@@ -1,6 +1,6 @@
 import { test, expect, afterEach } from 'vitest';
 import { render } from '@solidjs/testing-library';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { useCardResolution } from '../../src/components/use-card-resolution';
 import type { CardResolution } from '../../src/primitives/card-contract';
 
@@ -28,6 +28,7 @@ test('setLocal resolves optimistically when no prop is present', () => {
   });
   expect(ctl.isResolved()).toBe(false);
   ctl.setLocal({ kind: 'submit', data: { x: 1 } });
+  flush(); // V2-FLUSH: commit the staged write
   expect(ctl.isResolved()).toBe(true);
   expect(ctl.isOptimistic()).toBe(true);
 });
@@ -40,8 +41,10 @@ test('a new data identity clears the local resolution', () => {
     return <div />;
   });
   ctl.setLocal({ kind: 'action', action: 'a' });
+  flush(); // V2-FLUSH: commit the staged write
   expect(ctl.isResolved()).toBe(true);
   setData({ v: 2 });
+  flush(); // V2-FLUSH: commit the staged write
   expect(ctl.isResolved()).toBe(false);
 });
 
@@ -56,6 +59,7 @@ test('prop keeps the card resolved across a data change', () => {
     return <div />;
   });
   setData({ v: 2 });
+  flush(); // V2-FLUSH: commit the staged write
   expect(ctl.isResolved()).toBe(true);
 });
 
@@ -68,12 +72,16 @@ test('isTerminal is true for action / submit / expired; false for dismissed / no
   });
   expect(ctl.isTerminal()).toBe(false); // none
   setProp({ kind: 'action', action: 'a' });
+  flush(); // V2-FLUSH: commit the staged write
   expect(ctl.isTerminal()).toBe(true);
   setProp({ kind: 'submit', data: {} });
+  flush(); // V2-FLUSH: commit the staged write
   expect(ctl.isTerminal()).toBe(true);
   setProp({ kind: 'expired' });
+  flush(); // V2-FLUSH: commit the staged write
   expect(ctl.isTerminal()).toBe(true);
   setProp({ kind: 'dismissed' });
+  flush(); // V2-FLUSH: commit the staged write
   expect(ctl.isTerminal()).toBe(false);
   expect(ctl.isDeferred()).toBe(true);
 });
@@ -97,9 +105,11 @@ test('an optimistic dismissed flip is cleared by a fresh data identity', () => {
     return <div />;
   });
   ctl.setLocal({ kind: 'dismissed' });
+  flush(); // V2-FLUSH: commit the staged write
   expect(ctl.isDeferred()).toBe(true);
   expect(ctl.isOptimistic()).toBe(true);
   setData({ v: 2 }); // fresh card definition → interactive again
+  flush(); // V2-FLUSH: commit the staged write
   expect(ctl.isDeferred()).toBe(false);
   expect(ctl.isResolved()).toBe(false);
 });

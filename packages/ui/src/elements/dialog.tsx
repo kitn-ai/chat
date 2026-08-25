@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount } from 'solid-js';
+import { createSignal, onCleanup, onSettled } from 'solid-js';
 import { defineWebComponent } from './define';
 import { Dialog, type DialogController } from '../ui/dialog';
 import { wireDisclosure } from './disclosure';
@@ -93,14 +93,17 @@ defineWebComponent<Props, Events>('kai-dialog', {
   label: DEFAULT_LABEL,
 }, (props, ctx) => {
   const { flag, element, expose } = ctx;
-  let api: DialogController | undefined;
+  // V2-PORT: a reactive signal, not a plain `let` — the disclosure/controller
+  // effects track it, and ownedWrite sanctions the synchronous hand-up from
+  // the primitive's body (see elements/tool.tsx, the same fix).
+  const [api, setApi] = createSignal<DialogController | undefined>(undefined, { ownedWrite: true });
   let panel: HTMLElement | undefined;
 
   // The standard disclosure surface: settable+reflecting `open`, kai-open-change,
   // show/hide/toggle. See ./disclosure. The SOLE emitter of kai-open-change — the
   // primitive's onOpenChange is intentionally NOT wired here to avoid a double
   // dispatch.
-  wireDisclosure(ctx, () => api, () => props.open);
+  wireDisclosure(ctx, api, () => props.open);
 
   // Only render the header/footer chrome (border + padding) when the consumer has
   // actually projected content for that slot — otherwise an empty bordered region
@@ -111,12 +114,16 @@ defineWebComponent<Props, Events>('kai-dialog', {
     setHasHeader(!!element.querySelector(':scope > [slot="header"]'));
     setHasFooter(!!element.querySelector(':scope > [slot="footer"]'));
   };
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers) d(); });
+  onSettled(() => {
     recompute();
     if (typeof MutationObserver === 'function') {
       const obs = new MutationObserver(recompute);
       obs.observe(element, { childList: true });
-      onCleanup(() => obs.disconnect());
+      settledDisposers.push(() => obs.disconnect());
     }
   });
 
@@ -136,7 +143,7 @@ defineWebComponent<Props, Events>('kai-dialog', {
       aria-label={resolveLabel(props.label)}
       header={hasHeader() ? <slot name="header" /> : undefined}
       footer={hasFooter() ? <slot name="footer" /> : undefined}
-      controllerRef={(a) => (api = a)}
+      controllerRef={(a) => setApi(a)}
       panelRef={(el) => (panel = el)}
     >
       <slot />

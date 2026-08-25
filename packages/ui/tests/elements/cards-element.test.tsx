@@ -2,6 +2,7 @@
 // <kai-cards>: renders the right child kai-* per envelope, sets data/cardId/heading/theme,
 // routes child events through .policy, bubbles the raw kai-card event, and shows a
 // fallback (+ error) for unknown types.
+import { flush as flushSync } from 'solid-js';
 import '../../src/elements/cards';
 import { CARD_EVENT_NAME } from '../../src/primitives/card-routing';
 import type { CardEnvelope, CardEvent, CardPolicy } from '../../src/primitives/card-contract';
@@ -57,9 +58,11 @@ test('.policy set AFTER the element is in the DOM still receives events', async 
   document.body.appendChild(el);
   await flush(); await flush(); await flush();
   el.policy = { onAction: (_id, action) => actions.push(action) };
+  flushSync(); // V2-FLUSH: commit the staged policy prop before the click reads it
   const btn = el.shadowRoot!.querySelector('kai-confirm')!.shadowRoot!
     .querySelector<HTMLButtonElement>('[data-action-id="go"]')!;
   btn.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(actions).toEqual(['go']);
 });
@@ -69,6 +72,7 @@ test('.policy receives a child action', async () => {
   const el = await mount([CONFIRM], (e) => { e.policy = { onAction: (_id, action) => actions.push(action) }; });
   const btn = el.shadowRoot!.querySelector('kai-confirm')!.shadowRoot!.querySelector<HTMLButtonElement>('[data-action-id="go"]')!;
   btn.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(actions).toEqual(['go']);
 });
@@ -80,6 +84,7 @@ test('raw kai-card events bubble past kai-cards to the document', async () => {
   const el = await mount([CONFIRM]);
   const btn = el.shadowRoot!.querySelector('kai-confirm')!.shadowRoot!.querySelector<HTMLButtonElement>('[data-action-id="go"]')!;
   btn.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(seen.some((e) => e.kind === 'action' && (e as any).action === 'go')).toBe(true);
   document.removeEventListener(CARD_EVENT_NAME, handler);

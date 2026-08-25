@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onMount, onCleanup } from 'solid-js';
+import { createEffect, createSignal, onSettled, onCleanup } from 'solid-js';
 import { defineWebComponent } from './define';
 import { DefaultPromptInput } from './default-input';
 import type { AttachmentData } from '../components/attachments';
@@ -114,15 +114,16 @@ defineWebComponent<Props, Events>('kai-prompt-input', {
   const [attachments, setAttachments] = createSignal<AttachmentData[]>(props.attachments ?? []);
   // Re-seed when the `attachments` property is (re)assigned by the consumer
   // (e.g. set via a `ref` after mount). Subsequent in-element edits stay local.
-  createEffect(() => {
-    if (props.attachments) setAttachments(props.attachments);
+  // V2-PORT: prop read in the compute; the write in the apply.
+  createEffect(() => props.attachments, (a) => {
+    if (a) setAttachments(a);
   });
 
   // Read declarative <kai-action> children from light DOM — same pattern as
   // kai-message. Shadow DOM with no <slot> suppresses them visually; they are
   // invisible data carriers.
   const [toolbarActions, setToolbarActions] = createSignal<CustomAction[]>([]);
-  onMount(() => {
+  onSettled(() => {
     const readActions = () => {
       const nodes = [...element.querySelectorAll('kai-action')];
       setToolbarActions(nodes.map(n => ({
@@ -135,7 +136,8 @@ defineWebComponent<Props, Events>('kai-prompt-input', {
     readActions();
     const observer = new MutationObserver(readActions);
     observer.observe(element, { childList: true, attributes: true, subtree: true });
-    onCleanup(() => observer.disconnect());
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => observer.disconnect();
   });
 
   // A string `value` is controlled (the host owns it). A ComposerDoc `value` is a
@@ -153,8 +155,8 @@ defineWebComponent<Props, Events>('kai-prompt-input', {
   // Seed from a ComposerDoc `value`: push it into `internal` (so `current()`
   // reflects the seed) and into `lastChange` (so a submit-WITHOUT-edit still
   // carries the seeded doc + entities). Re-runs only when `value` is reassigned.
-  createEffect(() => {
-    const v = props.value;
+  // V2-PORT: prop read in the compute; the writes in the apply.
+  createEffect(() => props.value, (v) => {
     if (v != null && typeof v !== 'string') {
       const doc = normalizeValue(v);
       setInternal(doc);

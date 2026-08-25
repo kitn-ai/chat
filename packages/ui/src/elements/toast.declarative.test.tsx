@@ -13,7 +13,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent, waitFor } from '@solidjs/testing-library';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { ToastRegion } from '../components/toast';
 import type { ToastItem } from '../primitives/toast-store';
 
@@ -35,6 +35,7 @@ describe('kai-toast-region — declarative toasts property', () => {
     expect(queryByText('Alpha')).toBeInTheDocument();
     // new reference without 'a' — the way a consumer updates the JS property
     setToasts((prev) => prev.filter((t) => t.id !== 'a'));
+    flush(); // V2-FLUSH: commit the staged write
     await waitFor(() => expect(queryByText('Alpha')).toBeNull());
     expect(queryByText('Bravo')).toBeInTheDocument();
   });
@@ -45,6 +46,7 @@ describe('kai-toast-region — declarative toasts property', () => {
       <ToastRegion toasts={[item('x', 'Xray')]} onDismiss={onDismiss} />
     ));
     fireEvent.click(getByLabelText('Dismiss'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await waitFor(() => expect(onDismiss).toHaveBeenCalledWith('x', 'close'));
   });
 });

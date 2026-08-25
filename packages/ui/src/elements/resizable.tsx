@@ -1,4 +1,6 @@
-import { createSignal, createEffect, on, onMount, onCleanup, For, Show, type JSX } from 'solid-js';
+import { createSignal, createEffect, onSettled, onCleanup, For, Show, latest } from 'solid-js';
+import { deferApply } from '../utils/defer-apply'; // V2-PORT: on(...,{defer:true}) replacement
+import type { JSX } from '@solidjs/web';
 import { defineWebComponent } from './define';
 import { ResizableHandle, normalizeSize, clampBasis } from '../ui/resizable';
 
@@ -354,7 +356,11 @@ defineWebComponent<GroupProps, GroupEvents>('kai-resizable', {
     dispatch('kai-maximize-change', { maximized: false, index: null });
   }
 
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers) d(); });
+  onSettled(() => {
     readItems();
     const onIntent = (e: Event) => {
       const ce = e as CustomEvent<KaiMaximizeIntentDetail>;
@@ -382,7 +388,11 @@ defineWebComponent<GroupProps, GroupEvents>('kai-resizable', {
       // (The flag is held across this observer microtask; see persistSizes.)
       if (persistingSizes) return;
       readItems();
-      const stash = maximized();
+      // V2-PORT: latest() — this observer microtask can fire BEFORE the signal
+      // queue commits the setMaximized a re-target just staged; the committed
+      // read held the OLD stash, whose item we just hid, so the observer
+      // "restored" a maximize it was watching happen.
+      const stash = latest(maximized);
       if (stash) {
         // Use element identity, not a positional index, to detect whether the
         // maximized item is still present and visible.
@@ -409,7 +419,7 @@ defineWebComponent<GroupProps, GroupEvents>('kai-resizable', {
       attributes: true,
       attributeFilter: ['size', 'locked', 'min', 'max', 'hidden', 'collapsed'],
     });
-    onCleanup(() => {
+    settledDisposers.push(() => {
       mo.disconnect();
       element.removeEventListener('kai-maximize-intent', onIntent);
       element.removeEventListener('keydown', onKeydown, true);
@@ -431,21 +441,20 @@ defineWebComponent<GroupProps, GroupEvents>('kai-resizable', {
       restore: () => restore(),
     });
 
-    // Declarative maximizedIndex → maximize/restore. Skip the initial null run.
-    createEffect(
-      on(
-        () => props.maximizedIndex,
-        (idx) => {
-          if (idx == null) restore();
-          else {
-            const it = items()[idx]?.el;
-            if (it) maximizeItem(it);
-          }
-        },
-        { defer: true },
-      ),
-    );
   });
+
+  // Declarative maximizedIndex → maximize/restore. Skip the initial null run.
+  // V2-PORT: this effect used to be created inside onMount; v2 forbids creating
+  // reactive primitives inside onSettled (PRIMITIVE_IN_FORBIDDEN_SCOPE), so it
+  // lives in the facade body — deferApply still skips the mount run, as
+  // on(..., { defer: true }) did.
+  createEffect(() => props.maximizedIndex, deferApply((idx: number | null | undefined) => {
+    if (idx == null) restore();
+    else {
+      const it = items()[idx]?.el;
+      if (it) maximizeItem(it);
+    }
+  }));
 
   const isHoriz = () => orientation() === 'horizontal';
 
@@ -594,17 +603,20 @@ export function reflectItemConfig(
     // the attribute mid-drag). Starts `undefined`, which `norm` never returns, so
     // the first genuine value always reflects.
     let lastConsumer: string | null | undefined;
-    createEffect(() => {
-      const desired = norm(props[name]); // reactive read
-      if (desired === lastConsumer) return; // consumer intent unchanged → leave the attr (the drag owns it)
-      const current = element.getAttribute(name);
-      // Already matches — either untouched or the parent wrote it (drag). Don't
-      // adopt it as the consumer baseline and don't fight it.
-      if (desired === current) return;
-      lastConsumer = desired;
-      if (desired === null) element.removeAttribute(name);
-      else element.setAttribute(name, desired);
-    });
+    // V2-PORT: the prop read is the compute; the attribute negotiation is the apply.
+    createEffect(
+      () => norm(props[name]),
+      (desired) => {
+        if (desired === lastConsumer) return; // consumer intent unchanged → leave the attr (the drag owns it)
+        const current = element.getAttribute(name);
+        // Already matches — either untouched or the parent wrote it (drag). Don't
+        // adopt it as the consumer baseline and don't fight it.
+        if (desired === current) return;
+        lastConsumer = desired;
+        if (desired === null) element.removeAttribute(name);
+        else element.setAttribute(name, desired);
+      },
+    );
   };
   reflectString('size');
   reflectString('min');

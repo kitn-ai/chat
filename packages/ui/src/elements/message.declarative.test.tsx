@@ -8,6 +8,7 @@
  * validate at the boundary: log one clear error and render nothing for that
  * message, never let an uncaught exception blank the element.
  */
+import { flush } from 'solid-js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import './message';
 
@@ -39,7 +40,9 @@ describe('<kai-message> boundary validation', () => {
       document.body.appendChild(el);
     }).not.toThrow();
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
     expect(errorSpy.mock.calls[0][0]).toMatch(/kai-message.*'parts' array/i);
@@ -55,14 +58,18 @@ describe('<kai-message> boundary validation', () => {
     el.message = bad;
     document.body.appendChild(el);
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(errorSpy).toHaveBeenCalledTimes(1);
 
     // An unrelated prop change re-renders the element; the SAME bad message
     // reference must not log again.
     el.markdown = true;
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -71,7 +78,9 @@ describe('<kai-message> boundary validation', () => {
     el.message = { id: 'm1', role: 'assistant', parts: [{ type: 'text', text: 'Hello there' }] };
     document.body.appendChild(el);
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     expect(el.shadowRoot!.textContent).toContain('Hello there');
     expect(errorSpy).not.toHaveBeenCalled();
@@ -84,7 +93,9 @@ describe('<kai-message> boundary validation', () => {
     bad.message = { id: 'bad', role: 'assistant', content: 'legacy shape' };
     document.body.append(good, bad);
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     expect(good.shadowRoot!.textContent).toContain('I am fine');
     expect(bad.shadowRoot!.querySelector('[part="row"]')).toBeNull();

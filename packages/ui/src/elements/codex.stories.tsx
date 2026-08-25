@@ -25,7 +25,7 @@ import openaiLogo from './logos/openai.svg';
 // declared (identically) by sibling story files; redeclaring them keeps the file
 // self-documenting (TypeScript merges identical global augmentations - the types
 // must match byte-for-byte across files or it errors TS2717).
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -192,7 +192,7 @@ export const Codex: Story = {
     const active = () => TASKS.find((t) => t.id === activeTask());
 
     // Array/object props (and event wiring) are applied in each element's ref
-    // callback, NOT a one-shot onMount: the home + detail columns live inside <Show>,
+    // callback, NOT a one-shot onSettled: the home + detail columns live inside <Show>,
     // so they unmount/remount on view swap; a ref runs on every (re)mount.
     return (
       <div class="flex h-screen flex-col bg-background text-foreground">

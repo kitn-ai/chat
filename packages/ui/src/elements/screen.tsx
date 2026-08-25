@@ -1,3 +1,4 @@
+import { createSignal } from 'solid-js';
 import { defineWebComponent } from './define';
 import { Screen, type ScreenController } from '../components/screen';
 import { wireDisclosure } from './disclosure';
@@ -58,12 +59,15 @@ defineWebComponent<Props, Events>('kai-screen', {
   noInert: undefined,
 }, (props, ctx) => {
   const { flag, element, dispatch, expose } = ctx;
-  let api: ScreenController | undefined;
+  // V2-PORT: a reactive signal, not a plain `let` — the disclosure/controller
+  // effects track it, and ownedWrite sanctions the synchronous hand-up from
+  // the primitive's body (see elements/tool.tsx, the same fix).
+  const [api, setApi] = createSignal<ScreenController | undefined>(undefined, { ownedWrite: true });
   let surface: HTMLElement | undefined;
 
   // The standard disclosure surface: settable+reflecting `open`, kai-open-change,
   // show/hide/toggle. See ./disclosure. This is the SOLE emitter of kai-open-change.
-  wireDisclosure(ctx, () => api, () => props.open);
+  wireDisclosure(ctx, api, () => props.open);
 
   // focus() shadows the host's native focus so it targets the screen surface
   // inside the shadow root (the WebAwesome/Shoelace convention).
@@ -81,7 +85,7 @@ defineWebComponent<Props, Events>('kai-screen', {
       titleSlot={<slot name="title">{props.headline as string | undefined}</slot>}
       actions={<slot name="actions" />}
       onBack={() => { dispatch('kai-back', {}); }}
-      controllerRef={(a) => (api = a)}
+      controllerRef={(a) => setApi(a)}
       surfaceRef={(el) => (surface = el)}
     >
       <slot />

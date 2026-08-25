@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
@@ -19,6 +20,7 @@ describe('FeedbackBar', () => {
       <FeedbackBar title="Helpful?" onFeedback={onFeedback} />
     ));
     fireEvent.click(getByLabelText('Helpful'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onFeedback).toHaveBeenCalledWith('helpful');
     // Confirms in place — does not disappear; the prompt is replaced by thanks.
     expect(getByText('Thanks for your feedback')).toBeInTheDocument();
@@ -28,6 +30,7 @@ describe('FeedbackBar', () => {
   it('a not-helpful vote goes straight to thanks when collectDetail is off', () => {
     const { getByLabelText, getByText, queryByText } = render(() => <FeedbackBar title="Helpful?" />);
     fireEvent.click(getByLabelText('Not helpful'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(getByText('Thanks for your feedback')).toBeInTheDocument();
     expect(queryByText('What went wrong?')).not.toBeInTheDocument();
   });
@@ -38,6 +41,7 @@ describe('FeedbackBar', () => {
       <FeedbackBar title="Helpful?" collectDetail categories={['Inaccurate', 'Unhelpful']} onFeedback={onFeedback} />
     ));
     fireEvent.click(getByLabelText('Not helpful'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     // Vote still recorded immediately, AND the detail form appears.
     expect(onFeedback).toHaveBeenCalledWith('not-helpful');
     expect(getByText('What went wrong?')).toBeInTheDocument();
@@ -49,6 +53,7 @@ describe('FeedbackBar', () => {
       <FeedbackBar title="Helpful?" collectDetail categories={['Inaccurate']} />
     ));
     fireEvent.click(getByLabelText('Helpful'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(getByText('Thanks for your feedback')).toBeInTheDocument();
     expect(queryByText('What went wrong?')).not.toBeInTheDocument();
   });
@@ -64,9 +69,13 @@ describe('FeedbackBar', () => {
       />
     ));
     fireEvent.click(getByLabelText('Not helpful'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     fireEvent.click(getByText('Inaccurate'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     fireEvent.input(getByPlaceholderText('Tell us more (optional)'), { target: { value: 'wrong answer' } });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     fireEvent.click(getByText('Submit'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSubmitDetail).toHaveBeenCalledWith({
       value: 'not-helpful',
       category: 'Inaccurate',
@@ -81,7 +90,9 @@ describe('FeedbackBar', () => {
       <FeedbackBar title="Helpful?" collectDetail categories={['Inaccurate']} onSubmitDetail={onSubmitDetail} />
     ));
     fireEvent.click(getByLabelText('Not helpful'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     fireEvent.click(getByText('Skip'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSubmitDetail).not.toHaveBeenCalled();
     expect(getByText('Thanks for your feedback')).toBeInTheDocument();
   });
@@ -90,6 +101,7 @@ describe('FeedbackBar', () => {
     const onClose = vi.fn();
     const { getByLabelText } = render(() => <FeedbackBar title="Helpful?" onClose={onClose} />);
     fireEvent.click(getByLabelText('Close'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -98,6 +110,7 @@ describe('FeedbackBar', () => {
       <FeedbackBar title="Helpful?" thanksMessage="Got it — thank you!" />
     ));
     fireEvent.click(getByLabelText('Helpful'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(getByText('Got it — thank you!')).toBeInTheDocument();
   });
 });

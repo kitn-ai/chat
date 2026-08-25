@@ -329,6 +329,9 @@ describe('surface recipe wiring, executed against the real elements', () => {
     const editable = chat.shadowRoot!.querySelector<HTMLElement>('[data-kai-composer-editable]')!;
     editable.textContent = 'what is the wire format';
     editable.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    // V2-SHAPE: commit the input handler's staged doc before Enter reads it
+    // (one keystroke and its Enter never share a microtask in real use).
+    await flush();
     editable.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }));
     await flush();
 
@@ -425,6 +428,9 @@ describe('surface recipe wiring, executed against the real elements', () => {
     const editable = composer.shadowRoot!.querySelector<HTMLElement>('[data-kai-composer-editable]')!;
     editable.textContent = 'composed by hand';
     editable.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    // V2-SHAPE: commit the input handler's staged doc before Enter reads it
+    // (one keystroke and its Enter never share a microtask in real use).
+    await flush();
     editable.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }));
     await flush();
 

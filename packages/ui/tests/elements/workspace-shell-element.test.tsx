@@ -11,6 +11,7 @@
  * Geometry (drag deltas, breakpoint reflow, drawer stacking) is the B4 Chromium
  * probes' job; here we assert the shadow structure the browser projects.
  */
+import { flush as flushSync } from 'solid-js';
 import { expect, test, afterEach } from 'vitest';
 import '../../src/elements/chat-workspace';
 
@@ -81,6 +82,7 @@ test('the aside regions carry ::part hooks (start/end), and slotted content stay
   const root = el.shadowRoot!;
   expect(root.querySelector('[part~="start"]')).not.toBeNull();
   rail.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(clicked).toBe(true);
 });
 

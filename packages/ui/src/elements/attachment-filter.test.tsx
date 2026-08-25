@@ -14,6 +14,7 @@
  * roots, which jsdom does not provide. Same pattern as
  * prompt-input-toolbar-actions.test.tsx.
  */
+import { flush } from 'solid-js';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
@@ -66,6 +67,7 @@ const settle = async (): Promise<void> => {
 const pick = async (input: HTMLInputElement, files: File[]): Promise<void> => {
   Object.defineProperty(input, 'files', { value: files, configurable: true });
   fireEvent.change(input);
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   await settle();
 };
 

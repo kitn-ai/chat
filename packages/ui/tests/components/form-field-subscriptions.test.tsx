@@ -23,7 +23,7 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createRoot, createSignal, createEffect } from 'solid-js';
+import { createRoot, createSignal, createEffect, flush as flushSync } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { Form, fieldCommon, type FormDefinition } from '../../src/components/form';
 
@@ -52,7 +52,9 @@ describe('FieldRow widget props subscribe narrowly (K-D12b)', () => {
         onBlur: () => {},
       }, 'f-ticket', () => undefined, () => 'Ticket');
 
-      createEffect(() => seen.push(common.invalid));
+      // V2-PORT: two-argument effect; the tracked read is the compute, the push
+      // the apply — the subscription set under test is unchanged.
+      createEffect(() => common.invalid, (v) => { seen.push(v); });
       return d;
     });
 
@@ -62,13 +64,16 @@ describe('FieldRow widget props subscribe narrowly (K-D12b)', () => {
 
     // A keystroke: `value` moves, `error` does not.
     setValue('C');
+    flushSync(); // V2-FLUSH: commit the staged write
     setValue('CH');
+    flushSync(); // V2-FLUSH: commit the staged write
     await flush();
     expect(seen).toEqual([false]);
     expect(readValue).not.toHaveBeenCalled();
 
     // The harness CAN see a change — so the two lines above mean something.
     setError('Must match CHG-0000');
+    flushSync(); // V2-FLUSH: commit the staged write
     await flush();
     expect(seen).toEqual([false, true]);
 
@@ -92,10 +97,12 @@ describe('FieldRow widget props subscribe narrowly (K-D12b)', () => {
     const input = container.querySelector('input[data-control]') as HTMLInputElement;
     expect(input).toBeTruthy();
     input.focus();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     for (const ch of 'CHG-4821') {
       input.value = input.value + ch;
       input.dispatchEvent(new Event('input', { bubbles: true }));
+      flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
       expect(container.querySelector('input[data-control]')).toBe(input);
       expect(document.activeElement).toBe(input);
     }

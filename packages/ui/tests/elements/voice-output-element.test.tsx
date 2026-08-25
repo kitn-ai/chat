@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { vi } from 'vitest';
 import '../../src/elements/voice-output';
 
@@ -47,7 +48,9 @@ async function mountAndSpeak() {
   const el = document.createElement('kai-voice-output') as VoiceOutputEl;
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   el.text = 'hello out loud';
+  flush(); // V2-FLUSH: commit the staged prop before speak() reads it
 
   const speaking: boolean[] = [];
   el.addEventListener('kai-speaking-change', (e) => {
@@ -60,6 +63,7 @@ async function mountAndSpeak() {
 
   el.speak();
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   return { el, speaking, errors };
 }
 
@@ -71,9 +75,11 @@ test('kai-speaking-change {speaking:true} fires on utterance.onstart, not inside
   expect(speaking).toEqual([]);
 
   lastUtterance?.onstart?.();
+  flush(); // V2-FLUSH: commit the staged speaking-state write
   expect(speaking).toEqual([true]);
 
   lastUtterance?.onend?.();
+  flush(); // V2-FLUSH: commit the staged speaking-state write
   expect(speaking).toEqual([true, false]);
 
   el.remove();
@@ -83,7 +89,9 @@ test('utterance.onerror dispatches kai-voice-error {source:"synthesis"} with the
   const { el, speaking, errors } = await mountAndSpeak();
 
   lastUtterance?.onstart?.();
+  flush(); // V2-FLUSH: commit the staged speaking-state write
   lastUtterance?.onerror?.({ error: 'not-allowed' });
+  flush(); // V2-FLUSH: commit the staged speaking-state write
 
   expect(errors).toEqual([
     { source: 'synthesis', error: 'not-allowed', message: expect.stringContaining('not-allowed') },

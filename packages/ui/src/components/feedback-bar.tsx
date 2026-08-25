@@ -1,4 +1,5 @@
-import { type JSX, Switch, Match, For, Show, createSignal } from 'solid-js';
+import { Switch, Match, For, Show, createSignal } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { ThumbsUp, ThumbsDown, X, Check } from 'lucide-solid';
 import { Button } from '../ui/button';
@@ -125,7 +126,7 @@ export function FeedbackBar(props: FeedbackBarProps) {
                   {(c) => (
                     <button
                       type="button"
-                      aria-pressed={category() === c}
+                      aria-pressed={category() === c ? 'true' : 'false'}
                       onClick={() => setCategory(category() === c ? undefined : c)}
                       class={cn(
                         'rounded-full border px-2.5 py-1 text-xs transition-colors',

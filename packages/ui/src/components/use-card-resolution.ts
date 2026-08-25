@@ -7,7 +7,8 @@
 // A resolution is `isResolved` when present at all; `isTerminal` for the finished
 // states (action | submit | expired) and `isDeferred` for `dismissed` — a set-aside
 // card that still offers a Reopen affordance.
-import { createSignal, createMemo, createEffect, on, type Accessor } from 'solid-js';
+import { createSignal, createMemo, createEffect, type Accessor } from 'solid-js';
+import { deferApply } from '../utils/defer-apply'; // V2-PORT: on(...,{defer:true}) replacement
 import type { CardResolution } from '../primitives/card-contract';
 
 export interface ResolutionController<R extends CardResolution = CardResolution> {
@@ -31,7 +32,7 @@ export function useCardResolution<R extends CardResolution = CardResolution>(opt
   const [local, setLocal] = createSignal<R | undefined>(undefined);
   // Reset the optimistic flip when a NEW data identity arrives (deferred so mount
   // doesn't clobber an initial prop). The prop still wins via the memo below.
-  createEffect(on(opts.data, () => setLocal(undefined), { defer: true }));
+  createEffect(opts.data, deferApply(() => setLocal(undefined)));
   const resolution = createMemo(() => opts.prop() ?? local());
   const isResolved = createMemo(() => resolution() !== undefined);
   const isTerminal = createMemo(() => {

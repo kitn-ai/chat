@@ -3,8 +3,9 @@
 // with the envelope spread onto its props. Routing uses the ambient CardProvider
 // (useCardHost). Unknown type → CardFallback + a one-shot contract `error` emit.
 // Invalid data → two-tier validation, mirroring the remote transport; see below.
-import { createEffect, createMemo, untrack, Show, type JSX } from 'solid-js';
-import { Dynamic } from 'solid-js/web';
+import { createEffect, createMemo, untrack, Show } from 'solid-js';
+import { Dynamic } from '@solidjs/web';
+import type { JSX } from '@solidjs/web';
 import type { CardContext, CardEnvelope, CardHost } from '../primitives/card-contract';
 import { useCardHost } from '../primitives/card-host';
 import { emitCardEvent } from '../primitives/card-routing';
@@ -160,18 +161,22 @@ export function CardRenderer(props: CardRendererProps): JSX.Element {
   // (that is the documented way to re-render), so an identity-triggered emit would
   // fire once per chunk for one bad card.
   let lastEmitted: string | null = null;
-  createEffect(() => {
-    const r = report();
-    if (!entry()) return; // an unknown TYPE reports itself, once, in UnknownCard
-    if (!r || r.ok) {
-      lastEmitted = null;
-      return;
-    }
-    const message = cardValidationMessage(r);
-    if (message === lastEmitted) return;
-    lastEmitted = message;
-    host()?.emit({ kind: 'error', cardId: props.envelope.id, message });
-  });
+  // V2-PORT: tracked reads (report/entry/host/envelope id) in the compute; the
+  // dedupe + emit side effect in the apply.
+  createEffect(
+    () => ({ r: report(), known: !!entry(), h: host(), cardId: props.envelope.id }),
+    ({ r, known, h, cardId }) => {
+      if (!known) return; // an unknown TYPE reports itself, once, in UnknownCard
+      if (!r || r.ok) {
+        lastEmitted = null;
+        return;
+      }
+      const message = cardValidationMessage(r);
+      if (message === lastEmitted) return;
+      lastEmitted = message;
+      h?.emit({ kind: 'error', cardId, message });
+    },
+  );
 
   return (
     <Show when={entry()} fallback={<UnknownCard envelope={props.envelope} hostElement={props.hostElement} />}>

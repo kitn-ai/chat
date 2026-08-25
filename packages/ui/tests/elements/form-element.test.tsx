@@ -1,6 +1,7 @@
 // tests/elements/form-element.test.tsx
 // Contract integration: the bubbling `kai-card` CustomEvent reaches a document
 // listener (the requirement defineWebComponent's default dispatch does NOT meet).
+import { flush as flushSync } from 'solid-js';
 import '../../src/elements/form';
 import { CARD_EVENT_NAME } from '../../src/primitives/card-routing';
 import type { CardEvent } from '../../src/primitives/card-contract';
@@ -81,6 +82,7 @@ test('valid submit emits submit with the coerced object', async () => {
   // Solid delegates `input`; real browser input events are composed and cross the
   // shadow boundary to Solid's root listener, so mirror that here.
   textarea.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
 
   // plan: choose 'pro' radio
@@ -89,11 +91,13 @@ test('valid submit emits submit with the coerced object', async () => {
   )!;
   proRadio.checked = true;
   proRadio.dispatchEvent(new Event('change', { bubbles: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
 
   // contactOk: flip the switch on
   const sw = root.querySelector<HTMLElement>('[role="switch"]')!;
   sw.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
 
   // submit
@@ -122,6 +126,7 @@ test('secondary action button emits `action` with its id', async () => {
     (b) => b.textContent?.trim() === 'Skip',
   )!;
   skip.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   const action = events.find((e) => e.kind === 'action') as
     | Extract<CardEvent, { kind: 'action' }>
@@ -137,6 +142,7 @@ test('dismissible form emits `dismiss`', async () => {
     (b) => b.textContent?.trim() === 'Dismiss',
   )!;
   dismiss.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(events.some((e) => e.kind === 'dismiss')).toBe(true);
   off();

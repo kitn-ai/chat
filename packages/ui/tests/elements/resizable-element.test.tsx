@@ -1,4 +1,5 @@
 // tests/elements/resizable-element.test.tsx
+import { flush as flushSync } from 'solid-js';
 import '../../src/elements/resizable';
 import type { KaiMaximizeIntentDetail, KaiMaximizeStateDetail } from '../../src/elements/resizable';
 
@@ -116,6 +117,7 @@ test('exports the maximize protocol detail types (compile-time shape check)', ()
 
 function intentFrom(item: Element, requested: boolean) {
   item.dispatchEvent(new CustomEvent('kai-maximize-intent', { detail: { requested }, bubbles: true, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 }
 
 test('maximize hides siblings, clears the maximized item size/locked, reflects data-maximized', async () => {
@@ -150,6 +152,7 @@ test('intent from outside any item is ignored', async () => {
   const group = makeGroup([{}, {}]);
   await flush();
   group.dispatchEvent(new CustomEvent('kai-maximize-intent', { detail: { requested: true }, bubbles: true, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(group.hasAttribute('data-maximized')).toBe(false);
 });
@@ -201,11 +204,13 @@ test('Escape while maximized restores (and is a no-op otherwise)', async () => {
   group.maximize(0);
   await flush();
   group.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(group.children[1].hasAttribute('hidden')).toBe(false);
   expect(group.hasAttribute('data-maximized')).toBe(false);
   // Escape again is a harmless no-op.
   group.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(group.hasAttribute('data-maximized')).toBe(false);
 });
@@ -232,6 +237,7 @@ test('nested group stops the intent (outer group never maximizes)', async () => 
   outer.replaceChild(leaf, outer.children[0]);
   await flush();
   innerItem.dispatchEvent(new CustomEvent('kai-maximize-intent', { detail: { requested: true }, bubbles: true, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(inner.hasAttribute('data-maximized')).toBe(true);
   expect(outer.hasAttribute('data-maximized')).toBe(false);

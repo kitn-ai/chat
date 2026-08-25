@@ -1,4 +1,5 @@
-import { type JSX, splitProps, createSignal, createEffect, onCleanup, Show } from 'solid-js';
+import { omit, createSignal, createEffect, onCleanup, Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { Skeleton } from '../ui/skeleton';
 
@@ -21,23 +22,27 @@ function getImageSrc(base64?: string, mediaType?: string): string | undefined {
 }
 
 function Image(props: ImageProps) {
-  const [local, rest] = splitProps(props, ['base64', 'uint8Array', 'mediaType', 'class', 'alt']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'base64', 'uint8Array', 'mediaType', 'class', 'alt');
   const [objectUrl, setObjectUrl] = createSignal<string | undefined>(undefined);
 
   const mediaType = () => local.mediaType ?? 'image/png';
 
-  createEffect(() => {
-    const arr = local.uint8Array;
-    const mt = mediaType();
-    if (arr && mt) {
-      const blob = new Blob([arr as BlobPart], { type: mt });
-      const url = URL.createObjectURL(blob);
-      setObjectUrl(url);
-      onCleanup(() => URL.revokeObjectURL(url));
-    } else {
+  // V2-PORT: tracked reads in the compute; the object-URL lifecycle in the apply
+  // (in-effect onCleanup -> returned cleanup).
+  createEffect(
+    () => ({ arr: local.uint8Array, mt: mediaType() }),
+    ({ arr, mt }) => {
+      if (arr && mt) {
+        const blob = new Blob([arr as BlobPart], { type: mt });
+        const url = URL.createObjectURL(blob);
+        setObjectUrl(url);
+        return () => URL.revokeObjectURL(url);
+      }
       setObjectUrl(undefined);
-    }
-  });
+    },
+  );
 
   const src = () => getImageSrc(local.base64, mediaType()) ?? objectUrl();
 

@@ -3,6 +3,7 @@
 // Submit button emits the bubbling `kai-card` `action` event with the right payload +
 // resolved single-shot state, plus the unified allowOther flow. Modeled on
 // confirm-card-element.test.tsx.
+import { flush as flushSync } from 'solid-js';
 import '../../src/elements/choice';
 import { CARD_EVENT_NAME } from '../../src/primitives/card-routing';
 import type { CardEvent } from '../../src/primitives/card-contract';
@@ -96,6 +97,7 @@ test('picking a row selects it (aria-checked true) but does NOT emit yet', async
   const el = await mount(PLANS);
   const pro = radios(el).find((r) => r.dataset.optionId === 'pro')!;
   pro.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(pro.getAttribute('aria-checked')).toBe('true');
   expect(events.some((e) => e.kind === 'action')).toBe(false);
@@ -109,9 +111,11 @@ test('Submit emits `action` with id + echoed payload; bubbling+composed', async 
   // Submit disabled until something is selected.
   expect(submitButton(el).disabled).toBe(true);
   pro.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(submitButton(el).disabled).toBe(false);
   submitButton(el).click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   const action = events.find((e) => e.kind === 'action') as
     | Extract<CardEvent, { kind: 'action' }>
@@ -128,6 +132,7 @@ test('resolved state after Submit sets data-kai-resolved', async () => {
   radios(el).find((r) => r.dataset.optionId === 'pro')!.click();
   await flush();
   submitButton(el).click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(el.getAttribute('data-kai-resolved')).toBe('pro');
   off();
@@ -139,6 +144,7 @@ test('single-shot: after Submit, further clicks/Submit do not re-emit', async ()
   radios(el).find((r) => r.dataset.optionId === 'free')!.click();
   await flush();
   submitButton(el).click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   // The radiogroup is replaced by the read-only resolved view; no Submit remains.
   expect(el.shadowRoot!.querySelector('[role="radiogroup"]')).toBeNull();
@@ -154,6 +160,7 @@ test('disabled option is aria-disabled + not focusable + inert (cannot be select
   expect(a.getAttribute('aria-disabled')).toBe('true');
   expect(a.getAttribute('tabindex')).toBe('-1');
   a.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   // Clicking a disabled row neither selects it nor enables Submit.
   expect(a.getAttribute('aria-checked')).toBe('false');
@@ -181,17 +188,21 @@ test('Arrow keys move focus skipping disabled; Enter selects then Submit emits "
   const group = el.shadowRoot!.querySelector('[role="radiogroup"]') as HTMLElement;
   const a = radios(el).find((r) => r.dataset.optionId === 'a')!;
   a.focus();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   // ArrowDown from A should skip disabled B and land on C.
   group.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   // Enter selects the focused row (no emit yet).
   group.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   const c = radios(el).find((r) => r.dataset.optionId === 'c')!;
   expect(c.getAttribute('aria-checked')).toBe('true');
   expect(events.some((e) => e.kind === 'action')).toBe(false);
   // Submit emits the selection.
   submitButton(el).click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   const action = events.find((e) => e.kind === 'action') as
     | Extract<CardEvent, { kind: 'action' }>
@@ -222,6 +233,7 @@ test('allowOther: select Other reveals input; the one Submit emits __other__ wit
 
   const other = radios(el).find((r) => r.dataset.optionId === '__other__')!;
   other.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   // Other selected → input appears; no emit yet; Submit still disabled (empty text).
   expect(events.some((e) => e.kind === 'action')).toBe(false);
@@ -231,9 +243,11 @@ test('allowOther: select Other reveals input; the one Submit emits __other__ wit
 
   input.value = 'custom';
   input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(submitButton(el).disabled).toBe(false);
   submitButton(el).click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   const action = events.find((e) => e.kind === 'action') as
     | Extract<CardEvent, { kind: 'action' }>

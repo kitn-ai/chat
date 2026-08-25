@@ -33,6 +33,7 @@
  * AT act on: the body carries `inert` and `data-closed`, the trigger reports
  * `aria-expanded="false"`, and the error affordance lives OUTSIDE that subtree.
  */
+import { flush as flushSync } from 'solid-js';
 import { afterEach, describe, expect, test } from 'vitest';
 import '../../src/elements/tool';
 import type { ToolPart } from '../../src/components/tool-types';
@@ -262,6 +263,7 @@ describe('a failure is visible collapsed; the reason is one click away', () => {
     // as well against a panel that never renders the reason at all.
     const el = await mount(failing);
     trigger(el).click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     await flush();
 
     expect(expanded(el)).toBe(true);
@@ -274,6 +276,7 @@ describe('a failure is visible collapsed; the reason is one click away', () => {
     const el = await mount(failing);
     expect(trigger(el).textContent).not.toContain('upstream timed out');
     trigger(el).click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     await flush();
     expect(trigger(el).textContent).not.toContain('upstream timed out');
   });
@@ -370,11 +373,13 @@ describe('collapse / expand', () => {
     expect(expanded(el)).toBe(false);
 
     trigger(el).click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     await flush();
     expect(expanded(el)).toBe(true);
     expect(body(el).hasAttribute('inert')).toBe(false);
 
     trigger(el).click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     await flush();
     expect(expanded(el)).toBe(false);
     expect(body(el).hasAttribute('inert')).toBe(true);
@@ -583,6 +588,7 @@ describe('reflected boolean read-back', () => {
   test('a trigger click reflects OUT to the attribute and the property', async () => {
     const el = await mount(part({ state: 'output-available' }));
     trigger(el).click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     await flush();
     expect(el.hasAttribute('open')).toBe(true);
     expect(el.open).toBe(true);
@@ -626,6 +632,7 @@ describe('`disabled` gates the trigger, not the methods', () => {
     expect(trigger(el).disabled).toBe(true);
 
     trigger(el).click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     await flush();
     expect(expanded(el)).toBe(false);
 
@@ -640,6 +647,7 @@ describe('`disabled` gates the trigger, not the methods', () => {
     await flush();
     expect(trigger(el).disabled).toBe(true);
     trigger(el).click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     await flush();
     expect(expanded(el)).toBe(false);
 
@@ -649,6 +657,7 @@ describe('`disabled` gates the trigger, not the methods', () => {
     await flush();
     expect(trigger(el).disabled).toBe(false);
     trigger(el).click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     await flush();
     expect(expanded(el)).toBe(true);
   });

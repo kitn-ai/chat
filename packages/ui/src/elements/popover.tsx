@@ -1,3 +1,4 @@
+import { createSignal } from 'solid-js';
 import { defineWebComponent } from './define';
 import { Popover, type PopoverController } from '../ui/popover';
 import { wireDisclosure } from './disclosure';
@@ -57,13 +58,16 @@ defineWebComponent<Props, Events>('kai-popover', {
   disabled: undefined,
 }, (props, ctx) => {
   const { flag, element } = ctx;
-  let api: PopoverController | undefined;
+  // V2-PORT: a reactive signal, not a plain `let` — the disclosure/controller
+  // effects track it, and ownedWrite sanctions the synchronous hand-up from
+  // the primitive's body (see elements/tool.tsx, the same fix).
+  const [api, setApi] = createSignal<PopoverController | undefined>(undefined, { ownedWrite: true });
 
   // The standard overlay surface: settable+reflecting `open`, kai-open-change,
   // show/hide/toggle, disabled-gating. The sole source of kai-open-change — the
   // primitive's onOpenChange is intentionally NOT wired here to avoid a double
   // dispatch. See ./disclosure.
-  wireDisclosure(ctx, () => api, () => props.open);
+  wireDisclosure(ctx, api, () => props.open);
 
   return (
     <Popover
@@ -72,7 +76,7 @@ defineWebComponent<Props, Events>('kai-popover', {
       gutter={props.gutter}
       defaultOpen={flag('defaultOpen')}
       disabled={flag('disabled')}
-      controllerRef={(a) => (api = a)}
+      controllerRef={(a) => setApi(a)}
       boundary={() => element}
     >
       <slot />

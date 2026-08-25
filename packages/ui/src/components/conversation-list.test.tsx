@@ -12,6 +12,7 @@
  * composed paths), so it must hold regardless of which custom element hosts it —
  * that is what lets the facade layer survive ratification renames.
  */
+import { flush } from 'solid-js';
 import { describe, it, expect, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
@@ -71,6 +72,7 @@ describe('children mode wins over the conversations prop', () => {
     const input = container.querySelector<HTMLInputElement>('input[aria-label="Search chats"]');
     expect(input).not.toBeNull();
     fireEvent.input(input!, { target: { value: 'billing' } });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(query).toBe('billing');
     // The consumer's loop owns filtering: the slotted row is untouched.
     expect(container.querySelector('[role="list"]')!.textContent).toContain('row');
@@ -125,6 +127,7 @@ describe('createConversationItemsController', () => {
     // And the active property is driven for the facade's styling hook.
     expect((items[1] as HTMLElement & { active?: boolean }).active).toBe(true);
     setActive('c');
+    flush(); // V2-FLUSH: commit the staged write
     expect(items.map((i) => i.getAttribute('aria-current'))).toEqual(['false', 'false', 'true']);
   });
 
@@ -144,6 +147,7 @@ describe('createConversationItemsController', () => {
     const { items, setActive } = setup(['a', 'b', 'c'], 'b');
     expect(items.map((i) => i.getAttribute('tabindex'))).toEqual(['-1', '0', '-1']);
     setActive(undefined);
+    flush(); // V2-FLUSH: commit the staged write
     // No active item: the first item is the entry point.
     expect(items.map((i) => i.getAttribute('tabindex'))).toEqual(['0', '-1', '-1']);
   });
@@ -190,6 +194,7 @@ describe('createConversationItemsController', () => {
     menu.appendChild(button);
     items[0].appendChild(menu);
     button.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(selected).toEqual(['a']);
     // Same for light-DOM slot="menu" content (the element-mode shape).
     menu.remove();
@@ -197,6 +202,7 @@ describe('createConversationItemsController', () => {
     slotted.setAttribute('slot', 'menu');
     items[0].appendChild(slotted);
     slotted.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(selected).toEqual(['a']);
   });
 
@@ -229,6 +235,7 @@ describe('search no-match state (F-04)', () => {
     ));
     const input = container.querySelector<HTMLInputElement>('input[aria-label="Search chats"]')!;
     fireEvent.input(input, { target: { value: 'zzz-no-such-thing' } });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(container.textContent).toContain('No conversations match your search');
     // Distinct from the zero-conversations empty state.
     expect(container.textContent).not.toContain('No conversations yet');
@@ -242,8 +249,10 @@ describe('search no-match state (F-04)', () => {
     ));
     const input = container.querySelector<HTMLInputElement>('input[aria-label="Search chats"]')!;
     fireEvent.input(input, { target: { value: 'zzz' } });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(container.textContent).toContain('No conversations match your search');
     fireEvent.input(input, { target: { value: '' } });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(container.textContent).not.toContain('No conversations match your search');
     expect(container.textContent).toContain('Budget planning');
   });

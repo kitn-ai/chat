@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount } from 'solid-js';
+import { createSignal, onCleanup, onSettled } from 'solid-js';
 import { defineWebComponent } from './define';
 import { PromptDock, type PromptDockAppearance, type PromptDockFrame } from '../ui/prompt-dock';
 
@@ -55,7 +55,7 @@ defineWebComponent<Props>('kai-prompt-dock', {
   // primitive gates on a truthy top/bottom, and a bare <slot> is always truthy).
   const [filled, setFilled] = createSignal<Record<SlotName, boolean>>({ top: false, bottom: false });
 
-  onMount(() => {
+  onSettled(() => {
     const read = () => {
       const next = {} as Record<SlotName, boolean>;
       for (const name of SLOT_NAMES) next[name] = !!element.querySelector(`:scope > [slot="${name}"]`);
@@ -64,7 +64,8 @@ defineWebComponent<Props>('kai-prompt-dock', {
     read();
     const observer = new MutationObserver(read);
     observer.observe(element, { childList: true });
-    onCleanup(() => observer.disconnect());
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => observer.disconnect();
   });
 
   const lip = (name: SlotName) => (filled()[name] ? <slot name={name} /> : undefined);

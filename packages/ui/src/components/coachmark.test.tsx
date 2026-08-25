@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent, within } from '@solidjs/testing-library';
@@ -60,6 +61,7 @@ describe('Coachmark', () => {
       </Coachmark>
     ));
     fireEvent.click(doc().getByRole('button', { name: 'Dismiss' }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onDismiss).toHaveBeenCalledTimes(1);
     // Dismissing also closes the bubble.
     await tick();

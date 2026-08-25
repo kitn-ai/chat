@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { onMount, onCleanup } from 'solid-js';
+import { onSettled, onCleanup } from 'solid-js';
 import { action } from 'storybook/actions';
 import './register'; // side-effect: registers kai-prompt-input, kai-menu, kai-model-switcher, etc.
 import { attachKaiActions } from '../stories/docs/story-actions';
@@ -7,7 +7,7 @@ import type { KaiMenuItem } from './menu';
 import type { ModelOption } from '../types';
 
 // Declare custom element tags used in this story for Solid JSX.
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -75,7 +75,11 @@ function ComposerShowcase() {
   let suggestionsEl: SuggestionsEl | undefined;
   let noticeEl: HTMLElement | undefined;
 
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers) d(); });
+  onSettled(() => {
     // Wire the + menu items (realistic context-attach actions).
     if (plusMenuEl) {
       const plusItems: KaiMenuItem[] = [
@@ -117,7 +121,7 @@ function ComposerShowcase() {
           );
         }
       });
-      onCleanup(attachKaiActions(plusMenuEl, undefined, ['kai-open-change']));
+      settledDisposers.push(attachKaiActions(plusMenuEl, undefined, ['kai-open-change']));
     }
 
     // Wire the effort selector menu.
@@ -131,7 +135,7 @@ function ComposerShowcase() {
       effortMenuEl.addEventListener('kai-select', (e) => {
         action('effort menu: kai-select')((e as CustomEvent).detail);
       });
-      onCleanup(attachKaiActions(effortMenuEl, undefined, ['kai-open-change']));
+      settledDisposers.push(attachKaiActions(effortMenuEl, undefined, ['kai-open-change']));
     }
 
     // Wire the model switcher.
@@ -142,18 +146,18 @@ function ComposerShowcase() {
         { id: 'haiku', name: 'Haiku' },
       ];
       // kai-model-change + kai-open-change, both declared; the helper covers both.
-      onCleanup(attachKaiActions(modelEl));
+      settledDisposers.push(attachKaiActions(modelEl));
     }
 
     // Wire the prompt input, log all of its declared events (kai-submit,
     // kai-value-change, …). No suggestions here (custom chips rendered below).
     if (inputEl) {
-      onCleanup(attachKaiActions(inputEl));
+      settledDisposers.push(attachKaiActions(inputEl));
     }
 
     // The self-dismissing notice: log its kai-dismiss event.
     if (noticeEl) {
-      onCleanup(attachKaiActions(noticeEl));
+      settledDisposers.push(attachKaiActions(noticeEl));
     }
 
     // Suggestion chips: data is a JS property; each item carries an icon name.

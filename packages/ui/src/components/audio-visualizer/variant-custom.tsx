@@ -1,4 +1,5 @@
-import { createEffect, createMemo, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { ShaderCanvas, hexToRgb, DEFAULT_SHADER_COLOR, type UniformSpec, type UniformType } from './shader-canvas';
 import { createTween } from '../../primitives/create-tween';
 import { shaderTargets } from '../../primitives/visualizer-sequences';
@@ -222,24 +223,38 @@ export default function CustomVisualizer(props: ShaderVariantProps): JSX.Element
   // harness; latent here). NOT the benign disjoint-writer two-effect shape
   // the Task 12 review accepted -- these two wrote the SAME tween. See the
   // wave variant's twin comment; same effect-race class as b5795ac.
-  createEffect(() => {
-    const t = shaderTargets(renderState());
-    if (renderState() === 'speaking') {
+  // V2-PORT: the branch-conditional tracking moves whole into the COMPUTE
+  // (re-tracks per run, so `volume` only subscribes while speaking); the tween
+  // drives are the apply. One effect, one writer — rationale unchanged.
+  createEffect(
+    () => {
+      const t = shaderTargets(renderState());
+      const speaking = renderState() === 'speaking';
+      return {
+        t,
+        frozen: props.frozen,
+        // `volume` is only tracked in this branch, so volume ticks skip the
+        // base-target path below.
+        v: speaking ? props.volume : undefined,
+        speaking,
+      };
+    },
+    ({ t, frozen, v, speaking }) => {
+    if (speaking) {
       // Live volume takes over intensity while speaking, with no easing so
       // the picture tracks the audio exactly -- and lands immediately on
-      // re-entry regardless of effect ordering. `volume` is only tracked
-      // in this branch, so volume ticks skip the base-target path below.
-      intensity.to(0.3 + 0.7 * props.volume, { duration: 0 });
+      // re-entry regardless of effect ordering.
+      intensity.to(0.3 + 0.7 * (v as number), { duration: 0 });
     } else {
-      const transition = props.frozen ? { duration: 0 } : { duration: 0.5, ease: 'easeOut' as const };
-      intensity.to(Array.isArray(t.intensity) && props.frozen ? t.intensity[0] : t.intensity, transition);
+      const transition = frozen ? { duration: 0 } : { duration: 0.5, ease: 'easeOut' as const };
+      intensity.to(Array.isArray(t.intensity) && frozen ? t.intensity[0] : t.intensity, transition);
     }
     // `iTime` is never frozen by ShaderCanvas itself -- it is the raw clock,
     // always advancing. A custom shader written the conventional way
     // (`iTime * uSpeed`) is the ONLY thing that can honour reduced motion,
     // and only if `uSpeed` is actually pinned at 0 here. Matches
     // variant-aurora.tsx's `speed.to(props.frozen ? 0 : t.speed, ...)`.
-    speed.to(props.frozen ? 0 : t.speed, { duration: 0 });
+    speed.to(frozen ? 0 : t.speed, { duration: 0 });
   });
 
   // Recomputed whenever a dependency changes -- same as every other shader
@@ -286,17 +301,20 @@ export default function CustomVisualizer(props: ShaderVariantProps): JSX.Element
   // a DIFFERENT one in the same mount must still see and hear about the
   // second mistake, not silence because the first one already fired.
   let reported = false;
-  createEffect(() => {
-    const { error } = result();
-    if (!error) {
-      reported = false;
-      return;
-    }
-    if (reported) return;
-    reported = true;
-    console.error(`<kai-audio-visualizer variant="custom">: ${error}`);
-    props.onUnavailable();
-  });
+  // V2-PORT: `result` is the tracked read; the dedupe + report is the apply.
+  createEffect(
+    () => result().error,
+    (error) => {
+      if (!error) {
+        reported = false;
+        return;
+      }
+      if (reported) return;
+      reported = true;
+      console.error(`<kai-audio-visualizer variant="custom">: ${error}`);
+      props.onUnavailable();
+    },
+  );
 
   const containerStyle = (): JSX.CSSProperties => ({
     height: `${CONTAINER_HEIGHT[props.size]}px`,

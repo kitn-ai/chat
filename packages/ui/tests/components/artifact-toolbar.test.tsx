@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { render, fireEvent } from '@solidjs/testing-library';
 import { Artifact } from '../../src/components/artifact';
 
@@ -16,6 +17,7 @@ test('expand button hidden by default, shown when expandable, fires onMaximizeCh
   const b = btn(container, 'Expand')!;
   expect(b).toBeTruthy();
   fireEvent.click(b);
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(calls).toEqual([true]);
   expect(btn(container, 'Collapse')).toBeTruthy(); // toggled label
   unmount();
@@ -46,6 +48,7 @@ test('open-in-tab calls window.open(url, _blank, noopener,noreferrer)', () => {
   vi.stubGlobal('open', open);
   const { container } = render(() => <Artifact src="https://x.test/page" openInTab />);
   fireEvent.click(btn(container, 'Open in new tab')!);
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(open).toHaveBeenCalledWith('https://x.test/page', '_blank', 'noopener,noreferrer');
   vi.unstubAllGlobals();
 });
@@ -90,6 +93,7 @@ test('readonly-path: input is readonly, submit does not navigate, value still tr
   expect(input.getAttribute('aria-readonly')).toBe('true');
   input.value = 'https://x.test/b';
   fireEvent.submit(input.closest('form')!);
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(nav).toEqual([]); // submit is a no-op while read-only
   expect(input.value).toContain('x.test/a'); // still reflects currentUrl
 });

@@ -1,4 +1,5 @@
 // tests/components/link-preview.test.tsx
+import { flush } from 'solid-js';
 import { render, fireEvent, waitFor } from '@solidjs/testing-library';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { LinkPreview } from '../../src/components/link-preview';
@@ -64,6 +65,7 @@ describe('LinkPreview interaction', () => {
     ));
     const anchor = container.querySelector('a')!;
     fireEvent.click(anchor);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     const opens = events.filter((e) => e.kind === 'open');
     expect(opens).toHaveLength(1);
     expect(opens[0]).toMatchObject({ kind: 'open', url: FULL.url, target: 'tab', cardId: 'card-9' });
@@ -75,6 +77,7 @@ describe('LinkPreview interaction', () => {
       <LinkPreview cardId="c1" data={FULL} onEmit={(e) => events.push(e)} />
     ));
     fireEvent.keyDown(container.querySelector('a')!, { key: 'Enter' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(events.some((e) => e.kind === 'open')).toBe(true);
   });
 
@@ -93,6 +96,7 @@ describe('LinkPreview image degradation', () => {
     ));
     const img = container.querySelector('img[alt="A diagram"]') as HTMLImageElement;
     fireEvent.error(img);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(container.querySelector('img[alt="A diagram"]')).toBeNull();
     expect(getByText('Generative UI')).toBeTruthy(); // rest intact
     expect(events.some((e) => e.kind === 'error')).toBe(false);

@@ -1,4 +1,5 @@
-import { Show, splitProps, createMemo, type JSX } from 'solid-js';
+import { Show, omit, createMemo } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { MessageSquare } from 'lucide-solid';
 import { cn } from '../utils/cn';
 import type { ConversationSummary } from '../types';
@@ -84,7 +85,8 @@ export interface SlottedConversationItemProps {
 }
 
 export function SlottedConversationItem(props: SlottedConversationItemProps) {
-  const [local] = splitProps(props, ['conversationId', 'active', 'compact', 'leading', 'meta', 'menu', 'children', 'hostSemantics', 'class']);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = props;
   return (
     // The sibling restructure (ratified 2026-08-20): axe nested-interactive
     // bans focusable descendants of an activation control, so the control role
@@ -134,7 +136,8 @@ export function SlottedConversationItem(props: SlottedConversationItemProps) {
 }
 
 export function ConversationItem(props: ConversationItemProps) {
-  const [local] = splitProps(props, ['conversation', 'isActive', 'onSelect', 'compact', 'class']);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = props;
   // The trailing text: the consumer's own `trailing` field, else an auto relative
   // time from updatedAt (fallback lastMessageAt). Never an internal clock — it is a
   // render-time snapshot.

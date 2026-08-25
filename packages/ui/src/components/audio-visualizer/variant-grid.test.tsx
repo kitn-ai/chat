@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, flush as flushSync } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { GridVisualizer } from './variant-grid';
 import { installFakeClock } from '../../test-utils/fake-clock';
@@ -283,6 +283,7 @@ describe('GridVisualizer', () => {
     expect(seen.map((s) => s.highlighted())).toEqual([false, true, false, true]);
 
     setBands([1, 0]);
+    flushSync(); // V2-FLUSH: commit the staged write
     await flush();
 
     // This is the streaming-audio case <Index> exists for: bands change on
@@ -316,6 +317,7 @@ describe('GridVisualizer frozen and live sequencing', () => {
     expect(isFramePending()).toBe(false);
 
     advance(5000);
+    flushSync(); // V2-FLUSH: commit the staged frame writes
     expect(lit(container).map((e) => e.dataset.kaiIndex)).toEqual(['4']);
   });
 
@@ -330,6 +332,7 @@ describe('GridVisualizer frozen and live sequencing', () => {
     expect(lit(container).map((e) => e.dataset.kaiIndex)).toEqual(['4']);
 
     setCls('b');
+    flushSync(); // V2-FLUSH: commit the staged write
     await flush();
 
     expect(lit(container).map((e) => e.dataset.kaiIndex)).toEqual(['4']);
@@ -342,6 +345,7 @@ describe('GridVisualizer frozen and live sequencing', () => {
     expect(lit(container).map((e) => e.dataset.kaiIndex)).toEqual(['4']);
 
     advance(100); // the default grid interval
+    flushSync(); // V2-FLUSH: commit the staged frame writes
     expect(lit(container)).toHaveLength(0);
   });
 
@@ -360,6 +364,7 @@ describe('GridVisualizer frozen and live sequencing', () => {
     ]);
 
     advance(100);
+    flushSync(); // V2-FLUSH: commit the staged frame writes
 
     // Same closures as above, called again: they must reflect the new tick.
     expect(seen.every((s) => s.highlighted() === false)).toBe(true);

@@ -1,4 +1,5 @@
 // tests/components/card.test.tsx
+import { flush } from 'solid-js';
 import { render, fireEvent } from '@solidjs/testing-library';
 import { Card } from '../../src/components/card';
 
@@ -81,6 +82,7 @@ describe('<Card>', () => {
     expect(container.querySelector('button')).toBeNull();
     // Nothing fired.
     fireEvent.click(root);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onCardClick).not.toHaveBeenCalled();
     expect(onDismiss).not.toHaveBeenCalled();
   });
@@ -96,6 +98,7 @@ describe('<Card>', () => {
     const close = getByRole('button', { name: 'Dismiss' });
     expect(close).toBeTruthy();
     fireEvent.click(close);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onDismiss).toHaveBeenCalledTimes(1);
     // Self-hides after dismiss.
     expect(queryByRole('heading', { level: 3 })).toBeNull();
@@ -110,6 +113,7 @@ describe('<Card>', () => {
       </Card>
     ));
     fireEvent.click(getByRole('button', { name: 'Dismiss' }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onDismiss).toHaveBeenCalledTimes(1);
     expect(onCardClick).not.toHaveBeenCalled();
   });
@@ -128,16 +132,20 @@ describe('<Card>', () => {
     expect(root.getAttribute('tabindex')).toBe('0');
 
     fireEvent.click(root);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onCardClick).toHaveBeenCalledTimes(1);
 
     fireEvent.keyDown(root, { key: 'Enter' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onCardClick).toHaveBeenCalledTimes(2);
 
     fireEvent.keyDown(root, { key: ' ' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onCardClick).toHaveBeenCalledTimes(3);
 
     // An unrelated key does nothing.
     fireEvent.keyDown(root, { key: 'a' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onCardClick).toHaveBeenCalledTimes(3);
   });
 

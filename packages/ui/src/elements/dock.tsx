@@ -1,4 +1,4 @@
-import { untrack } from 'solid-js';
+import { untrack, createSignal } from 'solid-js';
 import { defineWebComponent } from './define';
 import {
   Dock, DockCloseGlyph, DockLauncherGlyph,
@@ -111,14 +111,17 @@ defineWebComponent<Props, Events>('kai-dock', {
   focusOnOpen: 'content',
 }, (props, ctx) => {
   const { flag, element, expose, reflectFlag } = ctx;
-  let api: DockController | undefined;
+  // V2-PORT: a reactive signal, not a plain `let` — the disclosure/controller
+  // effects track it, and ownedWrite sanctions the synchronous hand-up from
+  // the primitive's body (see elements/tool.tsx, the same fix).
+  const [api, setApi] = createSignal<DockController | undefined>(undefined, { ownedWrite: true });
   let panel: HTMLElement | undefined;
   let launcher: HTMLButtonElement | undefined;
 
   // The standard disclosure surface: settable+reflecting `open`, kai-open-change,
   // show/hide/toggle. See ./disclosure — and note it is the SOLE emitter of the
   // event, so the primitive's onOpenChange is deliberately not wired here.
-  wireDisclosure(ctx, () => api, () => props.open);
+  wireDisclosure(ctx, api, () => props.open);
 
   // The other three booleans get the same read-back treatment, for the same reason:
   // `<kai-dock unread>` parses to `undefined`, so without this the property would
@@ -153,7 +156,7 @@ defineWebComponent<Props, Events>('kai-dock', {
   expose({
     /** Move focus to the panel while open, or to the launcher while closed. */
     focus: (options?: FocusOptions) =>
-      (api?.open() ? panel : launcher)?.focus(options),
+      (api()?.open() ? panel : launcher)?.focus(options),
   });
 
   // The `content` focus target: the first element assigned to the panel. Read off the
@@ -180,7 +183,7 @@ defineWebComponent<Props, Events>('kai-dock', {
       disabled={flag('disabled')}
       focusOnOpen={props.focusOnOpen as DockFocusOnOpen}
       contentTarget={contentTarget}
-      controllerRef={(a) => (api = a)}
+      controllerRef={(a) => setApi(a)}
       panelRef={(el) => (panel = el)}
       launcherRef={(el) => (launcher = el)}
       // NATIVE SLOT FALLBACK does the whole icon chain, with no occupancy tracking and

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { onCleanup, onMount, type JSX } from 'solid-js';
+import { onCleanup, onSettled } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import './coachmark';
 
 // Labs: the anchored onboarding hint. The coachmark WRAPS a trigger (the default
@@ -7,7 +8,7 @@ import './coachmark';
 // owns when it shows (`default-open` here) and records the dismiss so it won't
 // show again.
 
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -46,10 +47,11 @@ export const PointingAtAButton: StoryObj = {
         headline="Cowork has a new home"
         badge="New"
         ref={(el: HTMLElement) =>
-          onMount(() => {
+          onSettled(() => {
             const onDismiss = () => console.log('kai-dismiss: coachmark seen');
             el.addEventListener('kai-dismiss', onDismiss);
-            onCleanup(() => el.removeEventListener('kai-dismiss', onDismiss));
+            // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => el.removeEventListener('kai-dismiss', onDismiss);
           })
         }
       >

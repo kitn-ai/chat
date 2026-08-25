@@ -1,4 +1,5 @@
-import { Index, type JSX } from 'solid-js';
+import { For, untrack } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../../utils/cn';
 import { normalizeVolumeBands } from '../../primitives/audio-bands';
 import { useSequencer } from '../../primitives/use-sequencer';
@@ -131,7 +132,7 @@ export function GridVisualizer(
         value) is the correct primitive here too, and it keeps the render-prop
         contract identical across variants. See the note in variant-bar.tsx.
       */}
-      <Index each={items()}>
+      <For keyed={false} each={items()}>
         {(_value, index) => {
           // Every column repeats down every row, so a cell's level comes from
           // its column band, not its flat position: index % cols(), not index.
@@ -144,7 +145,7 @@ export function GridVisualizer(
             value: () => levels()[index % cols()] ?? 0,
           };
           return (
-            props.children?.(item) ?? (
+            untrack(() => props.children)?.(item) ?? (
               // The lit state is a SECOND part TOKEN (`part(cell highlighted)`),
               // not a `data-*` attribute selector on `::part(cell)`: a CSS
               // attribute selector cannot follow a pseudo-element, so
@@ -155,7 +156,7 @@ export function GridVisualizer(
               <div
                 part={item.highlighted() ? 'cell highlighted' : 'cell'}
                 data-kai-index={item.index}
-                data-kai-highlighted={item.highlighted()}
+                data-kai-highlighted={item.highlighted() ? 'true' : 'false'}
                 class={cn(
                   'place-self-center rounded-full bg-current/10 transition-all ease-out',
                   'data-[kai-highlighted=true]:bg-current',
@@ -169,7 +170,7 @@ export function GridVisualizer(
             )
           );
         }}
-      </Index>
+      </For>
     </div>
   );
 }

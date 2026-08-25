@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { createSignal, onCleanup, Show, For, type JSX } from 'solid-js';
+import { createSignal, onCleanup, Show, For } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { AudioVisualizer, type AudioVisualizerProps } from './index';
 import { Button } from '../../ui/button';
 import { Notice } from '../../ui/notice';
@@ -919,7 +920,7 @@ export const Microphone: Story = {
             shader={args.variant === 'custom' ? { fragment: SPECTRUM_SHADER } : undefined}
           />
         </Tile>
-        <Button onClick={() => void toggle()} disabled={requesting()} aria-pressed={!!stream()}>
+        <Button onClick={() => void toggle()} disabled={requesting()} aria-pressed={!!stream() ? 'true' : 'false'}>
           {stream() ? 'Stop microphone' : requesting() ? 'Requesting...' : 'Enable microphone'}
         </Button>
         <Show when={error()}>{(message) => <Notice severity="error">{message()}</Notice>}</Show>
@@ -1000,7 +1001,7 @@ export const MicrophoneAll: Story = {
 
     return (
       <div style={{ display: 'flex', 'flex-direction': 'column', gap: '16px', 'align-items': 'center' }}>
-        <Button onClick={() => void toggle()} disabled={requesting()} aria-pressed={!!stream()}>
+        <Button onClick={() => void toggle()} disabled={requesting()} aria-pressed={!!stream() ? 'true' : 'false'}>
           {stream() ? 'Stop microphone' : requesting() ? 'Requesting...' : 'Enable microphone'}
         </Button>
         <Show when={error()}>{(message) => <Notice severity="error">{message()}</Notice>}</Show>

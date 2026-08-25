@@ -17,7 +17,7 @@ import {
 import './search';
 
 // Declare the custom element tag for SolidJS JSX.
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -117,11 +117,11 @@ function CheckBox(props: { checked: boolean; indeterminate?: boolean; onToggle: 
         e.stopPropagation();
         props.onToggle();
       }}
-      class="flex size-4 shrink-0 items-center justify-center rounded-[5px] border transition-colors"
-      classList={{
+      class={["flex size-4 shrink-0 items-center justify-center rounded-[5px] border transition-colors", {
         'border-border bg-background hover:border-muted-foreground/70': !on(),
-        'border-primary bg-primary text-primary-foreground': on(),
-      }}
+        'border-primary bg-primary text-primary-foreground': !!on(), // V2-PORT: ClassValue wants boolean
+      }]}
+     
     >
       <Show when={props.indeterminate} fallback={<Show when={props.checked}><Check size={11} strokeWidth={3.5} /></Show>}>
         <Minus size={11} strokeWidth={3.5} />
@@ -146,8 +146,8 @@ function SortHeader(props: {
       <button
         type="button"
         onClick={() => props.onSort(props.col)}
-        class="-mx-1.5 inline-flex items-center gap-1 rounded-md px-1.5 py-1 transition-colors hover:bg-surface-strong"
-        classList={{ 'text-foreground': active(), 'text-muted-foreground hover:text-foreground': !active() }}
+        class={["-mx-1.5 inline-flex items-center gap-1 rounded-md px-1.5 py-1 transition-colors hover:bg-surface-strong", { 'text-foreground': active(), 'text-muted-foreground hover:text-foreground': !active() }]}
+       
       >
         {props.label}
         <Show
@@ -386,14 +386,14 @@ export const DataTable: Story = {
                         const isSelected = () => selected().has(m.id);
                         return (
                           <tr
-                            class="group border-b border-border transition-colors last:border-0"
-                            classList={{
+                            class={["group border-b border-border transition-colors last:border-0", {
                               // No dedicated "row selected" token, so this is a
                               // faint primary wash (works in both modes); hover uses
                               // the surface token.
                               'bg-primary/[0.05]': isSelected(),
                               'hover:bg-surface': !isSelected(),
-                            }}
+                            }]}
+                           
                           >
                             <td class="px-3 py-2.5">
                               <CheckBox
@@ -475,12 +475,12 @@ export const DataTable: Story = {
                       onClick={() => setPage(p)}
                       aria-label={`Page ${p}`}
                       aria-current={page() === p ? 'page' : undefined}
-                      class="inline-flex size-8 items-center justify-center rounded-md border text-meta font-medium tabular-nums transition-colors"
-                      classList={{
+                      class={["inline-flex size-8 items-center justify-center rounded-md border text-meta font-medium tabular-nums transition-colors", {
                         'border-primary bg-primary text-primary-foreground': page() === p,
                         'border-border bg-background text-muted-foreground hover:bg-surface hover:text-foreground':
                           page() !== p,
-                      }}
+                      }]}
+                     
                     >
                       {p}
                     </button>

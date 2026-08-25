@@ -1,4 +1,5 @@
-import { type JSX, Show, splitProps } from 'solid-js';
+import { Show, omit } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
 import { renderIcon } from '../ui/icon';
@@ -23,7 +24,9 @@ export interface PromptSuggestionProps extends JSX.ButtonHTMLAttributes<HTMLButt
 }
 
 function PromptSuggestion(props: PromptSuggestionProps) {
-  const [local, rest] = splitProps(props, ['children', 'variant', 'size', 'class', 'icon', 'highlight', 'block', 'list']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'children', 'variant', 'size', 'class', 'icon', 'highlight', 'block', 'list');
   const Icon = () => <Show when={local.icon}>{renderIcon(local.icon, { class: 'size-3.5 shrink-0' })}</Show>;
 
   const isHighlightMode = () => local.highlight !== undefined && local.highlight.trim() !== '';

@@ -12,7 +12,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup } from '@solidjs/testing-library';
-import { createSignal, type JSX } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { reflectItemConfig } from './resizable';
 
 afterEach(cleanup);
@@ -43,8 +44,11 @@ describe('reflectItemConfig (property → attribute reflection)', () => {
     expect(el.getAttribute('size')).toBeNull();
 
     setSize('280px');
+    flush(); // V2-FLUSH: commit the staged write
     setMin('220px');
+    flush(); // V2-FLUSH: commit the staged write
     setMax('420px');
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
 
     expect(el.getAttribute('size')).toBe('280px');
@@ -55,10 +59,12 @@ describe('reflectItemConfig (property → attribute reflection)', () => {
   it('clears the attribute when the string prop goes back to undefined', async () => {
     const { el, setSize } = setup();
     setSize('280px');
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
     expect(el.getAttribute('size')).toBe('280px');
 
     setSize(undefined);
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
     expect(el.getAttribute('size')).toBeNull();
   });
@@ -74,6 +80,7 @@ describe('reflectItemConfig (property → attribute reflection)', () => {
   it('does not stomp a dragged size when a re-render re-asserts the declared size', async () => {
     const { el, setSize } = setup();
     setSize('280px');
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
     expect(el.getAttribute('size')).toBe('280px');
 
@@ -81,11 +88,13 @@ describe('reflectItemConfig (property → attribute reflection)', () => {
     // attribute, and component-register back-propagating that into the prop signal.
     el.setAttribute('size', '35%');
     setSize('35%');
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
     expect(el.getAttribute('size')).toBe('35%');
 
     // A framework re-render re-asserts the ORIGINAL declared size prop every render.
     setSize('280px');
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
     // Durable: the dragged size is preserved, not reset to 280px.
     expect(el.getAttribute('size')).toBe('35%');
@@ -94,15 +103,18 @@ describe('reflectItemConfig (property → attribute reflection)', () => {
   it('still applies an EXPLICIT consumer size change made after a drag', async () => {
     const { el, setSize } = setup();
     setSize('280px');
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
 
     // Drag → attribute + signal diverge to a live percent.
     el.setAttribute('size', '35%');
     setSize('35%');
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
 
     // Consumer genuinely changes the declared size.
     setSize('320px');
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
     expect(el.getAttribute('size')).toBe('320px');
   });

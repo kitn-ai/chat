@@ -1,11 +1,5 @@
-import {
-  type JSX,
-  For,
-  Show,
-  splitProps,
-  createSignal,
-  createMemo,
-} from 'solid-js';
+import { For, Show, omit, createSignal, createMemo } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import {
   ChevronRight,
@@ -213,14 +207,15 @@ export function FileTree(props: FileTreeProps): JSX.Element {
   // facade declares its own `files: []` default (elements/file-tree.tsx), so the
   // web-component path is covered where the property genuinely arrives late.
   // Same shape as `Segmented`, which reads `merged.options` directly.
-  const [local, rest] = splitProps(props, [
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 
     'files',
     'activeFile',
     'onSelect',
     'defaultExpanded',
     'summary',
-    'class',
-  ]);
+    'class');
 
   const tree = createMemo(() => buildFileTree(local.files));
 
@@ -419,7 +414,7 @@ function TreeNode(props: TreeNodeProps): JSX.Element {
         return (
           <div
             role="treeitem"
-            aria-selected={isActive()}
+            aria-selected={isActive() ? 'true' : 'false'}
             aria-label={ariaName}
             data-tree-path={props.node.path}
             data-tree-kind="file"
@@ -473,7 +468,7 @@ function TreeNode(props: TreeNodeProps): JSX.Element {
       <div role="none">
         <div
           role="treeitem"
-          aria-expanded={open()}
+          aria-expanded={open() ? 'true' : 'false'}
           data-tree-path={props.node.path}
           data-tree-kind="folder"
           tabindex={tabIndex()}

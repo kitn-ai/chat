@@ -1,4 +1,4 @@
-import { createEffect, untrack, type Accessor } from 'solid-js';
+import { createEffect, createSignal, latest, untrack, type Accessor } from 'solid-js';
 import type { WebComponentContext } from './define';
 
 /** The open controller a primitive hands up via `controllerRef` so a facade can
@@ -39,6 +39,16 @@ export function wireDisclosure<E extends { 'kai-open-change': { open: boolean } 
 ): void {
   const { element, dispatch, flag, reflectFlag, expose } = ctx;
   let prev: boolean | undefined;
+  const [seeded, setSeeded] = createSignal(false);
+  let mountBaselined = false;
+  // V2-PORT: flips once the intake effect below has applied the author's intent
+  // to the controller. The reflection holds off until then — under v2's staged
+  // writes the two effects can land in either order within one drain, and a
+  // reflection that runs first would write the controller's still-default CLOSED
+  // state over the author's `open` attribute and start an attribute⇄prop
+  // oscillation (measured: kai-tool looped the flush guard to its ceiling). A
+  // SIGNAL, not a plain flag, so the reflection re-runs when it flips even when
+  // the intake made no controller write (the default-open case).
 
   // External `open` prop/attr → drive internal state. Only when the consumer has
   // EXPLICITLY set it (so a defaultOpen seed survives mount); the equality guard
@@ -54,14 +64,32 @@ export function wireDisclosure<E extends { 'kai-open-change': { open: boolean } 
   // spelling the `open` prop's own doc advertises — never opened; only `default-open`
   // did. Reading intent IN before reflecting state OUT is what makes the author's
   // attribute survive long enough to mean something.
-  createEffect(() => {
-    const api = getApi();
-    if (!api) return;
-    const explicit = openProp() !== undefined || element.hasAttribute('open');
-    if (!explicit) return;
-    const desired = flag('open');
-    if (desired !== untrack(api.open)) api.setOpen(desired);
-  });
+  // V2-PORT: tracked reads (controller, prop, flag) in the compute; the
+  // attribute probe and the controller write in the apply (untracked by
+  // construction, so the old untrack() around api.open is folded in).
+  createEffect(
+    () => ({ api: getApi(), openP: openProp(), desired: flag('open') }),
+    ({ api, openP, desired }) => {
+      if (!api) return;
+      setSeeded(true);
+      const explicit = openP !== undefined || element.hasAttribute('open');
+      if (explicit) {
+        // V2-PORT: latest() — the guard has to compare against the STAGED value,
+        // or two same-flush passes read each other one commit stale and the
+        // attribute⇄prop pair oscillates forever (measured: the kai-tool loop).
+        if (desired !== latest(api.open)) api.setOpen(desired);
+      }
+      // V2-PORT: on the FIRST run with a live controller, pin the change
+      // notifier's baseline to the seeded outcome — within one drain the
+      // notifier's compute can run before this apply, capture the pre-seed
+      // state, and read the seed as a "change", announcing kai-open-change at
+      // mount (which the event contractually never does).
+      if (!mountBaselined) {
+        mountBaselined = true;
+        prev = explicit ? desired : latest(api.open);
+      }
+    },
+  );
 
   // Reflect internal open → the `[open]` host attribute.
   //
@@ -71,18 +99,47 @@ export function wireDisclosure<E extends { 'kai-open-change': { open: boolean } 
   // used to leave `el.open === undefined`, exactly as `kai-chat`'s `loading` did
   // (findings G-05). Returning `undefined` before the primitive has handed its
   // controller up leaves the author's `<el open>` attribute alone.
-  reflectFlag('open', () => getApi()?.open());
+  // V2-PORT: the reflection source reads the STAGED value via latest() (still a
+  // tracked read) — on the mount flush this effect runs in the same drain as the
+  // intake effect above, and reflecting the last COMMITTED (closed) state would
+  // delete the author's `open` attribute and start the oscillation.
+  reflectFlag('open', () => {
+    const api = getApi();
+    if (!api) return undefined;
+    api.open(); // tracked subscription
+    if (!seeded()) return undefined; // V2-PORT: see the `seeded` note above
+    return latest(api.open);
+  });
 
   // kai-open-change, fired once per change. Separate from the reflection above
   // because it is a notification, not a reflection; both run in the same batch, so
   // splitting them changes nothing observable about the ordering.
-  createEffect(() => {
-    const api = getApi();
-    if (!api) return;
-    const o = api.open();
-    if (prev !== undefined && prev !== o) dispatch('kai-open-change', { open: o } as E['kai-open-change']);
-    prev = o;
-  });
+  // V2-PORT: tracked reads in the compute; the change-detect + dispatch in the
+  // apply. The compute returns the STAGED value via latest(): on the mount drain
+  // the intake above may have just applied `<el open>` in this same flush, and a
+  // first run that captured the still-committed CLOSED state would make the very
+  // next pass look like a change — announcing kai-open-change at mount, which
+  // this event contractually never does.
+  createEffect(
+    () => {
+      const api = getApi();
+      if (!api) return undefined;
+      api.open(); // tracked subscription
+      return latest(api.open);
+    },
+    (o) => {
+      if (o === undefined) return;
+      // Re-read the STAGED truth here rather than trusting the compute's value:
+      // within one drain this compute can run BEFORE the intake's apply seeds
+      // the controller, and dispatching that stale snapshot announced a phantom
+      // closed→open pair at mount.
+      const api = untrack(getApi);
+      if (!api) return;
+      const now = latest(api.open);
+      if (prev !== undefined && prev !== now) dispatch('kai-open-change', { open: now } as E['kai-open-change']);
+      prev = now;
+    },
+  );
 
   expose({
     /** Open it programmatically (no-op while disabled). */

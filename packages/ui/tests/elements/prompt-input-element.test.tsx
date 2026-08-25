@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import '../../src/elements/prompt-input';
 import type { ComposerDoc } from '../../src/primitives/composer-model';
 
@@ -15,6 +16,7 @@ test('value as a ComposerDoc seeds a pill; submit emits a flattened string value
   el.value = doc;
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   // The seeded pill renders inline (a real skill pill, by kind).
   const pill = el.shadowRoot!.querySelector('[data-kai-entity]');
@@ -27,6 +29,7 @@ test('value as a ComposerDoc seeds a pill; submit emits a flattened string value
   el.addEventListener('kai-submit', (e) => (detail = (e as CustomEvent).detail));
   const editable = el.shadowRoot!.querySelector('[data-kai-composer-editable]') as HTMLElement;
   editable.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   const d = detail as unknown as { value: unknown; entities: { id: string }[] };
   expect(typeof d.value).toBe('string');
@@ -43,6 +46,7 @@ test('emits valuechange on input and submit on Enter', async () => {
   el.placeholder = 'Ask...';
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   const editable = el.shadowRoot!.querySelector('[data-kai-composer-editable]') as HTMLElement;
   expect(editable.getAttribute('data-placeholder')).toBe('Ask...');
@@ -57,9 +61,11 @@ test('emits valuechange on input and submit on Enter', async () => {
   // and reach SolidJS's document-level delegated listeners (mirrors real browser
   // behaviour where native input/keydown events are always composed).
   editable.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(changed).toBe('hello');
 
   editable.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(submitted).toBe('hello');
 
   el.remove();
@@ -74,6 +80,7 @@ test('default suggestionMode "submit": clicking a suggestion emits submit (sends
   el.suggestions = ['Hi', 'Bye'];
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(el.shadowRoot!.textContent).toContain('Hi');
 
@@ -99,6 +106,7 @@ test('suggestionMode "fill": clicking a suggestion fills the input and emits sug
   el.suggestionMode = 'fill';
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   let submitted: string | null = null;
   let clicked: string | null = null;
@@ -111,6 +119,7 @@ test('suggestionMode "fill": clicking a suggestion fills the input and emits sug
 
   // Wait for controlled re-render to reflect filled value
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   const editable = el.shadowRoot!.querySelector('[data-kai-composer-editable]') as HTMLElement;
   expect(editable.textContent).toBe('Bye'); // filled into the input
 
@@ -121,6 +130,7 @@ test('disallows leading whitespace at the start of the prompt', async () => {
   const el = document.createElement('kai-prompt-input') as HTMLElement & { value?: string };
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   const editable = el.shadowRoot!.querySelector('[data-kai-composer-editable]') as HTMLElement;
   let changed: string | null = null;
@@ -129,14 +139,18 @@ test('disallows leading whitespace at the start of the prompt', async () => {
   // Leading spaces are stripped on input.
   editable.textContent = '   hello';
   editable.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(editable.textContent).toBe('hello');
   expect(changed).toBe('hello');
 
   // A lone leading space collapses to empty (hitting space at the start does nothing).
   editable.textContent = ' ';
   editable.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(editable.textContent).toBe('');
 
   el.remove();
@@ -148,13 +162,16 @@ test('send button is disabled when loading even with non-empty value', async () 
   };
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   const editable = el.shadowRoot!.querySelector('[data-kai-composer-editable]') as HTMLElement;
   editable.textContent = 'something';
   editable.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   el.loading = true;
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   const send = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-testid="send"]')!;
   expect(send.disabled).toBe(true);
@@ -169,6 +186,7 @@ test('send button and textarea have accessible names (a11y A1)', async () => {
   el.placeholder = 'Ask anything...';
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   const send = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-testid="send"]')!;
   expect(send.getAttribute('aria-label')).toBe('Send message');
@@ -186,6 +204,7 @@ test('textarea always has a non-empty accessible name', async () => {
   const withDefault = document.createElement('kai-prompt-input');
   document.body.appendChild(withDefault);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   const defaultEditable = withDefault.shadowRoot!.querySelector('[data-kai-composer-editable]') as HTMLElement;
   expect(defaultEditable.getAttribute('aria-label')).toBeTruthy();
   withDefault.remove();
@@ -196,6 +215,7 @@ test('textarea always has a non-empty accessible name', async () => {
   emptyPlaceholder.placeholder = '';
   document.body.appendChild(emptyPlaceholder);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   const emptyEditable = emptyPlaceholder.shadowRoot!.querySelector('[data-kai-composer-editable]') as HTMLElement;
   expect(emptyEditable.getAttribute('aria-label')).toBe('Message');
   emptyPlaceholder.remove();

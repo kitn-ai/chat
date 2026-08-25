@@ -2,6 +2,7 @@
 // Native Solid host path for ChoiceCard: a `host` prop's emit is called (not the
 // CustomEvent). Select a row then Submit to emit `action` (id + payload), single-shot,
 // empty → error, and the unified allowOther flow emits `__other__` with the typed text.
+import { flush } from 'solid-js';
 import { render, fireEvent } from '@solidjs/testing-library';
 import { ChoiceCard } from '../../src/components/choice-card';
 import type { CardEvent, CardHost, CardContext } from '../../src/primitives/card-contract';
@@ -46,8 +47,10 @@ test('select a row then Submit emits `action` with id + echoed payload', () => {
   ));
   // Selecting a row alone does not emit.
   fireEvent.click(getByText('Pro'));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(action(events)).toBeUndefined();
   fireEvent.click(getByText('Submit'));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   const a = action(events);
   expect(a?.action).toBe('pro');
   expect(a?.payload).toEqual({ plan: 'pro' });
@@ -63,7 +66,9 @@ test('single-shot: after Submit there is no radiogroup; cannot re-emit', () => {
     />
   ));
   fireEvent.click(getByText('A'));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   fireEvent.click(getByText('Submit'));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   // After Submit the radiogroup + Submit are replaced by the read-only resolved view.
   expect(queryByRole('radiogroup')).toBeNull();
   expect(queryByText('Submit')).toBeNull();
@@ -84,10 +89,13 @@ test('Submit stays disabled until a selectable row is selected; disabled rows ca
   expect(submit.disabled).toBe(true);
   // Clicking the disabled row does not select it; Submit stays disabled.
   fireEvent.click(getByText('A'));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(submit.disabled).toBe(true);
   fireEvent.click(getByText('B'));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(submit.disabled).toBe(false);
   fireEvent.click(submit);
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(action(events)?.action).toBe('b');
 });
 
@@ -117,13 +125,16 @@ test('allowOther: select Other reveals input; the one Submit emits __other__ wit
 
   // Selecting Other reveals the input but does not emit; Submit still disabled (empty).
   fireEvent.click(getByText('Other…'));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(action(events)).toBeUndefined();
   expect(submit.disabled).toBe(true);
 
   const input = getByLabelText('Other…') as HTMLInputElement;
   fireEvent.input(input, { target: { value: 'My custom answer' } });
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(submit.disabled).toBe(false);
   fireEvent.click(submit);
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   const a = action(events);
   expect(a?.action).toBe('__other__');

@@ -11,7 +11,7 @@
 // CDN autoloader (no import map needed). Deps are shared across entries, so there
 // is no per-element duplication of Solid/CSS/marked.
 import { defineConfig } from 'vite';
-import solidPlugin from 'vite-plugin-solid';
+import solidPlugin from '@solidjs/vite-plugin' // V2-PORT: the Solid 2 compiler plugin;
 import { resolve } from 'node:path';
 import { readFileSync, existsSync } from 'node:fs';
 import { transform } from 'esbuild';

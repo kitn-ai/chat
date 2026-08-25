@@ -1,12 +1,12 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { onMount, onCleanup } from 'solid-js';
+import { onSettled, onCleanup } from 'solid-js';
 import './register'; // side effect: registers <kai-message>, <kai-source>, …
 import { attachKaiActions } from '../stories/docs/story-actions';
 import { textMessage } from '../state';
 import type { ChatMessage } from './chat-types';
 
 // The web components are custom DOM elements, so declare the tags for JSX.
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -86,16 +86,20 @@ function CustomAvatar() {
 function ComposedThread() {
   let userEl: (HTMLElement & { message?: ChatMessage }) | undefined;
   let assistantEl: (HTMLElement & { message?: ChatMessage }) | undefined;
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers) d(); });
+  onSettled(() => {
     if (userEl) {
       userEl.setAttribute('avatar', 'none');
       userEl.message = userMessage;
-      onCleanup(attachKaiActions(userEl)); // log kai-message-action
+      settledDisposers.push(attachKaiActions(userEl)); // log kai-message-action
     }
     if (assistantEl) {
       assistantEl.message = assistantMessage;
       // Log kai-message-action (copy / like / dislike / regenerate clicks).
-      onCleanup(attachKaiActions(assistantEl));
+      settledDisposers.push(attachKaiActions(assistantEl));
     }
   });
   return (

@@ -34,7 +34,7 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { ConversationList } from './conversation-list';
 import { Thread } from './thread';
@@ -81,6 +81,7 @@ describe('re-render contract — ConversationList (the #224 surface)', () => {
     // The reporter's edit: change the field, hand over a fresh array of the SAME objects.
     current().find((c) => c.id === 'a')!.title = 'RENAMED';
     setConversations([...current()]);
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
 
     expect(container.textContent).not.toContain('RENAMED');
@@ -92,6 +93,7 @@ describe('re-render contract — ConversationList (the #224 surface)', () => {
     expect(container.textContent).toContain('ORIGINAL');
 
     setConversations(current().map((c) => (c.id === 'a' ? { ...c, title: 'RENAMED' } : c)));
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
 
     expect(container.textContent).toContain('RENAMED');
@@ -106,6 +108,7 @@ describe('re-render contract — ConversationList (the #224 surface)', () => {
     // nothing notifies. Both halves of the rule are load-bearing.
     list[0] = { ...list[0], title: 'RENAMED' };
     setConversations(list);
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
 
     expect(container.textContent).not.toContain('RENAMED');
@@ -115,11 +118,13 @@ describe('re-render contract — ConversationList (the #224 surface)', () => {
     const { container, setConversations, current } = mountConversations();
 
     setConversations([...current(), { id: 'c', title: 'GAMMA', scope: { type: 'collection' }, messageCount: 9 } as ConversationSummary]);
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
     expect(container.textContent).toContain('GAMMA');
     expect(container.textContent).toContain('ORIGINAL');
 
     setConversations(current().filter((c) => c.id !== 'b'));
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
     expect(container.textContent).not.toContain('Beta');
     expect(container.textContent).toContain('ORIGINAL');
@@ -143,6 +148,7 @@ describe('re-render contract — Thread (the same rule on messages)', () => {
 
     current()[0].parts = [{ type: 'text', text: 'RENAMED' }];
     setMessages([...current()]);
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
 
     expect(container.textContent).not.toContain('RENAMED');
@@ -153,6 +159,7 @@ describe('re-render contract — Thread (the same rule on messages)', () => {
     expect(container.textContent).toContain('ORIGINAL');
 
     setMessages(current().map((m) => ({ ...m, parts: [{ type: 'text' as const, text: 'RENAMED' }] })));
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
 
     expect(container.textContent).toContain('RENAMED');

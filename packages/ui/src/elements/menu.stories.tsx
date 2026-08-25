@@ -1,12 +1,12 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { onMount, onCleanup } from 'solid-js';
+import { onSettled, onCleanup } from 'solid-js';
 import { Plus } from 'lucide-solid';
 import './register'; // side effect: registers all kai-* custom elements (incl. kai-menu)
 import { attachKaiActions } from '../stories/docs/story-actions';
 import type { KaiMenuItem } from './menu';
 
 // Declare the custom element tag for SolidJS JSX.
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -29,7 +29,7 @@ type Story = StoryObj;
 /**
  * Reproduces the `+` action menu from the design screenshot via the `kai-menu`
  * JSON-driven web component. Items are set as a JS property (array ref) in
- * `onMount`. Every declared event (`kai-select`, `kai-open-change`) logs to the
+ * `onSettled`. Every declared event (`kai-select`, `kai-open-change`) logs to the
  * Actions panel via the shared helper; the dedicated `kai-select` handler keeps
  * ONLY its side-effect (flipping the "Web search" checkbox and reassigning
  * `el.items` with a fresh array reference so the checkmark updates reactively).
@@ -64,12 +64,16 @@ function PlusMenuDemo() {
     { id: 'coming-soon', label: 'Coming soon', disabled: true },
   ];
 
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers) d(); });
+  onSettled(() => {
     if (!el) return;
     el.items = [...initialItems];
 
     // Log every declared event (kai-select, kai-open-change) to the Actions panel.
-    onCleanup(attachKaiActions(el));
+    settledDisposers.push(attachKaiActions(el));
 
     // Dedicated kai-select handler keeps ONLY its side-effect (logging is done by
     // the helper above): for the checkbox item, flip its state and reassign a
@@ -154,11 +158,15 @@ function FilterGroupByDemo() {
   let filter = 'all';
   let groupBy = 'date';
 
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers2: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers2) d(); });
+  onSettled(() => {
     if (!el) return;
     el.items = buildItems(filter, groupBy);
 
-    onCleanup(attachKaiActions(el));
+    settledDisposers2.push(attachKaiActions(el));
 
     // Single-select: set the clicked id as the selected one in its group and
     // reassign a fresh array ref so the checkmark moves reactively.

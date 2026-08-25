@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
@@ -74,15 +75,18 @@ describe('TasksCard progress (onboarding checklist)', () => {
     expect(checkboxes).toHaveLength(2);
 
     fireEvent.click(checkboxes[0]);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(getByText(countText('1 / 2'))).toBeInTheDocument();
     expect(onValueChange).toHaveBeenLastCalledWith({ value: ['role'] });
 
     fireEvent.click(checkboxes[1]);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(getByText(countText('2 / 2'))).toBeInTheDocument();
     expect(onValueChange).toHaveBeenLastCalledWith({ value: ['role', 'tools'] });
 
     // Unchecking walks it back down.
     fireEvent.click(checkboxes[0]);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(getByText(countText('1 / 2'))).toBeInTheDocument();
     expect(onValueChange).toHaveBeenLastCalledWith({ value: ['tools'] });
   });
@@ -113,6 +117,7 @@ describe('TasksCard progress (onboarding checklist)', () => {
     const { getByText, getAllByRole } = render(() => <TasksCard data={bounded} cardId="bounded" />);
     const checkboxes = getAllByRole('checkbox') as HTMLInputElement[];
     fireEvent.click(checkboxes[0]);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     // `total` is the number of rows (2); `max` only gates how many can be checked.
     expect(getByText(countText('1 / 2'))).toBeInTheDocument();
     // The other row is now blocked (disabled) by the max gate.

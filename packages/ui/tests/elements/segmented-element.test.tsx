@@ -16,6 +16,7 @@
  * markup because ordering is where the 13-facade bug class lives; every negative
  * assertion is paired with a positive over the same harness.
  */
+import { flush as flushSync } from 'solid-js';
 import { afterEach, describe, expect, test } from 'vitest';
 import '../../src/elements/segmented';
 import type { KaiSegmentedOption } from '../../src/elements/element-data-types';
@@ -58,6 +59,7 @@ const pressed = (el: Seg) =>
 
 const key = (node: EventTarget, k: string) =>
   node.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, composed: true, cancelable: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
 describe('rendering', () => {
   test('nothing renders without options, and the SAME element renders once given them', async () => {

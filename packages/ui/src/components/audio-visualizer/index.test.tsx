@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createSignal, createEffect } from 'solid-js';
+import { createSignal, createEffect, flush } from 'solid-js';
 import { render, cleanup, waitFor } from '@solidjs/testing-library';
 import { AudioVisualizer } from './index';
 import * as UseAudioAnalysisModule from '../../primitives/use-audio-analysis';
@@ -200,7 +200,10 @@ describe('AudioVisualizer shader reports itself unavailable', () => {
     vi.doMock('./variant-wave', () => ({
       default: (props: { onUnavailable: () => void }) => {
         waveMounted = true;
-        props.onUnavailable();
+        // V2-SHAPE: a synchronous body-time signal write is rejected by v2's
+        // owned-scope guard (the real variants report from effects); defer the
+        // report one microtask, as an effect would.
+        queueMicrotask(() => props.onUnavailable());
         return null;
       },
     }));
@@ -223,7 +226,9 @@ describe('AudioVisualizer shader reports itself unavailable', () => {
     // would, if the fallback depended on some transient "still loading" state
     // rather than a permanent flag).
     setCls('b');
+    flush(); // V2-FLUSH: commit the staged write
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(container.querySelectorAll('[part~="bar"]').length).toBeGreaterThan(0);
   });
 
@@ -232,7 +237,10 @@ describe('AudioVisualizer shader reports itself unavailable', () => {
     vi.doMock('./variant-wave', () => ({
       default: (props: { onUnavailable: () => void }) => {
         waveMounted = true;
-        props.onUnavailable();
+        // V2-SHAPE: a synchronous body-time signal write is rejected by v2's
+        // owned-scope guard (the real variants report from effects); defer the
+        // report one microtask, as an effect would.
+        queueMicrotask(() => props.onUnavailable());
         return null;
       },
     }));
@@ -255,6 +263,8 @@ describe('AudioVisualizer shader reports itself unavailable', () => {
     );
 
     setVariant('aurora');
+    await Promise.resolve(); // V2-SHAPE: let the staged write commit naturally
+    flush(); // V2-FLUSH
 
     // If `unavailable` were not reset on a variant change, the dispatcher's
     // `<Show>` gate would stay permanently closed and aurora's component
@@ -305,6 +315,7 @@ describe('AudioVisualizer volume from caller-supplied bands', () => {
     expect(first).toBeGreaterThan(0);
 
     setBands([0.9, 0.9, 0.9]);
+    flush(); // V2-FLUSH: commit the staged write
     await waitFor(() => expect(captured!.volume).not.toBe(first));
     expect(captured!.volume).toBeGreaterThan(0);
   });
@@ -477,7 +488,9 @@ describe('AudioVisualizer band count reactivity', () => {
     expect(options.bands()).toBe(2);
 
     setBarCount(7);
+    flush(); // V2-FLUSH: commit the staged write
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     // Same accessor, called again: it must reflect the NEW prop, not a
     // mount-time snapshot. Before the fix this field was a plain number (3),
@@ -593,11 +606,12 @@ describe('AudioVisualizer bands leak: state/frozen reads must not re-run an unre
       // is fine (the same pattern already used for `captured` elsewhere in
       // this file).
       default: (props: { state: string; frozen: boolean }) => {
+        // V2-PORT: two-argument effect; the tracked reads + counter are the compute.
         createEffect(() => {
           void props.state;
           void props.frozen;
           runs++;
-        });
+        }, () => {});
         return null;
       },
     }));
@@ -615,6 +629,7 @@ describe('AudioVisualizer bands leak: state/frozen reads must not re-run an unre
     // rerun at all.
     for (let i = 0; i < 20; i++) setBands([Math.random(), Math.random()]);
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     expect(runs).toBe(afterMount);
   });

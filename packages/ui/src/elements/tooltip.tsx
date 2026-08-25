@@ -1,3 +1,4 @@
+import { createSignal } from 'solid-js';
 import { type Placement } from '@floating-ui/dom';
 import { Tooltip, type TooltipController } from '../ui/tooltip';
 import { defineWebComponent } from './define';
@@ -54,11 +55,14 @@ defineWebComponent<Props, Events>('kai-tooltip', {
   disabled: undefined,
 }, (props, ctx) => {
   const { flag } = ctx;
-  let api: TooltipController | undefined;
+  // V2-PORT: a reactive signal, not a plain `let` — the disclosure/controller
+  // effects track it, and ownedWrite sanctions the synchronous hand-up from
+  // the primitive's body (see elements/tool.tsx, the same fix).
+  const [api, setApi] = createSignal<TooltipController | undefined>(undefined, { ownedWrite: true });
 
   // The standard overlay surface: settable+reflecting `open`, kai-open-change,
   // show/hide/toggle, disabled-gating. See ./disclosure.
-  wireDisclosure(ctx, () => api, () => props.open);
+  wireDisclosure(ctx, api, () => props.open);
 
   return (
     <>
@@ -76,7 +80,7 @@ defineWebComponent<Props, Events>('kai-tooltip', {
         placement={(props.placement as Placement | undefined) ?? undefined}
         defaultOpen={flag('defaultOpen')}
         disabled={flag('disabled')}
-        controllerRef={(a) => (api = a)}
+        controllerRef={(a) => setApi(a)}
       >
         <slot />
       </Tooltip>

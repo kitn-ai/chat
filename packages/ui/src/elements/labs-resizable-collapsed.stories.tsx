@@ -1,12 +1,13 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { createSignal, onMount, onCleanup, type JSX } from 'solid-js';
+import { createSignal, onSettled, onCleanup } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import './register'; // side effect: registers the custom elements
 import { attachKaiActions } from '../stories/docs/story-actions';
 
 // The web components are custom DOM elements, so declare the tags for JSX. This
 // labs story declares its own intrinsic types (including the new `collapsed`
 // boolean) so it can set `collapsed` as a plain JSX boolean, the bug repro.
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -98,8 +99,9 @@ export const CollapsedAtMount: Story = {
     const [collapsed, setCollapsed] = createSignal(true);
     let groupEl: HTMLElement | undefined;
     // Log the group's declared events (kai-change on drag, kai-maximize-change).
-    onMount(() => {
-      if (groupEl) onCleanup(attachKaiActions(groupEl));
+    onSettled(() => {
+      if (groupEl) // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return attachKaiActions(groupEl);
     });
     return (
       <div style={{ display: 'flex', 'flex-direction': 'column', gap: '8px' }}>

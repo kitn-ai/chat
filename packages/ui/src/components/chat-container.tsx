@@ -1,4 +1,5 @@
-import { type JSX, splitProps, createContext, useContext } from 'solid-js';
+import { omit, createContext, useContext } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { useStickToBottom } from '../primitives/use-stick-to-bottom';
 
@@ -22,10 +23,12 @@ export interface ChatContainerRootProps extends JSX.HTMLAttributes<HTMLDivElemen
 }
 
 function ChatContainerRoot(props: ChatContainerRootProps) {
-  const [local, rest] = splitProps(props, ['children', 'class']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'children', 'class');
   const { ref, isAtBottom, scrollToBottom } = useStickToBottom();
   return (
-    <ChatContainerContext.Provider value={{ isAtBottom, scrollToBottom }}>
+    <ChatContainerContext value={{ isAtBottom, scrollToBottom }}>
       <div
         ref={ref}
         // `kai-focus-inset`: the log fills a clipping container, so the default
@@ -41,7 +44,7 @@ function ChatContainerRoot(props: ChatContainerRootProps) {
       >
         {local.children}
       </div>
-    </ChatContainerContext.Provider>
+    </ChatContainerContext>
   );
 }
 
@@ -52,7 +55,9 @@ export interface ChatContainerContentProps extends JSX.HTMLAttributes<HTMLDivEle
 }
 
 function ChatContainerContent(props: ChatContainerContentProps) {
-  const [local, rest] = splitProps(props, ['children', 'class']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'children', 'class');
   return (
     <div class={cn('flex w-full flex-col', local.class)} {...rest}>
       {local.children}
@@ -67,7 +72,9 @@ export interface ChatContainerScrollAnchorProps extends JSX.HTMLAttributes<HTMLD
 }
 
 function ChatContainerScrollAnchor(props: ChatContainerScrollAnchorProps) {
-  const [local, rest] = splitProps(props, ['class']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'class');
   return (
     <div
       class={cn('h-px w-full shrink-0 scroll-mt-4', local.class)}

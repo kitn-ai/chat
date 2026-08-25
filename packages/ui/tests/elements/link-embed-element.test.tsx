@@ -1,4 +1,5 @@
 // tests/elements/link-embed-element.test.tsx
+import { flush as flushSync } from 'solid-js';
 import { afterEach, describe, expect, test } from 'vitest';
 import '../../src/elements/link-preview';
 import '../../src/elements/embed';
@@ -50,6 +51,7 @@ describe('kai-link-preview element', () => {
       received = (e as CustomEvent<CardEvent>).detail;
     });
     el.shadowRoot!.querySelector('a')!.click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(received).toMatchObject({
       kind: 'open',
       url: 'https://example.com/x',
@@ -85,6 +87,7 @@ describe('kai-embed element', () => {
       /Open on YouTube/.test(b.textContent ?? ''),
     )!;
     openBtn.click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(received).toMatchObject({ kind: 'open', target: 'tab', cardId: 'card-2' });
   });
 

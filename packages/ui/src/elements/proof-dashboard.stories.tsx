@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { createSignal, For, type Component } from 'solid-js';
-import { Dynamic } from 'solid-js/web';
+import { Dynamic } from '@solidjs/web';
 import {
   TrendingUp,
   Calendar,
@@ -121,8 +121,8 @@ function MetricTile(props: { m: Metric }) {
         <For each={props.m.spark}>
           {(v) => (
             <div
-              class="flex-1 rounded-sm"
-              classList={{ 'bg-tool-green/60': up(), 'bg-tool-red/60': !up() }}
+              class={["flex-1 rounded-sm", { 'bg-tool-green/60': up(), 'bg-tool-red/60': !up() }]}
+             
               style={{ height: `${v}%` }}
             />
           )}
@@ -256,11 +256,11 @@ export const Dashboard: Story = {
                     <button
                       type="button"
                       onClick={() => setRange(r.id)}
-                      class="rounded-md px-2.5 py-1 text-meta font-medium transition-colors"
-                      classList={{
+                      class={["rounded-md px-2.5 py-1 text-meta font-medium transition-colors", {
                         'bg-surface-strong text-foreground': range() === r.id,
                         'text-muted-foreground hover:text-foreground': range() !== r.id,
-                      }}
+                      }]}
+                     
                     >
                       {r.label}
                     </button>

@@ -1,11 +1,12 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { onMount, onCleanup } from 'solid-js';
+import { onSettled, onCleanup } from 'solid-js';
 import './register'; // side effect: registers <kai-prompt-input> et al.
 import { attachKaiActions } from '../stories/docs/story-actions';
 import type { AttachmentData } from '../components/attachments';
 
 // Wire a kai-* element's declared CustomEvents to the Actions panel from a `ref`.
-const withActions = (e: Element) => onMount(() => onCleanup(attachKaiActions(e as HTMLElement)));
+const withActions = (e: Element) => onSettled(() => { // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return attachKaiActions(e as HTMLElement); }); // V2-PORT (R2): braced — a non-function return crashes dev
 
 // Labs: the <kai-prompt-input> composition slots. Dogfoods real kit components
 // where they fit: a <kai-notice> above the card, a <kai-attachments> row (with
@@ -15,7 +16,7 @@ const withActions = (e: Element) => onMount(() => onCleanup(attachKaiActions(e a
 // slot: only the holes you can't reach from outside (inside the card / toolbar)
 // are slots. Component events log to the Actions panel.
 
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {

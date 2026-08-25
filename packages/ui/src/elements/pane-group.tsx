@@ -85,8 +85,8 @@ defineWebComponent<Props, Events>('kai-pane-group', {
   // Reflect the resolved active id to the `active` attribute so `[active="…"]` /
   // `::part` selectors and the consumer's per-tab named slot follow selection.
   // Writing the same value is idempotent, so no feedback loop with the prop.
-  createEffect(() => {
-    const a = active();
+  // V2-PORT: active() in the compute; the attribute write in the apply.
+  createEffect(active, (a) => {
     if (a != null) element.setAttribute('active', a);
   });
 

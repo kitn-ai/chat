@@ -22,7 +22,7 @@ import type { ChatMessage } from './chat-types';
 // JSX elements; the other kai-* tags are declared (identically) by sibling story
 // files. TypeScript merges identical global augmentations, so the shared tags are
 // copied byte-for-byte from the canonical sibling decls (mismatch errors TS2717).
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -185,7 +185,7 @@ export const ChatGPT: Story = {
     const toggleRail = () => (ws?.toggleAside as ((side: string) => void) | undefined)?.('start');
 
     // Array/object props (and event wiring) are applied in each element's ref
-    // callback, NOT a one-shot onMount, so they survive remounts. The rail
+    // callback, NOT a one-shot onSettled, so they survive remounts. The rail
     // geometry is CSS custom properties on the shell (the kai-dock rule), set in
     // the ref; the recents live on <kai-conversations>, the shell's start slot.
     return (

@@ -2,7 +2,7 @@
 // The `artifact` built-in card: the sizing wrapper (an <Artifact> fills its
 // container, so a card with no height collapses to an invisible zero-height box),
 // its stable handles, and the emit wiring onto the frozen CardEvent set.
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { render } from '@solidjs/testing-library';
 import { BUILTIN_CARD_COMPONENTS } from '../../src/primitives/card-registry';
 import { CardRenderer } from '../../src/components/card-renderer';
@@ -122,6 +122,7 @@ test('a tab change emits a contract `state` patch, not a new event kind', () => 
   const { host, events } = makeHost();
   const { getByRole } = renderArtifactCard(BASE, host);
   (getByRole('tab', { name: /code/i }) as HTMLElement).click();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   const patches = events.filter((e) => e.kind === 'state');
   expect(patches).toHaveLength(1);
   expect(patches[0]).toEqual({ kind: 'state', cardId: 'a1', patch: { tab: 'code' } });
@@ -131,6 +132,7 @@ test('a navigation emits a contract `state` patch carrying the url', () => {
   const { host, events } = makeHost();
   const { getByRole } = renderArtifactCard(BASE, host);
   (getByRole('button', { name: 'Reload' }) as HTMLElement).click();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   const patches = events.filter((e) => e.kind === 'state');
   expect(patches).toHaveLength(1);
   expect(patches[0]).toEqual({
@@ -156,6 +158,7 @@ test('a file selection emits a contract `state` patch carrying activeFile', () =
   const row = container.querySelector('[data-tree-path="index.html"]') as HTMLElement;
   expect(row).toBeTruthy();
   row.click();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   const patches = events.filter((e) => e.kind === 'state');
   expect(patches.some((p) => (p as { patch: { activeFile?: string } }).patch.activeFile === 'index.html')).toBe(true);
 });
@@ -203,7 +206,7 @@ function renderRevisable() {
     </CardProvider>
   ));
   /** A model revising its own artifact: same id, same tab/activeFile, new source. */
-  const revise = () => setParts((p) => upsertCardPart(p, revisable('v2')));
+  const revise = () => { setParts((p) => upsertCardPart(p, revisable('v2'))); flush(); }; // V2-FLUSH
   return { ...r, revise, parts };
 }
 
@@ -216,6 +219,7 @@ test('a revision does NOT yank the user out of the tab they chose', () => {
   const { container, getByRole, revise } = renderRevisable();
   expect(selectedTab(container)).toBe('Code'); // data.tab seeded the first view
   (getByRole('tab', { name: /preview/i }) as HTMLElement).click();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(selectedTab(container)).toBe('Preview');
   revise();
   // The revision landed...
@@ -228,6 +232,7 @@ test('a revision does NOT reset the file the user selected', () => {
   const { container, revise } = renderRevisable();
   expect(selectedFile(container)).toBe('index.html'); // data.activeFile seeded it
   (container.querySelector('[data-tree-path="about.html"]') as HTMLElement).click();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(selectedFile(container)).toBe('about.html');
   revise();
   expect(container.querySelector('h3')!.textContent).toContain('v2');
@@ -237,6 +242,7 @@ test('a revision does NOT reset the file the user selected', () => {
 test('a revision still updates the CONTENT the user is looking at', () => {
   const { container, revise } = renderRevisable();
   (container.querySelector('[data-tree-path="about.html"]') as HTMLElement).click();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(container.textContent).toContain('About v1');
   revise();
   // Same file, revised source — the point of upserting rather than appending.

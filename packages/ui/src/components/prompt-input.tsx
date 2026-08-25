@@ -1,4 +1,5 @@
-import { type JSX, splitProps, createSignal, createContext, useContext } from 'solid-js';
+import { omit, createSignal, createContext, useContext } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { useChatConfig, textClass } from '../primitives/chat-config';
 import { Composer, type TriggerDef, type ComposerChange } from './composer';
@@ -40,10 +41,11 @@ export interface PromptInputProps extends JSX.HTMLAttributes<HTMLDivElement> {
 }
 
 function PromptInput(props: PromptInputProps) {
-  const [local, rest] = splitProps(props, [
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 
     'isLoading', 'value', 'onValueChange', 'maxHeight', 'onSubmit',
-    'children', 'disabled', 'class', 'onClick',
-  ]);
+    'children', 'disabled', 'class', 'onClick');
 
   const [internalValue, setInternalValue] = createSignal<string | ComposerDoc>(local.value ?? '');
   let textareaRef: HTMLElement | undefined;
@@ -61,7 +63,7 @@ function PromptInput(props: PromptInputProps) {
   };
 
   return (
-    <PromptInputContext.Provider
+    <PromptInputContext
       value={{
         isLoading: local.isLoading ?? false,
         value: () => local.value ?? internalValue(),
@@ -90,7 +92,7 @@ function PromptInput(props: PromptInputProps) {
       >
         {local.children}
       </div>
-    </PromptInputContext.Provider>
+    </PromptInputContext>
   );
 }
 
@@ -107,7 +109,8 @@ export interface PromptInputTextareaProps extends JSX.TextareaHTMLAttributes<HTM
 }
 
 function PromptInputTextarea(props: PromptInputTextareaProps) {
-  const [local] = splitProps(props, ['class', 'placeholder', 'aria-label', 'triggers', 'kindIcons', 'onComposerChange']);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = props;
   const ctx = usePromptInput();
   const config = useChatConfig();
 
@@ -152,7 +155,9 @@ export interface PromptInputActionsProps extends JSX.HTMLAttributes<HTMLDivEleme
 }
 
 function PromptInputActions(props: PromptInputActionsProps) {
-  const [local, rest] = splitProps(props, ['children', 'class']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'children', 'class');
   return (
     <div class={cn('flex items-center gap-2', local.class)} {...rest}>
       {local.children}

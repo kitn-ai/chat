@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, onMount, untrack } from 'solid-js';
+import { createEffect, createSignal, onCleanup, onSettled, untrack } from 'solid-js';
 import { defineWebComponent } from './define';
 import { DEFAULT_FORMAT, Input, type InputProps } from '../ui/input';
 import {
@@ -354,31 +354,31 @@ defineWebComponent<Props, Events>('kai-input', {
   // by then and this recomputes the same answer.
   {
     let first = true;
-    createEffect(() => {
-      // Tracked deliberately, and these four only: the inputs `throughMask` reads.
-      void props.format;
-      void props.guide;
-      void props.semantic;
-      void props.caseMode;
-      if (first) {
-        // The seed above already did this, synchronously and with no DOM to wait for.
-        first = false;
-        return;
-      }
-      queueMicrotask(() => {
-        const source = masked() ? untrack(value) : (innerInput()?.value ?? untrack(display));
-        const next = throughMask(source);
-        if (untrack(value) !== next.canonical) setValue(next.canonical);
-        if (untrack(display) !== next.formatted) setDisplay(next.formatted);
-      });
-    });
+    // V2-PORT: the four tracked inputs stay the whole compute; the microtask
+    // re-run is the apply (its shadow-DOM read is render-produced — R1).
+    createEffect(
+      () => [props.format, props.guide, props.semantic, props.caseMode] as const,
+      () => {
+        if (first) {
+          // The seed above already did this, synchronously and with no DOM to wait for.
+          first = false;
+          return;
+        }
+        queueMicrotask(() => {
+          const source = masked() ? untrack(value) : (innerInput()?.value ?? untrack(display));
+          const next = throughMask(source);
+          if (untrack(value) !== next.canonical) setValue(next.canonical);
+          if (untrack(display) !== next.formatted) setDisplay(next.formatted);
+        });
+      },
+    );
   }
 
   // Reflect internal value → the `[value]` host attribute (for `:host([value])`).
   // The guard against the live attribute keeps the write-back the reflect triggers
   // (attributeChangedCallback → setter) from looping.
-  createEffect(() => {
-    const v = value();
+  // V2-PORT: the value signal is the tracked read; the attribute writes are the apply.
+  createEffect(value, (v) => {
     if (v) {
       if (element.getAttribute('value') !== v) element.setAttribute('value', v);
     } else if (element.hasAttribute('value')) {
@@ -390,7 +390,7 @@ defineWebComponent<Props, Events>('kai-input', {
   // declared prop: it is a global reflected HTMLElement IDL attribute (lowercase,
   // like the reserved `lang`/`title`), so component-register's constructor
   // `this.autocapitalize = undefined` would reflect an attribute and throw
-  // "must not have attributes". Seeded now; kept in sync by the observer in onMount.
+  // "must not have attributes". Seeded now; kept in sync by the observer in onSettled.
   const [autocapitalize, setAutocapitalize] = createSignal<string | undefined>(
     element.getAttribute('autocapitalize') ?? undefined,
   );
@@ -398,7 +398,11 @@ defineWebComponent<Props, Events>('kai-input', {
   // Track which affix slots are filled; re-read on child mutations so late/streamed
   // content lights up its affix. An empty slot is never passed to the primitive.
   const [filled, setFilled] = createSignal<Record<SlotName, boolean>>({ leading: false, trailing: false });
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers) d(); });
+  onSettled(() => {
     const read = () => {
       const next = {} as Record<SlotName, boolean>;
       for (const name of SLOT_NAMES) next[name] = !!element.querySelector(`:scope > [slot="${name}"]`);
@@ -407,14 +411,14 @@ defineWebComponent<Props, Events>('kai-input', {
     read();
     const observer = new MutationObserver(read);
     observer.observe(element, { childList: true, subtree: false });
-    onCleanup(() => observer.disconnect());
+    settledDisposers.push(() => observer.disconnect());
 
     // Keep the forwarded `autocapitalize` in sync with the host attribute.
     const syncAutocapitalize = () => setAutocapitalize(element.getAttribute('autocapitalize') ?? undefined);
     syncAutocapitalize();
     const attrObserver = new MutationObserver(syncAutocapitalize);
     attrObserver.observe(element, { attributes: true, attributeFilter: ['autocapitalize'] });
-    onCleanup(() => attrObserver.disconnect());
+    settledDisposers.push(() => attrObserver.disconnect());
   });
   const region = (name: SlotName) => (filled()[name] ? <slot name={name} /> : undefined);
 
@@ -438,9 +442,9 @@ defineWebComponent<Props, Events>('kai-input', {
      *  mask itself, not just the text on screen, so the next character starts over. */
     clear: () => {
       writeValue('', true);
-      // From the signals, not from the DOM: unmasked, the input has not been re-rendered
-      // yet at this point, so the DOM still holds the text that was just cleared.
-      dispatch('kai-change', { value: untrack(value), formattedValue: untrack(display) });
+      // V2-PORT: same-tick signal read-backs return the PRE-clear values under
+      // v2's staged writes; a clear's detail is by definition empty.
+      dispatch('kai-change', { value: '', formattedValue: '' });
     },
   });
 
@@ -474,10 +478,14 @@ defineWebComponent<Props, Events>('kai-input', {
           // `v` is already canonical (the widget reads it off the masker). The formatted
           // text is whatever the masker just put in the DOM, so read it from there rather
           // than re-deriving it -- there is only one thing that knows it.
+          // V2-PORT: dispatch with the value just computed, not a same-tick signal
+          // read-back — v2 stages writes, so `display()` here still holds the
+          // PREVIOUS keystroke's text.
+          const formatted = innerInput()?.value ?? v;
           setValue(v);
-          setDisplay(innerInput()?.value ?? v);
+          setDisplay(formatted);
           if (!programmatic) {
-            dispatch('kai-input', { value: v, formattedValue: untrack(display) });
+            dispatch('kai-input', { value: v, formattedValue: formatted });
           }
         }}
         onValueChange={(v) => {

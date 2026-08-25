@@ -1,4 +1,4 @@
-import { Show, createEffect, createMemo, on } from 'solid-js';
+import { Show, createEffect, createMemo } from 'solid-js';
 import { defineWebComponent } from './define';
 import {
   Context,
@@ -69,11 +69,11 @@ defineWebComponent<Props, Events>('kai-context', {
   });
 
   // Fire kai-threshold-change only when the level actually changes.
-  createEffect(on(severity, (level, prev) => {
+  createEffect(severity, (level, prev) => {
     if (prev !== undefined && level !== prev) {
       dispatch('kai-threshold-change', { level });
     }
-  }));
+  });
 
   return (
     <Show when={props.context}>

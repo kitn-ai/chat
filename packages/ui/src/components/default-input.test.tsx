@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { DefaultPromptInput } from '../elements/default-input';
 
 // jsdom doesn't implement Element.scrollTo; some inner controls may call it.
@@ -44,6 +44,7 @@ describe('DefaultPromptInput disabled state', () => {
     ));
     const send = container.querySelector('[data-testid="send"]') as HTMLButtonElement;
     fireEvent.click(send);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
@@ -60,6 +61,7 @@ describe('DefaultPromptInput disabled state', () => {
     ));
     const editable = editableEl(container);
     fireEvent.keyDown(editable, { key: 'Enter' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
@@ -76,8 +78,10 @@ describe('DefaultPromptInput disabled state', () => {
     ));
     expect(editableEl(container).getAttribute('contenteditable')).toBe('plaintext-only');
     setDisabled(true);
+    flush(); // V2-FLUSH: commit the staged write
     expect(editableEl(container).getAttribute('contenteditable')).toBe('false'); // fails if PromptInput context captures `disabled` statically
     setDisabled(false);
+    flush(); // V2-FLUSH: commit the staged write
     expect(editableEl(container).getAttribute('contenteditable')).toBe('plaintext-only');
   });
 
@@ -93,6 +97,7 @@ describe('DefaultPromptInput disabled state', () => {
     ));
     const editable = editableEl(container);
     fireEvent.keyDown(editable, { key: 'Enter' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 });

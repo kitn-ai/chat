@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
 import { groupMessageParts, MessageBody } from './message';
 import { appendReasoningPart, appendTextPart, upsertToolPart } from '../state/parts';
@@ -136,7 +136,9 @@ function renderStream(initial: MessagePart[]) {
     ...rendered,
     /** Push one delta. `fold` receives the current parts and returns the next
      *  array — pass a real fold (appendTextPart / upsertToolPart / …). */
-    delta: (fold: (p: MessagePart[]) => MessagePart[]) => setParts(fold(parts())),
+    // V2-SHAPE: the updater form + flush — a same-tick `parts()` read-back would
+    // see the last COMMITTED value under v2's staged writes and drop deltas.
+    delta: (fold: (p: MessagePart[]) => MessagePart[]) => { setParts(fold); flush(); },
   };
 }
 
@@ -169,6 +171,7 @@ describe('MessageBody streaming identity', () => {
     const { container, delta } = renderStream(initial);
 
     fireEvent.click(toolTrigger(container));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(toolTrigger(container)).toHaveAttribute('aria-expanded', 'true');
 
     // The very next chunk of the SAME in-flight message.
@@ -186,6 +189,7 @@ describe('MessageBody streaming identity', () => {
     );
 
     fireEvent.click(reasoningTrigger(container));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(reasoningOpen(container)).toBe(true);
 
     // The part the user just expanded is the one being rebuilt each delta.
@@ -251,6 +255,7 @@ describe('MessageBody streaming identity', () => {
       upsertToolPart([], 'call_1', { type: 'get_weather', state: 'output-available', output: { forecast: 'sunny' } }),
     );
     fireEvent.click(toolTrigger(container));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     const node = toolTrigger(container);
 
     delta((p) => appendTextPart(p, 'It is sunny.'));
@@ -278,7 +283,9 @@ describe('MessageBody reasoning auto-open while streaming (F-21)', () => {
     ));
     return {
       ...rendered,
-      delta: (fold: (p: MessagePart[]) => MessagePart[]) => setParts(fold(parts())),
+      // V2-SHAPE: the updater form + flush — a same-tick `parts()` read-back would
+    // see the last COMMITTED value under v2's staged writes and drop deltas.
+    delta: (fold: (p: MessagePart[]) => MessagePart[]) => { setParts(fold); flush(); },
       setStreaming,
     };
   };
@@ -308,9 +315,11 @@ describe('MessageBody reasoning auto-open while streaming (F-21)', () => {
     // The user shuts the panel mid-stream; the end of the stream must not
     // reopen it or fight the toggle.
     fireEvent.click(reasoningTrigger(container));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(reasoningOpen(container)).toBe(false);
 
     setStreaming(false);
+    flush(); // V2-FLUSH: commit the staged write
     expect(reasoningOpen(container)).toBe(false);
   });
 });
@@ -498,8 +507,10 @@ describe('MessageBody citation row', () => {
       expect(document.body.textContent).not.toContain('Themes are driven by CSS custom properties.');
 
       fireEvent.focusIn(chip);
+      flush(); // V2-FLUSH: v2 stages writes; commit before asserting
       vi.advanceTimersByTime(200); // past HoverCardRoot's 150ms openDelay
       await Promise.resolve();
+      flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
       expect(document.body.textContent).toContain('Theming');
       expect(document.body.textContent).toContain('Themes are driven by CSS custom properties.');

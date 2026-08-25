@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import solidPlugin from 'vite-plugin-solid';
+import solidPlugin from '@solidjs/vite-plugin' // V2-PORT: the Solid 2 compiler plugin;
 import { resolve } from 'node:path';
 
 // The wire adapter (@kitn.ai/ui/wire). Reads a Response / ReadableStream /
@@ -22,6 +22,6 @@ export default defineConfig({
       formats: ['es'],
       fileName: () => 'wire.js',
     },
-    rollupOptions: { external: ['solid-js', 'solid-js/web', 'solid-js/store'] },
+    rollupOptions: { external: ['solid-js', '@solidjs/web'] /* V2-PORT: the v2 package split */ },
   },
 });

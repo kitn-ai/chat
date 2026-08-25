@@ -27,6 +27,7 @@
  * and that the element really rendered, and one case deliberately makes the two
  * runs differ to show the comparison can fail at all.
  */
+import { flush } from 'solid-js';
 import { describe, it, expect, afterEach } from 'vitest';
 import {
   setWirePayloadCapture,
@@ -97,6 +98,7 @@ function run(
   });
 
   script(el);
+  flush(); // V2-FLUSH: commit the script's staged writes before snapshotting the DOM
 
   const dom = normalizeIds(el.shadowRoot?.innerHTML ?? '');
   el.remove();

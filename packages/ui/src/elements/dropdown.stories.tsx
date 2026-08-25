@@ -3,7 +3,7 @@ import './register'; // side effect: registers all kai-* custom elements (incl. 
 import { attachKaiActions } from '../stories/docs/story-actions';
 
 // Declare the custom element tag for SolidJS JSX.
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {

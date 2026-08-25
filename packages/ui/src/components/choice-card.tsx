@@ -1,17 +1,6 @@
-import {
-  type JSX,
-  For,
-  Show,
-  splitProps,
-  mergeProps,
-  createSignal,
-  createMemo,
-  createEffect,
-  on,
-  onMount,
-  ErrorBoundary,
-  createUniqueId,
-} from 'solid-js';
+import { For, Show, omit, createSignal, createMemo, createEffect, onSettled, Errored, createUniqueId } from 'solid-js';
+import { mergeDefaults } from '../utils/merge-defaults'; // V2-PORT: 1.x mergeProps semantics (undefined does not override)
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
 import { HoverCard } from '../ui/hover-card';
@@ -197,21 +186,9 @@ export interface ChoiceCardProps {
  * error state).
  */
 export function ChoiceCard(props: ChoiceCardProps): JSX.Element {
-  const merged = mergeProps({ cardId: 'kai-choice' }, props);
-  const [local] = splitProps(merged, [
-    'data',
-    'cardId',
-    'heading',
-    'host',
-    'hostElement',
-    'class',
-    'resolution',
-    'value',
-    'defaultValue',
-    'disabled',
-    'onValueChange',
-    'controllerRef',
-  ]);
+  const merged = mergeDefaults({ cardId: 'kai-choice' }, props);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = merged;
 
   const ctxHost = useCardHost();
   const uid = createUniqueId();
@@ -265,16 +242,11 @@ export function ChoiceCard(props: ChoiceCardProps): JSX.Element {
 
   // Reset all transient state whenever a NEW definition arrives (re-seed the
   // uncontrolled selection from `defaultValue`).
-  createEffect(
-    on(
-      () => local.data,
-      () => {
+  createEffect(() => local.data, () => {
         setInternalId(local.defaultValue);
         setOtherText('');
         setFocusIndex(Math.max(0, firstEnabledIndex(options())));
-      },
-    ),
-  );
+      });
 
   const resolvedChoice = createMemo(() => {
     const r = res.resolution();
@@ -288,21 +260,21 @@ export function ChoiceCard(props: ChoiceCardProps): JSX.Element {
   });
 
   // ready / error lifecycle emits.
-  createEffect(
-    on(valid, (ok) => {
+  createEffect(valid, (ok) => {
       if (ok) emit({ kind: 'ready', cardId: local.cardId });
       else emit({ kind: 'error', cardId: local.cardId, message: errorMessage() });
-    }),
-  );
+    });
 
   // Surface the resolved option id for host styling.
-  createEffect(() => {
-    const el = local.hostElement;
-    if (!el) return;
-    const id = resolvedId();
-    if (id !== undefined) el.setAttribute('data-kai-resolved', id);
-    else el.removeAttribute('data-kai-resolved');
-  });
+  // V2-PORT (R1): tracked reads in the compute; attribute writes in the apply.
+  createEffect(
+    () => ({ el: local.hostElement, id: resolvedId() }),
+    ({ el, id }) => {
+      if (!el) return;
+      if (id !== undefined) el.setAttribute('data-kai-resolved', id);
+      else el.removeAttribute('data-kai-resolved');
+    },
+  );
 
   const isOther = (opt: ChoiceOption): boolean => opt.id === OTHER_ACTION;
 
@@ -375,7 +347,7 @@ export function ChoiceCard(props: ChoiceCardProps): JSX.Element {
   //    card's latent selection/submit/dismiss capabilities. Every method drives
   //    the SAME internal path the buttons/keyboard drive, so the same kai-card
   //    events fire (and onValueChange for select()). ─────────────────────────────
-  onMount(() => {
+  onSettled(() => {
     local.controllerRef?.({
       // Focus the roving radiogroup tab stop, or the Other input when it's selected.
       focus: (options) => {
@@ -433,7 +405,7 @@ export function ChoiceCard(props: ChoiceCardProps): JSX.Element {
 
   return (
     <Show when={valid()} fallback={<Card heading={local.heading} errorMessage={errorMessage()} />}>
-      <ErrorBoundary
+      <Errored
         fallback={() => {
           emit({ kind: 'error', cardId: local.cardId, message: 'The card failed to render.' });
           return <Card heading={local.heading} errorMessage="The card failed to render." />;
@@ -536,7 +508,7 @@ export function ChoiceCard(props: ChoiceCardProps): JSX.Element {
           </div>
         </Card>
         </Show>
-      </ErrorBoundary>
+      </Errored>
     </Show>
   );
 }
@@ -591,7 +563,7 @@ function ListRow(props: RowProps): JSX.Element {
   return (
     <div
       role="radio"
-      aria-checked={props.checked}
+      aria-checked={props.checked ? 'true' : 'false'}
       aria-disabled={props.opt.disabled ? 'true' : undefined}
       aria-describedby={props.hasDesc ? props.descId : undefined}
       data-option-id={props.opt.id}

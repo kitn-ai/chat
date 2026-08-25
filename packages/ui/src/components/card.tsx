@@ -1,5 +1,7 @@
-import { type JSX, Show, splitProps, mergeProps, createSignal, createUniqueId } from 'solid-js';
-import { Dynamic } from 'solid-js/web';
+import { Show, omit, createSignal, createUniqueId } from 'solid-js';
+import { mergeDefaults } from '../utils/merge-defaults'; // V2-PORT: 1.x mergeProps semantics (undefined does not override)
+import type { JSX } from '@solidjs/web';
+import { Dynamic } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { AlertTriangle, X } from 'lucide-solid';
 
@@ -58,8 +60,10 @@ export interface CardProps extends JSX.HTMLAttributes<HTMLDivElement> {
  * make the card clickable, never both.
  */
 export function Card(props: CardProps): JSX.Element {
-  const merged = mergeProps({ dense: false }, props);
-  const [local, rest] = splitProps(merged, [
+  const merged = mergeDefaults({ dense: false }, props);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = merged;
+  const rest = omit(merged, 
     'heading',
     'description',
     'media',
@@ -75,8 +79,7 @@ export function Card(props: CardProps): JSX.Element {
     'clickable',
     'onCardClick',
     'class',
-    'children',
-  ]);
+    'children');
 
   const autoId = createUniqueId();
   const headingId = () => local.headingId ?? `kai-card-heading-${autoId}`;

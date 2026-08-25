@@ -7,6 +7,7 @@
  * Coverage-guard credit: this file IMPORTS the facade module AND literally
  * constructs `kai-conversation-item`.
  */
+import { flush } from 'solid-js';
 import { describe, it, expect, afterEach } from 'vitest';
 import '../../src/elements/conversation-list';
 import '../../src/elements/conversation-item';
@@ -180,10 +181,13 @@ describe('item children switch <kai-conversations> into item mode', () => {
     const selected: string[] = [];
     el.addEventListener('kai-conversation-select', (e) => selected.push((e as CustomEvent).detail.id));
     a.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(selected).toEqual(['a']);
     menuBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(selected).toEqual(['a']);
     a.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(selected).toEqual(['a', 'a']);
   });
 
@@ -229,6 +233,7 @@ describe('item children switch <kai-conversations> into item mode', () => {
     // composed: true matches the native input event, which crosses the shadow
     // boundary to Solid's delegated document listener.
     input!.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(queries).toEqual(['foo']);
   });
 });

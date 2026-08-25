@@ -1,4 +1,5 @@
-import { splitProps, For, Show, createSignal, createMemo, onMount, type JSX } from 'solid-js';
+import { omit, For, Show, createSignal, createMemo, onSettled } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { PanelLeftOpen } from 'lucide-solid';
 import { cn } from '../utils/cn';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
@@ -232,7 +233,8 @@ export interface ConversationListController {
 }
 
 export function ConversationList(props: ConversationListProps) {
-  const [local] = splitProps(props, ['groups', 'conversations', 'activeId', 'onSelect', 'onNewChat', 'onToggleSidebar', 'header', 'footer', 'empty', 'compact', 'onSearchChange', 'controllerRef', 'items', 'itemsKeyDown', 'itemsClick', 'class']);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = props;
   const [searchQuery, setSearchQuery] = createSignal('');
   // Item mode: the consumer's own rows replace the data rendering wholesale.
   const itemMode = createMemo(() => local.items != null);
@@ -243,7 +245,7 @@ export function ConversationList(props: ConversationListProps) {
   const setQuery = (q: string) => { setSearchQuery(q); local.onSearchChange?.(q); };
 
   // Hand the imperative controller (focus / clear the search box) to the facade.
-  onMount(() => {
+  onSettled(() => {
     local.controllerRef?.({
       focus: (options) => searchInput?.focus(options),
       clearSearch: () => setQuery(''),

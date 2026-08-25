@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup } from 'solid-js';
+import { createSignal, onSettled, onCleanup } from 'solid-js';
 import { defineWebComponent } from './define';
 import {
   ChainOfThoughtAccordion,
@@ -89,7 +89,7 @@ defineWebComponent<Props, Events>('kai-chain-of-thought', {
   // Read declarative <kai-step> children from light DOM.
   // Shadow DOM with no <slot> suppresses them visually — they're invisible data carriers.
   const [slottedSteps, setSlottedSteps] = createSignal<Step[]>([]);
-  onMount(() => {
+  onSettled(() => {
     const read = () => {
       const nodes = [...element.querySelectorAll('kai-step')];
       setSlottedSteps(nodes.map(parseKaiStepElement));
@@ -97,7 +97,8 @@ defineWebComponent<Props, Events>('kai-chain-of-thought', {
     read();
     const observer = new MutationObserver(read);
     observer.observe(element, { childList: true, attributes: true, subtree: true });
-    onCleanup(() => observer.disconnect());
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => observer.disconnect();
   });
 
   // Prop steps first; declarative children appended after.

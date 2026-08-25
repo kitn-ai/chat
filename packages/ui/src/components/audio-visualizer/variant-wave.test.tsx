@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { waveTargets } from '../../primitives/visualizer-sequences';
 import { installFakeClock } from '../../test-utils/fake-clock';
@@ -301,7 +301,7 @@ describe('WaveVisualizer: state -> uniform mapping', () => {
 
     // 300ms of frames against a 200ms tween: enough to land it, with no
     // wall-clock wait and no dependence on how busy the machine is.
-    for (let i = 0; i < 30; i++) advance(10);
+    for (let i = 0; i < 30; i++) { advance(10); flush(); } // V2-FLUSH per frame
 
     const t = waveTargets('listening');
     expect(c.uniforms.uAmplitude?.value).toBeCloseTo(t.amplitude, 2);
@@ -320,7 +320,7 @@ describe('WaveVisualizer: state -> uniform mapping', () => {
     // requestAnimationFrame machinery actually starts running.
     expect(c.uniforms.uFrequency?.value).toBeCloseTo(20 + 60 * 0.6, 6);
 
-    for (let i = 0; i < 30; i++) advance(10);
+    for (let i = 0; i < 30; i++) { advance(10); flush(); } // V2-FLUSH per frame
 
     expect(c.uniforms.uFrequency?.value).toBeCloseTo(20 + 60 * 0.6, 6);
     expect(c.uniforms.uAmplitude?.value).toBeCloseTo(0.015 + 0.4 * 0.6, 6);
@@ -428,15 +428,18 @@ describe('WaveVisualizer: speaking re-entry override survives adverse effect ord
     // only the state-target effect so it re-subscribes to `state` after the
     // volume-override effect.
     setFrozen(true);
+    flush(); // V2-FLUSH: commit the staged write
     setFrozen(false);
+    flush(); // V2-FLUSH: commit the staged write
 
     // The static-drive re-entry itself. Volume is pinned at 0.8 and never
     // ticks again -- nothing self-heals this if the base tween wins.
     setState('speaking');
+    flush(); // V2-FLUSH: commit the staged write
 
     // Run any 0.2s base tween to completion; if it stole amplitude, it has
     // fully landed on 0.025 by now.
-    for (let i = 0; i < 10; i++) advance(50);
+    for (let i = 0; i < 10; i++) { advance(50); flush(); } // V2-FLUSH per frame
 
     expect(captured!.uniforms.uAmplitude?.value).toBeCloseTo(0.015 + 0.4 * 0.8, 6);
     expect(captured!.uniforms.uFrequency?.value).toBeCloseTo(20 + 60 * 0.8, 6);
@@ -573,7 +576,7 @@ describe('WaveVisualizer: does not defeat ShaderCanvas\'s recompile guard', () =
     // `listening`'s opacity pulse ping-pongs forever, so this keeps a frame
     // pending indefinitely -- the loop bound is just a safety net, not a
     // reflection of the tween ever finishing.
-    for (let i = 0; i < 10 && isFramePending(); i++) advance(50);
+    for (let i = 0; i < 10 && isFramePending(); i++) { advance(50); flush(); } // V2-FLUSH per frame
 
     // The precondition: uMix's pushed value genuinely varied across the
     // loop, proof the opacity tween's OWN requestAnimationFrame loop

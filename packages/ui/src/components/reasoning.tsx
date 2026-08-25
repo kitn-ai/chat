@@ -1,4 +1,5 @@
-import { type JSX, type Accessor, splitProps, createSignal, createContext, useContext, createEffect, createUniqueId, onCleanup, Show } from 'solid-js';
+import { type Accessor, omit, createSignal, createContext, useContext, createEffect, createUniqueId, onCleanup, Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { ChevronDown } from 'lucide-solid';
 import { Markdown } from './markdown';
@@ -52,7 +53,8 @@ export interface ReasoningProps {
 }
 
 function Reasoning(props: ReasoningProps) {
-  const [local] = splitProps(props, ['children', 'class', 'open', 'defaultOpen', 'onOpenChange', 'isStreaming', 'disabled', 'controllerRef']);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = props;
   const [internalOpen, setInternalOpen] = createSignal(local.defaultOpen ?? false);
   const [wasAutoOpened, setWasAutoOpened] = createSignal(false);
 
@@ -71,14 +73,17 @@ function Reasoning(props: ReasoningProps) {
     local.onOpenChange?.(newOpen);
   };
 
-  createEffect(() => {
-    const streaming = local.isStreaming;
-    if (streaming && !wasAutoOpened()) {
-      if (!isControlled()) setInternalOpen(true);
+  // V2-PORT: tracked reads (isStreaming, the auto-open latch, controlledness) in
+  // the compute; the writes in the apply. Same tracked set as the 1.x effect.
+  createEffect(
+    () => ({ streaming: local.isStreaming, auto: wasAutoOpened(), controlled: isControlled() }),
+    ({ streaming, auto, controlled }) => {
+    if (streaming && !auto) {
+      if (!controlled) setInternalOpen(true);
       setWasAutoOpened(true);
     }
-    if (!streaming && wasAutoOpened()) {
-      if (!isControlled()) setInternalOpen(false);
+    if (!streaming && auto) {
+      if (!controlled) setInternalOpen(false);
       setWasAutoOpened(false);
     }
   });
@@ -96,7 +101,7 @@ function Reasoning(props: ReasoningProps) {
   let triggerEl: HTMLElement | undefined;
 
   return (
-    <ReasoningContext.Provider
+    <ReasoningContext
       value={{
         isOpen,
         onOpenChange: handleOpenChange,
@@ -107,7 +112,7 @@ function Reasoning(props: ReasoningProps) {
       }}
     >
       <div class={local.class}>{local.children}</div>
-    </ReasoningContext.Provider>
+    </ReasoningContext>
   );
 }
 
@@ -121,7 +126,9 @@ function ReasoningTrigger(props: ReasoningTriggerProps) {
   // `ref` is split out rather than left in `rest`: the trigger takes its own ref
   // to register as the panel's focus-return target, and a spread `ref` would
   // silently replace it. The consumer's ref is forwarded below instead.
-  const [local, rest] = splitProps(props, ['children', 'class', 'ref']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'children', 'class', 'ref');
   const { isOpen, onOpenChange, disabled, contentId, registerTrigger } = useReasoningContext();
 
   return (
@@ -141,7 +148,7 @@ function ReasoningTrigger(props: ReasoningTriggerProps) {
       type="button"
       class={cn('flex cursor-pointer items-center gap-2 text-meta', local.class)}
       disabled={disabled() || undefined}
-      aria-expanded={isOpen()}
+      aria-expanded={isOpen() ? 'true' : 'false'}
       aria-controls={contentId}
       data-expanded={isOpen() ? '' : undefined}
       data-closed={isOpen() ? undefined : ''}
@@ -171,7 +178,9 @@ export interface ReasoningContentProps extends JSX.HTMLAttributes<HTMLDivElement
 }
 
 function ReasoningContent(props: ReasoningContentProps) {
-  const [local, rest] = splitProps(props, ['children', 'class', 'contentClass', 'markdown']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'children', 'class', 'contentClass', 'markdown');
   const { isOpen, contentId, trigger } = useReasoningContext();
 
   let contentRef: HTMLDivElement | undefined;
@@ -195,7 +204,10 @@ function ReasoningContent(props: ReasoningContentProps) {
     if (active && contentRef.contains(active)) trigger()?.focus();
   };
 
-  createEffect(() => {
+  // V2-PORT (R1): `isOpen` is the tracked dependency; the ref reads and style/
+  // attribute writes are the apply (refs are render-produced), and the in-effect
+  // onCleanup became the returned cleanup.
+  createEffect(isOpen, (open) => {
     if (!contentRef || !innerRef) return;
 
     const dispose = observeContentHeight(innerRef, () => {
@@ -204,7 +216,7 @@ function ReasoningContent(props: ReasoningContentProps) {
       }
     });
 
-    if (isOpen()) {
+    if (open) {
       contentRef.style.maxHeight = `${innerRef.scrollHeight}px`;
       // Dropped in the same tick as the open, NOT on transitionend: the panel is
       // interactive from the first frame, so an inert outliving the animation can
@@ -224,7 +236,7 @@ function ReasoningContent(props: ReasoningContentProps) {
       contentRef.setAttribute('inert', '');
     }
 
-    onCleanup(dispose);
+    return dispose;
   });
 
   return (

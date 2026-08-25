@@ -26,6 +26,6 @@ export default defineConfig({
   build: {
     emptyOutDir: false, // do NOT clobber dist/kai.es.js (main build runs first)
     lib: { entry: 'src/remote/provider.ts', formats: ['es'], fileName: () => 'kai-provider.es.js' },
-    rollupOptions: { external: ['solid-js', 'solid-js/web'] },
+    rollupOptions: { external: ['solid-js', '@solidjs/web'] /* V2-PORT: the v2 package split */ },
   },
 });

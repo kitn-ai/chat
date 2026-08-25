@@ -1,4 +1,5 @@
-import { createEffect, type JSX } from 'solid-js';
+import { createEffect } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { ShaderCanvas, hexToRgb, DEFAULT_SHADER_COLOR } from './shader-canvas';
 import { createTween } from '../../primitives/create-tween';
 import { waveTargets } from '../../primitives/visualizer-sequences';
@@ -39,14 +40,17 @@ export default function WaveVisualizer(props: ShaderVariantProps): JSX.Element {
 
   // Opacity alone: it only follows state/frozen, so a volume tick (nearly
   // every animation frame while speaking) never restarts the pulse's tween.
-  createEffect(() => {
-    const t = targets();
-    // A pulse is an array target ([from, to], see createTween's ping-pong).
-    // Reduced motion collapses it to its first value so the line holds
-    // still instead of breathing.
-    const fade = Array.isArray(t.opacity) && props.frozen ? t.opacity[0] : t.opacity;
-    opacity.to(fade, props.frozen ? { duration: 0 } : { duration: t.pulseDuration || 0.2 });
-  });
+  // V2-PORT: tracked reads in the compute; the tween drive in the apply.
+  createEffect(
+    () => ({ t: targets(), frozen: props.frozen }),
+    ({ t, frozen }) => {
+      // A pulse is an array target ([from, to], see createTween's ping-pong).
+      // Reduced motion collapses it to its first value so the line holds
+      // still instead of breathing.
+      const fade = Array.isArray(t.opacity) && frozen ? t.opacity[0] : t.opacity;
+      opacity.to(fade, frozen ? { duration: 0 } : { duration: t.pulseDuration || 0.2 });
+    },
+  );
 
   // Amplitude and frequency share ONE effect -- a single writer -- on
   // purpose. They used to be split like opacity above: a state effect
@@ -65,22 +69,32 @@ export default function WaveVisualizer(props: ShaderVariantProps): JSX.Element {
   // effects with DISJOINT writers; these two wrote the same tweens. One
   // effect, one writer, ordering can no longer matter. Same effect-race
   // class as b5795ac's shared() finding.
-  createEffect(() => {
-    if (renderState() === 'speaking') {
-      // Live volume drives amplitude and frequency instantly while
-      // speaking, so the line never lags the audio -- and lands at the
-      // override immediately on re-entry, matching upstream's same-commit
-      // effect ordering. `volume` is only tracked in this branch, so
-      // volume ticks do not re-run the state-target path below.
-      const v = props.volume;
-      amplitude.to(0.015 + 0.4 * v, { duration: 0 });
-      frequency.to(20 + 60 * v, { duration: 0 });
-      return;
-    }
-    const t = targets();
-    amplitude.to(t.amplitude, transition());
-    frequency.to(t.frequency, transition());
-  });
+  // V2-PORT: the branch-conditional tracking moves whole into the COMPUTE (it
+  // re-tracks per run, so `volume` is still only a dependency while speaking);
+  // the tween drives are the apply. Still one effect, one writer — the ordering
+  // rationale above is unchanged.
+  createEffect(
+    () => {
+      if (renderState() === 'speaking') {
+        // Live volume drives amplitude and frequency instantly while
+        // speaking, so the line never lags the audio -- and lands at the
+        // override immediately on re-entry, matching upstream's same-commit
+        // effect ordering. `volume` is only tracked in this branch, so
+        // volume ticks do not re-run the state-target path below.
+        return { speaking: true as const, v: props.volume };
+      }
+      return { speaking: false as const, t: targets(), tr: transition() };
+    },
+    (r) => {
+      if (r.speaking) {
+        amplitude.to(0.015 + 0.4 * r.v, { duration: 0 });
+        frequency.to(20 + 60 * r.v, { duration: 0 });
+        return;
+      }
+      amplitude.to(r.t.amplitude, r.tr);
+      frequency.to(r.t.frequency, r.tr);
+    },
+  );
 
   const lineWidth = () => (props.size === 'icon' || props.size === 'sm' ? 2 : 1);
 

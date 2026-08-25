@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@solidjs/testing-library';
 import { ConversationList, CollapsedRail } from '../../src/components/conversation-list';
@@ -66,6 +67,7 @@ describe('ConversationList', () => {
       <ConversationList groups={groups} conversations={[...conversations, orphan]} onSelect={() => {}} onNewChat={() => {}} />
     ));
     fireEvent.input(screen.getByLabelText('Search chats'), { target: { value: 'orphan' } });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(screen.getByText('Orphaned thread')).toBeTruthy();
     expect(screen.queryByText('Quick question')).toBeNull();
   });
@@ -79,6 +81,7 @@ describe('CollapsedRail', () => {
     render(() => <CollapsedRail onExpand={onExpand} />);
     const btn = screen.getByRole('button', { name: 'Open sidebar' });
     fireEvent.click(btn);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onExpand).toHaveBeenCalledTimes(1);
   });
 });

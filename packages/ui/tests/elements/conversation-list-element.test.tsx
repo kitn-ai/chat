@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import '../../src/elements/conversation-list';
 import type { ConversationGroup, ConversationSummary } from '../../src/types';
 
@@ -15,6 +16,7 @@ test('renders conversations and emits conversationselect', async () => {
   el.conversations = conversations;
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(el.shadowRoot!.textContent).toContain('Hello world');
 
@@ -22,6 +24,7 @@ test('renders conversations and emits conversationselect', async () => {
   el.addEventListener('kai-conversation-select', (e) => (selected = (e as CustomEvent).detail.id));
   const item = el.shadowRoot!.querySelector('[data-conversation-id="c1"]') as HTMLElement;
   item.click();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(selected).toBe('c1');
 
   el.remove();
@@ -35,11 +38,13 @@ test('does not emit old "select" event (breaking change)', async () => {
   el.conversations = conversations;
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   let selectFired = false;
   el.addEventListener('kai-select', () => (selectFired = true));
   const item = el.shadowRoot!.querySelector('[data-conversation-id="c1"]') as HTMLElement;
   item.click();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(selectFired).toBe(false);
 
   el.remove();
@@ -53,6 +58,7 @@ test('icon-only controls have accessible names (a11y A1)', async () => {
   el.conversations = conversations;
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   const root = el.shadowRoot!;
   const toggle = root.querySelector<HTMLButtonElement>('button[aria-label="Toggle sidebar"]');
@@ -88,6 +94,7 @@ function mountConversations(extra?: (el: ConvEl) => void): ConvEl {
 test('collapse() shrinks the rail to a floating reopen button; expand() restores it', async () => {
   const el = mountConversations();
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   const root = el.shadowRoot!;
 
   // Expanded by default: the list (and search) render.
@@ -95,6 +102,7 @@ test('collapse() shrinks the rail to a floating reopen button; expand() restores
 
   el.collapse();
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   // Collapsed: the list is gone, only the reopen button remains.
   expect(root.textContent).not.toContain('Hello world');
   const reopen = root.querySelector<HTMLButtonElement>('button[aria-label="Open sidebar"]');
@@ -102,6 +110,7 @@ test('collapse() shrinks the rail to a floating reopen button; expand() restores
 
   el.expand();
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(root.textContent).toContain('Hello world');
   expect(root.querySelector('button[aria-label="Open sidebar"]')).toBeNull();
 
@@ -111,6 +120,7 @@ test('collapse() shrinks the rail to a floating reopen button; expand() restores
 test('collapse/expand/toggle fire kai-collapse-toggle with the new state', async () => {
   const el = mountConversations();
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   const states: boolean[] = [];
   el.addEventListener('kai-collapse-toggle', (e) => states.push((e as CustomEvent).detail.collapsed));
@@ -119,6 +129,7 @@ test('collapse/expand/toggle fire kai-collapse-toggle with the new state', async
   el.expand();
   el.toggle(); // from expanded → collapsed
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(states).toEqual([true, false, true]);
   el.remove();
@@ -128,15 +139,19 @@ test('the floating reopen button expands the rail and fires kai-collapse-toggle'
   const el = mountConversations((e) => (e.collapsed = undefined));
   el.collapsed = undefined;
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   el.collapse();
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   let lastCollapsed: boolean | null = null;
   el.addEventListener('kai-collapse-toggle', (e) => (lastCollapsed = (e as CustomEvent).detail.collapsed));
 
   const reopen = el.shadowRoot!.querySelector<HTMLButtonElement>('button[aria-label="Open sidebar"]')!;
   reopen.click();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(lastCollapsed).toBe(false);
   expect(el.shadowRoot!.textContent).toContain('Hello world');
@@ -150,6 +165,7 @@ test('default-collapsed seeds the rail collapsed (uncontrolled)', async () => {
   el.conversations = conversations;
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   const root = el.shadowRoot!;
   expect(root.querySelector('button[aria-label="Open sidebar"]')).not.toBeNull();
@@ -160,6 +176,7 @@ test('default-collapsed seeds the rail collapsed (uncontrolled)', async () => {
 test('controlled collapsed prop wins over an internal toggle', async () => {
   const el = mountConversations((e) => (e.collapsed = true));
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   const root = el.shadowRoot!;
   // Controlled-collapsed: shows the reopen button.
   expect(root.querySelector('button[aria-label="Open sidebar"]')).not.toBeNull();
@@ -170,6 +187,7 @@ test('controlled collapsed prop wins over an internal toggle', async () => {
   el.addEventListener('kai-collapse-toggle', () => (fired = true));
   el.expand();
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(fired).toBe(true);
   expect(root.querySelector('button[aria-label="Open sidebar"]')).not.toBeNull();
   el.remove();
@@ -187,6 +205,7 @@ test('compact via markup attribute renders dense rows (no message-count line)', 
   el.groups = groups;
   el.conversations = conversations;
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   // Scoped to the ROW node: the shadow root's textContent includes the inline
   // <style> fallback, whose CSS happens to contain the word "messages".
@@ -200,6 +219,7 @@ test('compact via property assignment renders dense rows; default keeps the coun
   // Default first: the count line renders, so its absence below means something.
   const plain = mountConversations();
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(plain.shadowRoot!.querySelector('[data-conversation-id="c1"]')!.textContent).toContain('2 messages');
   plain.remove();
 
@@ -209,6 +229,7 @@ test('compact via property assignment renders dense rows; default keeps the coun
   el.conversations = conversations;
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   const row = el.shadowRoot!.querySelector('[data-conversation-id="c1"]')!;
   expect(row.textContent).toContain('Hello world');

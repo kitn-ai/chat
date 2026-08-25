@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount } from 'solid-js';
+import { createSignal, onCleanup, onSettled } from 'solid-js';
 import { defineWebComponent } from './define';
 // The badge shape is the Solid component's own `Skill` — one declaration, so the
 // element and `<MessageSkills>` cannot drift, and the ROOT entry re-exports it.
@@ -65,7 +65,7 @@ defineWebComponent<Props>('kai-skills', {
   // Read declarative <kai-skill> children from light DOM.
   // The shadow root has no <slot>, so they are invisible — pure data carriers.
   const [slottedSkills, setSlottedSkills] = createSignal<Skill[]>([]);
-  onMount(() => {
+  onSettled(() => {
     const read = () => {
       const nodes = [...element.querySelectorAll('kai-skill')];
       setSlottedSkills(nodes.map(parseKaiSkillElement));
@@ -73,7 +73,8 @@ defineWebComponent<Props>('kai-skills', {
     read();
     const observer = new MutationObserver(read);
     observer.observe(element, { childList: true, attributes: true, subtree: true });
-    onCleanup(() => observer.disconnect());
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => observer.disconnect();
   });
 
   // Prop skills (first) merged with declarative children (after).

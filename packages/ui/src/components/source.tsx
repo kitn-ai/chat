@@ -1,4 +1,5 @@
-import { type JSX, createContext, useContext, Show, splitProps } from 'solid-js';
+import { createContext, useContext, Show, omit } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { HoverCardRoot, HoverCardTrigger, HoverCardContent } from '../ui/hover-card';
 import { isRenderableLink } from '../primitives/link-preview';
@@ -74,11 +75,11 @@ function Source(props: SourceProps) {
   };
 
   return (
-    <SourceContext.Provider value={{ get href() { return href(); }, get domain() { return domain(); } }}>
+    <SourceContext value={{ get href() { return href(); }, get domain() { return domain(); } }}>
       <HoverCardRoot openDelay={150}>
         {props.children}
       </HoverCardRoot>
-    </SourceContext.Provider>
+    </SourceContext>
   );
 }
 

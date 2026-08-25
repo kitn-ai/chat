@@ -11,6 +11,7 @@
  *      exactly what `defineWebComponent`'s `dispatch` produces.
  * The full component behaviour is covered in response-compare.test.tsx.
  */
+import { flush } from 'solid-js';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent, waitFor } from '@solidjs/testing-library';
@@ -47,6 +48,7 @@ describe('kai-compare — declarative data property', () => {
     const onSelect = vi.fn();
     const { getAllByText } = render(() => <ResponseCompare data={data} onSelect={onSelect} />);
     fireEvent.click(getAllByText('Pick this')[0]);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(1));
     const sel = onSelect.mock.calls[0][0] as CompareSelection;
     expect(sel.chosenId).toBe('a');

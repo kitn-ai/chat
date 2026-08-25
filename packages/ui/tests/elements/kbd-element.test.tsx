@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import '../../src/elements/kbd';
 
 test('kai-kbd renders normalized glyphs for keys + platform', async () => {
@@ -6,7 +7,9 @@ test('kai-kbd renders normalized glyphs for keys + platform', async () => {
   el.setAttribute('platform', 'mac');
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   const caps = Array.from(el.shadowRoot!.querySelectorAll('[part="key"]')).map((c) => c.textContent);
   expect(caps).toEqual(['⌘', '⇧', '↑']);
@@ -22,7 +25,9 @@ test('kai-kbd maps Mod to Ctrl off mac', async () => {
   el.setAttribute('platform', 'other');
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   const caps = Array.from(el.shadowRoot!.querySelectorAll('[part="key"]')).map((c) => c.textContent);
   expect(caps).toEqual(['Ctrl', 'K']);

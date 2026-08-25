@@ -1,4 +1,4 @@
-import { Show, omit, createUniqueId, createEffect, onCleanup } from 'solid-js';
+import { Show, omit, createUniqueId, createEffect, onCleanup, untrack } from 'solid-js';
 import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import type { CaseMode } from '../primitives/field-mask';
@@ -122,7 +122,9 @@ export function Input(props: InputProps): JSX.Element {
     'format', 'guide', 'semantic', 'caseMode', 'copyPolicy', 'onMaskReject',
   );
 
-  const id = local.id ?? createUniqueId();
+  // V2-PORT: a deliberate seed-once read — untracked explicitly, since v2 warns
+  // on bare reactive reads in a component body (they will not re-run).
+  const id = untrack(() => local.id) ?? createUniqueId();
   const hintId = `${id}-hint`;
   const isInvalid = () => !!local.invalid || !!local.error;
   const hasHint = () => !!local.error || !!local.hint;
@@ -317,7 +319,10 @@ export function Input(props: InputProps): JSX.Element {
       part={part}
       disabled={local.disabled}
       aria-invalid={isInvalid() ? 'true' : undefined}
-      aria-describedby={hasHint() ? hintId : undefined}
+      // V2-PORT: an explicit `undefined` attribute now REMOVES what the spread
+      // set (1.x treated undefined as absent in the merge), so fall back to the
+      // consumer aria-describedby value from `rest` when this widget adds none.
+      aria-describedby={hasHint() ? hintId : (rest['aria-describedby'] as string | undefined)}
       inputmode={inputmodeAttr()}
       autocomplete={autocompleteAttr()}
       spellcheck={spellcheckAttr()}

@@ -1,4 +1,5 @@
-import { createEffect, createMemo, onCleanup, untrack, type JSX } from 'solid-js';
+import { createEffect, createMemo, onCleanup, untrack } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../../utils/cn';
 
 export type UniformType =
@@ -830,30 +831,27 @@ export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
   // fast-changing signals, so an unmemoized read would re-run this effect at
   // band cadence even though the resolved boolean never changed.
   const animateWhenNotVisibleMemo = createMemo(() => props.animateWhenNotVisible ?? false);
-  createEffect(() => {
-    alwaysAnimate = animateWhenNotVisibleMemo();
+  // V2-PORT: the memo is the tracked read; the flag write + reconcile is the apply.
+  createEffect(animateWhenNotVisibleMemo, (always) => {
+    alwaysAnimate = always;
     // Route the change through the reconciler rather than acting on it here:
     // whether this means "build now", "release now", or "nothing changes"
     // depends on state `sync` already owns.
     sync();
   });
 
-  createEffect(() => {
-    // Reads ONLY the three memos below -- never `props.fragment` /
-    // `props.precision` / `props.uniforms` directly -- so this effect's
-    // dependency set is exactly {fragmentMemo, precisionMemo, shapeKey}, and
-    // nothing a caller's props chain does elsewhere (spread-derived or not)
-    // can mark it stale without one of those three RESOLVED values actually
-    // changing.
-    //
-    // Note what this effect does NOT do any more: touch the GPU. It resolves
-    // the source and hands it to `sync`, which owns every decision about
-    // whether a context should exist right now. That split is what lets the
-    // SAME setup path serve a first mount, a recompile, and a scroll-back-in
-    // restore, instead of one path per trigger.
-    const fragment = fragmentMemo();
-    const precision = precisionMemo();
-    shapeKey();
+  // V2-PORT: the compute reads ONLY the three memos — never `props.fragment` /
+  // `props.precision` / `props.uniforms` directly — so the dependency set is
+  // exactly {fragmentMemo, precisionMemo, shapeKey}; the untracked uniforms read
+  // and the rebuild live in the apply (untracked by construction, so the old
+  // untrack() wrapper is gone), and the in-effect onCleanup became the returned
+  // cleanup. The what-this-does-NOT-do note stands: no GPU work here; `sync`
+  // owns every decision about whether a context should exist right now.
+  createEffect(
+    () => ({ fragment: fragmentMemo(), precision: precisionMemo(), shape: shapeKey() }),
+    ({ fragment, precision }) => {
+    // V2-PORT: reads kept inside an apply must be untracked EXPLICITLY — v2 runs
+    // applies under a strict-read flag and warns on any bare reactive read.
     const uniforms = untrack(() => props.uniforms ?? {});
 
     build = { source: buildFragmentSource(fragment, uniforms, precision), uniforms };
@@ -869,7 +867,7 @@ export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
     // before `sync` builds the new one. The context itself deliberately
     // survives -- it is the expensive, rationed thing, and the new source
     // needs it immediately.
-    onCleanup(release);
+    return release;
   });
 
   return <canvas ref={canvas} part="canvas" class={cn('block h-full w-full', props.class)} />;

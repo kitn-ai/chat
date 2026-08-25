@@ -1,4 +1,4 @@
-import type { JSX } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { AudioVisualizer, type ShaderSpec, type VisualizerVariant } from '../components/audio-visualizer';
 import type { VisualizerSize } from '../components/audio-visualizer/sizes';
 import { defineWebComponent, type WebComponentContext } from './define';

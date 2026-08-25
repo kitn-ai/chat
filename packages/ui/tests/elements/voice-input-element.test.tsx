@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { vi } from 'vitest';
 import '../../src/elements/voice-input';
 
@@ -5,6 +6,7 @@ test('record button has an accessible name in its idle state (a11y A1)', async (
   const el = document.createElement('kai-voice-input');
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   const button = el.shadowRoot!.querySelector<HTMLButtonElement>('button')!;
   // Idle state mirrors the tooltip: "Voice input".
@@ -52,6 +54,7 @@ async function mountAndStart() {
   const el = document.createElement('kai-voice-input');
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   const errors: VoiceErrorDetail[] = [];
   el.addEventListener('kai-voice-error', (e) => {
@@ -65,6 +68,7 @@ async function mountAndStart() {
   const button = el.shadowRoot!.querySelector<HTMLButtonElement>('button')!;
   button.click(); // begin recognition
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   return { el, button, errors, transcripts, recog: FakeSpeechRecognition.last! };
 }
@@ -80,7 +84,9 @@ test('a recognition runtime error fires kai-voice-error with the platform code',
   recog.onerror?.({ error: 'network' });
   recog.onend?.(); // the session dies after the error, with no result
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(errors).toEqual([
     { source: 'recognition', error: 'network', message: expect.stringContaining('network') },
@@ -95,7 +101,9 @@ test('a session that ends with no text and no error fires kai-voice-error {error
 
   button.click(); // stop -> onend resolves with the empty final text
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(errors).toEqual([
     { source: 'recognition', error: 'no-result', message: expect.any(String) },
@@ -110,8 +118,11 @@ test('a session that produced text fires kai-transcription and NO kai-voice-erro
 
   recog.emitFinal('all good');
   button.click();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(transcripts).toEqual(['all good']);
   expect(errors).toEqual([]);
@@ -132,6 +143,7 @@ test('recognition failing to construct/start fires kai-voice-error with the exce
   const el = document.createElement('kai-voice-input');
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   const errors: VoiceErrorDetail[] = [];
   el.addEventListener('kai-voice-error', (e) => {
@@ -140,7 +152,9 @@ test('recognition failing to construct/start fires kai-voice-error with the exce
 
   el.shadowRoot!.querySelector<HTMLButtonElement>('button')!.click();
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(errors).toEqual([
     { source: 'recognition', error: 'InvalidStateError', message: 'recognition already started' },
@@ -158,6 +172,7 @@ test('native recognition fires kai-transcription when no transcribe is set', asy
   el.setAttribute('recognition-lang', 'en-US');
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   const transcripts: string[] = [];
   el.addEventListener('kai-transcription', (e) => {
@@ -167,6 +182,7 @@ test('native recognition fires kai-transcription when no transcribe is set', asy
   const button = el.shadowRoot!.querySelector<HTMLButtonElement>('button')!;
   button.click(); // begin recognition
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   const recog = FakeSpeechRecognition.last!;
   expect(recog.start).toHaveBeenCalled();
@@ -176,7 +192,9 @@ test('native recognition fires kai-transcription when no transcribe is set', asy
   button.click(); // stop → onend resolves with final text
   // let the resolved start() promise flush → onTranscription → dispatch
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(transcripts).toEqual(['hello from native']);
 

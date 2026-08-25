@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@solidjs/testing-library';
 import { FeedbackBar } from '../../src/components/feedback-bar';
@@ -12,6 +13,7 @@ describe('FeedbackBar', () => {
     const onFeedback = vi.fn();
     render(() => <FeedbackBar title="Was this helpful?" onFeedback={onFeedback} />);
     fireEvent.click(screen.getByRole('button', { name: 'Helpful' }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onFeedback).toHaveBeenCalledTimes(1);
     expect(onFeedback).toHaveBeenCalledWith('helpful');
   });
@@ -20,6 +22,7 @@ describe('FeedbackBar', () => {
     const onFeedback = vi.fn();
     render(() => <FeedbackBar title="Was this helpful?" onFeedback={onFeedback} />);
     fireEvent.click(screen.getByRole('button', { name: 'Not helpful' }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onFeedback).toHaveBeenCalledTimes(1);
     expect(onFeedback).toHaveBeenCalledWith('not-helpful');
   });
@@ -28,6 +31,7 @@ describe('FeedbackBar', () => {
     const onClose = vi.fn();
     render(() => <FeedbackBar title="Was this helpful?" onClose={onClose} />);
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 

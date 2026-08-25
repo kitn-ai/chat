@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { describe, it, expect, afterEach, beforeAll } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup } from '@solidjs/testing-library';
@@ -125,6 +126,7 @@ describe('ResizableHandle dblclick resets adjacent panels to defaults', () => {
     next.style.flexBasis = '480px';
 
     handle.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     expect(prev.style.flexBasis).toBe('30%');
     expect(next.style.flexBasis).toBe('70%');
@@ -148,6 +150,7 @@ describe('ResizableHandle dblclick resets adjacent panels to defaults', () => {
     next.style.flexShrink = '0';
 
     handle.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     expect(prev.style.flexBasis).toBe('30%');
     // The flexible panel (no default) returns to growing: basis cleared, grow:1.
@@ -168,6 +171,7 @@ describe('ResizableHandle dblclick resets adjacent panels to defaults', () => {
     prev.style.flexBasis = '120px';
 
     handle.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     expect(prev.style.flexBasis).toBe('120px');
   });
@@ -200,6 +204,7 @@ describe('<kai-resizable> size preservation across content-only re-renders', () 
     const el = host.querySelector('kai-resizable') as HTMLElement & { shadowRoot: ShadowRoot };
     // Let solid-element upgrade + onMount run.
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await new Promise((r) => setTimeout(r, 0));
 
     const panel = el.shadowRoot.querySelector('[data-panel]') as HTMLElement;
@@ -214,6 +219,7 @@ describe('<kai-resizable> size preservation across content-only re-renders', () 
 
     // Allow the MutationObserver microtask + any re-render to flush.
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await new Promise((r) => setTimeout(r, 0));
 
     const panelAfter = el.shadowRoot.querySelector('[data-panel]') as HTMLElement;
@@ -230,6 +236,7 @@ describe('<kai-resizable> size preservation across content-only re-renders', () 
     `);
     const el = host.querySelector('kai-resizable') as HTMLElement & { shadowRoot: ShadowRoot };
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await new Promise((r) => setTimeout(r, 0));
 
     const panels = el.shadowRoot.querySelectorAll('[data-panel]');
@@ -247,12 +254,14 @@ describe('<kai-resizable> size preservation across content-only re-renders', () 
     `);
     const el = host.querySelector('kai-resizable') as HTMLElement & { shadowRoot: ShadowRoot };
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await new Promise((r) => setTimeout(r, 0));
 
     // Simulate persistence overwriting the live `size` attribute after a drag.
     const item = host.querySelector('kai-resizable-item') as HTMLElement;
     item.setAttribute('size', '55%');
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await new Promise((r) => setTimeout(r, 0));
 
     const panel = el.shadowRoot.querySelector('[data-panel]') as HTMLElement;
@@ -269,6 +278,7 @@ describe('<kai-resizable> size preservation across content-only re-renders', () 
     `);
     const el = host.querySelector('kai-resizable') as HTMLElement & { shadowRoot: ShadowRoot };
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await new Promise((r) => setTimeout(r, 0));
     // The collapsed item is dropped from layout → only the chat panel renders.
     expect(el.shadowRoot.querySelectorAll('[data-panel]').length).toBe(1);
@@ -288,6 +298,7 @@ describe('<kai-resizable> size preservation across content-only re-renders', () 
     item.collapsed = true; // property, set before the element fully settles
     const el = host.querySelector('kai-resizable') as HTMLElement & { shadowRoot: ShadowRoot };
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await new Promise((r) => setTimeout(r, 0));
     // The facade reflected `collapsed` → attribute; the parent dropped the panel.
     expect(item.hasAttribute('collapsed')).toBe(true);
@@ -304,11 +315,13 @@ describe('<kai-resizable> size preservation across content-only re-renders', () 
     const el = host.querySelector('kai-resizable') as HTMLElement & { shadowRoot: ShadowRoot };
     const item = host.querySelector('kai-resizable-item') as HTMLElement & { collapsed?: boolean };
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await new Promise((r) => setTimeout(r, 0));
     expect(el.shadowRoot.querySelectorAll('[data-panel]').length).toBe(1);
 
     item.collapsed = false; // clearing the prop re-expands and reflects the attr off
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await new Promise((r) => setTimeout(r, 0));
     expect(item.hasAttribute('collapsed')).toBe(false);
     expect(el.shadowRoot.querySelectorAll('[data-panel]').length).toBe(2);
@@ -327,11 +340,13 @@ describe('<kai-resizable> size preservation across content-only re-renders', () 
     const el = host.querySelector('kai-resizable') as HTMLElement & { shadowRoot: ShadowRoot };
     const item = host.querySelector('kai-resizable-item') as HTMLElement;
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await new Promise((r) => setTimeout(r, 0));
     expect(el.shadowRoot.querySelectorAll('[data-panel]').length).toBe(2);
 
     item.setAttribute('hidden', '');
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await new Promise((r) => setTimeout(r, 0));
     // The `hidden` attribute still collapses; the facade owns only `collapsed`.
     expect(el.shadowRoot.querySelectorAll('[data-panel]').length).toBe(1);
@@ -347,6 +362,7 @@ describe('<kai-resizable> size preservation across content-only re-renders', () 
     `);
     const el = host.querySelector('kai-resizable') as HTMLElement & { shadowRoot: ShadowRoot };
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await new Promise((r) => setTimeout(r, 0));
 
     const panel = el.shadowRoot.querySelector('[data-panel]') as HTMLElement;
@@ -364,6 +380,7 @@ describe('<kai-resizable> size preservation across content-only re-renders', () 
     `);
     const el = host.querySelector('kai-resizable') as HTMLElement & { shadowRoot: ShadowRoot };
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await new Promise((r) => setTimeout(r, 0));
 
     expect(el.shadowRoot.querySelectorAll('[data-panel]').length).toBe(2);
@@ -373,6 +390,7 @@ describe('<kai-resizable> size preservation across content-only re-renders', () 
     el.appendChild(item);
 
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await new Promise((r) => setTimeout(r, 0));
 
     expect(el.shadowRoot.querySelectorAll('[data-panel]').length).toBe(3);

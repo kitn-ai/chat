@@ -1,5 +1,5 @@
 import { render } from '@solidjs/testing-library';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { Resizable, ResizablePanel } from '../../src/ui/resizable';
 
 afterEach(() => { document.body.innerHTML = ''; });
@@ -17,6 +17,7 @@ test('maximizedIndex hides the non-maximized panels; null shows all', () => {
   // All three visible initially (plus handles between them).
   expect(container.textContent).toContain('A');
   setIdx(1);
+  flush(); // V2-FLUSH: commit the staged write
   // Only the maximized panel's content remains visible (siblings hidden).
   const visibleText = Array.from(container.querySelectorAll('*'))
     .filter((n) => (n as HTMLElement).offsetParent !== null || true);
@@ -33,6 +34,8 @@ test('onMaximizeChange fires with the index on maximize and null on restore', ()
     </Resizable>
   ));
   setIdx(0);
+  flush(); // V2-FLUSH: commit the staged write
   setIdx(null);
+  flush(); // V2-FLUSH: commit the staged write
   expect(calls).toEqual([0, null]);
 });

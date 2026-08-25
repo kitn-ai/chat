@@ -1,7 +1,5 @@
-import {
-  createSignal, createEffect, onCleanup, Show, Switch, Match,
-  type Accessor, type Component, type JSX,
-} from 'solid-js';
+import { createSignal, createEffect, onCleanup, Show, Switch, Match, type Accessor, type Component } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../../utils/cn';
 import { useAudioAnalysis } from '../../primitives/use-audio-analysis';
 import { mirrorBandsCenterOut, mirrorBandsAroundRing } from '../../primitives/audio-bands';
@@ -136,13 +134,15 @@ export interface AudioVisualizerProps {
 export function usePrefersReducedMotion(): Accessor<boolean> {
   const [reduced, setReduced] = createSignal(false);
 
-  createEffect(() => {
+  // V2-PORT: a depless mount effect — empty compute; listener wiring in the
+  // apply, in-effect onCleanup -> returned cleanup.
+  createEffect(() => undefined, () => {
     if (typeof matchMedia !== 'function') return;
     const mq = matchMedia('(prefers-reduced-motion: reduce)');
     setReduced(mq.matches);
     const onChange = (e: MediaQueryListEvent) => setReduced(e.matches);
     mq.addEventListener?.('change', onChange);
-    onCleanup(() => mq.removeEventListener?.('change', onChange));
+    return () => mq.removeEventListener?.('change', onChange);
   });
 
   return reduced;
@@ -167,13 +167,15 @@ export function usePrefersReducedMotion(): Accessor<boolean> {
 export function useResolvedDark(theme: () => string | undefined): Accessor<boolean> {
   const [systemDark, setSystemDark] = createSignal(false);
 
-  createEffect(() => {
+  // V2-PORT: a depless mount effect — empty compute; listener wiring in the
+  // apply, in-effect onCleanup -> returned cleanup.
+  createEffect(() => undefined, () => {
     if (typeof matchMedia !== 'function') return;
     const mq = matchMedia('(prefers-color-scheme: dark)');
     setSystemDark(mq.matches);
     const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches);
     mq.addEventListener?.('change', onChange);
-    onCleanup(() => mq.removeEventListener?.('change', onChange));
+    return () => mq.removeEventListener?.('change', onChange);
   });
 
   return () => {
@@ -329,8 +331,9 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
   // mount needs its own signal to force the fallback despite `Shader()` being
   // truthy. `onUnavailable` below is what a mounted shader calls to set it.
   const [unavailable, setUnavailable] = createSignal(false);
-  createEffect(() => {
-    const v = variant();
+  // V2-PORT: `variant` is the tracked dependency; the dynamic-import lifecycle is
+  // the apply, and the in-effect onCleanup became the returned cleanup.
+  createEffect(variant, (v) => {
     const load = SHADER_VARIANTS[v];
     setShader(undefined);
     // Switching variants gets a fresh attempt: a failure on `aurora` must not
@@ -355,7 +358,7 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
           err,
         );
       });
-    onCleanup(() => { cancelled = true; });
+    return () => { cancelled = true; };
   });
 
   // Props every variant shares, MINUS `bands` -- deliberately. Solid compiles

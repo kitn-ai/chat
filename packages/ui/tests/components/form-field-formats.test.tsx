@@ -17,6 +17,7 @@
  * engine, and composition. Those are browser facts, covered by the task-6 Chromium
  * probes; the masker's jsdom contract is `tests/primitives/input-mask.test.ts`.
  */
+import { flush as flushSync } from 'solid-js';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup } from '@solidjs/testing-library';
@@ -54,6 +55,7 @@ const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 function type(el: HTMLInputElement, text: string): void {
   for (const ch of text) {
     el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertText', data: ch, cancelable: true, bubbles: true }));
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   }
 }
 
@@ -61,6 +63,7 @@ function type(el: HTMLInputElement, text: string): void {
 function typePlain(el: HTMLInputElement, text: string): void {
   el.value += text;
   el.dispatchEvent(new Event('input', { bubbles: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 }
 
 function mount(def: FormDefinition): {
@@ -111,7 +114,7 @@ describe('x-kai-format on a form field', () => {
     expect(values()).toEqual({ ticket: 'CHG-4821' });
   });
 
-  it('states the expected format in TEXT, through the row\'s EXISTING describedby channel', () => {
+  it('states the expected format in TEXT, through the row\'s EXISTING describedby channel', async () => {
     const { input, container } = mount({
       type: 'object',
       properties: {
@@ -126,6 +129,9 @@ describe('x-kai-format on a form field', () => {
       },
     });
 
+    // V2-SHAPE: the hint id joins the chain on the natural microtask commit.
+    await Promise.resolve();
+    flushSync();
     const described = (input.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean);
     expect(described.length).toBeGreaterThan(0);
 

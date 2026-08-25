@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { onMount, onCleanup } from 'solid-js';
+import { onSettled, onCleanup } from 'solid-js';
 import { LifeBuoy, Sparkles } from 'lucide-solid';
 import './register'; // side effect: registers <kai-chat> et al.
 import { attachKaiActions } from '../stories/docs/story-actions';
@@ -14,7 +14,7 @@ import type { ConversationSummary, ConversationGroup } from '../types';
 // fully-custom header/composer) stay hand-written but still use the kit tokens so
 // they never look out of place.
 
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -68,19 +68,23 @@ type Story = StoryObj;
 function InjectDemo() {
   let el: ChatEl | undefined;
   let convEl: ConversationsEl | undefined;
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers) d(); });
+  onSettled(() => {
     if (el) {
       el.messages = thread;
       el.chatTitle = 'Acme Support';
       // Log every event the chat shell declares (kai-submit, kai-value-change, …).
-      onCleanup(attachKaiActions(el));
+      settledDisposers.push(attachKaiActions(el));
     }
     if (convEl) {
       convEl.groups = convGroups;
       convEl.conversations = convs;
       convEl.activeId = 'c1';
       // Log every event the sidebar declares (kai-conversation-select, kai-new-chat, …).
-      onCleanup(attachKaiActions(convEl));
+      settledDisposers.push(attachKaiActions(convEl));
     }
   });
   return (
@@ -89,7 +93,7 @@ function InjectDemo() {
       <kai-conversations slot="sidebar" ref={(e) => (convEl = e as ConversationsEl)} style={{ display: 'block', height: '100%' }} />
       {/* A custom composer action (a themed kai-button) works in light + dark. */}
       <kai-button slot="composer-actions" variant="subtle" icon="sparkles"
-        ref={(e) => onMount(() => onCleanup(attachKaiActions(e)))}>Improve prompt</kai-button>
+        ref={(e) => onSettled(() => onCleanup(attachKaiActions(e)))}>Improve prompt</kai-button>
       <footer slot="footer" style="font:12px/1.4 system-ui;color:var(--color-muted-foreground);text-align:center;padding:4px">
         Acme may make mistakes. <a href="#" style="color:var(--color-foreground)">Verify important info</a>.
       </footer>
@@ -131,10 +135,14 @@ export const Inject: Story = {
 //      rather than re-rolling an empty state by hand. ─────────────────────────
 function EmptyDemo() {
   let el: ChatEl | undefined;
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers2: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers2) d(); });
+  onSettled(() => {
     if (!el) return;
     el.messages = [];
-    onCleanup(attachKaiActions(el)); // log kai-chat's events to the Actions panel
+    settledDisposers2.push(attachKaiActions(el)); // log kai-chat's events to the Actions panel
   });
   return (
     <kai-chat ref={(e) => (el = e as ChatEl)} style={{ display: 'block', height: '100vh' }}>
@@ -145,7 +153,7 @@ function EmptyDemo() {
       >
         <span slot="media"><LifeBuoy size={28} /></span>
         <kai-button variant="default"
-          ref={(e) => onMount(() => onCleanup(attachKaiActions(e)))}>Talk to a person</kai-button>
+          ref={(e) => onSettled(() => onCleanup(attachKaiActions(e)))}>Talk to a person</kai-button>
       </kai-empty>
     </kai-chat>
   );
@@ -184,10 +192,14 @@ let nextId = 100;
 function ReplaceDemo() {
   let el: ChatEl | undefined;
   let input: HTMLInputElement | undefined;
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers3: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers3) d(); });
+  onSettled(() => {
     if (!el) return;
     el.messages = thread;
-    onCleanup(attachKaiActions(el)); // log kai-chat's events to the Actions panel
+    settledDisposers3.push(attachKaiActions(el)); // log kai-chat's events to the Actions panel
   });
   const send = (e: Event) => {
     e.preventDefault();
@@ -246,10 +258,14 @@ export const ReplaceComposer: Story = {
 //    did before slots existed (regression guard). ─────────────────────────────
 function DropInDemo() {
   let el: ChatEl | undefined;
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers4: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers4) d(); });
+  onSettled(() => {
     if (!el) return;
     el.messages = thread;
-    onCleanup(attachKaiActions(el)); // log kai-chat's events to the Actions panel
+    settledDisposers4.push(attachKaiActions(el)); // log kai-chat's events to the Actions panel
   });
   return <kai-chat ref={(e) => (el = e as ChatEl)} style={{ display: 'block', height: '100vh' }} />;
 }

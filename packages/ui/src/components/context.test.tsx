@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent, screen } from '@solidjs/testing-library';
@@ -91,7 +92,9 @@ function openCard() {
   // ContextTrigger renders HoverCardTrigger; the host wrapper is the parent of the button.
   const btn = screen.getByRole('button');
   fireEvent.pointerEnter(btn.parentElement!);
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   vi.advanceTimersByTime(0); // openDelay=0 → card opens immediately
+  flush(); // V2-FLUSH: the timer handler's open write is staged too
 }
 
 /**

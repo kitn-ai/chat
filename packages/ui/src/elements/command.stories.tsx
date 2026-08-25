@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { onMount, onCleanup } from 'solid-js';
+import { onSettled, onCleanup } from 'solid-js';
 import './register'; // side effect: registers all kai-* custom elements (incl. kai-command)
 import { attachKaiActions } from '../stories/docs/story-actions';
 import type { KaiCommandItem } from './command';
 
 // Declare the custom element tag for SolidJS JSX.
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -32,7 +32,7 @@ type Story = StoryObj;
 /**
  * Reproduces a @-mention or slash-command picker backed by `<kai-command>`.
  * Items are grouped under "Mac apps", "Chats", and "Files". Set as a JS property
- * in `onMount`. Every declared event (`kai-select`, `kai-query-change`,
+ * in `onSettled`. Every declared event (`kai-select`, `kai-query-change`,
  * `kai-active-change`) is logged to the Actions panel.
  */
 function MentionPickerDemo() {
@@ -51,11 +51,15 @@ function MentionPickerDemo() {
     { id: 'screenrec', label: 'screenrec.py', icon: 'file-text', description: '/Users/rob/screenrec.py', group: 'Files' },
   ];
 
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers) d(); });
+  onSettled(() => {
     if (!el) return;
     el.items = [...items];
     // Auto-wire every CustomEvent the element declares to the Actions panel.
-    onCleanup(attachKaiActions(el));
+    settledDisposers.push(attachKaiActions(el));
   });
 
   return (

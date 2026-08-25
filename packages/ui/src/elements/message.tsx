@@ -1,5 +1,6 @@
-import { Show, createSignal, createEffect, onMount, onCleanup, type JSX } from 'solid-js';
-import { Dynamic } from 'solid-js/web';
+import { Show, createSignal, createEffect, onSettled, onCleanup, untrack, runWithOwner } from 'solid-js';
+import type { JSX } from '@solidjs/web';
+import { Dynamic } from '@solidjs/web';
 import { defineWebComponent } from './define';
 import { readSlots, MESSAGE_SLOTS } from './slots';
 import { ChatConfig, useChatConfig, type ProseSize } from '../primitives/chat-config';
@@ -45,16 +46,32 @@ export function cardComponentsFromTags(types?: CardTagMap, theme = 'auto'): Card
  *  `card` message part here. */
 function CardTagSlot(props: { tag: string; envelope: CardEnvelope; theme: string }): JSX.Element {
   let ref: HTMLElement | undefined;
-  createEffect(() => {
-    if (!ref) return;
-    (ref as unknown as { data: unknown }).data = props.envelope.data;
-    (ref as unknown as { cardId: string }).cardId = props.envelope.id;
-    if (props.envelope.title != null) (ref as unknown as { heading: string }).heading = props.envelope.title;
-    (ref as unknown as { resolution: unknown }).resolution = props.envelope.resolution;
-    ref.setAttribute('theme', props.theme);
-    ref.setAttribute('data-card-id', props.envelope.id);
-  });
-  return <Dynamic component={props.tag} ref={ref} />;
+  // V2-PORT: one stamping function, called from the REF (pre-upgrade — the
+  // house rule: set WC props in ref callbacks) AND from the effect for later
+  // envelope changes; mirrors <kai-cards>'s CardSlot. Seeding in the ref
+  // matters under v2: the effect's apply lands AFTER the child's mount-time
+  // effects, so an un-seeded child would transiently validate undefined data.
+  const applyEnvelope = (el: HTMLElement, env: CardEnvelope, theme: string): void => {
+    (el as unknown as { data: unknown }).data = env.data;
+    (el as unknown as { cardId: string }).cardId = env.id;
+    if (env.title != null) (el as unknown as { heading: string }).heading = env.title;
+    (el as unknown as { resolution: unknown }).resolution = env.resolution;
+    el.setAttribute('theme', theme);
+    el.setAttribute('data-card-id', env.id);
+  };
+  // V2-PORT (R1): envelope/theme reads in the compute; the writes in the apply.
+  createEffect(
+    () => ({ env: props.envelope, theme: props.theme }),
+    ({ env, theme }) => {
+      if (ref) applyEnvelope(ref, env, theme);
+    },
+  );
+  return (
+    <Dynamic
+      component={props.tag}
+      ref={(el: HTMLElement) => { ref = el; untrack(() => applyEnvelope(el, props.envelope, props.theme)); }}
+    />
+  );
 }
 
 interface Props extends Record<string, unknown> {
@@ -149,7 +166,13 @@ function liftRoleOffHost(element: HTMLElement): void {
   const attr = element.getAttribute('role');
   if (attr === null) return;
   element.removeAttribute('role');
-  (element as unknown as { role?: string }).role = attr;
+  // V2-PORT: the prop assignment lands on component-register's signal-backed
+  // setter, and this runs from the facade BODY — an owned scope where v2's dev
+  // guard rejects writes. The write is the whole point here, so run it with no
+  // owner (same value, same tick, guard satisfied).
+  runWithOwner(null, () => {
+    (element as unknown as { role?: string }).role = attr;
+  });
 }
 
 /** Events fired by `<kai-message>`. */
@@ -235,7 +258,7 @@ defineWebComponent<Props, Events>('kai-message', {
   const [slottedActions, setSlottedActions] = createSignal<import('../elements/chat-types').CustomAction[]>([]);
   // Which composition slots (before-body / after-body / avatar) the consumer filled.
   const [slots, setSlots] = createSignal<Record<string, boolean>>({});
-  onMount(() => {
+  onSettled(() => {
     const read = () => {
       const nodes = [...element.querySelectorAll('kai-action')];
       setSlottedActions(nodes.map(n => ({
@@ -249,17 +272,19 @@ defineWebComponent<Props, Events>('kai-message', {
     read();
     const observer = new MutationObserver(read);
     observer.observe(element, { childList: true, attributes: true, subtree: true });
-    onCleanup(() => observer.disconnect());
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => observer.disconnect();
   });
   // A consumer can set `role` at any point after the element is live
   // (`el.setAttribute('role', 'user')`), which puts the invalid ARIA role back on
   // the host. Keep lifting it off. Scoped to the one attribute so this cannot be
   // mistaken for general attribute handling; no loop, because the write-back is a
   // property and the removal leaves nothing for the next callback to find.
-  onMount(() => {
+  onSettled(() => {
     const roleObserver = new MutationObserver(() => liftRoleOffHost(element));
     roleObserver.observe(element, { attributes: true, attributeFilter: ['role'] });
-    onCleanup(() => roleObserver.disconnect());
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => roleObserver.disconnect();
   });
   const isUser = () => msg().role === 'user';
   const avatar = () =>

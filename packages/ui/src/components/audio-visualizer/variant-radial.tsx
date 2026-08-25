@@ -1,4 +1,5 @@
-import { Index, type JSX } from 'solid-js';
+import { For, untrack } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../../utils/cn';
 import { normalizeVolumeBands } from '../../primitives/audio-bands';
 import { useSequencer } from '../../primitives/use-sequencer';
@@ -93,7 +94,7 @@ export function RadialVisualizer(
         instead, so each spoke's DOM node is created once and its `level`
         accessor updates in place. See the note in variant-bar.tsx.
       */}
-      <Index each={levels()}>
+      <For keyed={false} each={levels()}>
         {(level, i) => {
           // `i` is a plain number here (stable per position under <Index>),
           // not an accessor -- do not call it as `i()`. `highlighted`/`value`
@@ -121,7 +122,7 @@ export function RadialVisualizer(
                 spoke on the ring even when the caller owns its markup. See
                 the `children` doc on VariantProps in variant-bar.tsx.
               */}
-              {props.children?.(item) ?? (
+              {untrack(() => props.children)?.(item) ?? (
                 // The lit state is a SECOND part TOKEN (`part(bar highlighted)`),
                 // not a `data-*` attribute selector on `::part(bar)`: a CSS
                 // attribute selector cannot follow a pseudo-element, so
@@ -132,7 +133,7 @@ export function RadialVisualizer(
                 <div
                   part={item.highlighted() ? 'bar highlighted' : 'bar'}
                   data-kai-index={item.index}
-                  data-kai-highlighted={item.highlighted()}
+                  data-kai-highlighted={item.highlighted() ? 'true' : 'false'}
                   class={cn(
                     'origin-bottom rounded-full bg-current/10',
                     'data-[kai-highlighted=true]:bg-current',
@@ -157,7 +158,7 @@ export function RadialVisualizer(
             </div>
           );
         }}
-      </Index>
+      </For>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@solidjs/testing-library';
-import { createSignal, flush } from 'solid-js';
+import { createSignal, flush as flushSync } from 'solid-js';
 import { createPresence, As, useDismiss, usePosition } from '../../src/ui/overlay';
 
 // jsdom (v24) does not implement the PointerEvent constructor. useDismiss
@@ -37,9 +37,9 @@ describe('createPresence', () => {
     });
     expect(present()).toBe(true);
     setShow(false);
-    flush(); // V2-FLUSH: commit the staged hide so the close effect queues its microtask
+    flushSync(); // V2-FLUSH: commit the staged hide so the close effect queues its microtask
     await Promise.resolve();
-    flush(); // V2-FLUSH: the microtask's setPresent write is itself staged
+    flushSync(); // V2-FLUSH: the microtask's setPresent write is itself staged
     expect(present()).toBe(false);
   });
 
@@ -53,6 +53,7 @@ describe('createPresence', () => {
     });
     expect(state()).toBe('open');
     setShow(false);
+    flushSync(); // V2-FLUSH: commit the staged write
     await Promise.resolve();
     expect(state()).toBe('closed');
   });
@@ -66,7 +67,9 @@ describe('createPresence', () => {
       return <div ref={p.setRef} />;
     });
     setShow(false);
+    flushSync(); // V2-FLUSH: commit the staged write
     setShow(true); // re-open synchronously before microtask
+    flushSync(); // V2-FLUSH: commit the staged write
     await Promise.resolve();
     await Promise.resolve();
     expect(present()).toBe(true);
@@ -223,7 +226,7 @@ describe('useDismiss', () => {
       return null;
     });
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(dismissed).toBe(1);
   });
 
@@ -237,10 +240,10 @@ describe('useDismiss', () => {
       return null;
     });
     inside.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(dismissed).toBe(0);
     document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(dismissed).toBe(1);
     inside.remove();
   });

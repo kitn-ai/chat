@@ -1,4 +1,4 @@
-import { splitProps, Show, For } from 'solid-js';
+import { omit, Show, For } from 'solid-js';
 import { cn } from '../utils/cn';
 import { Dropdown, DropdownTrigger, DropdownContent, DropdownItem, type DropdownController } from '../ui/dropdown';
 import { Button } from '../ui/button';
@@ -19,7 +19,8 @@ export interface ChatScopePickerProps {
 }
 
 export function ChatScopePicker(props: ChatScopePickerProps) {
-  const [local] = splitProps(props, ['currentLabel', 'onScopeChange', 'availableAuthors', 'availableTags', 'class', 'defaultOpen', 'disabled', 'controllerRef']);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = props;
   return (
     <Dropdown
       defaultOpen={local.defaultOpen}

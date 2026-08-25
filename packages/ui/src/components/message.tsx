@@ -1,4 +1,5 @@
-import { type JSX, For, Index, Switch, Match, createMemo, createSignal, splitProps, Show } from "solid-js";
+import { For, Switch, Match, createMemo, createSignal, omit, Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { Tooltip } from "../ui/tooltip";
 import { Copy, Check } from "lucide-solid";
 import { cn } from "../utils/cn";
@@ -65,7 +66,9 @@ export interface MessageProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, '
 }
 
 function Message(props: MessageProps) {
-  const [local, rest] = splitProps(props, ["children", "class", "role"]);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, "children", "class", "role");
   return (
     <div
       part="row"
@@ -132,7 +135,9 @@ export interface MessageContentProps extends JSX.HTMLAttributes<HTMLDivElement> 
 }
 
 function MessageContent(props: MessageContentProps) {
-  const [local, rest] = splitProps(props, ["children", "markdown", "class", "part"]);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, "children", "markdown", "class", "part");
   const config = useChatConfig();
   const classNames = () =>
     cn(
@@ -162,7 +167,9 @@ export interface MessageActionsProps extends JSX.HTMLAttributes<HTMLDivElement> 
 }
 
 function MessageActions(props: MessageActionsProps) {
-  const [local, rest] = splitProps(props, ["children", "class"]);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, "children", "class");
   return (
     <div
       class={cn(
@@ -254,7 +261,7 @@ function MessageActionBar(props: MessageActionBarProps) {
               class={cn('rounded-full', isActiveVote() && 'text-primary')}
               data-action={item.id}
               aria-label={showCheck() ? 'Copied' : item.label}
-              aria-pressed={vote !== undefined ? isActiveVote() : undefined}
+              aria-pressed={vote !== undefined ? ((isActiveVote()) ? 'true' : 'false') : undefined}
               onClick={() => props.onAction(item.id)}
             >
               <Show
@@ -464,7 +471,8 @@ function MessageBody(props: MessageBodyProps) {
     <>
       {/* before-body (inject): a per-message header above everything else. */}
       <Show when={props.beforeBody}>{props.beforeBody}</Show>
-      {/* <Index>, NOT <For>, on purpose — this is load-bearing.
+      {/* <For keyed={false}> (v2's spelling of 1.x <Index>), NOT a keyed <For>,
+       *  on purpose — this is load-bearing.
        *
        *  A streaming message re-renders once per delta with a brand-new `parts`
        *  array (a new reference IS the re-render signal), and
@@ -495,7 +503,7 @@ function MessageBody(props: MessageBodyProps) {
        *
        *  This only works while the children read through the accessors below:
        *  capturing `g().part` once re-freezes the row at its first delta. */}
-      <Index each={groups()}>
+      <For keyed={false} each={groups()}>
         {(group) => (
           <Switch fallback={null}>
             <Match when={groupAs(group(), 'files')}>
@@ -650,7 +658,7 @@ function MessageBody(props: MessageBodyProps) {
             </Match>
           </Switch>
         )}
-      </Index>
+      </For>
       <Show when={(props.actions?.length ?? 0) > 0}>
         <MessageActionBar
           actions={props.actions!}

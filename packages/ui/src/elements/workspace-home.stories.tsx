@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { onMount } from 'solid-js';
+import { onSettled } from 'solid-js';
 import './register'; // registers kai-workspace, kai-nav, kai-notice, kai-prompt-input, kai-suggestions, kai-card
 import type { KaiNavItem } from '../ui/nav';
 
@@ -30,7 +30,7 @@ const IDEAS = [
 export const Home: Story = {
   render: () => {
     let nav!: El, sugg!: El, notice!: El, input!: El, card!: El;
-    onMount(() => {
+    onSettled(() => {
       nav.items = NAV;
       nav.defaultValue = 'new';
       sugg.suggestions = IDEAS;

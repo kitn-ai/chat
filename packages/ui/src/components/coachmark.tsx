@@ -1,5 +1,6 @@
-import { createSignal, createUniqueId, createEffect, onCleanup, Show, type Accessor, type JSX } from 'solid-js';
-import { Portal } from 'solid-js/web';
+import { createSignal, createUniqueId, createEffect, onCleanup, Show, type Accessor } from 'solid-js';
+import type { JSX } from '@solidjs/web';
+import { Portal } from '@solidjs/web';
 import { X } from 'lucide-solid';
 import type { Placement } from '@floating-ui/dom';
 import { cn } from '../utils/cn';
@@ -129,12 +130,13 @@ export function Coachmark(props: CoachmarkProps) {
   // native listener (not preventing default or stopping propagation) so the
   // trigger's own click still fires, and so it works for a slotted trigger in the
   // web component. Only acts while open so it never re-fires onDismiss when shut.
-  createEffect(() => {
-    const el = anchor();
+  // V2-PORT: the anchor signal is the tracked dependency; listener wiring is the
+  // apply, whose returned cleanup replaces the in-effect onCleanup.
+  createEffect(anchor, (el) => {
     if (!el) return;
     const onClick = () => { if (isOpen()) dismiss(); };
     el.addEventListener('click', onClick);
-    onCleanup(() => el.removeEventListener('click', onClick));
+    return () => el.removeEventListener('click', onClick);
   });
 
   return (

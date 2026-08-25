@@ -1,4 +1,5 @@
-import { splitProps, Show, createSignal, createEffect, on, onCleanup } from 'solid-js';
+import { omit, Show, createSignal, createEffect, onCleanup } from 'solid-js';
+import { deferApply } from '../utils/defer-apply'; // V2-PORT: on(...,{defer:true}) replacement
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
 import { Tooltip } from '../ui/tooltip';
@@ -50,7 +51,8 @@ function hasSpeechSynthesis(): boolean {
 }
 
 export function VoiceOutput(props: VoiceOutputProps) {
-  const [local] = splitProps(props, ['text', 'disabled', 'class']);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = props;
   const [isSpeaking, setIsSpeaking] = createSignal(false);
   const [isLoading, setIsLoading] = createSignal(false);
 
@@ -174,15 +176,15 @@ export function VoiceOutput(props: VoiceOutputProps) {
 
   // Emit speaking transitions to the host. `defer: true` skips the spurious
   // initial `false` — only real start/stop transitions fire.
-  createEffect(on(isSpeaking, (speaking) => {
+  createEffect(isSpeaking, deferApply((speaking) => {
     props.onSpeakingChange?.(speaking);
-  }, { defer: true }));
+  }));
 
   // Autoplay: speak when text first arrives / changes (defer skips the mount
   // value so an empty seed doesn't speak).
-  createEffect(on(() => local.text, (text) => {
+  createEffect(() => local.text, deferApply((text) => {
     if (props.autoplay && text) speak();
-  }, { defer: true }));
+  }));
 
   props.controllerRef?.({ speak, pause, resume, stop });
 
@@ -221,7 +223,7 @@ export function VoiceOutput(props: VoiceOutputProps) {
           variant="ghost"
           size="icon-sm"
           aria-label={label()}
-          aria-pressed={isSpeaking()}
+          aria-pressed={isSpeaking() ? 'true' : 'false'}
           onClick={handleClick}
           disabled={local.disabled || !capable() || isLoading()}
           class={cn('relative z-10 rounded-full transition-all duration-300')}

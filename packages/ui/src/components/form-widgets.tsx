@@ -1,4 +1,5 @@
-import { type JSX, For, Show, createSignal } from 'solid-js';
+import { For, Show, createSignal } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { Textarea } from '../ui/textarea';
 import { Input, FIELD_BASE as inputBase } from '../ui/input';
@@ -31,8 +32,9 @@ export interface WidgetProps {
 
 function ariaProps(p: WidgetProps) {
   return {
-    'aria-required': p.required || undefined,
-    'aria-invalid': p.invalid || undefined,
+    // V2-PORT: aria enumerated attrs take 'true'/'false' strings in v2's JSX types.
+    'aria-required': p.required ? ('true' as const) : undefined,
+    'aria-invalid': p.invalid ? ('true' as const) : undefined,
     'aria-describedby': p.describedBy,
   };
 }
@@ -72,8 +74,8 @@ export function TextWidget(
       placeholder={props.placeholder}
       invalid={props.invalid}
       disabled={props.disabled}
-      minLength={props.field.minLength}
-      maxLength={props.field.maxLength}
+      minlength={props.field.minLength}
+      maxlength={props.field.maxLength}
       // Masking (spec §7.3). Each is `undefined` for a field with no format hints, so
       // an unhinted field renders exactly the input it rendered before. The hint TEXT
       // is deliberately not passed as `Input`'s own `hint`: `FieldRow` renders it and
@@ -102,7 +104,7 @@ export function TextareaWidget(props: WidgetProps): JSX.Element {
         value={(props.value as string) ?? ''}
         placeholder={props.placeholder}
         disabled={props.disabled}
-        maxLength={props.field.maxLength}
+        maxlength={props.field.maxLength}
         {...ariaProps(props)}
         onInput={(e) => props.onInput(e.currentTarget.value)}
         onBlur={props.onBlur}
@@ -200,7 +202,7 @@ export function RatingWidget(props: WidgetProps): JSX.Element {
           <button
             type="button"
             role="radio"
-            aria-checked={current() === n}
+            aria-checked={current() === n ? 'true' : 'false'}
             aria-label={`${n} ${n === 1 ? 'star' : 'stars'}`}
             tabindex={-1}
             disabled={props.disabled}
@@ -232,7 +234,7 @@ export function SwitchWidget(props: WidgetProps): JSX.Element {
       data-control
       type="button"
       role="switch"
-      aria-checked={on()}
+      aria-checked={on() ? 'true' : 'false'}
       aria-label={props.label}
       disabled={props.disabled}
       class={cn(

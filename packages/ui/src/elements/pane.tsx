@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount } from 'solid-js';
+import { createSignal, onCleanup, onSettled } from 'solid-js';
 import { defineWebComponent } from './define';
 import { Pane, type PaneStatus } from '../ui/pane';
 
@@ -94,7 +94,7 @@ defineWebComponent<Props, Events>('kai-pane', {
     leading: false, actions: false, footer: false,
   });
 
-  onMount(() => {
+  onSettled(() => {
     const read = () => {
       const next = {} as Record<SlotName, boolean>;
       for (const name of SLOT_NAMES) next[name] = !!element.querySelector(`:scope > [slot="${name}"]`);
@@ -103,7 +103,8 @@ defineWebComponent<Props, Events>('kai-pane', {
     read();
     const observer = new MutationObserver(read);
     observer.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ['slot'] });
-    onCleanup(() => observer.disconnect());
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => observer.disconnect();
   });
 
   const region = (name: SlotName) => (filled()[name] ? <slot name={name} /> : undefined);

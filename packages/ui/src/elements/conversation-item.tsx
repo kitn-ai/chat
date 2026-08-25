@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount } from 'solid-js';
+import { createSignal, onCleanup, onSettled } from 'solid-js';
 import { defineWebComponent } from './define';
 import { readSlots, CONVERSATION_ITEM_SLOTS } from './slots';
 import { SlottedConversationItem } from '../components/conversation-item';
@@ -55,12 +55,16 @@ defineWebComponent<Props>('kai-conversation-item', {
   // Which named regions the consumer has filled; drives the conditional
   // wrappers so an empty region leaves no stray box behind.
   const [slots, setSlots] = createSignal<Record<string, boolean>>({});
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers) d(); });
+  onSettled(() => {
     const read = () => setSlots(readSlots(element, CONVERSATION_ITEM_SLOTS));
     read();
     const observer = new MutationObserver(read);
     observer.observe(element, { childList: true, attributes: true, subtree: true });
-    onCleanup(() => observer.disconnect());
+    settledDisposers.push(() => observer.disconnect());
 
     // The HOST is the row LISTITEM (sibling restructure, ratified 2026-08-20):
     // it wraps the activation body AND the consumer's tabbable menu, so it must

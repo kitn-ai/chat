@@ -25,6 +25,7 @@
  * asserts the OPERATION ORDER (what was true at the instant `focus()` was called),
  * which is the part a browser would get wrong silently.
  */
+import { flush as flushSync } from 'solid-js';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -99,6 +100,7 @@ function tabReachable(node: HTMLElement): boolean {
 /** A keydown as the browser delivers one: from the focused node, bubbling + composed. */
 const escapeFrom = (node: EventTarget) =>
   node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true, cancelable: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
 // ---------------------------------------------------------------------------
 // Open / close, through every driver a consumer has
@@ -160,10 +162,12 @@ describe('open / close', () => {
   test('clicking the launcher toggles', async () => {
     const el = await mount();
     launcher(el).click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     await flush();
     expect(expanded(el)).toBe(true);
 
     launcher(el).click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     await flush();
     expect(expanded(el)).toBe(false);
   });
@@ -260,6 +264,7 @@ describe('reflected boolean read-back', () => {
   test('the internal open state reflects out to the attribute (a launcher click)', async () => {
     const el = await mount();
     launcher(el).click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     await flush();
     expect(el.hasAttribute('open')).toBe(true);
     expect(el.open).toBe(true);
@@ -368,6 +373,7 @@ describe('D-B focus on open', () => {
     el.setAttribute('focus-on-open', 'none');
     await flush();
     outside.focus();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     el.show();
     await flush();
@@ -380,6 +386,7 @@ describe('D-B focus on open', () => {
     el.removeAttribute('focus-on-open');
     await flush();
     outside.focus();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     el.show();
     await flush();
     expect(document.activeElement).toBe(el.querySelector('#content'));
@@ -390,6 +397,7 @@ describe('D-B focus on open', () => {
     document.body.appendChild(outside);
     const el = await mount('<div slot="panel" tabindex="0" id="content">body</div>');
     outside.focus();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     el.show();
     await flush();
@@ -420,6 +428,7 @@ describe('D-B focus on open', () => {
     await flush();
 
     outside.focus();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     el.open = true;
     await flush();
     expect(document.activeElement).toBe(outside);
@@ -461,12 +470,14 @@ describe('D-B focus on open', () => {
   test('focus() targets the panel while open and the launcher while closed', async () => {
     const el = await mount('<div slot="panel">body</div>');
     el.focus();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     await flush();
     expect(shadow(el).activeElement).toBe(launcher(el));
 
     el.show();
     await flush();
     el.focus();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(shadow(el).activeElement).toBe(panel(el));
   });
 

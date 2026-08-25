@@ -1,4 +1,5 @@
-import { For, Show, createMemo, onMount, type JSX } from 'solid-js';
+import { For, Show, createMemo, onSettled } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { ChatConfig, useChatConfig } from '../primitives/chat-config';
 import { ChatContainer, ChatContainerContent, ChatContainerScrollAnchor } from './chat-container';
 import { Message, MessageAvatar, MessageBody } from './message';
@@ -109,7 +110,7 @@ export function Thread(props: ThreadProps) {
   const messageKeys = createMemo(() => props.messages.map((m) => m.id));
 
   // Hand the imperative controller to the facade once mounted (rootEl is set).
-  onMount(() => {
+  onSettled(() => {
     props.controllerRef?.({
       scrollToBottom: (behavior) => {
         const vp = rootEl?.querySelector<HTMLElement>('.overflow-y-auto');

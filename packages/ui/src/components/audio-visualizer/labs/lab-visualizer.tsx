@@ -1,4 +1,5 @@
-import { createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { createSignal, onCleanup, onSettled } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { ShaderCanvas, hexToRgb, type UniformSpec } from '../shader-canvas';
 import { LAB_FRAGMENTS, type LabLook } from './lab-shaders';
 import { createChoreography, LOOK_DEFAULTS, type LabParams, type LabState } from './lab-choreography';
@@ -31,7 +32,7 @@ export function LabVisualizer(props: LabVisualizerProps): JSX.Element {
   const chor = createChoreography(() => props.look, () => props.state ?? 'manual', merged);
   const [frame, setFrame] = createSignal(chor.step(0));
 
-  onMount(() => {
+  onSettled(() => {
     // Captured at SETUP and closed over, never re-resolved as a global inside
     // `onCleanup`: cleanup can run after the host removed the DOM globals (a
     // `kai-*` release is deferred one microtask past detachment, so an
@@ -60,7 +61,8 @@ export function LabVisualizer(props: LabVisualizerProps): JSX.Element {
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    onCleanup(() => cancelFrame(raf));
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => cancelFrame(raf);
   });
 
   const uniforms = (): Record<string, UniformSpec> => {

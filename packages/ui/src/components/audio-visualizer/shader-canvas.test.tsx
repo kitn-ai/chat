@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, flush as flushSync } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { installFakeClock } from '../../test-utils/fake-clock';
 import { buildFragmentSource, hexToRgb, DEFAULT_SHADER_COLOR, ShaderCanvas } from './shader-canvas';
@@ -369,8 +369,10 @@ describe('ShaderCanvas: recompiles on shader structure, not per-frame uniform va
     expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
 
     setVolume(0.3);
+    flush(); // V2-FLUSH: commit the staged write
     await flush();
     setVolume(0.9);
+    flush(); // V2-FLUSH: commit the staged write
     await flush();
 
     expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
@@ -394,6 +396,7 @@ describe('ShaderCanvas: recompiles on shader structure, not per-frame uniform va
     expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
 
     setWide(true);
+    flush(); // V2-FLUSH: commit the staged write
     await flush();
 
     expect(calls.filter((c) => c === 'createProgram')).toHaveLength(2);
@@ -459,6 +462,7 @@ describe('ShaderCanvas: WebGL context lost after a successful compile', () => {
     calls.length = 0;
     const canvas = document.querySelector('canvas')!;
     canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError.mock.calls[0]![0]).toMatch(/context/i);
@@ -482,6 +486,7 @@ describe('ShaderCanvas: WebGL context lost after a successful compile', () => {
     const canvas = document.querySelector('canvas')!;
     const event = new Event('webglcontextlost', { cancelable: true });
     canvas.dispatchEvent(event);
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     expect(event.defaultPrevented).toBe(true);
   });
@@ -556,6 +561,7 @@ describe('ShaderCanvas: an array uniform relying on inferred arraySize still rec
     expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
 
     setBands([0, 0, 0, 0, 0]);
+    flush(); // V2-FLUSH: commit the staged write
     await flush();
 
     expect(calls.filter((c) => c === 'createProgram')).toHaveLength(2);
@@ -572,6 +578,7 @@ describe('ShaderCanvas: an array uniform relying on inferred arraySize still rec
     expect(fragmentSources[0]).toContain('uniform float uBands[3];');
 
     setBands([0, 0, 0, 0, 0]);
+    flush(); // V2-FLUSH: commit the staged write
     await flush();
 
     expect(fragmentSources[1]).toContain('uniform float uBands[5];');
@@ -638,6 +645,7 @@ describe('ShaderCanvas: immune to a spread-prop leak from an unrelated fast-chan
     // ~32ms real analyser cadence, 10 ticks.
     for (let i = 0; i < 10; i++) {
       setBands([i, i, i]);
+      flush(); // V2-FLUSH: commit the staged write
       await flush();
     }
 
@@ -821,6 +829,7 @@ describe('ShaderCanvas: releases its WebGL context while off screen', () => {
     // guard is unverified: removing it leaves every other test green.
     document.querySelector('canvas')!
       .dispatchEvent(new Event('webglcontextrestored', { cancelable: true }));
+      flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     calls.length = 0;
     advance(16);
@@ -918,7 +927,7 @@ describe('ShaderCanvas: animateWhenNotVisible', () => {
     expect(uniformWrites.iTime?.at(-1)).toBeCloseTo(6, 5);
   });
 
-  it('releases once it is flipped off at runtime while the canvas is hidden', () => {
+  it('releases once it is flipped off at runtime while the canvas is hidden', async () => {
     installFakeIntersectionObserver();
     const { gl, calls } = createFakeGL();
     stubGetContext(gl);
@@ -930,6 +939,10 @@ describe('ShaderCanvas: animateWhenNotVisible', () => {
     calls.length = 0;
 
     setAlways(false);
+    // V2-SHAPE: the flag flows through a lazy memo; its effect lands on the
+    // natural microtask commit rather than a synchronous flush() drain.
+    await Promise.resolve();
+    flush(); // V2-FLUSH
 
     // The observer's standing verdict applies the moment the opt-out drops,
     // with no re-wiring and no waiting for another callback.
@@ -938,7 +951,7 @@ describe('ShaderCanvas: animateWhenNotVisible', () => {
     expect(calls.indexOf('deleteProgram')).toBeLessThan(calls.indexOf('loseContext'));
   });
 
-  it('takes the context back when it is flipped on at runtime while the canvas is hidden', () => {
+  it('takes the context back when it is flipped on at runtime while the canvas is hidden', async () => {
     const io = installFakeIntersectionObserver();
     const { gl, calls, flushGLEvents } = createFakeGL();
     stubGetContext(gl);
@@ -951,6 +964,10 @@ describe('ShaderCanvas: animateWhenNotVisible', () => {
     calls.length = 0;
 
     setAlways(true);
+    // V2-SHAPE: the flag flows through a lazy memo; its effect lands on the
+    // natural microtask commit rather than a synchronous flush() drain.
+    await Promise.resolve();
+    flush(); // V2-FLUSH
 
     expect(calls).toContain('restoreContext');
     flushGLEvents();
@@ -973,7 +990,9 @@ describe('ShaderCanvas: animateWhenNotVisible', () => {
     // to this flag and rebuild the whole GL program on a toggle -- the same
     // leak class the fragment/precision memos above exist to prevent.
     setAlways(false);
+    flush(); // V2-FLUSH: commit the staged write
     setAlways(true);
+    flush(); // V2-FLUSH: commit the staged write
 
     expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
     expect(calls).not.toContain('loseContext');

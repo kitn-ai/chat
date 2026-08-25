@@ -1,15 +1,7 @@
-import {
-  type JSX,
-  splitProps,
-  mergeProps,
-  createSignal,
-  createEffect,
-  createMemo,
-  on,
-  onMount,
-  onCleanup,
-  Show,
-} from 'solid-js';
+import { omit, createSignal, createEffect, createMemo, onSettled, onCleanup, Show, latest } from 'solid-js';
+import { mergeDefaults } from '../utils/merge-defaults'; // V2-PORT: 1.x mergeProps semantics (undefined does not override)
+import { deferApply } from '../utils/defer-apply'; // V2-PORT: on(...,{defer:true}) replacement
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
 import { CodeBlock, CodeBlockCode } from './code-block';
@@ -165,7 +157,7 @@ export function isPdfUrl(url: string, files: ArtifactFile[]): boolean {
  * `kai-tab-change` / `kai-file-select` so a consumer can observe/sync.
  */
 export function Artifact(props: ArtifactProps): JSX.Element {
-  const merged = mergeProps(
+  const merged = mergeDefaults(
     {
       files: [] as ArtifactFile[],
       // No `tab` default: a present `tab` means controlled. The uncontrolled
@@ -185,7 +177,9 @@ export function Artifact(props: ArtifactProps): JSX.Element {
     },
     props,
   );
-  const [local, rest] = splitProps(merged, [
+  // V2-PORT: splitProps -> alias + omit.
+  const local = merged;
+  const rest = omit(merged, 
     'src',
     'files',
     'tab',
@@ -209,8 +203,7 @@ export function Artifact(props: ArtifactProps): JSX.Element {
     'readonlyPath',
     'displayUrl',
     'controllerRef',
-    'class',
-  ]);
+    'class');
 
   // A sandboxed iframe WITHOUT `allow-same-origin` makes the framed document's
   // `contentWindow.history`/`location` opaque (a deliberate security property —
@@ -269,7 +262,8 @@ export function Artifact(props: ArtifactProps): JSX.Element {
 
   // Maximize view-state — controlled by `local.maximized`, toggled by the button.
   const [maximized, setMaximized] = createSignal<boolean>(local.maximized ?? false);
-  createEffect(() => setMaximized(local.maximized ?? false));
+  // V2-PORT: signal write in the apply half.
+  createEffect(() => local.maximized ?? false, (v) => { setMaximized(v); });
   const toggleMaximize = () => {
     const next = !maximized();
     setMaximized(next);
@@ -314,23 +308,18 @@ export function Artifact(props: ArtifactProps): JSX.Element {
   // Controlled syncing: when the consumer changes the props, follow them. `tab` is
   // followed ONLY when it's actually set — an undefined `tab` means uncontrolled,
   // so the internal signal (seeded from defaultTab) is left for the user to drive.
-  createEffect(() => {
-    if (local.tab !== undefined) setTab(local.tab);
+  // V2-PORT: tracked prop reads in the compute; the writes in the apply.
+  createEffect(() => local.tab, (t) => {
+    if (t !== undefined) setTab(t);
   });
-  createEffect(() => setActiveFile(local.activeFile));
+  createEffect(() => local.activeFile, (f) => { setActiveFile(f); });
   // `src` change → navigate. Use `on(local.src, …)` so the effect tracks ONLY
   // the `src` prop — NOT `currentUrl()` — otherwise navigating away (file click,
   // path edit) would re-trigger it and snap the iframe back to `src`. Skip the
   // initial run: history is already seeded with `src` and the iframe binds it.
-  createEffect(
-    on(
-      () => local.src,
-      (next) => {
+  createEffect(() => local.src, deferApply((next: string | undefined) => {
         if (next && next !== currentUrl()) navigate(next);
-      },
-      { defer: true },
-    ),
-  );
+      }));
 
   const fileFor = (path: string | undefined): ArtifactFile | undefined =>
     path === undefined ? undefined : local.files.find((f) => f.path === path);
@@ -355,11 +344,13 @@ export function Artifact(props: ArtifactProps): JSX.Element {
 
   /** Point the iframe at the current cursor entry + emit `navigate`. */
   function loadCurrent() {
-    if (iframeEl) iframeEl.src = framedUrl() || 'about:blank';
+    // V2-PORT: latest() — the callers write history/cursor and call this in the
+    // same tick; the committed reads would load and report the PREVIOUS entry.
+    if (iframeEl) iframeEl.src = latest(framedUrl) || 'about:blank';
     // Reports the REAL url, not the framed one: a consumer observing navigation
     // (or a card patching `src` back into its envelope) must not be told the
     // model sent something it did not.
-    local.onNavigate?.(currentUrl());
+    local.onNavigate?.(latest(currentUrl));
   }
 
   function selectTab(next: ArtifactTab) {
@@ -411,7 +402,7 @@ export function Artifact(props: ArtifactProps): JSX.Element {
   //     artifact's latent toolbar capabilities. Every method delegates to the
   //     SAME internal handler the toolbar buttons use, so navigate/tab-change/
   //     file-select/maximize-change all still fire. ---
-  onMount(() => {
+  onSettled(() => {
     local.controllerRef?.({
       back: () => goBack(),
       forward: () => goForward(),
@@ -631,7 +622,7 @@ function ArtifactToolbar(props: ToolbarProps): JSX.Element {
           variant="ghost"
           size="icon-sm"
           aria-label={props.maximized() ? 'Collapse' : 'Expand'}
-          aria-expanded={props.maximized()}
+          aria-expanded={props.maximized() ? 'true' : 'false'}
           onClick={() => props.onToggleMaximize()}
         >
           <Show when={props.maximized()} fallback={<Maximize2 size={15} aria-hidden="true" />}>
@@ -684,7 +675,7 @@ function SegmentButton(props: {
     <button
       type="button"
       role="tab"
-      aria-selected={props.selected}
+      aria-selected={props.selected ? 'true' : 'false'}
       class={cn(
         'inline-flex h-6 items-center gap-1.5 rounded px-2 text-xs font-medium transition-colors outline-none',
         'focus-visible:ring-2 focus-visible:ring-ring',
@@ -866,16 +857,15 @@ function ArtifactPdfPreview(props: { url: string; reloadKey: number }): JSX.Elem
     }
   };
 
-  createEffect(
-    on(
-      () => [props.url, props.reloadKey] as const,
-      () => {
+  createEffect(() => [props.url, props.reloadKey] as const, () => {
         void renderNow();
-      },
-    ),
-  );
+      });
 
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers) d(); });
+  onSettled(() => {
     if (!container || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(() => {
       if (state() !== 'success') return;
@@ -883,7 +873,7 @@ function ArtifactPdfPreview(props: { url: string; reloadKey: number }): JSX.Elem
       resizeTimer = setTimeout(() => void renderNow(), 200);
     });
     ro.observe(container);
-    onCleanup(() => {
+    settledDisposers.push(() => {
       ro.disconnect();
       clearTimeout(resizeTimer);
       token++; // cancel any in-flight render
@@ -897,7 +887,7 @@ function ArtifactPdfPreview(props: { url: string; reloadKey: number }): JSX.Elem
         ref={(el) => (container = el)}
         role="region"
         aria-label="PDF preview"
-        aria-busy={state() === 'loading'}
+        aria-busy={state() === 'loading' ? 'true' : 'false'}
         tabindex="0"
         class="absolute inset-0 flex flex-col items-center gap-3 overflow-auto bg-surface-sunken p-3 scrollbar-thin focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
       />

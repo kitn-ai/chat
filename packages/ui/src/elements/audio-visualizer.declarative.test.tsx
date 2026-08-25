@@ -15,7 +15,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, waitFor } from '@solidjs/testing-library';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { AudioVisualizer, normalizeVariant } from '../components/audio-visualizer';
 import { num, AudioVisualizerFacade } from './audio-visualizer';
 
@@ -114,6 +114,7 @@ describe('kai-audio-visualizer declarative API', () => {
       <AudioVisualizer state="speaking" barCount={2} bands={bands()} />
     ));
     setBands([0.9, 0.9]);
+    flush(); // V2-FLUSH: commit the staged write
     await waitFor(() => {
       const heights = Array.from(container.querySelectorAll('[part~="bar"]')).map(
         (b) => (b as HTMLElement).style.height,

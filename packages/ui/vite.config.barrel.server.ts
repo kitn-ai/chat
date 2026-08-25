@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import solidPlugin from 'vite-plugin-solid';
+import solidPlugin from '@solidjs/vite-plugin' // V2-PORT: the Solid 2 compiler plugin;
 import { resolve } from 'node:path';
 
 // Server-safe twin of vite.config.barrel.ts → dist/index.server.js, wired into the
@@ -43,7 +43,7 @@ export default defineConfig({
       fileName: () => 'index.server.js',
     },
     rollupOptions: {
-      external: ['solid-js', 'solid-js/web', 'solid-js/store', 'solid-element'],
+      external: ['solid-js', '@solidjs/web', '@solidjs/element'] // V2-PORT: the v2 package split,
     },
   },
 });

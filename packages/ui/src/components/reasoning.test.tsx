@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
 import { Reasoning, ReasoningTrigger, ReasoningContent } from './reasoning';
 
@@ -62,6 +62,7 @@ describe('Reasoning disclosure aria wiring', () => {
   it('flips every state handle when the trigger is clicked open', () => {
     const { container } = renderReasoning();
     fireEvent.click(trigger(container));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     expect(trigger(container)).toHaveAttribute('aria-expanded', 'true');
     expect(trigger(container)).toHaveAttribute('data-state', 'open');
@@ -73,7 +74,9 @@ describe('Reasoning disclosure aria wiring', () => {
   it('flips back on a second click', () => {
     const { container } = renderReasoning();
     fireEvent.click(trigger(container));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     fireEvent.click(trigger(container));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(trigger(container)).toHaveAttribute('aria-expanded', 'false');
     expect(panel(container)).toHaveAttribute('data-state', 'closed');
   });
@@ -89,6 +92,7 @@ describe('Reasoning disclosure aria wiring', () => {
     expect(trigger(container)).toHaveAttribute('aria-expanded', 'false');
 
     setOpen(true);
+    flush(); // V2-FLUSH: commit the staged write
     expect(trigger(container)).toHaveAttribute('aria-expanded', 'true');
     expect(panel(container)).toHaveAttribute('data-state', 'open');
   });
@@ -137,6 +141,7 @@ describe('Reasoning disclosure aria wiring', () => {
     const { container } = renderReasoning({ disabled: true });
     expect(trigger(container)).toBeDisabled();
     fireEvent.click(trigger(container));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(trigger(container)).toHaveAttribute('aria-expanded', 'false');
   });
 });
@@ -175,13 +180,16 @@ describe('Reasoning collapsed content leaves the tab order', () => {
   it('drops inert when the panel opens', () => {
     const { container } = renderReasoning();
     fireEvent.click(trigger(container));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(panel(container)).not.toHaveAttribute('inert');
   });
 
   it('re-applies inert when the panel collapses again', () => {
     const { container } = renderReasoning();
     fireEvent.click(trigger(container));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     fireEvent.click(trigger(container));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(panel(container)).toHaveAttribute('inert');
   });
 
@@ -195,6 +203,7 @@ describe('Reasoning collapsed content leaves the tab order', () => {
     ));
     expect(panel(container)).toHaveAttribute('inert');
     setOpen(true);
+    flush(); // V2-FLUSH: commit the staged write
     expect(panel(container)).not.toHaveAttribute('inert');
   });
 
@@ -204,9 +213,11 @@ describe('Reasoning collapsed content leaves the tab order', () => {
     const { container, getByTestId, setOpen } = renderFocusable();
     const inside = getByTestId('inside');
     inside.focus();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(document.activeElement).toBe(inside);
 
     setOpen(false);
+    flush(); // V2-FLUSH: commit the staged write
     expect(document.activeElement).toBe(trigger(container));
   });
 
@@ -214,18 +225,24 @@ describe('Reasoning collapsed content leaves the tab order', () => {
     const { getByTestId, setOpen } = renderFocusable();
     const outside = getByTestId('outside');
     outside.focus();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     setOpen(false);
+    flush(); // V2-FLUSH: commit the staged write
     expect(document.activeElement).toBe(outside);
   });
 
   it('leaves focus alone when an already-collapsed panel re-renders', () => {
     const { getByTestId, setOpen } = renderFocusable();
     setOpen(false);
+    flush(); // V2-FLUSH: commit the staged write
     const outside = getByTestId('outside');
     outside.focus();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     setOpen(true);
+    flush(); // V2-FLUSH: commit the staged write
     setOpen(false);
+    flush(); // V2-FLUSH: commit the staged write
     expect(document.activeElement).toBe(outside);
   });
 
@@ -254,8 +271,10 @@ describe('Reasoning collapsed content leaves the tab order', () => {
 
     expect(p.style.maxHeight).toBe('0px');
     fireEvent.click(trigger(container));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(p.style.maxHeight).toBe('120px');
     fireEvent.click(trigger(container));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(p.style.maxHeight).toBe('0px');
   });
 });

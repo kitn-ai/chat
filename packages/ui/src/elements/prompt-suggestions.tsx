@@ -1,4 +1,4 @@
-import { For, createSignal, onMount, onCleanup } from 'solid-js';
+import { For, createSignal, onSettled, onCleanup } from 'solid-js';
 import { defineWebComponent } from './define';
 import { PromptSuggestion } from '../components/prompt-suggestion';
 
@@ -70,7 +70,7 @@ defineWebComponent<Props, Events>('kai-suggestions', {
   // Read declarative <kai-suggestion> children from light DOM.
   // Shadow DOM with no <slot> suppresses them visually — they're invisible data carriers.
   const [slottedSuggestions, setSlottedSuggestions] = createSignal<Item[]>([]);
-  onMount(() => {
+  onSettled(() => {
     const read = () => {
       const nodes = [...element.querySelectorAll('kai-suggestion')];
       setSlottedSuggestions(nodes.map(parseSuggestionNode));
@@ -78,7 +78,8 @@ defineWebComponent<Props, Events>('kai-suggestions', {
     read();
     const observer = new MutationObserver(read);
     observer.observe(element, { childList: true, attributes: true, subtree: true });
-    onCleanup(() => observer.disconnect());
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => observer.disconnect();
   });
 
   // Merge prop suggestions (first) with declarative children (after).

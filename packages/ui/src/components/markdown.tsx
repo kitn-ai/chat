@@ -1,4 +1,4 @@
-import { splitProps, createMemo, createUniqueId, For, Show, Switch, Match } from 'solid-js';
+import { omit, createMemo, createUniqueId, For, Show, Switch, Match } from 'solid-js';
 import { cn } from '../utils/cn';
 import { Marked } from 'marked';
 import { CodeBlock, CodeBlockCode } from './code-block';
@@ -130,7 +130,8 @@ function MarkdownBlock(props: { content: string }) {
 }
 
 function Markdown(props: MarkdownProps) {
-  const [local] = splitProps(props, ['content', 'id', 'class', 'codeTheme', 'part']);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = props;
   const config = useChatConfig();
   const blockId = () => local.id ?? createUniqueId();
   const blocks = createMemo(() => parseMarkdownIntoBlocks(local.content));

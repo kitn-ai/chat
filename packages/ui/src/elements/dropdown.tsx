@@ -1,4 +1,4 @@
-import { Show } from 'solid-js';
+import { Show, createSignal } from 'solid-js';
 import { MoreHorizontal } from 'lucide-solid';
 import { Dropdown, DropdownTrigger, DropdownContent, type DropdownController } from '../ui/dropdown';
 import { renderIcon } from '../ui/icon';
@@ -78,11 +78,14 @@ defineWebComponent<Props, Events>('kai-dropdown', {
   disabled: undefined,
 }, (props, ctx) => {
   const { flag } = ctx;
-  let api: DropdownController | undefined;
+  // V2-PORT: a reactive signal, not a plain `let` — the disclosure/controller
+  // effects track it, and ownedWrite sanctions the synchronous hand-up from
+  // the primitive's body (see elements/tool.tsx, the same fix).
+  const [api, setApi] = createSignal<DropdownController | undefined>(undefined, { ownedWrite: true });
 
   // The standard overlay surface: settable+reflecting `open`, kai-open-change,
   // show/hide/toggle, disabled-gating. See ./disclosure.
-  wireDisclosure(ctx, () => api, () => props.open);
+  wireDisclosure(ctx, api, () => props.open);
 
   return (
     <>
@@ -92,7 +95,7 @@ defineWebComponent<Props, Events>('kai-dropdown', {
       <Dropdown
         defaultOpen={flag('defaultOpen')}
         disabled={flag('disabled')}
-        controllerRef={(a) => (api = a)}
+        controllerRef={(a) => setApi(a)}
       >
         <DropdownTrigger
           class={cn(

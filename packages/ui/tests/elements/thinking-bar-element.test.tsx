@@ -14,6 +14,7 @@
  * over the SAME harness; both consumer spellings are driven — markup attributes
  * AND JS properties, in both orders where the ordering has ever mattered.
  */
+import { flush as flushSync } from 'solid-js';
 import { afterEach, describe, expect, test } from 'vitest';
 import '../../src/elements/thinking-bar';
 
@@ -143,10 +144,12 @@ describe('kai-stop', () => {
     el.addEventListener('kai-stop', () => { count += 1; });
 
     stopButton(el)!.click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     await flush();
     expect(count).toBe(1);
 
     stopButton(el)!.click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     await flush();
     expect(count, 'one event per click, not a latched state').toBe(2);
   });
@@ -156,6 +159,7 @@ describe('kai-stop', () => {
     let event: Event | undefined;
     el.addEventListener('kai-stop', (e) => { event = e; });
     stopButton(el)!.click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     await flush();
 
     expect(event).toBeInstanceOf(CustomEvent);
@@ -174,6 +178,7 @@ describe('kai-stop', () => {
 
     // Paired: the same listener still hears a real click.
     stopButton(el)!.click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     await flush();
     expect(seen.length).toBe(1);
   });

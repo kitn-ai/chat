@@ -81,8 +81,8 @@ defineWebComponent<Props, Events>('kai-search', {
   });
 
   // Reflect internal value → `[value]` host attribute (for `:host([value])`).
-  createEffect(() => {
-    const v = value();
+  // V2-PORT: the value signal is the tracked read; the attribute writes are the apply.
+  createEffect(value, (v) => {
     if (v) {
       if (element.getAttribute('value') !== v) element.setAttribute('value', v);
     } else if (element.hasAttribute('value')) {

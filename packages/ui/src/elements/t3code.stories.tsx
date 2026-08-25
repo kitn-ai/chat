@@ -24,7 +24,7 @@ import type { KaiCommandItem } from './command';
 // keeps the file self-documenting (TypeScript merges identical global
 // augmentations — the types must match byte-for-byte across files or it errors
 // TS2717).
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -177,7 +177,7 @@ export const T3Code: Story = {
     const toggleRail = () => (ws?.toggleAside as ((side: string) => void) | undefined)?.('start');
 
     // Array/object props (and event wiring) are applied in each element's ref
-    // callback, NOT a one-shot onMount, so they survive remounts.
+    // callback, NOT a one-shot onSettled, so they survive remounts.
     return (
       <div class="relative h-screen w-full">
         <kai-workspace

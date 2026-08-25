@@ -15,7 +15,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
-import { For } from 'solid-js';
+import { For, flush } from 'solid-js';
 import { parseSuggestionNode } from './prompt-suggestions';
 import { PromptSuggestion } from '../components/prompt-suggestion';
 
@@ -105,6 +105,7 @@ describe('suggestion chip rendering and click events', () => {
       <SuggestionList items={['Use Vue']} onSelect={onSelect} />
     ));
     fireEvent.click(getByText('Use Vue'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSelect).toHaveBeenCalledWith('Use Vue');
   });
 
@@ -117,6 +118,7 @@ describe('suggestion chip rendering and click events', () => {
       />
     ));
     fireEvent.click(getByText('Use Vue'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSelect).toHaveBeenCalledWith('vue');
   });
 
@@ -129,6 +131,7 @@ describe('suggestion chip rendering and click events', () => {
       />
     ));
     fireEvent.click(getByText('Use Vue'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSelect).toHaveBeenCalledWith('Use Vue');
   });
 
@@ -159,6 +162,7 @@ describe('suggestion chip rendering and click events', () => {
       <SuggestionList items={[parsed]} onSelect={onSelect} />
     ));
     fireEvent.click(getByText('Use Vue'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSelect).toHaveBeenCalledWith('vue');
   });
 });
@@ -224,6 +228,7 @@ describe('layout="list" rendering', () => {
       <SuggestionRows items={ideas} onSelect={onSelect} />
     ));
     fireEvent.click(getByText('Organize my inbox'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSelect).toHaveBeenCalledWith('inbox');
   });
 });

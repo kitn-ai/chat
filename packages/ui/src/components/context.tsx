@@ -1,4 +1,5 @@
-import { type JSX, Show, createContext, createMemo, useContext } from 'solid-js';
+import { Show, createContext, createMemo, useContext } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { HoverCardRoot, HoverCardTrigger, HoverCardContent } from '../ui/hover-card';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
@@ -95,11 +96,11 @@ export function Context(props: ContextProps) {
   }));
 
   return (
-    <ContextCtx.Provider value={value()}>
+    <ContextCtx value={value()}>
       <HoverCardRoot openDelay={0}>
         {props.children}
       </HoverCardRoot>
-    </ContextCtx.Provider>
+    </ContextCtx>
   );
 }
 

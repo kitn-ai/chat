@@ -29,6 +29,7 @@
  * asynchronous is when it lands, so every post-highlight assertion polls instead of
  * sleeping a guessed interval.
  */
+import { flush as flushSync } from 'solid-js';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render } from '@solidjs/testing-library';
 import { readFileSync } from 'node:fs';
@@ -339,6 +340,7 @@ describe('the copy control', () => {
     await until(() => shikiPre(el) !== null, 'shiki markup');
 
     copyButton(el)!.click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     await flush();
 
     expect(writeText).toHaveBeenCalledTimes(1);
@@ -361,6 +363,7 @@ describe('the copy control', () => {
     el.code = 'second';
     await flush();
     copyButton(el)!.click();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     await flush();
 
     expect(writeText.mock.calls[0][0]).toBe('second');
@@ -381,6 +384,7 @@ describe('the copy control', () => {
       expect(copy.getAttribute('aria-label')).toBe('Copy code');
 
       copy.click();
+      flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
       await vi.advanceTimersByTimeAsync(0);
       expect(copyButton(el)!.getAttribute('aria-label'), 'the press must be acknowledged').toBe('Copied');
 

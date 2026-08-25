@@ -1,4 +1,5 @@
-import { createEffect, createSignal, onCleanup, type Accessor, type JSX } from 'solid-js';
+import { createEffect, createSignal, onCleanup, type Accessor, latest } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { ShaderCanvas, hexToRgb, DEFAULT_SHADER_COLOR } from './shader-canvas';
 import { createTween } from '../../primitives/create-tween';
 import type { VisualizerState } from '../../primitives/visualizer-sequences';
@@ -130,10 +131,11 @@ function auroraTargets(state: VisualizerState): {
  * down from there; this hook only fills the gap when nothing does.
  */
 function usePrefersDark(): Accessor<boolean> {
-  const [dark, setDark] = createSignal(false);
-  if (typeof matchMedia === 'function') {
-    const mq = matchMedia('(prefers-color-scheme: dark)');
-    setDark(mq.matches);
+  // V2-PORT: v2 rejects signal writes in a component body — SEED the signal with
+  // the media-query state instead of writing it right after creation.
+  const mq = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : undefined;
+  const [dark, setDark] = createSignal(mq?.matches ?? false);
+  if (mq) {
     const onChange = (e: MediaQueryListEvent) => setDark(e.matches);
     mq.addEventListener?.('change', onChange);
     onCleanup(() => mq.removeEventListener?.('change', onChange));
@@ -181,18 +183,21 @@ export default function AuroraVisualizer(props: ShaderVariantProps & { dark?: bo
   // amplitudeRenderState in variant-bar. `data-kai-state` keeps the real state.
   const renderState = () => amplitudeRenderState(props.state, props.listeningAmplitude);
 
-  createEffect(() => {
-    const t = auroraTargets(renderState());
+  // V2-PORT: tracked reads (state targets, frozen) in the compute; the tween
+  // drives in the apply.
+  createEffect(
+    () => ({ t: auroraTargets(renderState()), frozen: props.frozen, listening: renderState() === 'listening' }),
+    ({ t, frozen, listening }) => {
     // Fact sheet section 5: "0.5 s ease-out unless noted." Frozen (reduced
     // motion) settles on every target immediately instead.
-    const landing = props.frozen ? { duration: 0 } : { duration: 0.5, ease: 'easeOut' as const };
+    const landing = frozen ? { duration: 0 } : { duration: 0.5, ease: 'easeOut' as const };
     // Pulses (an array target, see createTween's ping-pong) run at fact
     // sheet section 5's stated 0.35 s ease-out cadence -- faster than every
     // other target's 0.5 s landing tween, and distinct from wave/custom's
     // flat 0.5 s pulse. Frozen collapses a pulse to its first value instead
     // of animating it at all.
-    const pulsing = props.frozen ? { duration: 0 } : { duration: 0.35, ease: 'easeOut' as const };
-    const intensityTarget = Array.isArray(t.intensity) && props.frozen ? t.intensity[0] : t.intensity;
+    const pulsing = frozen ? { duration: 0 } : { duration: 0.35, ease: 'easeOut' as const };
+    const intensityTarget = Array.isArray(t.intensity) && frozen ? t.intensity[0] : t.intensity;
     intensity.to(intensityTarget, Array.isArray(t.intensity) ? pulsing : landing);
 
     complexity.to(t.complexity, landing);
@@ -204,7 +209,7 @@ export default function AuroraVisualizer(props: ShaderVariantProps & { dark?: bo
     // ease-out landing, and frozen collapses the spring like any tween.
     scale.to(
       t.scale,
-      renderState() === 'listening' && !props.frozen
+      listening && !frozen
         ? { type: 'spring', duration: 1.0, bounce: 0.35 }
         : landing,
     );
@@ -215,7 +220,7 @@ export default function AuroraVisualizer(props: ShaderVariantProps & { dark?: bo
     // only thing driving the aura's continuous "wind" motion at all (there
     // is no separate amplitude/opacity axis to freeze it through, unlike
     // wave), so zeroing it is what actually holds the shape still.
-    speed.to(props.frozen ? 0 : t.speed, { duration: 0 });
+    speed.to(frozen ? 0 : t.speed, { duration: 0 });
   });
 
   // Voice-driven radius: "0.2 + 0.2 x volume", speaking only, instant (fact
@@ -236,13 +241,30 @@ export default function AuroraVisualizer(props: ShaderVariantProps & { dark?: bo
   // Reads scale.animating() but never scale.value(): reading the tween's
   // own value here would wire the self-retriggering effect loop
   // create-tween's doc warns about.
-  createEffect(() => {
-    if (renderState() !== 'speaking') return;
-    const volume = props.volume;
-    if (!(volume > 0)) return;
-    if (scale.animating()) return;
-    scale.to(0.2 + 0.2 * volume);
-  });
+  // V2-PORT: same conditional-tracking shape as before, now in the compute (it
+  // re-tracks per run — `volume`/`animating` only while speaking); the tween
+  // drive is the apply.
+  createEffect(
+    () => {
+      if (renderState() !== 'speaking') return undefined;
+      const volume = props.volume;
+      if (!(volume > 0)) return undefined;
+      if (scale.animating()) return undefined; // tracked: re-runs the moment a landing settles
+      return volume;
+    },
+    (volume) => {
+      if (volume === undefined) return;
+      // V2-PORT: the animating GUARD must be re-checked here, in the apply, via
+      // latest() (the staged read). On a state flip both computes run before
+      // either apply, so the compute above cannot see the landing this same
+      // flush is about to start — but this apply runs AFTER the landing
+      // effect's apply (creation order), whose setAnimating(true) is staged by
+      // now. Reading only the committed value here would snap the scale
+      // mid-landing; latest() closes that one-flush hole.
+      if (latest(() => scale.animating())) return;
+      scale.to(0.2 + 0.2 * volume);
+    },
+  );
 
   // Solid-body rotation trim (deg/s -> rad/s for the shader), never
   // tweened, pinned to 0 under frozen exactly like uSpeed -- it multiplies

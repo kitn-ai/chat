@@ -15,7 +15,7 @@ import './register'; // registers kai-icon (the only kai-* element used here)
 // kai-icon is the sole element. Declared identically to the other Labs stories so
 // the shared global JSX augmentation matches byte-for-byte across the compilation
 // (TypeScript errors TS2717 otherwise).
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {

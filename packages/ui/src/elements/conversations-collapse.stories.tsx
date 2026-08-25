@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { onMount, onCleanup } from 'solid-js';
+import { onSettled, onCleanup } from 'solid-js';
 import './conversation-list';
 import { attachKaiActions } from '../stories/docs/story-actions';
 import type { ConversationSummary, ConversationGroup } from '../types';
@@ -37,12 +37,16 @@ type Story = StoryObj;
 
 function CollapseDemo() {
   let el: ConvEl | undefined;
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers) d(); });
+  onSettled(() => {
     if (!el) return;
     el.groups = groups;
     el.conversations = conversations;
     el.activeId = 'c1';
-    onCleanup(attachKaiActions(el)); // log kai-conversation-select, kai-collapse-toggle, …
+    settledDisposers.push(attachKaiActions(el)); // log kai-conversation-select, kai-collapse-toggle, …
   });
   return (
     <div style={{ display: 'flex', 'flex-direction': 'column', gap: '0.75rem', padding: '1rem' }}>
@@ -98,11 +102,15 @@ export const Collapse: Story = {
 // Start collapsed via the uncontrolled `default-collapsed` attribute.
 function DefaultCollapsedDemo() {
   let el: ConvEl | undefined;
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers2: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers2) d(); });
+  onSettled(() => {
     if (!el) return;
     el.groups = groups;
     el.conversations = conversations;
-    onCleanup(attachKaiActions(el));
+    settledDisposers2.push(attachKaiActions(el));
   });
   return (
     <div

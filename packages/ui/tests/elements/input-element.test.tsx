@@ -1,3 +1,4 @@
+import { flush as flushSync } from 'solid-js';
 import '../../src/elements/input';
 
 /** Let Solid's scheduler flush effects (the value→attribute reflect) + renders. */
@@ -30,6 +31,7 @@ test('typing in the inner input fires kai-input with detail.value', async () => 
   const input = el.shadowRoot!.querySelector('input')!;
   input.value = 'abc';
   input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
 
   expect(values).toEqual(['abc']);
@@ -51,6 +53,7 @@ test('blur on the inner input fires kai-change with detail.value', async () => {
 
   const input = el.shadowRoot!.querySelector('input')!;
   input.dispatchEvent(new Event('blur'));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
 
   expect(changes).toEqual(['committed']);
@@ -88,6 +91,7 @@ test('focus() focuses the inner input', async () => {
   input.addEventListener('focus', () => { focused = true; });
 
   el.focus();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(focused).toBe(true);
 
   el.remove();

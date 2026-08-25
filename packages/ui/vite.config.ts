@@ -7,7 +7,7 @@
 // chunk granularity — ~41 element chunks — which made registration slow enough to expose
 // prop-before-upgrade races in consumers. The default path must stay coarse + fast.)
 import { defineConfig } from 'vite';
-import solidPlugin from 'vite-plugin-solid';
+import solidPlugin from '@solidjs/vite-plugin' // V2-PORT: the Solid 2 compiler plugin;
 import { resolve } from 'node:path';
 import { transform } from 'esbuild';
 // Rollup's output types come through vite's `Rollup` namespace re-export, NOT as

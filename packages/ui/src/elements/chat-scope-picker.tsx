@@ -1,3 +1,4 @@
+import { createSignal } from 'solid-js';
 import { defineWebComponent } from './define';
 import { ChatScopePicker } from '../components/chat-scope-picker';
 import { wireDisclosure } from './disclosure';
@@ -45,11 +46,14 @@ defineWebComponent<Props, Events>('kai-scope-picker', {
   disabled: undefined,
 }, (props, ctx) => {
   const { dispatch, flag } = ctx;
-  let api: DropdownController | undefined;
+  // V2-PORT: a reactive signal, not a plain `let` — the disclosure/controller
+  // effects track it, and ownedWrite sanctions the synchronous hand-up from
+  // the primitive's body (see elements/tool.tsx, the same fix).
+  const [api, setApi] = createSignal<DropdownController | undefined>(undefined, { ownedWrite: true });
 
   // The standard overlay surface: settable+reflecting `open`, kai-open-change,
   // show/hide/toggle, disabled-gating. See ./disclosure.
-  wireDisclosure(ctx, () => api, () => props.open);
+  wireDisclosure(ctx, api, () => props.open);
 
   return (
     <ChatScopePicker
@@ -59,7 +63,7 @@ defineWebComponent<Props, Events>('kai-scope-picker', {
       onScopeChange={(filters) => dispatch('kai-scope-change', { filters })}
       defaultOpen={flag('defaultOpen')}
       disabled={flag('disabled')}
-      controllerRef={(a) => (api = a)}
+      controllerRef={(a) => setApi(a)}
     />
   );
 });

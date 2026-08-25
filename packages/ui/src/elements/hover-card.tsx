@@ -1,3 +1,4 @@
+import { createSignal } from 'solid-js';
 import { type Placement } from '@floating-ui/dom';
 import { HoverCardRoot, HoverCardTrigger, HoverCardContent, type HoverCardController } from '../ui/hover-card';
 import { defineWebComponent } from './define';
@@ -54,11 +55,14 @@ defineWebComponent<Props, Events>('kai-hover-card', {
   disabled: undefined,
 }, (props, ctx) => {
   const { flag } = ctx;
-  let api: HoverCardController | undefined;
+  // V2-PORT: a reactive signal, not a plain `let` — the disclosure/controller
+  // effects track it, and ownedWrite sanctions the synchronous hand-up from
+  // the primitive's body (see elements/tool.tsx, the same fix).
+  const [api, setApi] = createSignal<HoverCardController | undefined>(undefined, { ownedWrite: true });
 
   // The standard overlay surface: settable+reflecting `open`, kai-open-change,
   // show/hide/toggle, disabled-gating. See ./disclosure.
-  wireDisclosure(ctx, () => api, () => props.open);
+  wireDisclosure(ctx, api, () => props.open);
 
   return (
     <>
@@ -68,7 +72,7 @@ defineWebComponent<Props, Events>('kai-hover-card', {
         closeDelay={props.closeDelay != null ? Number(props.closeDelay) : undefined}
         defaultOpen={flag('defaultOpen')}
         disabled={flag('disabled')}
-        controllerRef={(a) => (api = a)}
+        controllerRef={(a) => setApi(a)}
       >
         <HoverCardTrigger><slot /></HoverCardTrigger>
         <HoverCardContent placement={(props.placement as Placement | undefined) ?? undefined}>

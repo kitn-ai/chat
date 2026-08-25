@@ -32,6 +32,7 @@
  * degenerate no-focusables branch is asserted separately, unstubbed, because it is
  * also a real code path.
  */
+import { flush as flushSync } from 'solid-js';
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import '../../src/elements/dialog';
 
@@ -68,6 +69,7 @@ const isOpen = (el: Dialog) => panel(el) !== null;
 const key = (node: EventTarget, k: string, init: KeyboardEventInit = {}) => {
   const e = new KeyboardEvent('keydown', { key: k, bubbles: true, composed: true, cancelable: true, ...init });
   node.dispatchEvent(e);
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   return e;
 };
 
@@ -84,7 +86,9 @@ const key = (node: EventTarget, k: string, init: KeyboardEventInit = {}) => {
  */
 const press = (down: EventTarget, up: EventTarget = down) => {
   down.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   up.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 };
 
 // ---------------------------------------------------------------------------
@@ -249,6 +253,7 @@ describe('focus, per the contract the source states', () => {
     const outside = document.createElement('button');
     document.body.appendChild(outside);
     outside.focus();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     el.show();
     await flush();
@@ -264,6 +269,7 @@ describe('focus, per the contract the source states', () => {
     const outside = document.createElement('button');
     document.body.appendChild(outside);
     outside.focus();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     el.show();
     await flush();
@@ -281,6 +287,7 @@ describe('focus, per the contract the source states', () => {
     const transient = document.createElement('button');
     document.body.appendChild(transient);
     transient.focus();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     el.show();
     await flush();
@@ -294,6 +301,7 @@ describe('focus, per the contract the source states', () => {
     const outside = document.createElement('button');
     document.body.appendChild(outside);
     outside.focus();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     // `default-open` and `open` both open AT MOUNT, and the focus effect is seeded
     // `prev=false` so its open branch runs — which means focus DOES enter the panel.
@@ -320,9 +328,11 @@ describe('focus, per the contract the source states', () => {
     const outside = document.createElement('button');
     document.body.appendChild(outside);
     outside.focus();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(shadow(el).activeElement).not.toBe(panel(el));
 
     el.focus();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(shadow(el).activeElement).toBe(panel(el));
   });
 
@@ -363,6 +373,7 @@ describe('the Tab focus trap', () => {
     await flush();
     const c = el.querySelector('#c') as HTMLElement;
     c.focus();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     const e = key(c, 'Tab');
     expect(e.defaultPrevented, 'the trap must take the keystroke').toBe(true);
@@ -375,6 +386,7 @@ describe('the Tab focus trap', () => {
     await flush();
     const a = el.querySelector('#a') as HTMLElement;
     a.focus();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     const e = key(a, 'Tab', { shiftKey: true });
     expect(e.defaultPrevented).toBe(true);
@@ -389,6 +401,7 @@ describe('the Tab focus trap', () => {
     await flush();
     const b = el.querySelector('#b') as HTMLElement;
     b.focus();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     const e = key(b, 'Tab');
     expect(e.defaultPrevented, 'the browser must do this one itself').toBe(false);
@@ -407,6 +420,7 @@ describe('the Tab focus trap', () => {
 
     const c = el.querySelector('#c') as HTMLElement;
     c.focus();
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     key(c, 'Tab');
     expect(document.activeElement).toBe(el.querySelector('#a'));
   });
@@ -469,14 +483,15 @@ describe('Escape, per this element\'s own semantics', () => {
     expect(isOpen(el)).toBe(false);
   });
 
-  test('Escape does not preventDefault, and still reaches the page', async () => {
-    // OBSERVED, and deliberately recorded rather than asserted as an intention: the
-    // source calls `e.stopPropagation()`, but Solid DELEGATES keydown to the
-    // document, so the handler already runs at document level and stopping
-    // propagation there cannot un-deliver the event to a document listener. The
-    // dialog does not preventDefault either. Both halves are pinned so that a future
-    // change to either — real event listeners instead of delegation, or an added
-    // preventDefault — shows up here rather than in a consumer's app.
+  test('Escape does not preventDefault, and its stopPropagation now really stops it', async () => {
+    // V2 BEHAVIOR CHANGE, deliberately re-pinned (the previous pin's own comment
+    // predicted this day). Solid 1 delegated keydown to the DOCUMENT, so the
+    // dialog's `e.stopPropagation()` ran at document level and could not
+    // un-deliver the event to a document listener — the old pin recorded that a
+    // document listener still heard Escape. Solid 2 owns delegation per RENDER
+    // ROOT (the shadow root here), so the dialog's stopPropagation now works as
+    // written: Escape handled by an open dialog no longer leaks to page-level
+    // keydown listeners. preventDefault is still NOT called either way.
     const el = await mount('<button id="a">a</button>');
     el.show();
     await flush();
@@ -486,7 +501,7 @@ describe('Escape, per this element\'s own semantics', () => {
     const e = key(el.querySelector('#a')!, 'Escape');
     document.removeEventListener('keydown', onDocument);
 
-    expect(onDocument).toHaveBeenCalledTimes(1);
+    expect(onDocument).toHaveBeenCalledTimes(0);
     expect(e.defaultPrevented).toBe(false);
   });
 });

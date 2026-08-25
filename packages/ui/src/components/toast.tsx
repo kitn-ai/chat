@@ -1,6 +1,5 @@
-import {
-  createSignal, createEffect, onCleanup, on, For, Show, createMemo,
-} from 'solid-js';
+import { createSignal, createEffect, onCleanup, For, Show, createMemo } from 'solid-js';
+import { deferApply } from '../utils/defer-apply'; // V2-PORT: on(...,{defer:true}) replacement
 import { X, Check, AlertTriangle, XCircle, Info } from 'lucide-solid';
 import { cn } from '../utils/cn';
 import { createPresence } from '../ui/overlay';
@@ -121,24 +120,26 @@ export function Toast(props: ToastProps) {
 
   // (Re)start the timer whenever the resolved duration changes (mount + update());
   // resets the remaining time to full. Holds instead of running if currently held.
-  createEffect(on(() => resolveDuration(props.item), (d) => {
+  createEffect(() => resolveDuration(props.item), (d) => {
     remaining = d;
     if (held()) clear();
     else begin();
-  }));
+  });
   // Pause/resume on hover (this pill or the whole stack) WITHOUT resetting remaining,
   // so the countdown continues from where it left off. Deferred — the duration
   // effect already armed it on mount.
-  createEffect(on(held, (isHeld) => {
+  createEffect(held, deferApply((isHeld) => {
     if (isHeld) pause();
     else begin();
-  }, { defer: true }));
+  }));
   onCleanup(clear);
 
   // When presence has fully exited, notify the parent so it drops the item.
-  createEffect(() => {
-    if (!presence.present() && !open()) props.onDismiss(reason);
-  });
+  // V2-PORT: tracked reads in the compute; the notify in the apply.
+  createEffect(
+    () => !presence.present() && !open(),
+    (gone) => { if (gone) props.onDismiss(reason); },
+  );
 
   const close = () => { clear(); reason = 'close'; setOpen(false); };
 
@@ -396,8 +397,9 @@ export function ToastRegion(props: ToastRegionProps) {
   // Scoped to a target → anchor the stack to the `position` corner of the target,
   // following it on scroll/resize. Otherwise it's a viewport-fixed corner/center.
   const [anchor, setAnchor] = createSignal<TargetRect | null>(null);
-  createEffect(() => {
-    const t = props.target;
+  // V2-PORT: the target prop is the tracked dependency; observer wiring is the
+  // apply, and the in-effect onCleanup became the returned cleanup.
+  createEffect(() => props.target, (t) => {
     if (!t || typeof window === 'undefined') { setAnchor(null); return; }
     // Captured at SETUP and closed over, never re-resolved as a global inside
     // `onCleanup`: cleanup can run after the host removed the DOM globals (a
@@ -414,11 +416,11 @@ export function ToastRegion(props: ToastRegionProps) {
     ro.observe(t);
     win.addEventListener('scroll', update, true);
     win.addEventListener('resize', update);
-    onCleanup(() => {
+    return () => {
       ro.disconnect();
       win.removeEventListener('scroll', update, true);
       win.removeEventListener('resize', update);
-    });
+    };
   });
 
   return (

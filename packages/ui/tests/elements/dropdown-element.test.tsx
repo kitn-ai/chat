@@ -21,6 +21,7 @@
  * undefined) the slot would be an inert unknown element in the light DOM and every
  * slotted row would silently vanish. That is asserted, not assumed.
  */
+import { flush as flushSync } from 'solid-js';
 import { afterEach, describe, expect, test } from 'vitest';
 import '../../src/elements/dropdown';
 
@@ -143,6 +144,7 @@ describe('kai-dropdown', () => {
       expect(menuOf(el), 'show() is a no-op while disabled').toBe(null);
 
       triggerOf(el)!.click();
+      flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
       await flush();
       expect(menuOf(el), 'the trigger is inert while disabled').toBe(null);
 
@@ -190,6 +192,7 @@ describe('kai-dropdown', () => {
      */
     const keydown = (el: Drop, key: string) => {
       menuOf(el)!.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, composed: true }));
+      flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
       return flush();
     };
     const row = (el: Drop, id: string) => el.querySelector<HTMLElement>(`#${id}`)!;

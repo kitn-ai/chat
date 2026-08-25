@@ -1,6 +1,0 @@
-{
-  "comment": "PHASE-1 SCAFFOLD for the Solid v2 migration — delete when phase 2 lands. Scopes a tsc pass to the migrated slice (src/primitives + src/ui). tsc still pulls in transitive imports from un-migrated dirs (components/, elements/); the runner script filters diagnostics to slice files, so this proves the slice compiles under solid-js 2 without demanding the rest of the tree does yet.",
-  "extends": "./tsconfig.json",
-  "compilerOptions": { "noEmit": true },
-  "include": ["src/primitives/**/*.ts", "src/primitives/**/*.tsx", "src/ui/**/*.ts", "src/ui/**/*.tsx", "src/utils/**/*.ts"]
-}

@@ -10,7 +10,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup } from '@solidjs/testing-library';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import {
   Attachments,
   Attachment,
@@ -44,6 +44,7 @@ describe('Attachment item layout', () => {
     expect(item().className).toMatch(/size-24/); // grid tile
 
     setVariant('inline');
+    flush(); // V2-FLUSH: commit the staged write
     expect(item().className).not.toMatch(/size-24/); // no longer a grid tile
     expect(item().className).toMatch(/\bh-8\b/); // inline chip height
   });

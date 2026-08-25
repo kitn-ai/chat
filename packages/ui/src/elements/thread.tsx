@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup } from 'solid-js';
+import { createSignal, onSettled, onCleanup } from 'solid-js';
 import { defineWebComponent } from './define';
 import { readSlots, THREAD_SLOTS } from './slots';
 import { Thread, type ThreadController } from '../components/thread';
@@ -97,12 +97,13 @@ defineWebComponent<Props, Events>('kai-thread', {
   // Detect whether the consumer projected `slot="empty"` content, so the built-in
   // default only renders when they did NOT.
   const [slots, setSlots] = createSignal<Record<string, boolean>>({});
-  onMount(() => {
+  onSettled(() => {
     const read = () => setSlots(readSlots(element, THREAD_SLOTS));
     read();
     const observer = new MutationObserver(read);
     observer.observe(element, { childList: true });
-    onCleanup(() => observer.disconnect());
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => observer.disconnect();
   });
 
   // Imperative method API — forward the thread's scroll control onto the host.

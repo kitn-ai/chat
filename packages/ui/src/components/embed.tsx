@@ -1,13 +1,6 @@
-import {
-  type JSX,
-  splitProps,
-  createSignal,
-  createEffect,
-  createMemo,
-  on,
-  onMount,
-  Show,
-} from 'solid-js';
+import { omit, createSignal, createEffect, createMemo, onSettled, Show } from 'solid-js';
+import { deferApply } from '../utils/defer-apply'; // V2-PORT: on(...,{defer:true}) replacement
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { Play, Video, ExternalLink, TriangleAlert } from 'lucide-solid';
 import type { CardEvent } from '../primitives/card-contract';
@@ -38,7 +31,9 @@ export interface EmbedProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, 'on
  * emits are lifecycle `ready`, `open`, and failure `error`.
  */
 export function Embed(props: EmbedProps): JSX.Element {
-  const [local, rest] = splitProps(props, ['cardId', 'data', 'onEmit', 'class']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'cardId', 'data', 'onEmit', 'class');
 
   const emit = (event: CardEvent) => local.onEmit?.(event);
 
@@ -65,27 +60,19 @@ export function Embed(props: EmbedProps): JSX.Element {
   const watch = createMemo(() => watchUrl(local.data));
   const label = () => providerLabel(local.data.provider);
 
-  onMount(() => emit({ kind: 'ready', cardId: local.cardId }));
+  onSettled(() => { emit({ kind: 'ready', cardId: local.cardId }); }); // V2-PORT (R2): braced — a non-function return crashes dev
 
   // Resolution failure → a single `error` event (defense in depth; the schema allOf
   // and the origin allowlist should catch most of these earlier).
-  createEffect(
-    on(resolved, (r) => {
+  createEffect(resolved, (r) => {
       if (!r.ok) emit({ kind: 'error', cardId: local.cardId, message: r.error });
-    }),
-  );
+    });
 
   // Reset facade state when the payload changes.
-  createEffect(
-    on(
-      () => local.data,
-      () => {
+  createEffect(() => local.data, deferApply(() => {
         setPlaying(false);
         setPosterBroken(false);
-      },
-      { defer: true },
-    ),
-  );
+      }));
 
   const play = () => {
     if (!resolved().ok) return;

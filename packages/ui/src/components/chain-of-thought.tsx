@@ -1,11 +1,5 @@
-import {
-  type JSX,
-  type Accessor,
-  splitProps,
-  createSignal,
-  For,
-  Show,
-} from 'solid-js';
+import { type Accessor, omit, createSignal, For, Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
 import { ChevronDown, Circle } from 'lucide-solid';
@@ -17,7 +11,9 @@ export interface ChainOfThoughtItemProps extends JSX.HTMLAttributes<HTMLDivEleme
 }
 
 function ChainOfThoughtItem(props: ChainOfThoughtItemProps) {
-  const [local, rest] = splitProps(props, ['children', 'class']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'children', 'class');
   return (
     <div class={cn('text-muted-foreground text-sm', local.class)} {...rest}>
       {local.children}

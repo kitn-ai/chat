@@ -3,7 +3,8 @@
 // registered card, or its `data` failed HARD validation against the built-in schema
 // for that type (see primitives/card-validate-cards.ts for what "hard" means).
 // Visual: reuses the Card chrome so it sits naturally in a card stream.
-import { Show, type JSX } from 'solid-js';
+import { Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { Card } from './card';
 import { AlertTriangle } from 'lucide-solid';
 

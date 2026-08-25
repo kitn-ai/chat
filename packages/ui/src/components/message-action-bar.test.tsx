@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
 import { MessageActionBar, MessageAvatar } from './message';
 import { actionIcon, BUILTIN_ACTION_LABEL } from '../ui/action-icons';
@@ -51,8 +51,10 @@ describe('MessageActionBar', () => {
     expect(copy.querySelector('svg')).toBeTruthy();
 
     fireEvent.click(copy);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onAction).toHaveBeenCalledWith('copy');
     fireEvent.click(getByLabelText('Regenerate'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onAction).toHaveBeenCalledWith('regenerate');
   });
 
@@ -66,6 +68,7 @@ describe('MessageActionBar', () => {
     expect(btn).toHaveAttribute('data-action', 'share');
     expect(btn.querySelector('svg')).toBeTruthy();
     fireEvent.click(btn);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onAction).toHaveBeenCalledWith('share');
   });
 
@@ -80,6 +83,7 @@ describe('MessageActionBar', () => {
     expect(btn.querySelector('svg')).toBeFalsy();
     expect(btn).toHaveTextContent('Archive');
     fireEvent.click(btn);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onAction).toHaveBeenCalledWith('archive');
   });
 
@@ -122,6 +126,7 @@ describe('MessageActionBar', () => {
     expect(getByLabelText('Copy').querySelector('.text-emerald-400')).toBeFalsy();
 
     setCopied(true);
+    flush(); // V2-FLUSH: commit the staged write
     const btn = getByLabelText('Copied');
     expect(btn).toBeInTheDocument();
     expect(btn.querySelector('.text-emerald-400')).toBeTruthy();
@@ -162,6 +167,7 @@ describe('MessageActionBar', () => {
     // both shown initially → neither collapsed
     expect(getByLabelText('Dislike').closest('[data-feedback-collapsed]')).toBeNull();
     setVote('like');
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
     expect(getByLabelText('Like')).toHaveAttribute('aria-pressed', 'true');
     // dislike stays mounted but collapses (so the active thumb slides into its place)
@@ -174,10 +180,13 @@ describe('MessageActionBar', () => {
       <MessageActionBar actions={['copy', 'like', 'dislike']} onAction={onAction} />
     ));
     fireEvent.click(getByLabelText('Copy'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onAction).toHaveBeenCalledWith('copy');
     fireEvent.click(getByLabelText('Like'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onAction).toHaveBeenCalledWith('like');
     fireEvent.click(getByLabelText('Dislike'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onAction).toHaveBeenCalledWith('dislike');
   });
 });

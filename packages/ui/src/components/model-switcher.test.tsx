@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent, screen } from '@solidjs/testing-library';
@@ -30,6 +31,7 @@ describe('ModelSwitcher grouping & descriptions', () => {
     expect(screen.getByText('Legacy models')).toBeInTheDocument();
     expect(screen.queryByText('GPT-4o')).not.toBeInTheDocument();
     fireEvent.click(screen.getByText('Legacy models'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(screen.getByText('GPT-4o')).toBeInTheDocument();
     expect(screen.getByText('GPT-4.1')).toBeInTheDocument();
   });
@@ -47,7 +49,9 @@ describe('ModelSwitcher grouping & descriptions', () => {
     render(() => <ModelSwitcher models={MODELS} currentModelId="gpt-5.5" onModelChange={onModelChange} />);
     open();
     fireEvent.click(screen.getByText('Legacy models'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     fireEvent.click(screen.getByText('GPT-4o'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onModelChange).toHaveBeenCalledWith('gpt-4o');
   });
 

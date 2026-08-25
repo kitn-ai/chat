@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { defineWebComponent } from '../../src/elements/define';
 
 test('registers a custom element that renders content and CSS into its shadow root', async () => {
@@ -8,6 +9,7 @@ test('registers a custom element that renders content and CSS into its shadow ro
   const el = document.createElement('kitn-test-el') as HTMLElement & { label: string };
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(el.shadowRoot).toBeTruthy();
   expect(el.shadowRoot!.querySelector('style')).toBeTruthy();
@@ -16,6 +18,7 @@ test('registers a custom element that renders content and CSS into its shadow ro
   let detail: any = null;
   el.addEventListener('pressed', (e) => (detail = (e as CustomEvent).detail));
   el.shadowRoot!.querySelector('button')!.click();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(detail).toEqual({ label: 'hi' });
 
   el.remove();

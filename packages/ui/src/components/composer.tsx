@@ -1,15 +1,6 @@
-import {
-  type JSX,
-  createSignal,
-  createEffect,
-  createMemo,
-  createUniqueId,
-  on,
-  onMount,
-  onCleanup,
-  Show,
-  For,
-} from 'solid-js';
+import { createSignal, createEffect, createMemo, createUniqueId, onSettled, onCleanup, Show, For } from 'solid-js';
+import { deferApply } from '../utils/defer-apply'; // V2-PORT: on(...,{defer:true}) replacement
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import {
   type ComposerDoc,
@@ -322,10 +313,13 @@ export function Composer(props: ComposerProps): JSX.Element {
   const itemIconSrc = (item: TriggerItem) => item.icon ?? props.kindIcons?.[itemKind(item)];
 
   // Keep selectedIndex in bounds when filteredItems changes
-  createEffect(() => {
-    const max = filteredItems().length;
-    if (selectedIndex() >= max) setSelectedIndex(Math.max(0, max - 1));
-  });
+  // V2-PORT: tracked reads in the compute; the clamp write in the apply.
+  createEffect(
+    () => ({ max: filteredItems().length, idx: selectedIndex() }),
+    ({ max, idx }) => {
+      if (idx >= max) setSelectedIndex(Math.max(0, max - 1));
+    },
+  );
 
   // --- Floating menu positioning ---
   // Virtual reference element built from the live caret rect
@@ -369,7 +363,7 @@ export function Composer(props: ComposerProps): JSX.Element {
     applyHighlights(editable, matches, ZWSP, highlightName);
   }
 
-  onMount(() => {
+  onSettled(() => {
     renderDoc(editable, normalizeValue(props.value), editable.ownerDocument, props.kindIcons);
     setEmpty(docIsEmpty(parseDom(editable)));
     recomputeHighlights();
@@ -378,7 +372,7 @@ export function Composer(props: ComposerProps): JSX.Element {
 
   // Re-render when the controlled `value` prop changes, but ONLY when the
   // editable is NOT focused (don't stomp the caret while the user is typing).
-  createEffect(on(() => props.value, (v) => {
+  createEffect(() => props.value, deferApply((v: string | ComposerDoc | undefined) => {
     // Re-render only when the incoming value actually differs from what the DOM
     // already shows. This skips the echo of our own onChange (so the caret isn't
     // stomped while typing) while still honoring genuine external changes —
@@ -390,13 +384,13 @@ export function Composer(props: ComposerProps): JSX.Element {
     setEmpty(docIsEmpty(parseDom(editable)));
     recomputeHighlights();
     history.reset({ doc: parseDom(editable), caret: 0 }); // external value = new baseline
-  }, { defer: true }));
+  }));
 
   // Re-decorate when `highlights` changes on its own — e.g. a consumer (or the
   // docs <Example>) assigns `value` then `highlights` as separate properties
   // after mount. Without this, highlights set after the value-effect ran would
-  // never apply. `defer` skips the mount run (onMount already decorates).
-  createEffect(on(() => props.highlights, () => recomputeHighlights(), { defer: true }));
+  // never apply. `defer` skips the mount run (onSettled already decorates).
+  createEffect(() => props.highlights, deferApply<HighlightRule[] | undefined>(() => { recomputeHighlights(); }));
 
   function updateTriggerState() {
     const defs = props.triggers;
@@ -468,7 +462,7 @@ export function Composer(props: ComposerProps): JSX.Element {
   const handleFocus = (e: FocusEvent) => { focused = true; props.onFocus?.(e); };
   const handleBlur = (e: FocusEvent) => { focused = false; clearPillSelection(); props.onBlur?.(e); };
 
-  onMount(() => {
+  onSettled(() => {
     // Captured at SETUP and closed over, never re-resolved as a global inside
     // `onCleanup`: cleanup can run after the host removed the DOM globals (a
     // `kai-*` release is deferred one microtask past detachment, so an
@@ -483,14 +477,15 @@ export function Composer(props: ComposerProps): JSX.Element {
       if (focused) updateTriggerState();
     };
     doc.addEventListener('selectionchange', onSelectionChange);
-    onCleanup(() => doc.removeEventListener('selectionchange', onSelectionChange));
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => doc.removeEventListener('selectionchange', onSelectionChange);
   });
 
   // --- Imperative controller (Pattern C): hand the facade a handle over the
   //     composer's latent capabilities. `editable`/`snapshot`/`insertEntity` are
   //     already wired internally — this just surfaces them without changing any
   //     existing behavior. ---
-  onMount(() => {
+  onSettled(() => {
     props.controllerRef?.({
       focus: (options) => editable.focus(options),
       blur: () => editable.blur(),
@@ -897,7 +892,7 @@ export function Composer(props: ComposerProps): JSX.Element {
           data-kai-composer-editable
           data-pill-selected={selectedPill() ? '' : undefined}
           data-placeholder={props.placeholder ?? ''}
-          contentEditable={props.disabled ? false : ('plaintext-only' as unknown as boolean)}
+          contenteditable={props.disabled ? 'false' : ('plaintext-only' as unknown as boolean)} // V2-PORT: boolean false would REMOVE the attribute in v2; the string keeps the 1.x DOM
           role="textbox"
           aria-multiline="true"
           aria-label={props.ariaLabel || props.placeholder || 'Message input'}
@@ -945,7 +940,7 @@ export function Composer(props: ComposerProps): JSX.Element {
                   {(entry) => (
                     <button
                       role="option"
-                      aria-selected={selectedIndex() === entry.index}
+                      aria-selected={selectedIndex() === entry.index ? 'true' : 'false'}
                       data-index={entry.index}
                       class={cn(
                         'w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors',

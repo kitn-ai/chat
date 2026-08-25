@@ -9,7 +9,7 @@ import { componentDescription } from '../stories/docs/element-controls';
 // kai-menu is used as a JSX element below; the tag is declared (identically) by
 // sibling story files. TypeScript merges identical global augmentations, so this
 // is copied byte-for-byte from the canonical sibling decls (mismatch errors TS2717).
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {

@@ -20,6 +20,7 @@
  * when Constructable Stylesheets are missing), contrary to the note carried by
  * the older `*.declarative.test.tsx` files in this directory.
  */
+import { flush } from 'solid-js';
 import { describe, it, expect, afterEach } from 'vitest';
 import { fireEvent } from '@solidjs/testing-library';
 import './conversation-list';
@@ -114,6 +115,7 @@ describe('<kai-model-switcher> exposes the current model as a checked radio item
     });
     const groupHeader = [...shadow(el).querySelectorAll<HTMLElement>('button')].find((b) => b.textContent?.includes('Legacy'))!;
     fireEvent.click(groupHeader);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await new Promise((r) => setTimeout(r, 20));
     const row = rows(el).find((r) => r.textContent?.includes('Grouped'))!;
     expect(row.getAttribute('aria-checked')).toBe('true');
@@ -127,6 +129,7 @@ describe('<kai-model-switcher> exposes the current model as a checked radio item
     expect(rows(el).length).toBe(2);
     const alpha = rows(el).find((r) => r.textContent?.includes('Alpha'))!;
     fireEvent.click(alpha);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await new Promise((r) => setTimeout(r, 20));
     expect(shadow(el).querySelectorAll('[role="menuitemradio"]').length).toBe(0);
   });
@@ -136,6 +139,7 @@ describe('<kai-model-switcher> exposes the current model as a checked radio item
     const seen: string[] = [];
     el.addEventListener('kai-model-change', (e) => seen.push((e as CustomEvent).detail.modelId));
     fireEvent.click(rows(el).find((r) => r.textContent?.includes('Alpha'))!);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await new Promise((r) => setTimeout(r, 20));
     expect(seen).toEqual(['alpha']);
   });
@@ -150,6 +154,7 @@ describe('<kai-context> exposes usage as a progressbar', () => {
     const el = await mount('kai-context', { context });
     const trigger = shadow(el).querySelector('button')!;
     fireEvent.pointerEnter(trigger.parentElement!);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await new Promise((r) => setTimeout(r, 20));
     return el;
   }

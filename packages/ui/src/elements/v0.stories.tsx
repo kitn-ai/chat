@@ -28,7 +28,7 @@ import './register'; // every kai-* element used below
 // other prop (src, files, defaultTab, the no-* flags, openInTab, iframeTitle,
 // displayUrl) is set as a PROPERTY in the ref callback, the kai- contract for
 // non-scalar config.
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -377,13 +377,13 @@ export function Featured() {
         <p className="opt">Color <b>{color.name}</b></p>
         <div className="swatches">
           {colors.map((c) => (
-            <button key={c.name} aria-pressed={c.name === color.name}
+            <button key={c.name} aria-pressed={c.name === color.name ? 'true' : 'false'}
               style={{ background: c.hex }} onClick={() => setColor(c)} />
           ))}
         </div>
         <div className="sizes">
           {sizes.map((s) => (
-            <button key={s} aria-pressed={s === size} onClick={() => setSize(s)}>{s}</button>
+            <button key={s} aria-pressed={s === size ? 'true' : 'false'} onClick={() => setSize(s)}>{s}</button>
           ))}
         </div>
         <button className="btn-primary">Add to bag</button>

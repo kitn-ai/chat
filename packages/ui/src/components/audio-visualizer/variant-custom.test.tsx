@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { installFakeClock } from '../../test-utils/fake-clock';
 import { buildFragmentSource, type UniformSpec } from './shader-canvas';
@@ -369,11 +369,17 @@ describe('CustomVisualizer: an invalid consumer uniform never throws, and routes
     // SAME error each time. Without the `reported` latch, each of these
     // would spam a fresh console.error + onUnavailable call.
     setVolume(0.2);
+    flush(); // V2-FLUSH: commit the staged write
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     setBands([0.4, 0.5, 0.6]);
+    flush(); // V2-FLUSH: commit the staged write
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     setVolume(0.9);
+    flush(); // V2-FLUSH: commit the staged write
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     expect(onUnavailable).toHaveBeenCalledTimes(1);
     expect(error).toHaveBeenCalledTimes(1);
@@ -407,13 +413,17 @@ describe('CustomVisualizer: an invalid consumer uniform never throws, and routes
 
     // Fixed -- a valid render in between. No new failure to report.
     setShader({ fragment: FRAGMENT });
+    flush(); // V2-FLUSH: commit the staged write
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onUnavailable).toHaveBeenCalledTimes(1);
 
     // A DIFFERENT bad uniform. Without the reset, `reported` would still be
     // `true` from the first failure and this would go silent.
     setShader({ fragment: FRAGMENT, uniforms: { uOther: { type: '3fv', value: 5 as unknown as number[] } } });
+    flush(); // V2-FLUSH: commit the staged write
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     expect(onUnavailable).toHaveBeenCalledTimes(2);
     expect(error).toHaveBeenCalledTimes(2);
@@ -611,7 +621,7 @@ describe('CustomVisualizer: does not defeat ShaderCanvas\'s recompile guard', ()
     ));
     expect(calls).toHaveLength(1);
 
-    for (let i = 0; i < 10 && isFramePending(); i++) advance(50);
+    for (let i = 0; i < 10 && isFramePending(); i++) { advance(50); flush(); } // V2-FLUSH per frame
 
     // The precondition: uIntensity's pushed value genuinely varied across the
     // loop, proof the tween's OWN requestAnimationFrame loop actually ran
@@ -744,14 +754,17 @@ describe('CustomVisualizer: speaking re-entry override survives adverse effect o
     // Adverse history: re-run only the state-target effect (it alone reads
     // `frozen`) so it re-subscribes to `state` after the volume override.
     setFrozen(true);
+    flush(); // V2-FLUSH: commit the staged write
     setFrozen(false);
+    flush(); // V2-FLUSH: commit the staged write
 
     // Static-drive re-entry; volume is pinned and never ticks again.
     setState('speaking');
+    flush(); // V2-FLUSH: commit the staged write
 
     // Run the 0.5s base tween to completion -- if it stole intensity, it
     // has fully landed back on the 0.3 base by now.
-    for (let i = 0; i < 12; i++) advance(70);
+    for (let i = 0; i < 12; i++) { advance(70); flush(); } // V2-FLUSH per frame
 
     expect(captured!.uniforms.uIntensity?.value).toBeCloseTo(0.3 + 0.7 * 0.8, 6);
   });

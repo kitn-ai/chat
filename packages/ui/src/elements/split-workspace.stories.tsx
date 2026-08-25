@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { createSignal, createEffect, Show, For, Switch, Match, onMount, onCleanup, type JSX } from 'solid-js';
-import { Portal } from 'solid-js/web';
+import { createSignal, createEffect, Show, For, Switch, Match, onSettled, onCleanup } from 'solid-js';
+import type { JSX } from '@solidjs/web';
+import { Portal } from '@solidjs/web';
 import {
   Bot, Terminal, FlaskConical, BookText, Boxes, Sparkles, ShieldCheck, Database,
   Megaphone, Bell, Globe, Search, Keyboard,
@@ -64,7 +65,7 @@ import { toast, configureToasts } from '../primitives/toast-store';
 // TypeScript MERGES identical global augmentations, so each shared declaration is
 // copied byte-for-byte from its canonical sibling (chatgpt.stories.tsx /
 // codex.stories.tsx / t3code.stories.tsx) or it errors TS2717.
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -387,7 +388,7 @@ export const SplitWorkspace: Story = {
     // The zoomed (maximized) agent id, or null. Esc / ⌥Z restore.
     const [zoomedId, setZoomedId] = createSignal<string | null>(null);
     // If the maximized group is closed/merged away, drop back to the columns.
-    createEffect(() => { const z = zoomedId(); if (z && !findGroup(z)) setZoomedId(null); });
+    createEffect(zoomedId, (z) => { if (z && !findGroup(z)) setZoomedId(null); }); // V2-PORT
     // The agent id whose tab "…" menu is open, or null.
     const [menuFor, setMenuFor] = createSignal<string | null>(null);
     const [menuPos, setMenuPos] = createSignal<{ x: number; y: number } | null>(null);
@@ -419,6 +420,14 @@ export const SplitWorkspace: Story = {
     const [broadcastOpen, setBroadcastOpen] = createSignal(false);
     const [shortcutsOpen, setShortcutsOpen] = createSignal(false);
     const [confirmCloseWs, setConfirmCloseWs] = createSignal<string | null>(null);
+    // V2-PORT: refs are unowned in v2, so the dialog open-sync effects that used
+    // to live inside the refs run here (owned story scope) over recorded nodes.
+    let broadcastDialogEl: (HTMLElement & { open?: boolean }) | undefined;
+    let shortcutsDialogEl: (HTMLElement & { open?: boolean }) | undefined;
+    let confirmDialogEl: El | undefined;
+    createEffect(broadcastOpen, (open) => { if (broadcastDialogEl) broadcastDialogEl.open = open; });
+    createEffect(shortcutsOpen, (open) => { if (shortcutsDialogEl) shortcutsDialogEl.open = open; });
+    createEffect(() => confirmCloseWs() != null, (open) => { if (confirmDialogEl) confirmDialogEl.open = open; });
     const [railTab, setRailTab] = createSignal<'agents' | 'files'>('agents');
     // The workspaces rail is hand-rolled (kai-nav can't do per-item close), so the
     // list is dynamic + each row has a hover-× that closes it.
@@ -948,7 +957,11 @@ export const SplitWorkspace: Story = {
     // it bottom-right. (No manual region: a second region bound to the same store
     // would double every toast. The Storybook decorator themes the body-mounted
     // region to match the light/dark toggle.)
-    onMount(() => {
+    // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+    // and register them once at the owner scope (same lifecycle as 1.x).
+    const settledDisposers: (() => void)[] = [];
+    onCleanup(() => { for (const d of settledDisposers) d(); });
+    onSettled(() => {
       configureToasts({ position: 'bottom-right' });
       // "An agent needs you": one PERSISTENT, actionable toast per waiting agent,
       // raised ONCE. Stable ids upsert, so HMR/re-render never stacks duplicates.
@@ -1008,7 +1021,7 @@ export const SplitWorkspace: Story = {
       const onDocClick = () => { if (menuFor()) setMenuFor(null); };
       document.addEventListener('keydown', onKey);
       document.addEventListener('click', onDocClick);
-      onCleanup(() => {
+      settledDisposers.push(() => {
         document.removeEventListener('keydown', onKey);
         document.removeEventListener('click', onDocClick);
       });
@@ -1559,7 +1572,7 @@ export const SplitWorkspace: Story = {
           <div class="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-0.5 rounded-lg bg-surface-sunken p-0.5">
             <button
               type="button"
-              aria-pressed={topView() === 'agents'}
+              aria-pressed={topView() === 'agents' ? 'true' : 'false'}
               onClick={() => setTopView('agents')}
               class={cn(
                 'flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors',
@@ -1570,7 +1583,7 @@ export const SplitWorkspace: Story = {
             </button>
             <button
               type="button"
-              aria-pressed={topView() === 'browser'}
+              aria-pressed={topView() === 'browser' ? 'true' : 'false'}
               onClick={() => setTopView('browser')}
               class={cn(
                 'flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors',
@@ -1602,7 +1615,7 @@ export const SplitWorkspace: Story = {
               <button
                 type="button"
                 aria-haspopup="menu"
-                aria-expanded={attnOpen()}
+                aria-expanded={attnOpen() ? 'true' : 'false'}
                 aria-label={`${attentionCount()} agents waiting on you`}
                 onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setAttnPos({ x: r.right, y: r.bottom }); setAttnOpen((o) => !o); }}
                 class="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
@@ -1681,11 +1694,11 @@ export const SplitWorkspace: Story = {
                           // area is a plain button so the close button can be a sibling
                           // without triggering nested-interactive a11y violations.
                           <div
-                            class="group/ws flex items-center rounded-md text-sm transition-colors"
-                            classList={{
+                            class={["group/ws flex items-center rounded-md text-sm transition-colors", {
                               'bg-accent text-foreground': workspace() === w.id,
                               'text-muted-foreground hover:bg-hover hover:text-foreground': workspace() !== w.id,
-                            }}
+                            }]}
+                           
                           >
                             <button
                               type="button"
@@ -1718,11 +1731,11 @@ export const SplitWorkspace: Story = {
                           // area is a plain button so the close button can be a sibling
                           // without triggering nested-interactive a11y violations.
                           <div
-                            class="group/pane flex w-full items-center rounded-md text-sm transition-colors"
-                            classList={{
+                            class={["group/pane flex w-full items-center rounded-md text-sm transition-colors", {
                               'bg-accent text-foreground': focusedPaneId() === a.id,
                               'text-muted-foreground hover:bg-hover hover:text-foreground': focusedPaneId() !== a.id,
-                            }}
+                            }]}
+                           
                           >
                             <button
                               type="button"
@@ -1940,7 +1953,10 @@ export const SplitWorkspace: Story = {
         {/* broadcast composer — dogfoods kai-dialog (it owns the backdrop, focus-trap, and Escape) */}
         <kai-dialog
           ref={(el: HTMLElement & { open?: boolean }) => {
-            createEffect(() => { el.open = broadcastOpen(); });
+            // V2-PORT: refs are unowned in v2 — the open-sync effect moved to the
+            // story's owned scope below; the ref records the node + wires events.
+            broadcastDialogEl = el;
+            el.open = broadcastOpen();
             el.addEventListener('kai-open-change', (e) =>
               setBroadcastOpen((e as CustomEvent<{ open: boolean }>).detail.open),
             );
@@ -1968,7 +1984,8 @@ export const SplitWorkspace: Story = {
         {/* keyboard shortcuts — dogfoods kai-dialog (backdrop, focus-trap, Escape) */}
         <kai-dialog
           ref={(el: HTMLElement & { open?: boolean }) => {
-            createEffect(() => { el.open = shortcutsOpen(); });
+            shortcutsDialogEl = el; // V2-PORT: see the broadcast dialog note
+            el.open = shortcutsOpen();
             el.addEventListener('kai-open-change', (e) =>
               setShortcutsOpen((e as CustomEvent<{ open: boolean }>).detail.open),
             );
@@ -2018,7 +2035,8 @@ export const SplitWorkspace: Story = {
         {/* confirm closing a workspace — dogfoods kai-dialog */}
         <kai-dialog
           ref={(el) => {
-            createEffect(() => { (el as El).open = confirmCloseWs() != null; });
+            confirmDialogEl = el as El; // V2-PORT: see the broadcast dialog note
+            (el as El).open = confirmCloseWs() != null;
             el.addEventListener('kai-open-change', (e) => { if (!(e as CustomEvent).detail.open) setConfirmCloseWs(null); });
           }}
         >
@@ -2058,7 +2076,7 @@ export const SplitWorkspace: Story = {
     );
   },
   play: async () => {
-    // Let the onMount toasts' fade-in (animate-in fade-in-0) settle before the
+    // Let the onSettled toasts' fade-in (animate-in fade-in-0) settle before the
     // a11y/axe pass; otherwise axe samples them mid-fade and reads the near-black
     // toast text as a low-contrast ~#a8a8a9 (black composited at partial opacity).
     const settled = () => {

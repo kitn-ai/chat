@@ -1,4 +1,5 @@
-import { For, Show, merge } from 'solid-js';
+import { For, Show } from 'solid-js';
+import { mergeDefaults } from '../utils/merge-defaults'; // V2-PORT: 1.x mergeProps semantics (undefined does not override)
 import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 
@@ -36,7 +37,7 @@ const SIZE: Record<'sm' | 'md', string> = {
  * key navigation that moves selection between segments.
  */
 export function Segmented(props: SegmentedProps): JSX.Element {
-  const merged = merge({ size: 'md' as const }, props);
+  const merged = mergeDefaults({ size: 'md' as const }, props);
   const buttons: HTMLButtonElement[] = [];
 
   const currentIndex = () => merged.options.findIndex((o) => o.value === merged.value);

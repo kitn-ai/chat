@@ -1,4 +1,5 @@
-import { type JSX, splitProps, createResource, createSignal, onCleanup, Show } from 'solid-js';
+import { omit, createEffect, createSignal, onCleanup, Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { Copy, Check } from 'lucide-solid';
 import { cn } from '../utils/cn';
 import { useChatConfig } from '../primitives/chat-config';
@@ -70,7 +71,9 @@ function CodeBlockCopyButton(props: { text: string }) {
 }
 
 function CodeBlock(props: CodeBlockProps) {
-  const [local, rest] = splitProps(props, ['children', 'class', 'copy', 'copyText']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'children', 'class', 'copy', 'copyText');
   return (
     <div
       class={cn(
@@ -106,7 +109,9 @@ export interface CodeBlockCodeProps extends JSX.HTMLAttributes<HTMLDivElement> {
 }
 
 function CodeBlockCode(props: CodeBlockCodeProps) {
-  const [local, rest] = splitProps(props, ['code', 'language', 'theme', 'class']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'code', 'language', 'theme', 'class');
   const config = useChatConfig();
 
   const lang = () => local.language ?? 'tsx';
@@ -115,9 +120,23 @@ function CodeBlockCode(props: CodeBlockCodeProps) {
 
   // When highlighting is off, the source is null so the fetcher never runs and
   // no Shiki code is ever imported — the plain `<pre>` fallback renders instead.
-  const [highlighted] = createResource(
+  // V2-PORT: createResource is removed; a signal + two-argument effect reproduces
+  // the exact contract this site used (undefined until resolved, stale results
+  // dropped via the returned cleanup, no Loading boundary involved).
+  const [highlighted, setHighlighted] = createSignal<string | undefined>(undefined);
+  createEffect(
     () => (highlightingOn() ? { code: local.code, lang: lang(), theme: theme() } : null),
-    (src) => highlight(src.code, src.lang, src.theme)
+    (src) => {
+      if (!src) {
+        setHighlighted(undefined);
+        return;
+      }
+      let stale = false;
+      void highlight(src.code, src.lang, src.theme).then((html) => {
+        if (!stale) setHighlighted(html);
+      });
+      return () => { stale = true; };
+    },
   );
 
   const codeTextSize = () => {
@@ -164,7 +183,9 @@ export interface CodeBlockGroupProps extends JSX.HTMLAttributes<HTMLDivElement> 
 }
 
 function CodeBlockGroup(props: CodeBlockGroupProps) {
-  const [local, rest] = splitProps(props, ['children', 'class']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'children', 'class');
   return (
     <div
       class={cn('flex items-center justify-between', local.class)}

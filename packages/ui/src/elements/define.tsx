@@ -1,8 +1,9 @@
-import { customElement } from 'solid-element';
+import { customElement } from '@solidjs/element';
 import { ChatConfig } from '../primitives/chat-config';
 import { ELEMENT_CSS } from './css';
 import { elementDiagnosticsWanted, installElementDiagnostics } from './element-diagnostics';
-import { createEffect, createSignal, onCleanup, Show, type JSX } from 'solid-js';
+import { createEffect, createSignal, onCleanup, runWithOwner, Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 
 /**
  * Shared constructable stylesheet, built once and adopted by every element's
@@ -29,10 +30,13 @@ function getSharedSheet(): CSSStyleSheet | null {
 /** Resolve whether the element should render dark, given its `theme` and the
  *  system preference. `auto` (the default) follows `prefers-color-scheme`. */
 function createDarkMode(getTheme: () => string | undefined) {
-  const [systemDark, setSystemDark] = createSignal(false);
-  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    setSystemDark(mq.matches);
+  // V2-PORT: v2 rejects signal writes in an owned body — SEED from the media
+  // query instead of writing right after creation.
+  const mq = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-color-scheme: dark)')
+    : undefined;
+  const [systemDark, setSystemDark] = createSignal(mq?.matches ?? false);
+  if (mq) {
     const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches);
     mq.addEventListener('change', onChange);
     onCleanup(() => mq.removeEventListener('change', onChange));
@@ -344,7 +348,11 @@ function installFlagReadBack(element: HTMLElement, name: string, attribute: stri
   // fixes the read-back without inventing an opinion the author never expressed.
   const current = get.call(element);
   if (typeof current !== 'boolean' && resolveFlag(element, current, attribute)) {
-    wrapped.call(element, true);
+    // V2-PORT: this seed is a signal write and reflectFlag runs from the facade
+    // BODY — an owned scope, where v2's dev guard rejects writes. The write is
+    // the deliberate attribute→prop promotion documented above, so run it with
+    // no owner (same value, same tick, guard satisfied).
+    runWithOwner(null, () => wrapped.call(element, true));
   }
 }
 
@@ -445,14 +453,20 @@ export function defineWebComponent<P extends Record<string, unknown>, E = Record
     const reflectFlag: WebComponentContext<E>['reflectFlag'] = (name, source) => {
       const attribute = toAttr(name);
       installFlagReadBack(element, name, attribute);
-      createEffect(() => {
-        const on = source ? source() : flag(name);
-        // `undefined` means the caller's source is not ready yet (a controller a
-        // primitive has not handed up). Leave the author's attribute alone rather
-        // than writing a guessed OFF over it.
-        if (on === undefined) return;
-        element.toggleAttribute(attribute, on);
-      });
+      // V2-PORT (R1): the tracked read (source/flag) is the compute; the host
+      // attribute write is the apply. `element` is the already-upgraded host
+      // (not a render-produced ref), but the WRITE is still a side effect and
+      // belongs in the apply phase.
+      createEffect(
+        () => (source ? source() : flag(name)),
+        (on) => {
+          // `undefined` means the caller's source is not ready yet (a controller a
+          // primitive has not handed up). Leave the author's attribute alone rather
+          // than writing a guessed OFF over it.
+          if (on === undefined) return;
+          element.toggleAttribute(attribute, on);
+        },
+      );
     };
 
     // Attach imperative methods onto the host instance. See WebComponentContext.expose.
@@ -481,7 +495,7 @@ export function defineWebComponent<P extends Record<string, unknown>, E = Record
     // `renderRoot` access — which happens during that insert, AFTER this facade
     // function returns. So we pre-attach the shadow root here (with the same
     // `mode: 'open'` the renderRoot getter would use, making it a no-op for
-    // solid-element) and adopt the sheet now. If we deferred to onMount instead,
+    // solid-element) and adopt the sheet now. If we deferred to onSettled instead,
     // the content would paint UNSTYLED and then animate from that bare state to
     // its resting style once the sheet landed — every `transition-colors` button
     // and menu/dropdown trigger flashing as if hovered-then-un-hovered on first
@@ -504,7 +518,7 @@ export function defineWebComponent<P extends Record<string, unknown>, E = Record
             re-roots the inherited `color` to the active mode's foreground, so text
             without an explicit color class (e.g. attachment filename labels) follows
             light/dark instead of inheriting the host page's color. */}
-        <div classList={{ dark: isDark() }} style={{ display: 'contents', color: 'var(--color-foreground)' }}>
+        <div class={{ dark: isDark() }} style={{ display: 'contents', color: 'var(--color-foreground)' }}>
           <div ref={portalNode} />
           <ChatConfig portalMount={portalNode}>
             {Facade(props as unknown as P, {

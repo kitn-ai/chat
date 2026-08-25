@@ -2,6 +2,7 @@
 // Per-card dismiss → collapsed stub → reopen, across confirm / choice / form / tasks.
 // The × (only when `dismissible`) emits `dismiss` AND optimistically flips to the
 // re-openable DismissedStub; Reopen emits `{ kind:'reopen', cardId }`.
+import { flush } from 'solid-js';
 import { test, expect, afterEach } from 'vitest';
 import { render, fireEvent } from '@solidjs/testing-library';
 import { ConfirmCard, type ConfirmCardData } from '../../src/components/confirm-card';
@@ -34,6 +35,7 @@ test('confirm: × emits dismiss + collapses to a reopenable stub; Reopen emits r
   expect(queryByText('Run')).toBeTruthy();
 
   fireEvent.click(getByRole('button', { name: 'Dismiss' }));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   // dismiss event emitted.
   expect(events.some((e) => e.kind === 'dismiss' && e.cardId === 'c1')).toBe(true);
@@ -46,6 +48,7 @@ test('confirm: × emits dismiss + collapses to a reopenable stub; Reopen emits r
   expect(reopen).toBeTruthy();
 
   fireEvent.click(reopen);
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(events.some((e) => e.kind === 'reopen' && e.cardId === 'c1')).toBe(true);
 });
 
@@ -78,10 +81,12 @@ test('choice: × emits dismiss + stub; Reopen emits reopen', () => {
     <ChoiceCard host={host} cardId="ch1" heading="Fruit" data={CHOICE} />
   ));
   fireEvent.click(getByRole('button', { name: 'Dismiss' }));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(events.some((e) => e.kind === 'dismiss' && e.cardId === 'ch1')).toBe(true);
   expect(getByRole('group', { name: /Choose: Fruit — dismissed/ })).toBeTruthy();
   expect(queryByText('Apple')).toBeNull();
   fireEvent.click(getByRole('button', { name: 'Reopen' }));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(events.some((e) => e.kind === 'reopen' && e.cardId === 'ch1')).toBe(true);
 });
 
@@ -96,10 +101,12 @@ test('tasks: × emits dismiss + stub; Reopen emits reopen', () => {
     <TasksCard host={host} cardId="t1" heading="Plan" data={TASKS} />
   ));
   fireEvent.click(getByRole('button', { name: 'Dismiss' }));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(events.some((e) => e.kind === 'dismiss' && e.cardId === 't1')).toBe(true);
   expect(getByRole('group', { name: /Tasks: Plan — dismissed/ })).toBeTruthy();
   expect(queryByText('Apple')).toBeNull();
   fireEvent.click(getByRole('button', { name: 'Reopen' }));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(events.some((e) => e.kind === 'reopen' && e.cardId === 't1')).toBe(true);
 });
 
@@ -116,9 +123,11 @@ test('form: Dismiss emits dismiss + stub; Reopen emits reopen', () => {
     <Form host={host} cardId="f1" data={FORM} />
   ));
   fireEvent.click(getByRole('button', { name: 'Dismiss' }));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(events.some((e) => e.kind === 'dismiss' && e.cardId === 'f1')).toBe(true);
   expect(getByRole('group', { name: /Form: Profile — dismissed/ })).toBeTruthy();
   expect(queryByLabelText('Name')).toBeNull();
   fireEvent.click(getByRole('button', { name: 'Reopen' }));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(events.some((e) => e.kind === 'reopen' && e.cardId === 'f1')).toBe(true);
 });

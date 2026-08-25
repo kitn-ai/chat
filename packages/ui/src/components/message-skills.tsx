@@ -1,4 +1,5 @@
-import { Show, For, type JSX, splitProps } from "solid-js";
+import { Show, For, omit } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from "../utils/cn";
 
 // --- MessageSkills ---

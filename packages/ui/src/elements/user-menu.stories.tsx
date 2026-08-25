@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { onMount } from 'solid-js';
+import { onSettled } from 'solid-js';
 import { ChevronDown } from 'lucide-solid';
 import './register'; // registers kai-menu, kai-avatar, kai-status (and the rest)
 import type { KaiMenuItem } from './menu';
@@ -41,7 +41,7 @@ type MenuEl = HTMLElement & { items?: KaiMenuItem[]; open?: boolean };
 
 function UserMenu(props: { open?: boolean }) {
   let el: MenuEl | undefined;
-  onMount(() => {
+  onSettled(() => {
     if (!el) return;
     el.items = ITEMS;
     if (props.open) el.open = true;

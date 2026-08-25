@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import '../../src/elements/nav';
 import type { KaiNavItem } from '../../src/ui/nav';
 
@@ -22,6 +23,7 @@ function mountNav(items: KaiNavItem[]): NavEl {
 test('closable item: the trailing close button fires kai-nav-item-close and NOT kai-nav-select', async () => {
   const el = mountNav([{ id: 'a', label: 'Alpha', closable: true }]);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   let closed: string | undefined;
   let selectFired = false;
@@ -31,7 +33,9 @@ test('closable item: the trailing close button fires kai-nav-item-close and NOT 
   const closeBtn = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-nav-action="close"]');
   expect(closeBtn).not.toBeNull();
   closeBtn!.click();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(closed).toBe('a');
   // ★ Headline assertion: clicking the trailing button must NOT select the row.
@@ -44,6 +48,7 @@ test('action item: the trailing action button fires kai-nav-item-action with {va
   const action = { icon: 'pencil', label: 'Rename' };
   const el = mountNav([{ id: 'b', label: 'Beta', action }]);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   let detail: { value: string; action?: typeof action } | undefined;
   let selectFired = false;
@@ -53,7 +58,9 @@ test('action item: the trailing action button fires kai-nav-item-action with {va
   const actionBtn = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-nav-action="action"]');
   expect(actionBtn).not.toBeNull();
   actionBtn!.click();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(detail).toEqual({ value: 'b', action });
   expect(selectFired).toBe(false);
@@ -68,6 +75,7 @@ test('clicking the item body still fires kai-nav-select (unchanged) and not a tr
     { id: 'c', label: 'Gamma', closable: true, action: { icon: 'pencil', label: 'Rename' } },
   ]);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   let selected: string | undefined;
   let trailingFired = false;
@@ -79,7 +87,9 @@ test('clicking the item body still fires kai-nav-select (unchanged) and not a tr
   const row = el.shadowRoot!.querySelector<HTMLButtonElement>('[part="item"]');
   expect(row).not.toBeNull();
   row!.click();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(selected).toBe('c');
   expect(trailingFired).toBe(false);
@@ -90,6 +100,7 @@ test('clicking the item body still fires kai-nav-select (unchanged) and not a tr
 test('the trailing button is exposed as ::part(item-action)', async () => {
   const el = mountNav([{ id: 'd', label: 'Delta', closable: true }]);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(el.shadowRoot!.querySelector('[part="item-action"]')).not.toBeNull();
   el.remove();
 });

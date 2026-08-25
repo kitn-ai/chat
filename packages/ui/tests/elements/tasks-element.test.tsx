@@ -1,6 +1,7 @@
 // tests/elements/tasks-element-element.test.tsx
 // Contract integration for <kai-tasks>: row toggles are quiet; only confirm emits
 // `submit` with ids in input order; select-all + min/max/allowEmpty gating.
+import { flush as flushSync } from 'solid-js';
 import '../../src/elements/tasks';
 import { CARD_EVENT_NAME } from '../../src/primitives/card-routing';
 import type { CardEvent } from '../../src/primitives/card-contract';
@@ -54,6 +55,7 @@ const rowCheckbox = (root: ShadowRoot, id: string): HTMLInputElement =>
 const setChecked = (cb: HTMLInputElement, on: boolean): void => {
   cb.checked = on;
   cb.dispatchEvent(new Event('change', { bubbles: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 };
 
 const confirmBtn = (root: ShadowRoot): HTMLButtonElement =>
@@ -77,6 +79,7 @@ test('toggling rows emits NO event; only confirm does', async () => {
   const el = await mount(PLAN);
   const root = el.shadowRoot!;
   setChecked(rowCheckbox(root, 'build'), true);
+  flushSync(); // V2-FLUSH: commit the staged write
   await flush();
   expect(events.some((e) => e.kind === 'submit')).toBe(false);
   off();
@@ -88,8 +91,10 @@ test('confirm emits submit with selected ids in INPUT order', async () => {
   const root = el.shadowRoot!;
   // also check deploy (after build in input order)
   setChecked(rowCheckbox(root, 'deploy'), true);
+  flushSync(); // V2-FLUSH: commit the staged write
   await flush();
   confirmBtn(root).click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   const submit = events.find((e) => e.kind === 'submit') as
     | Extract<CardEvent, { kind: 'submit' }>
@@ -116,11 +121,13 @@ test('select-all checks all toggleable rows + computes indeterminate', async () 
   expect(master.checked).toBe(false);
   // check one → indeterminate
   setChecked(rowCheckbox(root, 'a'), true);
+  flushSync(); // V2-FLUSH: commit the staged write
   await flush();
   expect(master.indeterminate).toBe(true);
   expect(master.getAttribute('aria-checked')).toBe('mixed');
   // select-all → all toggleable checked, disabled excluded
   setChecked(master, true);
+  flushSync(); // V2-FLUSH: commit the staged write
   await flush();
   expect(rowCheckbox(root, 'a').checked).toBe(true);
   expect(rowCheckbox(root, 'b').checked).toBe(true);
@@ -135,6 +142,7 @@ test('allowEmpty:false disables confirm at zero; >=1 enables', async () => {
   const root = el.shadowRoot!;
   expect(confirmBtn(root).disabled).toBe(true);
   setChecked(rowCheckbox(root, 'a'), true);
+  flushSync(); // V2-FLUSH: commit the staged write
   await flush();
   expect(confirmBtn(root).disabled).toBe(false);
   off();
@@ -146,6 +154,7 @@ test('allowEmpty:true confirms with zero → { selected: [] }', async () => {
   const root = el.shadowRoot!;
   expect(confirmBtn(root).disabled).toBe(false);
   confirmBtn(root).click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   const submit = events.find((e) => e.kind === 'submit') as
     | Extract<CardEvent, { kind: 'submit' }>
@@ -159,9 +168,11 @@ test('min gates confirm', async () => {
   const el = await mount({ min: 2, tasks: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }] });
   const root = el.shadowRoot!;
   setChecked(rowCheckbox(root, 'a'), true);
+  flushSync(); // V2-FLUSH: commit the staged write
   await flush();
   expect(confirmBtn(root).disabled).toBe(true); // 1 < min 2
   setChecked(rowCheckbox(root, 'b'), true);
+  flushSync(); // V2-FLUSH: commit the staged write
   await flush();
   expect(confirmBtn(root).disabled).toBe(false);
   off();
@@ -175,6 +186,7 @@ test('max blocks toggling unchecked rows past the cap', async () => {
   });
   const root = el.shadowRoot!;
   setChecked(rowCheckbox(root, 'a'), true);
+  flushSync(); // V2-FLUSH: commit the staged write
   await flush();
   // b should now be disabled (max reached)
   expect(rowCheckbox(root, 'b').disabled).toBe(true);
@@ -196,6 +208,7 @@ test('resolved state after submit: read-only summary shown, no controls', async 
   const el = await mount({ tasks: [{ id: 'a', label: 'A', checked: true }] });
   const root = el.shadowRoot!;
   confirmBtn(root).click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   // After confirm the interactive controls are gone and the read-only summary appears.
   expect(root.querySelector('button')).toBeNull();

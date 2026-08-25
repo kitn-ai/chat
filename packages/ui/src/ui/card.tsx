@@ -1,4 +1,5 @@
-import { Show, omit, merge, createSignal, createUniqueId } from 'solid-js';
+import { Show, omit, createSignal, createUniqueId } from 'solid-js';
+import { mergeDefaults } from '../utils/merge-defaults'; // V2-PORT: 1.x mergeProps semantics (undefined does not override)
 import type { JSX } from '@solidjs/web';
 import { Dynamic } from '@solidjs/web';
 import { cn } from '../utils/cn';
@@ -78,7 +79,7 @@ export interface CardProps extends JSX.HTMLAttributes<HTMLDivElement> {
  * nests interactive controls inside a button/link.
  */
 export function Card(props: CardProps): JSX.Element {
-  const merged = merge(
+  const merged = mergeDefaults(
     { appearance: 'outlined' as CardAppearance, orientation: 'vertical' as CardOrientation, collapse: '28rem', dense: false },
     props,
   );

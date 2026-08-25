@@ -1,4 +1,5 @@
-import { type JSX, Show, splitProps } from 'solid-js';
+import { Show, omit } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
 import { Tooltip } from '../ui/tooltip';
@@ -7,7 +8,9 @@ import { Separator } from '../ui/separator';
 export interface CheckpointProps extends JSX.HTMLAttributes<HTMLDivElement> {}
 
 export function Checkpoint(props: CheckpointProps) {
-  const [local, rest] = splitProps(props, ['class', 'children']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'class', 'children');
   return (
     <div
       class={cn(

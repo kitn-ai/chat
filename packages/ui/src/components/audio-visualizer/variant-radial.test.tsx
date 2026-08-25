@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, flush as flushSync } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { RadialVisualizer } from './variant-radial';
 import { defaultRadialBarCount } from './sizes';
@@ -162,6 +162,7 @@ describe('RadialVisualizer', () => {
     expect(seen.map((s) => s.value())).toEqual([0, 0.5, 1, 0]);
 
     setBands([1, 0, 0.25, 0.75]);
+    flushSync(); // V2-FLUSH: commit the staged write
     await flush();
 
     // This is the streaming-audio case <Index> exists for: bands change on
@@ -239,6 +240,7 @@ describe('RadialVisualizer barCount divisibility warning', () => {
     expect(warn).toHaveBeenCalledTimes(1);
 
     setCls('b');
+    flushSync(); // V2-FLUSH: commit the staged write
     await flush();
 
     expect(warn).toHaveBeenCalledTimes(1);
@@ -270,6 +272,7 @@ describe('RadialVisualizer frozen and live sequencing', () => {
     expect(isFramePending()).toBe(false);
 
     advance(5000);
+    flushSync(); // V2-FLUSH: commit the staged frame writes
     expect(bars(container).map((b) => b.dataset.kaiHighlighted)).toEqual(initial);
   });
 
@@ -282,6 +285,7 @@ describe('RadialVisualizer frozen and live sequencing', () => {
     expect(initial).toEqual(['true', 'false', 'true', 'false', 'true', 'false', 'true', 'false']);
 
     setCls('b');
+    flushSync(); // V2-FLUSH: commit the staged write
     await flush();
 
     expect(bars(container).map((b) => b.dataset.kaiHighlighted)).toEqual(initial);
@@ -296,6 +300,7 @@ describe('RadialVisualizer frozen and live sequencing', () => {
     ]);
 
     advance(500); // the listening interval
+    flushSync(); // V2-FLUSH: commit the staged frame writes
     expect(bars(container).map((b) => b.dataset.kaiHighlighted)).toEqual([
       'false', 'true', 'false', 'true', 'false', 'true', 'false', 'true',
     ]);
@@ -314,6 +319,7 @@ describe('RadialVisualizer frozen and live sequencing', () => {
     ]);
 
     advance(500);
+    flushSync(); // V2-FLUSH: commit the staged frame writes
 
     // Same closures as above, called again: they must reflect the new tick.
     expect(seen.map((s) => s.highlighted())).toEqual([
@@ -332,6 +338,7 @@ describe('RadialVisualizer frozen and live sequencing', () => {
     expect(host.className).not.toContain('animate-spin');
 
     advance(5000);
+    flushSync(); // V2-FLUSH: commit the staged frame writes
     bars(container).forEach((b) => expect(b.dataset.kaiHighlighted).toBe('true'));
     expect(host.className).not.toContain('animate-spin');
   });

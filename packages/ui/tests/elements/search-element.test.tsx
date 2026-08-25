@@ -1,3 +1,4 @@
+import { flush as flushSync } from 'solid-js';
 import { vi } from 'vitest';
 import '../../src/elements/search';
 
@@ -9,6 +10,7 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 const typeInto = (input: HTMLInputElement, value: string) => {
   input.value = value;
   input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 };
 
 test('renders a leading search icon and the default placeholder', async () => {
@@ -42,6 +44,7 @@ test('typing fires a single debounced kai-search after a burst', async () => {
     // Nothing fires until the debounce window elapses.
     expect(events).toEqual([]);
     vi.advanceTimersByTime(200);
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
     // One event after the burst, carrying the latest value.
     expect(events).toEqual(['abc']);
   } finally {
@@ -67,6 +70,7 @@ test('a clear button appears when non-empty; clicking it empties + fires kai-sea
   const events: string[] = [];
   el.addEventListener('kai-search', (e) => events.push((e as CustomEvent<{ value: string }>).detail.value));
   clearBtn.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
 
   expect(el.value).toBe('');
@@ -87,6 +91,7 @@ test('Enter fires kai-submit with the current value', async () => {
   let submitted: string | undefined;
   el.addEventListener('kai-submit', (e) => { submitted = (e as CustomEvent<{ value: string }>).detail.value; });
   input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(submitted).toBe('query');
 

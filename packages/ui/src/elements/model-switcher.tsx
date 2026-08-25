@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount } from 'solid-js';
+import { createSignal, onCleanup, onSettled } from 'solid-js';
 import { defineWebComponent } from './define';
 import { ModelSwitcher } from '../components/model-switcher';
 import { wireDisclosure } from './disclosure';
@@ -84,17 +84,20 @@ defineWebComponent<Props, Events>('kai-model-switcher', {
   disabled: undefined,
 }, (props, ctx) => {
   const { dispatch, element, flag } = ctx;
-  let api: DropdownController | undefined;
+  // V2-PORT: a reactive signal, not a plain `let` — the disclosure/controller
+  // effects track it, and ownedWrite sanctions the synchronous hand-up from
+  // the primitive's body (see elements/tool.tsx, the same fix).
+  const [api, setApi] = createSignal<DropdownController | undefined>(undefined, { ownedWrite: true });
 
   // The standard overlay surface: settable+reflecting `open`, kai-open-change,
   // show/hide/toggle, disabled-gating. See ./disclosure. When <=1 model the inner
-  // Dropdown never mounts, so `api` stays undefined and these methods no-op.
-  wireDisclosure(ctx, () => api, () => props.open);
+  // Dropdown never mounts, so `api()` stays undefined and these methods no-op.
+  wireDisclosure(ctx, api, () => props.open);
 
   // Read declarative <kai-model> children from light DOM.
   // Shadow DOM with no <slot> suppresses them visually — they're invisible data carriers.
   const [slottedModels, setSlottedModels] = createSignal<ModelOption[]>([]);
-  onMount(() => {
+  onSettled(() => {
     const read = () => {
       const nodes = [...element.querySelectorAll('kai-model')];
       setSlottedModels(nodes.map(parseKaiModelElement));
@@ -102,7 +105,8 @@ defineWebComponent<Props, Events>('kai-model-switcher', {
     read();
     const observer = new MutationObserver(read);
     observer.observe(element, { childList: true, attributes: true, subtree: true });
-    onCleanup(() => observer.disconnect());
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => observer.disconnect();
   });
 
   // Merge prop models (first) with declarative children (after).
@@ -115,7 +119,7 @@ defineWebComponent<Props, Events>('kai-model-switcher', {
       onModelChange={(modelId) => dispatch('kai-model-change', { modelId })}
       defaultOpen={flag('defaultOpen')}
       disabled={flag('disabled')}
-      controllerRef={(a) => (api = a)}
+      controllerRef={(a) => setApi(a)}
     />
   );
 });

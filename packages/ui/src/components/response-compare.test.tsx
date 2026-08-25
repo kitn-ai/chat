@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent, waitFor } from '@solidjs/testing-library';
-import { createRoot, createSignal } from 'solid-js';
+import { createRoot, createSignal, flush } from 'solid-js';
 import { ResponseCompare, useResolved } from './response-compare';
 import {
   normalizeCandidates,
@@ -137,32 +137,36 @@ describe('isAnyStreaming', () => {
 
 describe('useResolved — precedence (prop > local optimistic > none)', () => {
   it('starts unresolved; setLocal flips it optimistically', () => {
-    createRoot((dispose) => {
-      const [d] = createSignal({ k: 1 });
-      const c = useResolved<CompareSelection>({ prop: () => undefined, data: d });
+    // V2-SHAPE: create inside the root, DRIVE outside it (owned-scope write guard).
+    const [d] = createSignal({ k: 1 });
+    const [c, dispose] = createRoot((dd) =>
+      [useResolved<CompareSelection>({ prop: () => undefined, data: d }), dd] as const);
+    {
       expect(c.isResolved()).toBe(false);
       expect(c.isOptimistic()).toBe(false);
       c.setLocal({ chosenId: 'a', rejectedIds: ['b'] });
+      flush(); // V2-FLUSH
       expect(c.isResolved()).toBe(true);
       expect(c.isOptimistic()).toBe(true);
       expect(c.value()?.chosenId).toBe('a');
       dispose();
-    });
+    }
   });
 
   it('the prop wins over a local flip and is NOT optimistic', () => {
-    createRoot((dispose) => {
-      const [d] = createSignal({ k: 1 });
-      const [prop] = createSignal<CompareSelection | undefined>({
-        chosenId: 'b',
-        rejectedIds: ['a'],
-      });
-      const c = useResolved<CompareSelection>({ prop, data: d });
-      c.setLocal({ chosenId: 'a', rejectedIds: ['b'] });
-      expect(c.value()?.chosenId).toBe('b'); // prop wins
-      expect(c.isOptimistic()).toBe(false); // not a session flip
-      dispose();
+    // V2-SHAPE: create inside the root, DRIVE outside it (owned-scope write guard).
+    const [d] = createSignal({ k: 1 });
+    const [prop] = createSignal<CompareSelection | undefined>({
+      chosenId: 'b',
+      rejectedIds: ['a'],
     });
+    const [c, dispose] = createRoot((dd) =>
+      [useResolved<CompareSelection>({ prop, data: d }), dd] as const);
+    c.setLocal({ chosenId: 'a', rejectedIds: ['b'] });
+    flush(); // V2-FLUSH
+    expect(c.value()?.chosenId).toBe('b'); // prop wins
+    expect(c.isOptimistic()).toBe(false); // not a session flip
+    dispose();
   });
 
   it('a fresh data identity clears the optimistic flip but NOT the prop', async () => {
@@ -181,12 +185,15 @@ describe('useResolved — precedence (prop > local optimistic > none)', () => {
     ctrl.setLocal({ chosenId: 'a', rejectedIds: ['b'] });
     await waitFor(() => expect(getByTestId('resolved').textContent).toBe('true'));
     setD({ k: 2 });
+    flush(); // V2-FLUSH: commit the staged write
     await waitFor(() => expect(getByTestId('resolved').textContent).toBe('false'));
 
     // prop survives a new data ref
     setProp({ chosenId: 'b', rejectedIds: ['a'] });
+    flush(); // V2-FLUSH: commit the staged write
     await waitFor(() => expect(ctrl.value()?.chosenId).toBe('b'));
     setD({ k: 3 });
+    flush(); // V2-FLUSH: commit the staged write
     expect(ctrl.value()?.chosenId).toBe('b');
   });
 });
@@ -221,6 +228,7 @@ describe('ResponseCompare — selection commits + single-shot', () => {
       <ResponseCompare data={data()} onSelect={onSelect} />
     ));
     fireEvent.click(getAllByText('Pick this')[0]);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(1));
     const sel = onSelect.mock.calls[0][0] as CompareSelection;
     expect(sel.chosenId).toBe('a');
@@ -237,6 +245,7 @@ describe('ResponseCompare — selection commits + single-shot', () => {
       <ResponseCompare data={data()} onSelect={onSelect} />
     ));
     fireEvent.click(getAllByText('Pick this')[1]);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(1));
     const sel = onSelect.mock.calls[0][0] as CompareSelection;
     expect(sel.chosenId).toBe('b');
@@ -249,6 +258,7 @@ describe('ResponseCompare — selection commits + single-shot', () => {
       <ResponseCompare data={data()} onSelect={onSelect} />
     ));
     fireEvent.click(getAllByText('Pick this')[0]);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(1));
     // the pick buttons are gone after collapse; even if a leftover were clicked,
     // resolution is single-shot. Re-query and click anything still present.
@@ -283,6 +293,7 @@ describe('ResponseCompare — streaming gates the pick', () => {
 
     // settle: fresh data ref with no streaming
     setD(data({ candidates: [candA(), candB()] }));
+    flush(); // V2-FLUSH: commit the staged write
     await waitFor(() => expect(buttons().every((b) => !b.disabled)).toBe(true));
     // onReady fires once both have settled
     await waitFor(() => expect(onReady).toHaveBeenCalled());
@@ -324,8 +335,10 @@ describe('ResponseCompare — selection prop re-hydrates the collapsed winner', 
       <ResponseCompare data={d()} />
     ));
     fireEvent.click(getAllByText('Pick this')[0]);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await waitFor(() => expect(queryByRole('radiogroup')).toBeNull());
     setD(data()); // fresh identity
+    flush(); // V2-FLUSH: commit the staged write
     await waitFor(() => expect(queryByRole('radiogroup')).not.toBeNull());
   });
 });
@@ -372,11 +385,13 @@ describe('ResponseCompare — keyboard a11y', () => {
 
     // ArrowRight → focus moves to B
     fireEvent.keyDown(group, { key: 'ArrowRight' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await waitFor(() => expect(radios[1].getAttribute('tabindex')).toBe('0'));
     expect(radios[0].getAttribute('tabindex')).toBe('-1');
 
     // Enter selects the focused column (B)
     fireEvent.keyDown(group, { key: 'Enter' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(1));
     expect((onSelect.mock.calls[0][0] as CompareSelection).chosenId).toBe('b');
   });
@@ -387,6 +402,7 @@ describe('ResponseCompare — keyboard a11y', () => {
       <ResponseCompare data={data()} onSelect={onSelect} />
     ));
     fireEvent.keyDown(getByRole('radiogroup'), { key: ' ' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(1));
     expect((onSelect.mock.calls[0][0] as CompareSelection).chosenId).toBe('a');
   });

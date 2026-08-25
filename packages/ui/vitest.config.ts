@@ -92,6 +92,15 @@ export default defineConfig({
         find: /^@kitn\.ai\/ui\/schemas$/,
         replacement: path.resolve(dirname, 'src/schemas/index.ts'),
       },
+      // V2-PORT: route the suite's testing-library imports through a shim that
+      // flush()es the Solid 2 staged-write queue after render/fireEvent/cleanup,
+      // restoring the 1.x synchronous observable contract the assertions were
+      // written against. See src/test-utils/testing-library-flush.ts. Anchored
+      // so subpath imports (if any ever appear) keep resolving to the real lib.
+      {
+        find: /^@solidjs\/testing-library$/,
+        replacement: path.resolve(dirname, 'src/test-utils/testing-library-flush.ts'),
+      },
     ],
   },
   test: {

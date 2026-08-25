@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { onMount, onCleanup } from 'solid-js';
+import { onSettled, onCleanup } from 'solid-js';
 import './register'; // side effect: registers <kai-chat>, <kai-conversations>, <kai-prompt-input>
 import { attachKaiActions } from '../stories/docs/story-actions';
 import type { AttachmentData } from '../components/attachments';
@@ -8,7 +8,7 @@ import type { ComposerDoc } from '../primitives/composer-model';
 import { argTypesFor, specDescription } from '../stories/docs/element-controls';
 
 // The web components are custom DOM elements, so declare the tags for JSX.
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -49,7 +49,11 @@ interface PromptInputEl extends HTMLElement {
 /** Live demo of the actual `<kai-prompt-input>` custom element (Shadow DOM and all). */
 function PromptInputElement(props: { webSearch?: boolean; voice?: boolean; attachments?: AttachmentData[]; args?: Record<string, unknown> }) {
   let el: PromptInputEl | undefined;
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers) d(); });
+  onSettled(() => {
     if (!el) return;
     // Default fixed data
     el.placeholder = 'Ask anything...';
@@ -70,7 +74,7 @@ function PromptInputElement(props: { webSearch?: boolean; voice?: boolean; attac
     }
     // Log every declared CustomEvent (kai-submit, kai-value-change, kai-web-search,
     // kai-voice, kai-suggestion-click, …) to the Actions panel.
-    onCleanup(attachKaiActions(el));
+    settledDisposers.push(attachKaiActions(el));
   });
   return (
     <kai-prompt-input
@@ -99,7 +103,7 @@ const HTML_SNIPPET = `<!-- Works in any framework or plain HTML -->
 </script>`;
 
 const SOLID_SNIPPET = `import '@kitn.ai/ui/elements'; // registers the custom elements
-import { onMount } from 'solid-js';
+import { onSettled } from 'solid-js';
 
 function Composer() {
   let el: HTMLElement & {
@@ -109,7 +113,7 @@ function Composer() {
     loading?: boolean;
     suggestions?: string[];
   };
-  onMount(() => {
+  onSettled(() => {
     el.placeholder = 'Ask anything...';
     el.suggestions = ['Summarize this thread', 'Draft a reply'];
   });
@@ -237,11 +241,15 @@ export const WithCustomToolbarActions: Story = {
   name: 'Custom Toolbar Actions (kai-action)',
   render: () => {
     let el: HTMLElement | undefined;
-    onMount(() => {
+    // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+    // and register them once at the owner scope (same lifecycle as 1.x).
+    const settledDisposers2: (() => void)[] = [];
+    onCleanup(() => { for (const d of settledDisposers2) d(); });
+    onSettled(() => {
       if (!el) return;
       el.setAttribute('placeholder', 'Ask anything...');
       // Log every declared event, incl. kai-toolbar-action from the <kai-action> children.
-      onCleanup(attachKaiActions(el));
+      settledDisposers2.push(attachKaiActions(el));
     });
     return (
       <div style={{ padding: '16px', width: '100%' }}>
@@ -324,12 +332,16 @@ export const WithEntityPills: Story = {
   name: 'Entity Pills (/ skills, @ agents)',
   render: () => {
     let el: PromptInputEl | undefined;
-    onMount(() => {
+    // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+    // and register them once at the owner scope (same lifecycle as 1.x).
+    const settledDisposers3: (() => void)[] = [];
+    onCleanup(() => { for (const d of settledDisposers3) d(); });
+    onSettled(() => {
       if (!el) return;
       el.placeholder = 'Type / for a skill or @ for an agent…';
       el.triggers = ENTITY_TRIGGERS;
       // Log every declared event (kai-submit carries the structured doc + entities).
-      onCleanup(attachKaiActions(el));
+      settledDisposers3.push(attachKaiActions(el));
     });
     return (
       <div style={{ padding: '16px', width: '100%' }}>
@@ -350,7 +362,11 @@ export const Prefilled: Story = {
   name: 'Prefilled (pills)',
   render: () => {
     let el: PromptInputEl | undefined;
-    onMount(() => {
+    // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+    // and register them once at the owner scope (same lifecycle as 1.x).
+    const settledDisposers4: (() => void)[] = [];
+    onCleanup(() => { for (const d of settledDisposers4) d(); });
+    onSettled(() => {
       if (!el) return;
       el.triggers = ENTITY_TRIGGERS;
       el.value = [
@@ -363,7 +379,7 @@ export const Prefilled: Story = {
         { type: 'text', text: '.' },
       ];
       // Log every declared event (kai-submit carries the structured doc + entities).
-      onCleanup(attachKaiActions(el));
+      settledDisposers4.push(attachKaiActions(el));
     });
     return (
       <div style={{ padding: '16px', width: '100%' }}>

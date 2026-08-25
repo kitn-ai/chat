@@ -10,6 +10,7 @@
  * below each tier's natural width and assert the host's bounding box never
  * overflows its parent horizontally) is a browser-only concern for the IVP.
  */
+import { flush } from 'solid-js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, waitFor } from '@solidjs/testing-library';
@@ -141,6 +142,7 @@ describe('AudioVisualizer fit-to-container scaling', () => {
 
     ro.cb([entry(inner, 200, 80), entry(outer, 500)]);
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     expect(inner.style.transform).toBe('');
     expect(outer.style.height).toBe('');

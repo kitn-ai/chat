@@ -1,17 +1,18 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { onMount, onCleanup } from 'solid-js';
+import { onSettled, onCleanup } from 'solid-js';
 import './register'; // side-effect: registers kai-avatar, kai-badge, kai-tooltip, kai-button, …
 import { attachKaiActions } from '../stories/docs/story-actions';
 
 // Small helper for stories below: wire a kai-* element's declared CustomEvents to
 // the Actions panel from a `ref`, cleaned up on unmount.
-const withActions = (e: Element) => onMount(() => onCleanup(attachKaiActions(e as HTMLElement)));
+const withActions = (e: Element) => onSettled(() => { // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return attachKaiActions(e as HTMLElement); }); // V2-PORT (R2): braced — a non-function return crashes dev
 
 // A purple square as a tiny offline-safe avatar image (proves the <img> path).
 const AVATAR_SRC =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='8' fill='%234f46e5'/%3E%3C/svg%3E";
 
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent, waitFor } from '@solidjs/testing-library';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { Toast, ToastRegion, type ToastPosition } from './toast';
 import type { ToastItem } from '../primitives/toast-store';
 
@@ -113,6 +113,7 @@ describe('Toast — auto-dismiss', () => {
     render(() => <Toast item={base({ duration: 2000 })} onDismiss={onDismiss} />);
     expect(onDismiss).not.toHaveBeenCalled();
     vi.advanceTimersByTime(2000);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     // presence then unmounts on a microtask (no real animation in jsdom)
     await vi.waitFor(() => expect(onDismiss).toHaveBeenCalledWith('timeout'));
   });
@@ -121,6 +122,7 @@ describe('Toast — auto-dismiss', () => {
     const onDismiss = vi.fn();
     render(() => <Toast item={base({ duration: 0 })} onDismiss={onDismiss} />);
     vi.advanceTimersByTime(60_000);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onDismiss).not.toHaveBeenCalled();
   });
 
@@ -131,11 +133,13 @@ describe('Toast — auto-dismiss', () => {
     ));
     const pill = getByRole('status');
     vi.advanceTimersByTime(1000);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     fireEvent.pointerEnter(pill);          // pause with ~1000ms left
     vi.advanceTimersByTime(5000);          // time passes, paused → no dismiss
     expect(onDismiss).not.toHaveBeenCalled();
     fireEvent.pointerLeave(pill);          // resume
     vi.advanceTimersByTime(999);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onDismiss).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);             // remaining ~1000ms elapses
     await vi.waitFor(() => expect(onDismiss).toHaveBeenCalledWith('timeout'));
@@ -148,9 +152,12 @@ describe('Toast — auto-dismiss', () => {
     vi.advanceTimersByTime(5000);          // paused from mount → never starts
     expect(onDismiss).not.toHaveBeenCalled();
     setPaused(false);                      // stack un-hovered → resume from full remaining
+    flush(); // V2-FLUSH: commit the staged write
     vi.advanceTimersByTime(1999);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onDismiss).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await vi.waitFor(() => expect(onDismiss).toHaveBeenCalledWith('timeout'));
   });
 });
@@ -162,6 +169,7 @@ describe('Toast — close + action', () => {
       <Toast item={base({ duration: 0 })} onDismiss={onDismiss} />
     ));
     fireEvent.click(getByLabelText('Dismiss'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await waitFor(() => expect(onDismiss).toHaveBeenCalledWith('close'));
   });
 
@@ -177,6 +185,7 @@ describe('Toast — close + action', () => {
       />
     ));
     fireEvent.click(getByText('Undo'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(handler).toHaveBeenCalled();
     expect(onAction).toHaveBeenCalledWith('Undo');
     await waitFor(() => expect(onDismiss).toHaveBeenCalledWith('action'));
@@ -192,9 +201,11 @@ describe('Toast — close + action', () => {
       />
     ));
     fireEvent.click(getByText('Keep'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(handler).toHaveBeenCalled();
     // give the microtask queue a chance — it must NOT dismiss
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onDismiss).not.toHaveBeenCalled();
     expect(getByText('Keep')).toBeInTheDocument();
   });
@@ -235,6 +246,7 @@ describe('ToastRegion — stacking + queue + a11y', () => {
     expect(queryByText('A')).toBeNull();
     // remove C → A promotes
     setItems((l) => l.filter((t) => t.id !== 'c'));
+    flush(); // V2-FLUSH: commit the staged write
     await waitFor(() => expect(queryByText('A')).toBeInTheDocument());
   });
 
@@ -244,6 +256,7 @@ describe('ToastRegion — stacking + queue + a11y', () => {
       <ToastRegion toasts={[base({ id: 'x', message: 'X', duration: 0 })]} onDismiss={onDismiss} />
     ));
     fireEvent.click(getByLabelText('Dismiss'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await waitFor(() => expect(onDismiss).toHaveBeenCalledWith('x', 'close'));
   });
 
@@ -394,8 +407,10 @@ describe('ToastRegion — collapsed stacking', () => {
     const region = getByRole('region');
     expect(region.dataset.expanded).toBeUndefined();
     fireEvent.pointerEnter(region);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await waitFor(() => expect(region.dataset.expanded).toBe(''));
     fireEvent.pointerLeave(region);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await waitFor(() => expect(region.dataset.expanded).toBeUndefined());
   });
 
@@ -403,6 +418,7 @@ describe('ToastRegion — collapsed stacking', () => {
     const { getByRole } = render(() => <ToastRegion toasts={items(3)} stack="collapsed" />);
     const region = getByRole('region');
     fireEvent.focusIn(region);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await waitFor(() => expect(region.dataset.expanded).toBe(''));
   });
 

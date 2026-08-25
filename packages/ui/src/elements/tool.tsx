@@ -50,7 +50,9 @@ defineWebComponent<Props, Events>('kai-tool', {
   // rendering disagreed. Making the controller reactive is the whole fix: the effects
   // re-run the moment it lands. `Tool` already tracks its own copy this way internally.
   // Pinned by the ordering rows in tests/elements/tool.test.tsx.
-  const [api, setApi] = createSignal<CollapsibleController>();
+  // V2-PORT: handed up synchronously from Collapsible's body — ownedWrite is the
+  // sanctioned opt-in for that owned-scope write (see components/tool.tsx).
+  const [api, setApi] = createSignal<CollapsibleController | undefined>(undefined, { ownedWrite: true });
 
   // The standard disclosure surface: settable+reflecting `open`, kai-open-change,
   // show/hide/toggle, disabled-gating. See ./disclosure. This is the SOLE emitter

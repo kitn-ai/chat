@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import solidPlugin from 'vite-plugin-solid';
+import solidPlugin from '@solidjs/vite-plugin' // V2-PORT: the Solid 2 compiler plugin;
 import { resolve } from 'node:path';
 
 // The card JSON Schemas as a JS module (@kitn.ai/ui/schemas). Data only: the
@@ -30,6 +30,6 @@ export default defineConfig({
       formats: ['es'],
       fileName: () => 'schemas.js',
     },
-    rollupOptions: { external: ['solid-js', 'solid-js/web', 'solid-js/store'] },
+    rollupOptions: { external: ['solid-js', '@solidjs/web'] /* V2-PORT: the v2 package split */ },
   },
 });

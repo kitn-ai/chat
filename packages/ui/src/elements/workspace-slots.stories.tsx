@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { onMount, onCleanup } from 'solid-js';
+import { onSettled, onCleanup } from 'solid-js';
 import { Sparkles } from 'lucide-solid';
 import './chat-workspace';
 import './conversation-list';
@@ -51,7 +51,11 @@ function SlotsDemo() {
   let ws: El | undefined;
   let rail: El | undefined;
   let chat: El | undefined;
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers) d(); });
+  onSettled(() => {
     if (rail) {
       rail.groups = groups;
       rail.conversations = conversations;
@@ -65,7 +69,7 @@ function SlotsDemo() {
       // Set as a property: the generated attribute typings regenerate with the
       // supervisor's build:api pass, and properties are the contract anyway.
       ws.drawerBelow = 560;
-      onCleanup(attachKaiActions(ws)); // logs kai-aside-toggle / kai-aside-resize
+      settledDisposers.push(attachKaiActions(ws)); // logs kai-aside-toggle / kai-aside-resize
     }
   });
   return (

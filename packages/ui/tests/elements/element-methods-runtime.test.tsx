@@ -12,6 +12,7 @@
  *
  * Derived from element-meta.json, not a hand-kept list.
  */
+import { flush } from 'solid-js';
 import '../../src/elements/register-impl';
 import '../../src/elements/register';
 import { readFileSync } from 'node:fs';
@@ -50,6 +51,7 @@ test('every method the generated types promise exists on the upgraded element', 
     document.body.append(el);
     // The facade callback runs on mount; give Solid's render a turn to settle.
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     for (const m of methods!) {
       if (typeof el[m.name] !== 'function') missing.push(`${tag}.${m.name}`);
     }

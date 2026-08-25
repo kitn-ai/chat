@@ -1,3 +1,4 @@
+import { createSignal } from 'solid-js';
 import { defineWebComponent } from './define';
 import { Reasoning, ReasoningTrigger, ReasoningContent, type ReasoningController } from '../components/reasoning';
 import { ChatConfig, useChatConfig } from '../primitives/chat-config';
@@ -48,12 +49,15 @@ defineWebComponent<Props, Events>('kai-reasoning', {
 }, (props, ctx) => {
   const { flag } = ctx;
   const outer = useChatConfig();
-  let api: ReasoningController | undefined;
+  // V2-PORT: a reactive signal, not a plain `let` — the disclosure/controller
+  // effects track it, and ownedWrite sanctions the synchronous hand-up from
+  // the primitive's body (see elements/tool.tsx, the same fix).
+  const [api, setApi] = createSignal<ReasoningController | undefined>(undefined, { ownedWrite: true });
 
   // The standard disclosure surface: settable+reflecting `open`, kai-open-change,
   // show/hide/toggle, disabled-gating. See ./disclosure. This is the SOLE emitter
   // of kai-open-change — we no longer dispatch it from Reasoning's onOpenChange.
-  wireDisclosure(ctx, () => api, () => props.open);
+  wireDisclosure(ctx, api, () => props.open);
 
   return (
     <ChatConfig portalMount={outer.portalMount()}>
@@ -61,7 +65,7 @@ defineWebComponent<Props, Events>('kai-reasoning', {
         defaultOpen={flag('defaultOpen')}
         isStreaming={flag('streaming')}
         disabled={flag('disabled')}
-        controllerRef={(a) => (api = a)}
+        controllerRef={(a) => setApi(a)}
       >
         <ReasoningTrigger>{props.label}</ReasoningTrigger>
         <ReasoningContent markdown={flag('markdown')}>{props.text}</ReasoningContent>

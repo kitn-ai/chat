@@ -4,8 +4,10 @@
 // `kai-card` events through an optional `policy`. The raw events keep bubbling past
 // <kai-cards> (composed) so document-level listeners still work. Unknown types render
 // the Solid CardFallback inline and emit a contract `error`.
-import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
-import { Dynamic } from 'solid-js/web';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onSettled, untrack } from 'solid-js';
+import { deferApply } from '../utils/defer-apply'; // V2-PORT: on(...,{defer:true}) replacement
+import type { JSX } from '@solidjs/web';
+import { Dynamic } from '@solidjs/web';
 import { defineWebComponent } from './define';
 import type { CardEnvelope, CardEvent, CardPolicy, CardResolution } from '../primitives/card-contract';
 import { CARD_EVENT_NAME, emitCardEvent, routeCardEvent } from '../primitives/card-routing';
@@ -128,21 +130,36 @@ function CardSlot(props: {
   });
   const invalid = () => report()?.tier === 'hard';
 
-  // Set object/string props as DOM properties on the custom element (reactive).
-  createEffect(() => {
-    if (!ref) return;
-    (ref as unknown as { data: unknown }).data = props.envelope.data;
-    (ref as unknown as { cardId: string }).cardId = props.envelope.id;
-    if (props.envelope.title != null) (ref as unknown as { heading: string }).heading = props.envelope.title;
-    (ref as unknown as { resolution: unknown }).resolution = props.envelope.resolution;
-    ref.setAttribute('theme', props.theme);
+  // V2-PORT: one place that stamps the envelope onto the child element — called
+  // from the REF (pre-upgrade, the house rule: set WC props in ref callbacks)
+  // AND from the reactive effect below for later envelope changes. Seeding in
+  // the ref matters under v2: this facade's update effect now lands on the
+  // flush AFTER the child's own mount-time effects, so an un-seeded child would
+  // transiently validate undefined data and emit a spurious error event.
+  const applyEnvelope = (el: HTMLElement, env: typeof props.envelope, theme: string): void => {
+    (el as unknown as { data: unknown }).data = env.data;
+    (el as unknown as { cardId: string }).cardId = env.id;
+    if (env.title != null) (el as unknown as { heading: string }).heading = env.title;
+    (el as unknown as { resolution: unknown }).resolution = env.resolution;
+    el.setAttribute('theme', theme);
     // Stable, queryable id so the host's getCard()/resolve() can find this child
     // node without relying on the (private, scalar-only) cardId property reflecting.
-    ref.setAttribute('data-card-id', props.envelope.id);
-  });
-  // Hoist the unknown-type error emit to onMount to avoid side-effect-in-JSX lint issue
+    el.setAttribute('data-card-id', env.id);
+  };
+
+  // Set object/string props as DOM properties on the custom element (reactive).
+  // V2-PORT (R1): the envelope/theme reads are the tracked compute; the `ref`
+  // read and the property/attribute writes are the apply (the ref is
+  // render-produced, so a compute-side read would see undefined at mount).
+  createEffect(
+    () => ({ env: props.envelope, theme: props.theme }),
+    ({ env, theme }) => {
+      if (ref) applyEnvelope(ref, env, theme);
+    },
+  );
+  // Hoist the unknown-type error emit to onSettled to avoid side-effect-in-JSX lint issue
   // and to ensure exactly one error fires.
-  onMount(() => {
+  onSettled(() => {
     if (!props.tag) {
       props.emit({ kind: 'error', cardId: props.envelope.id, message: `Unsupported card type: ${props.envelope.type}` });
     }
@@ -151,18 +168,21 @@ function CardSlot(props: {
   // mount: a consumer re-assigning `el.cards` per stream chunk hands this a new
   // envelope object each time, so an identity-triggered emit would fire per chunk.
   let lastEmitted: string | null = null;
-  createEffect(() => {
-    const r = report();
-    if (!props.tag) return; // an unknown TYPE already reported itself in onMount
-    if (!r || r.ok) {
-      lastEmitted = null;
-      return;
-    }
-    const message = cardValidationMessage(r);
-    if (message === lastEmitted) return;
-    lastEmitted = message;
-    props.emit({ kind: 'error', cardId: props.envelope.id, message });
-  });
+  // V2-PORT: tracked reads in the compute; the dedupe + emit in the apply.
+  createEffect(
+    () => ({ r: report(), tag: props.tag, cardId: props.envelope.id }),
+    ({ r, tag, cardId }) => {
+      if (!tag) return; // an unknown TYPE already reported itself in onSettled
+      if (!r || r.ok) {
+        lastEmitted = null;
+        return;
+      }
+      const message = cardValidationMessage(r);
+      if (message === lastEmitted) return;
+      lastEmitted = message;
+      props.emit({ kind: 'error', cardId, message });
+    },
+  );
 
   return (
     <Show
@@ -173,7 +193,7 @@ function CardSlot(props: {
         <Show
           when={invalid()}
           // SOFT and valid both take this branch: the card renders as it does today.
-          fallback={<Dynamic component={tag()} ref={ref} />}
+          fallback={<Dynamic component={tag()} ref={(el: HTMLElement) => { ref = el; untrack(() => applyEnvelope(el, props.envelope, props.theme)); }} />}
         >
           <CardFallback type={props.envelope.type} cardId={props.envelope.id} reason={report()!.summary} />
         </Show>
@@ -194,13 +214,13 @@ defineWebComponent<Props, Events>(
     // a genuine prop change (mount uses the createSignal seed below), preserving any
     // pending imperative resolution until the consumer supplies a new prop array.
     const [cards, setCards] = createSignal<CardEnvelope[]>(props.cards ?? []);
-    createEffect(on(() => props.cards, (next) => setCards(next ?? []), { defer: true }));
+    createEffect(() => props.cards, deferApply((next: CardEnvelope[] | undefined) => { setCards(next ?? []); }));
 
     // Route children's bubbling kai-card events through the policy. Attached to the host
     // element so composed events from each child's shadow root are caught as they bubble.
     // The handler reads `props.policy` at EVENT time (not mount time) so setting
     // `el.policy` after the element is in the DOM — the standard host pattern — works.
-    onMount(() => {
+    onSettled(() => {
       const handler = (e: Event) => {
         const detail = (e as CustomEvent<CardEvent>).detail;
         routeCardEvent(props.policy ?? {}, detail);
@@ -211,7 +231,8 @@ defineWebComponent<Props, Events>(
         if (resolution) dispatch('kai-card-resolved', { cardId: detail.cardId, resolution });
       };
       element.addEventListener(CARD_EVENT_NAME, handler as EventListener);
-      onCleanup(() => element.removeEventListener(CARD_EVENT_NAME, handler as EventListener));
+      // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => element.removeEventListener(CARD_EVENT_NAME, handler as EventListener);
     });
 
     // ── Imperative API (instance methods on the host) ──────────────────────────

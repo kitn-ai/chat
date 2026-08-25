@@ -13,7 +13,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
 import { ChevronDown } from 'lucide-solid';
@@ -132,6 +132,7 @@ describe('scroll button visibility logic', () => {
       <ScrollButtonUI isAtBottom={() => false} onClick={onClick} />
     ));
     fireEvent.click(getByRole('button', { name: /scroll to bottom/i }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
@@ -143,6 +144,7 @@ describe('scroll button visibility logic', () => {
     const btn = getByRole('button', { name: /scroll to bottom/i });
     expect(btn.className).toMatch(/opacity-100/);
     setAtBottom(true);
+    flush(); // V2-FLUSH: commit the staged write
     expect(btn.className).toMatch(/opacity-0/);
   });
 });

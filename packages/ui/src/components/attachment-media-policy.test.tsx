@@ -29,6 +29,7 @@
  * and re-introducing a prefix switch here turns it red (a prefix switch calls
  * `application/json` a document; the policy calls it text).
  */
+import { flush } from 'solid-js';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup } from '@solidjs/testing-library';
@@ -347,8 +348,10 @@ describe('the thread previews attachments at a size a human can see', () => {
     vi.useFakeTimers();
     try {
       trigger.focus();
+      flush(); // V2-FLUSH: v2 stages writes; commit before asserting
       expect(document.activeElement).toBe(trigger);
       vi.advanceTimersByTime(50);
+      flush(); // V2-FLUSH: v2 stages writes; commit before asserting
       // The card portals out of `container`, so look at the document.
       expect(document.body.textContent).toContain('application/pdf');
     } finally {

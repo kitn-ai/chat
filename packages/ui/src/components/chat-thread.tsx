@@ -1,4 +1,4 @@
-import { createSignal, createEffect, createMemo, For, Show, onMount } from 'solid-js';
+import { createSignal, createEffect, createMemo, For, Show, onSettled } from 'solid-js';
 import { ChatConfig, useChatConfig } from '../primitives/chat-config';
 import { type ComposerDoc, normalizeValue, serializeToText } from '../primitives/composer-model';
 import { ChatContainer, ChatContainerContent, ChatContainerScrollAnchor } from './chat-container';
@@ -242,8 +242,8 @@ export function ChatThread(props: ChatThreadProps) {
   // lives in `internal` so the user's (string) edits replace it without a fight.
   const current = (): string | ComposerDoc =>
     typeof props.value === 'string' ? props.value : internal();
-  createEffect(() => {
-    const v = props.value;
+  // V2-PORT: tracked prop read in the compute; the write in the apply.
+  createEffect(() => props.value, (v) => {
     if (v != null && typeof v !== 'string') setInternal(v);
   });
   const handleChange = (v: string) => { setInternal(v); props.onValueChange?.(v); };
@@ -265,7 +265,7 @@ export function ChatThread(props: ChatThreadProps) {
   const showScrollButton = () => props.scrollButton !== false;
 
   // Hand the imperative controller to the facade once mounted (rootEl is set).
-  onMount(() => {
+  onSettled(() => {
     props.controllerRef?.({
       focus: (options) =>
         rootEl

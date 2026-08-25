@@ -1,3 +1,4 @@
+import { flush as flushSync } from 'solid-js';
 import '../../src/elements/feedback-bar';
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -22,6 +23,7 @@ test('clicking thumbs-up emits feedback event with value "helpful"', async () =>
   const thumbsUp = el.shadowRoot!.querySelector<HTMLButtonElement>('button[aria-label="Helpful"]');
   expect(thumbsUp).not.toBeNull();
   thumbsUp!.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(detail).not.toBeNull();
   expect(detail!.value).toBe('helpful');
@@ -39,6 +41,7 @@ test('clicking thumbs-down emits feedback event with value "not-helpful"', async
   const thumbsDown = el.shadowRoot!.querySelector<HTMLButtonElement>('button[aria-label="Not helpful"]');
   expect(thumbsDown).not.toBeNull();
   thumbsDown!.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(detail).not.toBeNull();
   expect(detail!.value).toBe('not-helpful');
@@ -55,6 +58,7 @@ test('clicking close emits close event (unchanged)', async () => {
   const closeBtn = el.shadowRoot!.querySelector<HTMLButtonElement>('button[aria-label="Close"]');
   expect(closeBtn).not.toBeNull();
   closeBtn!.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(closed).toBe(true);
 });
@@ -69,6 +73,7 @@ test('old helpful event is no longer emitted (breaking change)', async () => {
 
   const thumbsUp = el.shadowRoot!.querySelector<HTMLButtonElement>('button[aria-label="Helpful"]');
   thumbsUp!.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(helpfulFired).toBe(false);
 });
@@ -83,6 +88,7 @@ test('old nothelpful event is no longer emitted (breaking change)', async () => 
 
   const thumbsDown = el.shadowRoot!.querySelector<HTMLButtonElement>('button[aria-label="Not helpful"]');
   thumbsDown!.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(nothelpfulFired).toBe(false);
 });

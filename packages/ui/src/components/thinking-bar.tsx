@@ -1,4 +1,5 @@
-import { type JSX, splitProps, Show } from 'solid-js';
+import { omit, Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { TextShimmer } from './text-shimmer';
 import { ChevronRight } from 'lucide-solid';
@@ -12,7 +13,8 @@ export interface ThinkingBarProps {
 }
 
 function ThinkingBar(props: ThinkingBarProps) {
-  const [local] = splitProps(props, ['class', 'text', 'onStop', 'stopLabel', 'onClick']);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = props;
 
   const text = () => local.text ?? 'Thinking';
   const stopLabel = () => local.stopLabel ?? 'Answer now';

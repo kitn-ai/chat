@@ -89,8 +89,8 @@ defineWebComponent<Props, Events>('kai-segmented', {
   // Reflect internal value → the `[value]` host attribute (for `:host([value])`).
   // The guard against the live attribute keeps the write-back the reflect triggers
   // (attributeChangedCallback → setter) from looping.
-  createEffect(() => {
-    const v = value();
+  // V2-PORT: the value signal is the tracked read; the attribute writes are the apply.
+  createEffect(value, (v) => {
     if (v) {
       if (element.getAttribute('value') !== v) element.setAttribute('value', v);
     } else if (element.hasAttribute('value')) {

@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { WorkspaceShell, type WorkspaceShellController } from './workspace-shell';
 
@@ -31,6 +31,7 @@ globalThis.ResizeObserver = class {
 /** Fire every live ResizeObserver with a fake host width. */
 function fireResize(width: number) {
   for (const cb of roCallbacks) cb([{ contentRect: { width } }]);
+  flush(); // V2-FLUSH: the observer handler's writes are staged; commit
 }
 
 afterEach(() => { cleanup(); roCallbacks.clear(); });
@@ -105,9 +106,11 @@ describe('collapse: controlled and uncontrolled per aside', () => {
     ));
     expect(region(container, 'start')).toBeTruthy();
     api.collapseAside('start');
+    flush(); // V2-FLUSH: commit the staged controller write
     expect(region(container, 'start')).toBeNull();
     expect(onAsideToggle).toHaveBeenLastCalledWith({ side: 'start', collapsed: true });
     api.expandAside('start');
+    flush(); // V2-FLUSH: commit the staged controller write
     expect(region(container, 'start')).toBeTruthy();
     expect(onAsideToggle).toHaveBeenLastCalledWith({ side: 'start', collapsed: false });
   });
@@ -121,6 +124,7 @@ describe('collapse: controlled and uncontrolled per aside', () => {
     ));
     expect(region(container, 'start')).toBeNull();
     api.toggleAside('start');
+    flush(); // V2-FLUSH: commit the staged controller write
     expect(region(container, 'start')).toBeTruthy();
   });
 
@@ -139,11 +143,13 @@ describe('collapse: controlled and uncontrolled per aside', () => {
       </WorkspaceShell>
     ));
     api.collapseAside('start');
+    flush(); // V2-FLUSH: commit the staged controller write
     // Controlled: the DOM does not move until the app flips its own state...
     expect(region(container, 'start')).toBeTruthy();
     expect(onAsideToggle).toHaveBeenLastCalledWith({ side: 'start', collapsed: true });
     // ...and moves when it does.
     setCollapsed(true);
+    flush(); // V2-FLUSH: commit the staged write
     expect(region(container, 'start')).toBeNull();
   });
 
@@ -155,6 +161,7 @@ describe('collapse: controlled and uncontrolled per aside', () => {
       </WorkspaceShell>
     ));
     api.collapseAside('end');
+    flush(); // V2-FLUSH: commit the staged controller write
     expect(region(container, 'end')).toBeNull();
     expect(region(container, 'start')).toBeTruthy();
   });
@@ -206,8 +213,10 @@ describe('resize handles', () => {
     ));
     expect(container.querySelectorAll('[role="separator"]').length).toBe(2);
     api.collapseAside('start');
+    flush(); // V2-FLUSH: commit the staged controller write
     expect(container.querySelectorAll('[role="separator"]').length).toBe(1);
     api.collapseAside('end');
+    flush(); // V2-FLUSH: commit the staged controller write
     expect(container.querySelectorAll('[role="separator"]').length).toBe(0);
   });
 
@@ -230,6 +239,7 @@ describe('mobile drawer', () => {
     await tick();
     fireResize(480);
     api.expandAside('start');
+    flush(); // V2-FLUSH: commit the staged controller write
     const drawer = region(container, 'start');
     expect(drawer).toBeTruthy();
     expect(drawer!.closest('[data-drawer]') ?? drawer!.hasAttribute('data-drawer') ? drawer : null).toBeTruthy();
@@ -256,11 +266,15 @@ describe('mobile drawer', () => {
     fireResize(480);
     const opener = container.querySelector('[data-probe="opener"]') as HTMLButtonElement;
     opener.focus();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     api.expandAside('start');
+    flush(); // V2-FLUSH: commit the staged controller write
     await tick();
     const inRail = container.querySelector('[data-probe="in-rail"]') as HTMLButtonElement;
     inRail.focus();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     inRail.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await tick();
     expect(region(container, 'start')).toBeNull();
     expect(document.activeElement).toBe(opener);
@@ -276,9 +290,12 @@ describe('mobile drawer', () => {
     await tick();
     fireResize(480);
     api.expandAside('start');
+    flush(); // V2-FLUSH: commit the staged controller write
     const mainBtn = container.querySelector('[data-probe="main-btn"]') as HTMLButtonElement;
     mainBtn.focus();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     mainBtn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await tick();
     expect(region(container, 'start')).toBeTruthy();
   });

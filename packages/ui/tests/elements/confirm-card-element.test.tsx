@@ -1,6 +1,7 @@
 // tests/elements/confirm-card-element.test.tsx
 // Contract integration for <kai-confirm>: the bubbling `kai-card` CustomEvent reaches
 // a document listener with the right `action` payload + resolved single-shot state.
+import { flush as flushSync } from 'solid-js';
 import '../../src/elements/confirm-card';
 import { CARD_EVENT_NAME } from '../../src/primitives/card-routing';
 import type { CardEvent } from '../../src/primitives/card-contract';
@@ -64,6 +65,7 @@ test('clicking an action emits `action` with id + echoed payload; bubbling+compo
     (b) => b.dataset.actionId === 'approve',
   )!;
   btn.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   const action = events.find((e) => e.kind === 'action') as
     | Extract<CardEvent, { kind: 'action' }>
@@ -81,6 +83,7 @@ test('resolved state shows read-only chosen label, hides other actions + sets da
     (b) => b.dataset.actionId === 'approve',
   )!;
   approve.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   // After resolution, buttons are replaced by a read-only label; the other action button is absent.
   const reject = Array.from(el.shadowRoot!.querySelectorAll<HTMLButtonElement>('button')).find(
@@ -100,7 +103,9 @@ test('single-shot: a second click does not emit again', async () => {
     (b) => b.dataset.actionId === 'approve',
   )!;
   approve.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   approve.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(events.filter((e) => e.kind === 'action').length).toBe(1);
   off();
@@ -113,6 +118,7 @@ test('dismissible emits `dismiss`', async () => {
     (b) => b.getAttribute('aria-label') === 'Dismiss',
   )!;
   dismiss.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(events.some((e) => e.kind === 'dismiss')).toBe(true);
   off();

@@ -1,3 +1,4 @@
+import { createSignal } from 'solid-js';
 import { defineWebComponent } from './define';
 import { Coachmark, type CoachmarkController } from '../components/coachmark';
 import { wireDisclosure } from './disclosure';
@@ -63,11 +64,14 @@ defineWebComponent<Props, Events>('kai-coachmark', {
   arrow: true,
 }, (props, ctx) => {
   const { flag, dispatch } = ctx;
-  let api: CoachmarkController | undefined;
+  // V2-PORT: a reactive signal, not a plain `let` — the disclosure/controller
+  // effects track it, and ownedWrite sanctions the synchronous hand-up from
+  // the primitive's body (see elements/tool.tsx, the same fix).
+  const [api, setApi] = createSignal<CoachmarkController | undefined>(undefined, { ownedWrite: true });
 
   // The standard disclosure surface: settable+reflecting `open`, kai-open-change,
   // show/hide/toggle. See ./disclosure. This is the SOLE emitter of kai-open-change.
-  wireDisclosure(ctx, () => api, () => props.open);
+  wireDisclosure(ctx, api, () => props.open);
 
   // headline/badge are scalar string props (NOT slots) — pass through directly so
   // the component's own `Show when={…}` gating drives whether each region renders.
@@ -81,7 +85,7 @@ defineWebComponent<Props, Events>('kai-coachmark', {
       headline={props.headline as string | undefined}
       badge={props.badge as string | undefined}
       content={<slot name="content" />}
-      controllerRef={(a) => (api = a)}
+      controllerRef={(a) => setApi(a)}
       onDismiss={() => dispatch('kai-dismiss', {})}
     >
       <slot />

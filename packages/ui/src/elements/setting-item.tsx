@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount } from 'solid-js';
+import { createSignal, onCleanup, onSettled } from 'solid-js';
 import { SettingItem } from '../ui/settings-group';
 import { defineWebComponent } from './define';
 
@@ -32,12 +32,13 @@ defineWebComponent<Props>('kai-setting-item', {
   // a truthy node, so we track occupancy and gate on it (the kai-card approach).
   // Re-read on child/attribute mutations so a late-slotted control lights up.
   const [hasControl, setHasControl] = createSignal(false);
-  onMount(() => {
+  onSettled(() => {
     const read = () => setHasControl(!!element.querySelector(':scope > [slot="control"]'));
     read();
     const observer = new MutationObserver(read);
     observer.observe(element, { childList: true, attributes: true, subtree: true });
-    onCleanup(() => observer.disconnect());
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => observer.disconnect();
   });
 
   return (

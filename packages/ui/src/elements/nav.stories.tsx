@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { onMount } from 'solid-js';
+import { onSettled } from 'solid-js';
 import './nav';
 import type { KaiNavItem } from '../ui/nav';
 
 // Declare the custom element tag for SolidJS JSX.
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -32,7 +32,7 @@ const ITEMS: KaiNavItem[] = [
 export const Sidebar: StoryObj = {
   render: () => {
     let el!: HTMLElement & { items?: KaiNavItem[] };
-    onMount(() => { el.items = ITEMS; });
+    onSettled(() => { el.items = ITEMS; });
     return (
       <div style={{ width: '240px', padding: '1rem' }}>
         <kai-nav ref={el} default-value="new"></kai-nav>

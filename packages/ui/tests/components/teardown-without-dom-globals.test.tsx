@@ -44,8 +44,9 @@
  *      for why that is a parser and not a regex.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render } from 'solid-js/web';
-import { createRoot, type JSX } from 'solid-js';
+import { render } from '@solidjs/web';
+import { createRoot, flush } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import ts from 'typescript';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, dirname, sep } from 'node:path';
@@ -268,16 +269,20 @@ describe('disposal after the host environment tore the DOM globals down', () => 
       disposeAfterGlobalsVanish(
         () => {
           tween = createTween(0);
-          // `stop()` is `if (raf) cancelAnimationFrame(raf)`, so a tween with
-          // nothing in flight never reaches the global at all. An animated
-          // `to()` is what arms the loop; an instant one (`duration: 0`, or no
-          // transition) would leave this case exercising nothing.
-          tween.to(1, { duration: 500 });
           return <div />;
         },
-        // `animating` is documented as true exactly while a frame loop is armed,
-        // so this is a public read of the precondition rather than a guess.
-        () => expect(tween.animating()).toBe(true),
+        // `stop()` is `if (raf) cancelAnimationFrame(raf)`, so a tween with
+        // nothing in flight never reaches the global at all. An animated
+        // `to()` is what arms the loop; an instant one (`duration: 0`, or no
+        // transition) would leave this case exercising nothing.
+        // V2-SHAPE: the drive moved OUT of the component body (v2 rejects
+        // reactive writes there) into this post-render stage, then the
+        // documented public `animating` read checks the precondition.
+        () => {
+          tween.to(1, { duration: 500 });
+          flush();
+          expect(tween.animating()).toBe(true);
+        },
       ),
     ).toBeUndefined();
   });
@@ -357,7 +362,13 @@ describe('disposal after the host environment tore the DOM globals down', () => 
     const host = document.createElement('div');
     document.body.appendChild(host);
     try {
-      expect(() => createRoot((d) => { createTween(0); d(); })).not.toThrow();
+      // V2-SHAPE: dispose OUTSIDE the root body (the tween's cleanup writes a
+      // signal, which v2 rejects inside the root's synchronous owned scope).
+      expect(() => {
+        let d!: () => void;
+        createRoot((dd) => { d = dd; createTween(0); });
+        d();
+      }).not.toThrow();
       expect(() =>
         render(() => <ShaderCanvas fragment="void mainImage(out vec4 c, in vec2 p) { c = vec4(1.0); }" />, host)(),
       ).not.toThrow();
@@ -794,9 +805,11 @@ it('KNOWN_UNFIXED carries no stale entry for an already-fixed site', () => {
  * that lets a real entry slip in. `offenders` keeps its line numbers, because those
  * have to be actionable and are expected to be empty anyway.
  */
-const UNRESOLVED_TEARDOWN_CALLBACKS = [
-  'components/reasoning.tsx  onCleanup(dispose)',
-  'ui/dropdown.tsx  onCleanup(unregister)',
+const UNRESOLVED_TEARDOWN_CALLBACKS: string[] = [
+  // V2-PORT: both former entries dissolved in the Solid 2 migration — the
+  // reasoning effect now RETURNS `dispose` as its apply cleanup, and dropdown's
+  // submenu unregister moved out of the (now unowned) ref into an owned effect.
+  // The pin stays so a NEW unresolvable teardown still fails this suite.
 ];
 
 it('every teardown callback the scan cannot resolve is one that was reviewed', () => {

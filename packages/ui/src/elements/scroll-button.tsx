@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount } from 'solid-js';
+import { createSignal, onCleanup, onSettled } from 'solid-js';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
 import { ChevronDown } from 'lucide-solid';
@@ -93,7 +93,7 @@ defineWebComponent<Props, Events>('kai-scroll-button', {
     containerEl = null;
   }
 
-  onMount(() => {
+  onSettled(() => {
     // Resolve the scroll container: `for` id → nearest scrollable ancestor.
     const target = props.for
       ? document.getElementById(props.for)

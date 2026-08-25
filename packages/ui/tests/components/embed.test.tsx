@@ -1,4 +1,5 @@
 // tests/components/embed.test.tsx
+import { flush } from 'solid-js';
 import { render, fireEvent } from '@solidjs/testing-library';
 import { afterEach, describe, expect, test } from 'vitest';
 import { Embed } from '../../src/components/embed';
@@ -30,6 +31,7 @@ describe('Embed facade (privacy guarantee)', () => {
       <Embed cardId="c1" data={{ provider: 'youtube', id: 'dQw4w9WgXcQ', title: 'Intro' }} />
     ));
     fireEvent.click(container.querySelector('button[aria-label="Play Intro"]')!);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     const frames = container.querySelectorAll('iframe');
     expect(frames).toHaveLength(1);
     const f = frames[0] as HTMLIFrameElement;
@@ -44,6 +46,7 @@ describe('Embed facade (privacy guarantee)', () => {
       <Embed cardId="c1" data={{ provider: 'youtube', id: 'abc', title: 'X' }} />
     ));
     fireEvent.keyDown(container.querySelector('button[aria-label="Play X"]')!, { key: 'Enter' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(container.querySelector('iframe')).toBeTruthy();
   });
 });
@@ -61,6 +64,7 @@ describe('Embed lifecycle + open affordance', () => {
       <Embed cardId="c1" data={{ provider: 'youtube', id: 'abc' }} onEmit={(e) => events.push(e)} />
     ));
     fireEvent.click(getByText(/Open on YouTube/));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     const opens = events.filter((e) => e.kind === 'open');
     expect(opens).toHaveLength(1);
     expect(opens[0]).toMatchObject({
@@ -88,6 +92,7 @@ describe('Embed generic + errors', () => {
       <Embed cardId="c1" data={{ provider: 'generic', url: 'https://player.x/v', title: 'G' }} />
     ));
     fireEvent.click(container.querySelector('button[aria-label="Play G"]')!);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     const f = container.querySelector('iframe') as HTMLIFrameElement;
     expect(f.src).toBe('https://player.x/v');
   });
@@ -109,6 +114,7 @@ describe('Embed generic + errors', () => {
     ));
     const poster = container.querySelector('img') as HTMLImageElement;
     fireEvent.error(poster);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(container.querySelector('button[aria-label="Play P"]')).toBeTruthy();
     expect(events.some((e) => e.kind === 'error')).toBe(false);
   });

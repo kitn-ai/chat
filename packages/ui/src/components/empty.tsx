@@ -1,4 +1,5 @@
-import { type JSX, splitProps } from 'solid-js';
+import { omit } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../utils/cn';
 
@@ -23,7 +24,9 @@ export interface EmptyProps extends JSX.HTMLAttributes<HTMLDivElement> {
 }
 
 function Empty(props: EmptyProps) {
-  const [local, rest] = splitProps(props, ['class', 'children']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'class', 'children');
   return (
     <div
       data-slot="empty"
@@ -45,7 +48,9 @@ export interface EmptyHeaderProps extends JSX.HTMLAttributes<HTMLDivElement> {
 }
 
 function EmptyHeader(props: EmptyHeaderProps) {
-  const [local, rest] = splitProps(props, ['class', 'children']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'class', 'children');
   return (
     <div
       data-slot="empty-header"
@@ -79,7 +84,9 @@ export interface EmptyMediaProps
 }
 
 function EmptyMedia(props: EmptyMediaProps) {
-  const [local, rest] = splitProps(props, ['class', 'variant', 'children']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'class', 'variant', 'children');
   return (
     <div
       data-slot="empty-media"
@@ -99,7 +106,9 @@ export interface EmptyTitleProps extends JSX.HTMLAttributes<HTMLDivElement> {
 }
 
 function EmptyTitle(props: EmptyTitleProps) {
-  const [local, rest] = splitProps(props, ['class', 'children']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'class', 'children');
   return (
     <div
       data-slot="empty-title"
@@ -118,7 +127,9 @@ export interface EmptyDescriptionProps extends JSX.HTMLAttributes<HTMLParagraphE
 }
 
 function EmptyDescription(props: EmptyDescriptionProps) {
-  const [local, rest] = splitProps(props, ['class', 'children']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'class', 'children');
   return (
     <p
       data-slot="empty-description"
@@ -140,7 +151,9 @@ export interface EmptyContentProps extends JSX.HTMLAttributes<HTMLDivElement> {
 }
 
 function EmptyContent(props: EmptyContentProps) {
-  const [local, rest] = splitProps(props, ['class', 'children']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'class', 'children');
   return (
     <div
       data-slot="empty-content"

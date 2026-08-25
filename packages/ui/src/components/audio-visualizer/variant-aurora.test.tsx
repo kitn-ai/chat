@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { installFakeClock } from '../../test-utils/fake-clock';
 import type { ShaderVariantProps } from './index';
@@ -320,7 +320,9 @@ describe('AuroraVisualizer: state -> uniform mapping', () => {
     expect(captured!.uniforms.uScale?.value).toBeCloseTo(0.2 + 0.2 * 0.9, 6);
 
     setVolume(0);
+    flush(); // V2-FLUSH: commit the staged write
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     // Upstream-parity (audit target 6 + the Apache hook's semantics): the
     // override drives the scale TWEEN, and silence simply stops driving it,
     // so a mid-speech pause leaves the radius wherever the voice last put
@@ -329,7 +331,9 @@ describe('AuroraVisualizer: state -> uniform mapping', () => {
 
     // And a later voice tick takes back over instantly.
     setVolume(0.25);
+    flush(); // V2-FLUSH: commit the staged write
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(captured!.uniforms.uScale?.value).toBeCloseTo(0.2 + 0.2 * 0.25, 6);
   });
 
@@ -414,14 +418,17 @@ describe('AuroraVisualizer: listening spring + volume-override guard', () => {
       <AuroraVisualizer {...baseProps} state={state()} frozen={false} onUnavailable={() => {}} />
     ));
     // Land idle's 0.2 first so the spring's start point is deterministic.
-    for (let i = 0; i < 30; i++) advance(25);
+    for (let i = 0; i < 30; i++) { advance(25); flush(); } // V2-FLUSH per frame
     expect(uScale()).toBeCloseTo(0.2, 3);
 
     setState('listening');
+    flush(); // V2-FLUSH: commit the staged write
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     let peak = 0;
     for (let i = 0; i < 50; i++) {
       advance(25);
+      flush(); // V2-FLUSH: commit the staged frame writes
       peak = Math.max(peak, uScale());
     }
     // A 0.5s easeOut landing (every other state's transition) can never
@@ -436,23 +443,28 @@ describe('AuroraVisualizer: listening spring + volume-override guard', () => {
     render(() => (
       <AuroraVisualizer {...baseProps} state={state()} volume={0.9} frozen={false} onUnavailable={() => {}} />
     ));
-    for (let i = 0; i < 30; i++) advance(25);
+    for (let i = 0; i < 30; i++) { advance(25); flush(); } // V2-FLUSH per frame
     expect(uScale()).toBeCloseTo(0.2, 3);
 
     setState('speaking');
+    flush(); // V2-FLUSH: commit the staged write
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     // Mid-landing (0.5s easeOut, 0.2 -> 0.3): volume 0.9 must NOT have
     // snapped the scale to 0.38 -- the landing finishes first.
     advance(100);
+    flush(); // V2-FLUSH: commit the staged frame writes
     expect(uScale()).toBeLessThan(0.31);
     advance(100);
+    flush(); // V2-FLUSH: commit the staged frame writes
     expect(uScale()).toBeLessThan(0.31);
 
     // Landing completes; the guard opens and the CURRENT volume applies
     // immediately (the override effect also tracks scale.animating(), so a
     // volume that arrived during the landing is not lost until a next tick).
-    for (let i = 0; i < 20; i++) advance(25);
+    for (let i = 0; i < 20; i++) { advance(25); flush(); } // V2-FLUSH per frame
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(uScale()).toBeCloseTo(0.2 + 0.2 * 0.9, 6);
   });
 });
@@ -520,7 +532,7 @@ describe('AuroraVisualizer: does not defeat ShaderCanvas\'s recompile guard', ()
 
     // listening's intensity pulse ping-pongs forever, so this keeps a frame
     // pending indefinitely -- the loop bound is just a safety net.
-    for (let i = 0; i < 10 && isFramePending(); i++) advance(50);
+    for (let i = 0; i < 10 && isFramePending(); i++) { advance(50); flush(); } // V2-FLUSH per frame
 
     // The precondition: uIntensity's pushed value genuinely varied across
     // the loop, proof the pulse tween's OWN requestAnimationFrame loop

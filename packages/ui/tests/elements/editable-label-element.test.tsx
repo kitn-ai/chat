@@ -1,3 +1,4 @@
+import { flush as flushSync } from 'solid-js';
 import '../../src/elements/editable-label';
 
 /** Let Solid's scheduler flush effects + renders. */
@@ -20,7 +21,9 @@ test('committing a changed value fires kai-rename with detail.value', async () =
   const input = el.shadowRoot!.querySelector<HTMLInputElement>('input')!;
   input.value = 'New';
   input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
 
   expect(renames).toEqual(['New']);
@@ -46,7 +49,9 @@ test('Esc fires kai-cancel and keeps the old value', async () => {
   const input = el.shadowRoot!.querySelector<HTMLInputElement>('input')!;
   input.value = 'Discard';
   input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
 
   expect(cancelled).toBe(true);

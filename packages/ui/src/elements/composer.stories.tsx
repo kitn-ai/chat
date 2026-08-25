@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { onMount, onCleanup } from 'solid-js';
+import { onSettled, onCleanup } from 'solid-js';
 import './register'; // side effect: registers all kai-* custom elements (incl. kai-composer)
 import { attachKaiActions } from '../stories/docs/story-actions';
 import type { TriggerDef } from '../components/composer';
@@ -8,7 +8,7 @@ import { expect } from 'storybook/test';
 import { specDescription } from '../stories/docs/element-controls';
 
 // The web components are custom DOM elements, declare the tag for SolidJS JSX.
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -93,11 +93,15 @@ type Story = StoryObj;
 export const Default: Story = {
   render: () => {
     let el: ComposerEl | undefined;
-    onMount(() => {
+    // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+    // and register them once at the owner scope (same lifecycle as 1.x).
+    const settledDisposers: (() => void)[] = [];
+    onCleanup(() => { for (const d of settledDisposers) d(); });
+    onSettled(() => {
       if (!el) return;
       el.placeholder = 'Ask anything…';
       // Log every declared CustomEvent (kai-submit, kai-value-change, kai-trigger, …).
-      onCleanup(attachKaiActions(el));
+      settledDisposers.push(attachKaiActions(el));
     });
     return (
       <div style={{ padding: '16px', width: '100%' }}>
@@ -148,7 +152,11 @@ const SKILL_SNIPPET = `<kai-composer id="composer" style="display:block; width:1
 export const Skills: Story = {
   render: () => {
     let el: ComposerEl | undefined;
-    onMount(() => {
+    // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+    // and register them once at the owner scope (same lifecycle as 1.x).
+    const settledDisposers2: (() => void)[] = [];
+    onCleanup(() => { for (const d of settledDisposers2) d(); });
+    onSettled(() => {
       if (!el) return;
       el.placeholder = 'Type / to pick a skill…';
       el.triggers = [
@@ -167,7 +175,7 @@ export const Skills: Story = {
         },
       ];
       // Log every declared CustomEvent (kai-submit, kai-trigger, kai-entity-add, …).
-      onCleanup(attachKaiActions(el));
+      settledDisposers2.push(attachKaiActions(el));
     });
     return (
       <div style={{ padding: '16px', width: '100%' }}>
@@ -222,7 +230,11 @@ const MENTION_SNIPPET = `<kai-composer id="composer" style="display:block; width
 export const Mentions: Story = {
   render: () => {
     let el: ComposerEl | undefined;
-    onMount(() => {
+    // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+    // and register them once at the owner scope (same lifecycle as 1.x).
+    const settledDisposers3: (() => void)[] = [];
+    onCleanup(() => { for (const d of settledDisposers3) d(); });
+    onSettled(() => {
       if (!el) return;
       el.placeholder = 'Type @ to mention someone…';
       el.triggers = [
@@ -236,7 +248,7 @@ export const Mentions: Story = {
         },
       ];
       // Log every declared CustomEvent (kai-submit, kai-trigger, kai-entity-add, …).
-      onCleanup(attachKaiActions(el));
+      settledDisposers3.push(attachKaiActions(el));
     });
     return (
       <div style={{ padding: '16px', width: '100%' }}>
@@ -286,7 +298,11 @@ const PREFILLED_SNIPPET = `<kai-composer id="composer" style="display:block; wid
 export const Prefilled: Story = {
   render: () => {
     let el: ComposerEl | undefined;
-    onMount(() => {
+    // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+    // and register them once at the owner scope (same lifecycle as 1.x).
+    const settledDisposers4: (() => void)[] = [];
+    onCleanup(() => { for (const d of settledDisposers4) d(); });
+    onSettled(() => {
       if (!el) return;
       el.value = [
         {
@@ -301,7 +317,7 @@ export const Prefilled: Story = {
         { type: 'text', text: " I'm going to show y" },
       ];
       // Log every declared CustomEvent (kai-submit, kai-value-change, …).
-      onCleanup(attachKaiActions(el));
+      settledDisposers4.push(attachKaiActions(el));
     });
     return (
       <div style={{ padding: '16px', width: '100%' }}>
@@ -343,7 +359,11 @@ export const PillKinds: Story = {
   name: 'Pill kinds (skill / agent / plugin)',
   render: () => {
     let el: ComposerEl | undefined;
-    onMount(() => {
+    // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+    // and register them once at the owner scope (same lifecycle as 1.x).
+    const settledDisposers5: (() => void)[] = [];
+    onCleanup(() => { for (const d of settledDisposers5) d(); });
+    onSettled(() => {
       if (!el) return;
       el.value = [
         { type: 'text', text: 'Review ' },
@@ -357,7 +377,7 @@ export const PillKinds: Story = {
         { type: 'text', text: ' on this PR.' },
       ];
       // Log every declared CustomEvent (kai-submit, kai-entity-remove, …).
-      onCleanup(attachKaiActions(el));
+      settledDisposers5.push(attachKaiActions(el));
     });
     return (
       <div style={{ padding: '16px', width: '100%' }}>
@@ -392,7 +412,11 @@ const HIGHLIGHT_SNIPPET = `<kai-composer id="composer" style="display:block; wid
 export const Highlighted: Story = {
   render: () => {
     let el: ComposerEl | undefined;
-    onMount(() => {
+    // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+    // and register them once at the owner scope (same lifecycle as 1.x).
+    const settledDisposers6: (() => void)[] = [];
+    onCleanup(() => { for (const d of settledDisposers6) d(); });
+    onSettled(() => {
       if (!el) return;
       el.value = 'Please deploy this fix for TICKET-123 and TICKET-456 soon.';
       el.highlights = [
@@ -400,7 +424,7 @@ export const Highlighted: Story = {
         { pattern: 'TICKET-\\d+', class: 'tok' },
       ];
       // Log every declared CustomEvent (kai-submit, kai-value-change, …).
-      onCleanup(attachKaiActions(el));
+      settledDisposers6.push(attachKaiActions(el));
     });
     return (
       <div style={{ padding: '16px', width: '100%' }}>

@@ -1,4 +1,5 @@
-import { createSignal, For, onMount, type JSX } from 'solid-js';
+import { createSignal, For, onSettled } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import type { Palette } from './theme-editor/theme-css';
 
 // Docs-only helpers (not part of the kit's public API). They auto-discover the
@@ -171,7 +172,7 @@ const sectionHead: JSX.CSSProperties = {
 /** Auto-generated reference of every overridable token (light + dark values). */
 export function TokenTable() {
   const [data, setData] = createSignal<{ colors: ColorToken[]; radii: RadiusToken[]; texts: TextToken[] }>({ colors: [], radii: [], texts: [] });
-  onMount(() => setData(discover()));
+  onSettled(() => { setData(discover()); }); // V2-PORT (R2): braced — a non-function return crashes dev
   return (
     <div style={{ padding: '64px 20px', width: '100%' }}>
       <style>{`.kit-token-link{color:#006DEB;text-decoration:underline}.kit-token-link:hover{text-decoration:none}html.dark .kit-token-link,.dark .kit-token-link{color:#4ea3ff}`}</style>

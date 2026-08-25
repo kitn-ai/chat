@@ -10,6 +10,7 @@
 // still drops everything). They go through the real elements — the same path
 // every real message flows through, like hostile-model-output.test.tsx does for
 // text — and drive the card with a real shadow-root click.
+import { flush } from 'solid-js';
 import '../../src/elements/chat';
 import '../../src/elements/message';
 import '../../src/elements/thread';
@@ -48,10 +49,13 @@ async function driveCard(el: HTMLElement): Promise<CardEvent[]> {
   el.addEventListener('kai-card', (e) => events.push((e as CustomEvent<CardEvent>).detail));
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   const btn = el.shadowRoot!.querySelector<HTMLButtonElement>('button[data-action-id="approve"]');
   expect(btn, 'the confirm card action button should render in the shadow root').toBeTruthy();
   btn!.click();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   el.remove();
   return events;
 }
@@ -95,6 +99,7 @@ test("an unknown card type's contract error is emitted off <kai-chat>, not disca
   el.addEventListener('kai-card', (e) => events.push((e as CustomEvent<CardEvent>).detail));
   document.body.appendChild(el);
   await Promise.resolve();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   el.remove();
   expect(events).toContainEqual({
     kind: 'error',

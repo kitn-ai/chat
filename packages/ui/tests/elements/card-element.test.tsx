@@ -1,4 +1,5 @@
 // tests/elements/card-element.test.tsx
+import { flush as flushSync } from 'solid-js';
 import '../../src/elements/card';
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -60,6 +61,7 @@ test('dismissible renders a dismiss part, hides the card, and fires kai-dismiss'
   const x = root.querySelector('[part="dismiss"]') as HTMLElement;
   expect(x).toBeTruthy();
   x.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(fired).toBe(true);
   expect(root.querySelector('[part="card"]')).toBeNull();
@@ -77,5 +79,6 @@ test('clickable makes the card a role=button that fires kai-card-click', async (
   const card = root.querySelector('[part="card"]') as HTMLElement;
   expect(card.getAttribute('role')).toBe('button');
   card.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(fired).toBe(true);
 });

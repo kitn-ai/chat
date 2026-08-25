@@ -1,7 +1,8 @@
 // src/components/artifact-card.tsx
 // The `artifact` built-in card: chrome + sizing around <Artifact>, plus the
 // bridge from its observation callbacks onto the frozen Card Contract.
-import { createUniqueId, untrack, Show, type JSX } from 'solid-js';
+import { createUniqueId, untrack, Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import type { CardHost } from '../primitives/card-contract';
 import { Artifact } from './artifact';
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, flush as flushSync } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { BarVisualizer } from './variant-bar';
 import { defaultBarCount } from './sizes';
@@ -140,6 +140,7 @@ describe('BarVisualizer', () => {
     expect(seen.map((s) => s.value())).toEqual([0.1, 0.2, 0.3]);
 
     setBands([0.9, 0.8, 0.7]);
+    flushSync(); // V2-FLUSH: commit the staged write
     await flush();
 
     // This is the streaming-audio case <Index> exists for: bands change on
@@ -241,6 +242,7 @@ describe('BarVisualizer frozen and live sequencing', () => {
     expect(isFramePending()).toBe(false);
 
     advance(5000);
+    flushSync(); // V2-FLUSH: commit the staged frame writes
     expect(bars(container).map((b) => b.dataset.kaiHighlighted)).toEqual(initial);
   });
 
@@ -253,6 +255,7 @@ describe('BarVisualizer frozen and live sequencing', () => {
     expect(initial).toEqual(['false', 'false', 'true', 'false']);
 
     setCls('b');
+    flushSync(); // V2-FLUSH: commit the staged write
     await flush();
 
     expect(bars(container).map((b) => b.dataset.kaiHighlighted)).toEqual(initial);
@@ -265,6 +268,7 @@ describe('BarVisualizer frozen and live sequencing', () => {
     expect(bars(container).map((b) => b.dataset.kaiHighlighted)).toEqual(['false', 'false', 'true', 'false']);
 
     advance(500); // the listening interval
+    flushSync(); // V2-FLUSH: commit the staged frame writes
     expect(bars(container).map((b) => b.dataset.kaiHighlighted)).toEqual(['false', 'false', 'false', 'false']);
   });
 
@@ -279,6 +283,7 @@ describe('BarVisualizer frozen and live sequencing', () => {
     expect(seen.map((s) => s.highlighted())).toEqual([false, false, true, false]);
 
     advance(500);
+    flushSync(); // V2-FLUSH: commit the staged frame writes
 
     // Same closures as above, called again: they must reflect the new tick.
     expect(seen.map((s) => s.highlighted())).toEqual([false, false, false, false]);

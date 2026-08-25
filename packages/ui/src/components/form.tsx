@@ -1,17 +1,20 @@
+// V2-PORT: Index -> <For keyed={false}> (identical children signature in v2);
+// on() removed (its (deps, fn) pair IS the two-argument createEffect);
+// onMount -> onSettled; ErrorBoundary -> Errored; the solid-js/store subpath is
+// gone (createStore on solid-js; draft setters subsume produce; unwrap -> snapshot).
 import {
-  type JSX,
   For,
   Show,
-  Index,
-  splitProps,
-  mergeProps,
   createMemo,
   createEffect,
-  on,
-  onMount,
-  ErrorBoundary,
+  onSettled,
+  Errored,
+  createStore,
+  snapshot,
+  untrack,
 } from 'solid-js';
-import { createStore, produce, unwrap } from 'solid-js/store';
+import { mergeDefaults } from '../utils/merge-defaults'; // V2-PORT: 1.x mergeProps semantics (undefined does not override)
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
 import { Card } from './card';
@@ -608,11 +611,9 @@ const DEFAULT_FORM: FormDefinition = { type: 'object', properties: {} };
  * `kai-card` CustomEvent.
  */
 export function Form(props: FormProps): JSX.Element {
-  const merged = mergeProps({ cardId: 'kai-form' }, props);
-  const [local] = splitProps(merged, [
-    'data', 'cardId', 'heading', 'host', 'hostElement', 'class', 'resolution',
-    'values', 'defaultValues', 'disabled', 'onValuesChange', 'controllerRef',
-  ]);
+  // V2-PORT: mergeProps -> merge; the pick-only splitProps is a plain alias.
+  const merged = mergeDefaults({ cardId: 'kai-form' }, props);
+  const local = merged;
 
   const ctxHost = useCardHost();
 
@@ -658,13 +659,13 @@ export function Form(props: FormProps): JSX.Element {
 
   const seed = (d: FormDefinition): void => {
     const next = seedMap(d);
-    setValues(produce((s) => {
+    setValues((s) => { // V2-PORT: draft setter (produce removed)
       for (const k of Object.keys(s)) delete s[k];
       Object.assign(s, next);
-    }));
-    setErrors(produce((s) => {
+    });
+    setErrors((s) => { // V2-PORT: draft setter (produce removed)
       for (const k of Object.keys(s)) delete s[k];
-    }));
+    });
   };
 
   // Reset to defaults only (ignore the controlled `values`/`defaultValues` overlay):
@@ -676,51 +677,63 @@ export function Form(props: FormProps): JSX.Element {
       if (field.default !== undefined) next[key] = field.default;
       else if (field.type === 'array') next[key] = [];
     }
-    setValues(produce((s) => {
+    setValues((s) => { // V2-PORT: draft setter (produce removed)
       for (const k of Object.keys(s)) delete s[k];
       Object.assign(s, next);
-    }));
-    setErrors(produce((s) => {
+    });
+    setErrors((s) => { // V2-PORT: draft setter (produce removed)
       for (const k of Object.keys(s)) delete s[k];
-    }));
+    });
   };
 
   // Reseed whenever a NEW valid definition arrives.
-  createEffect(on(() => local.data, () => { if (envelopeValid().ok) seed(def()); }));
+  // V2-PORT: on(deps, fn) -> the two-argument createEffect (writes in the apply).
+  // (the apply's reads are untracked EXPLICITLY — v2 warns on bare reactive
+  // reads in an effect callback, and on()'s v1 callback was untracked anyway)
+  createEffect(() => local.data, () => { untrack(() => { if (envelopeValid().ok) seed(def()); }); });
 
   // Controlled values: when the consumer drives `values`, mirror it into the store
   // (the controlled prop wins over local edits). Deferred so mount's seed runs first.
-  createEffect(on(() => local.values, (v) => {
+  // V2-PORT: on(..., { defer: true }) has no v2 counterpart — a first-run flag
+  // reproduces it (skip the mount application; seedMap already merged `values`).
+  let valuesApplied = false;
+  createEffect(() => local.values, (v) => {
+    if (!valuesApplied) { valuesApplied = true; return; }
     if (!v) return;
-    setValues(produce((s) => {
+    setValues((s) => { // V2-PORT: draft setter (produce removed)
       for (const k of Object.keys(s)) delete s[k];
       Object.assign(s, v);
-    }));
-  }, { defer: true }));
+    });
+  });
 
   // ready + error lifecycle emits.
-  createEffect(on(envelopeValid, (state) => {
+  // V2-PORT: on(deps, fn) -> the two-argument createEffect.
+  createEffect(envelopeValid, (state) => {
     if (state.ok) emit({ kind: 'ready', cardId: local.cardId });
     else emit({ kind: 'error', cardId: local.cardId, message: state.message });
-  }));
+  });
 
   // Surface the resolved state for host styling. Only a `submit` resolution is the
   // "submitted" state; a deferred `dismissed` (or `expired`) is not.
-  createEffect(() => {
-    const el = local.hostElement;
-    if (!el) return;
-    if (res.resolution()?.kind === 'submit') el.setAttribute('data-kai-resolved', 'submitted');
-    else el.removeAttribute('data-kai-resolved');
-  });
+  // V2-PORT (R1): tracked reads in the compute; the attribute writes in the apply.
+  createEffect(
+    () => ({ el: local.hostElement, submitted: res.resolution()?.kind === 'submit' }),
+    ({ el, submitted }) => {
+      if (!el) return;
+      if (submitted) el.setAttribute('data-kai-resolved', 'submitted');
+      else el.removeAttribute('data-kai-resolved');
+    },
+  );
 
   const setField = (key: string, raw: unknown): void => {
-    setValues(key, raw);
-    if (errors[key]) setErrors(key, undefined as unknown as string);
+    // V2-PORT: path setters -> draft mutations.
+    setValues((s) => { s[key] = raw; });
+    if (errors[key]) setErrors((s) => { s[key] = undefined as unknown as string; });
     // Fire the live change signal: current coerced values + validity (distinct from
     // the terminal submit). Validation here is read-only — it doesn't surface errors.
-    const snapshot = unwrap(values) as Record<string, unknown>;
-    const out = buildResult(def(), snapshot);
-    const { valid } = validateForm(def(), snapshot);
+    const snap = snapshot(values) as Record<string, unknown>;
+    const out = buildResult(def(), snap);
+    const { valid } = validateForm(def(), snap);
     local.onValuesChange?.({ values: out, valid });
   };
 
@@ -731,7 +744,7 @@ export function Form(props: FormProps): JSX.Element {
       { type: 'object', required: def().required, properties: { [key]: field } },
       { [key]: values[key] },
     );
-    setErrors(key, single.fieldErrors[key]);
+    setErrors((s) => { s[key] = single.fieldErrors[key]; }); // V2-PORT: path setter -> draft
   };
 
   // Resolve the root to query controls inside (the live <form> when called from the
@@ -749,12 +762,12 @@ export function Form(props: FormProps): JSX.Element {
   // the form's onSubmit handler and the controller's send().
   const runSubmit = (formEl?: HTMLElement | null): boolean => {
     if (res.isResolved()) return false;
-    const snapshot = unwrap(values);
-    const result = validateForm(def(), snapshot as Record<string, unknown>);
-    setErrors(produce((s) => {
+    const snap = snapshot(values);
+    const result = validateForm(def(), snap as Record<string, unknown>);
+    setErrors((s) => { // V2-PORT: draft setter (produce removed)
       for (const k of Object.keys(s)) delete s[k];
       Object.assign(s, result.fieldErrors);
-    }));
+    });
     if (!result.valid) {
       const firstBad = keys().find((k) => result.fieldErrors[k]);
       if (firstBad) {
@@ -763,7 +776,7 @@ export function Form(props: FormProps): JSX.Element {
       }
       return false;
     }
-    const out = buildResult(def(), snapshot as Record<string, unknown>);
+    const out = buildResult(def(), snap as Record<string, unknown>);
     emit({ kind: 'submit', cardId: local.cardId, data: out });
     res.setLocal({ kind: 'submit', data: out });
     return true;
@@ -792,7 +805,7 @@ export function Form(props: FormProps): JSX.Element {
   // after a failed validation); validate runs the existing validateForm and surfaces
   // the per-field errors WITHOUT submitting; send runs the same path as the Submit
   // button; reset re-seeds from schema defaults; dismiss/reopen drive the stub.
-  onMount(() => {
+  onSettled(() => { // V2-PORT (R2): onMount -> onSettled; braced body returns undefined
     local.controllerRef?.({
       focus: (options) => {
         const root = queryRoot();
@@ -802,12 +815,12 @@ export function Form(props: FormProps): JSX.Element {
       },
       send: () => { runSubmit(); },
       validate: () => {
-        const snapshot = unwrap(values) as Record<string, unknown>;
-        const result = validateForm(def(), snapshot);
-        setErrors(produce((s) => {
+        const snap = snapshot(values) as Record<string, unknown>;
+        const result = validateForm(def(), snap);
+        setErrors((s) => { // V2-PORT: draft setter (produce removed)
           for (const k of Object.keys(s)) delete s[k];
           Object.assign(s, result.fieldErrors);
-        }));
+        });
         return result.valid
           ? { valid: true }
           : { valid: false, errors: result.fieldErrors };
@@ -833,7 +846,7 @@ export function Form(props: FormProps): JSX.Element {
       when={envelopeValid().ok}
       fallback={<Card heading={local.heading} errorMessage={envelopeValid().message} />}
     >
-      <ErrorBoundary
+      <Errored
         fallback={() => {
           emit({ kind: 'error', cardId: local.cardId, message: 'The form failed to render.' });
           return <Card heading={local.heading} errorMessage="The form failed to render." />;
@@ -912,7 +925,7 @@ export function Form(props: FormProps): JSX.Element {
           </Show>
         </Card>
         </Show>
-      </ErrorBoundary>
+      </Errored>
     </Show>
   );
 }
@@ -1220,7 +1233,7 @@ function RepeaterWidget(props: CompositeProps): JSX.Element {
   return (
     <fieldset class="flex flex-col gap-3 rounded-lg border border-border p-3" data-control>
       <legend class="px-1 text-sm font-medium text-foreground">{props.label}</legend>
-      <Index each={rows()}>
+      <For keyed={false} each={rows()}>
         {(row, i) => (
           <div class="flex flex-col gap-2 rounded-md border border-border/60 p-2">
             <div class="flex items-center justify-between">
@@ -1253,7 +1266,7 @@ function RepeaterWidget(props: CompositeProps): JSX.Element {
             </For>
           </div>
         )}
-      </Index>
+      </For>
       <Button type="button" variant="outline" size="sm" disabled={props.disabled} onClick={addRow}>
         Add item
       </Button>

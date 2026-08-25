@@ -1,17 +1,7 @@
-import {
-  type JSX,
-  type Accessor,
-  Show,
-  Index,
-  splitProps,
-  mergeProps,
-  createSignal,
-  createMemo,
-  createEffect,
-  on,
-  ErrorBoundary,
-  createUniqueId,
-} from 'solid-js';
+import { type Accessor, Show, For, omit, createSignal, createMemo, createEffect, Errored, createUniqueId } from 'solid-js';
+import { deferApply } from '../utils/defer-apply'; // V2-PORT: on(...,{defer:true}) replacement
+import { mergeDefaults } from '../utils/merge-defaults'; // V2-PORT: 1.x mergeProps semantics (undefined does not override)
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
 import { Card } from './card';
@@ -77,7 +67,7 @@ export function useResolved<T>(opts: {
   const [local, setLocal] = createSignal<T | undefined>(undefined);
   // Clear the optimistic flip on a NEW data identity (deferred so mount doesn't
   // clobber an initial prop). The prop still wins via the memo below.
-  createEffect(on(opts.data, () => setLocal(undefined), { defer: true }));
+  createEffect(opts.data, deferApply(() => setLocal(undefined)));
   const value = createMemo(() => opts.prop() ?? local());
   const isResolved = createMemo(() => value() !== undefined);
   const isOptimistic = createMemo(() => opts.prop() === undefined && local() !== undefined);
@@ -128,18 +118,9 @@ export interface ResponseCompareProps {
  * Enter/Space picks). Emits `onError` for a malformed definition.
  */
 export function ResponseCompare(props: ResponseCompareProps): JSX.Element {
-  const merged = mergeProps({ compareId: 'kai-compare', layout: 'auto' as CompareLayout }, props);
-  const [local] = splitProps(merged, [
-    'data',
-    'compareId',
-    'selection',
-    'layout',
-    'class',
-    'controllerRef',
-    'onSelect',
-    'onReady',
-    'onError',
-  ]);
+  const merged = mergeDefaults({ compareId: 'kai-compare', layout: 'auto' as CompareLayout }, props);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = merged;
 
   const uid = createUniqueId();
 
@@ -163,19 +144,17 @@ export function ResponseCompare(props: ResponseCompareProps): JSX.Element {
   let groupRef: HTMLDivElement | undefined;
 
   // Reset the roving tab stop + active tab whenever a NEW definition arrives.
-  createEffect(on(() => local.data, () => { setFocusIndex(0); setActive(0); }));
+  createEffect(() => local.data, () => { setFocusIndex(0); setActive(0); });
 
   // ready / error lifecycle: error on an unusable definition, ready once both
   // candidates have settled (so consumers know the pick is now live).
-  createEffect(
-    on([valid, streaming], ([ok, isStreaming]) => {
+  createEffect(() => [valid(), streaming()] as const, ([ok, isStreaming]) => { // V2-PORT: on([a,b]) -> function compute
       if (!ok) {
         local.onError?.(errorMessage());
         return;
       }
       if (!isStreaming) local.onReady?.();
-    }),
-  );
+    });
 
   const chosenId = createMemo(() => res.value()?.chosenId);
   const chosenCandidate = createMemo<CompareCandidate | undefined>(() => {
@@ -264,7 +243,7 @@ export function ResponseCompare(props: ResponseCompareProps): JSX.Element {
       when={valid()}
       fallback={<Card errorMessage={errorMessage() || "This comparison couldn't be displayed."} />}
     >
-      <ErrorBoundary
+      <Errored
         fallback={() => {
           local.onError?.('The comparison failed to render.');
           return <Card errorMessage="The comparison failed to render." />;
@@ -289,12 +268,12 @@ export function ResponseCompare(props: ResponseCompareProps): JSX.Element {
             {/* Tab pills — switch the visible candidate in tabs / auto-narrow mode. */}
             <Show when={showTabs()}>
               <div role="tablist" aria-label="Switch response" class={cn('flex gap-1', tabBarClass())}>
-                <Index each={pair() ?? []}>
+                <For keyed={false} each={pair() ?? []}>
                   {(candidate, index) => (
                     <button
                       type="button"
                       role="tab"
-                      aria-selected={active() === index}
+                      aria-selected={active() === index ? 'true' : 'false'}
                       class={cn(
                         'rounded-md px-3 py-1 text-xs font-medium transition-colors',
                         active() === index
@@ -306,7 +285,7 @@ export function ResponseCompare(props: ResponseCompareProps): JSX.Element {
                       {candidate().label ?? `Response ${candidate().id}`}
                     </button>
                   )}
-                </Index>
+                </For>
               </div>
             </Show>
 
@@ -318,7 +297,7 @@ export function ResponseCompare(props: ResponseCompareProps): JSX.Element {
               class={wrapperClass()}
               onKeyDown={onGroupKeyDown}
             >
-              <Index each={pair() ?? []}>
+              <For keyed={false} each={pair() ?? []}>
                 {(candidate, index) => (
                   <CompareColumn
                     candidate={candidate()}
@@ -332,11 +311,11 @@ export function ResponseCompare(props: ResponseCompareProps): JSX.Element {
                     }}
                   />
                 )}
-              </Index>
+              </For>
             </div>
           </Show>
         </div>
-      </ErrorBoundary>
+      </Errored>
     </Show>
   );
 }
@@ -400,7 +379,7 @@ function CompareColumn(props: ColumnProps): JSX.Element {
       <Button
         type="button"
         role="radio"
-        aria-checked={false}
+        aria-checked={false ? 'true' : 'false'}
         aria-label={`Pick ${labelText()}`}
         data-candidate-id={props.candidate.id}
         variant="outline"

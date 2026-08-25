@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { createSignal, onCleanup, onSettled } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import './screen';
 
 // Labs: the full-bleed overlay destination. The developer owns the swap: a
@@ -8,7 +9,7 @@ import './screen';
 // fills whatever it is mounted in (this positioned region), inerts the rest, and
 // returns focus on close.
 
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -83,15 +84,16 @@ export const Overlay: StoryObj = {
           open={open()}
           headline="Design"
           ref={(el: HTMLElement) =>
-            onMount(() => {
+            onSettled(() => {
               const onBack = () => setOpen(false);
               const onChange = (e: Event) => setOpen((e as CustomEvent<{ open: boolean }>).detail.open);
               el.addEventListener('kai-back', onBack);
               el.addEventListener('kai-open-change', onChange);
-              onCleanup(() => {
+              // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => {
                 el.removeEventListener('kai-back', onBack);
                 el.removeEventListener('kai-open-change', onChange);
-              });
+              };
             })
           }
         >

@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
 import { Thread, type ThreadController } from './thread';
 import type { ChatMessage } from '../elements/chat-types';
@@ -124,6 +124,7 @@ describe('Thread message actions', () => {
       <Thread messages={[assistant('Copy me')]} onMessageAction={onMessageAction} />
     ));
     fireEvent.click(getByLabelText('Copy'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(writeText).toHaveBeenCalledWith('Copy me');
     expect(onMessageAction).toHaveBeenLastCalledWith({ messageId: 'a1', action: 'copy' });
   });
@@ -134,9 +135,11 @@ describe('Thread message actions', () => {
       <Thread messages={[assistant('Hi')]} onMessageAction={onMessageAction} />
     ));
     fireEvent.click(getByLabelText('Like'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onMessageAction).toHaveBeenLastCalledWith({ messageId: 'a1', action: 'like', state: 'on' });
     await tick();
     fireEvent.click(getByLabelText('Like'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onMessageAction).toHaveBeenLastCalledWith({ messageId: 'a1', action: 'like', state: 'off' });
   });
 });
@@ -171,6 +174,7 @@ describe('Thread stick-to-bottom', () => {
     scrollTo.mockClear();
     // A NEW array reference with an appended assistant turn — as a stream chunk.
     setMessages([...base, { id: 'a1', role: 'assistant', parts: [{ type: 'text', text: 'streaming...' }] }]);
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
 
     expect(scrollTo).toHaveBeenCalled();

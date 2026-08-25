@@ -29,7 +29,7 @@ import type { ConversationSummary, ConversationGroup } from '../types';
 // compilation — the types must match BYTE-FOR-BYTE or it errors TS2717), so the
 // shared ones are copied verbatim; kai-switch and kai-sources are declared here
 // for the first time.
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -209,7 +209,7 @@ export const Perplexity: Story = {
     const [expanded, setExpanded] = createSignal(false);
 
     // Array/object props (and event wiring) are applied in each element's ref
-    // callback, NOT a one-shot onMount, so they survive remounts (the tab panels
+    // callback, NOT a one-shot onSettled, so they survive remounts (the tab panels
     // live inside <Show>, so they unmount/remount on tab switch).
     return (
       <div class="relative h-screen w-full">

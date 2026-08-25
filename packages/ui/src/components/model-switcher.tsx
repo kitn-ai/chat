@@ -1,4 +1,4 @@
-import { splitProps, For, Show, createSignal } from 'solid-js';
+import { omit, For, Show, createSignal } from 'solid-js';
 import { cn } from '../utils/cn';
 import { Dropdown, DropdownTrigger, DropdownContent, DropdownRadioItem, type DropdownController } from '../ui/dropdown';
 import { Button } from '../ui/button';
@@ -58,7 +58,8 @@ function ModelRow(props: {
 }
 
 export function ModelSwitcher(props: ModelSwitcherProps) {
-  const [local] = splitProps(props, ['models', 'currentModelId', 'onModelChange', 'class', 'defaultOpen', 'disabled', 'controllerRef']);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = props;
   const currentModel = () => local.models.find((m) => m.id === local.currentModelId);
 
   // The rows are DropdownRadioItems, which stay open by design, so the switcher
@@ -107,7 +108,7 @@ export function ModelSwitcher(props: ModelSwitcherProps) {
                 <div>
                   <button
                     type="button"
-                    aria-expanded={open()}
+                    aria-expanded={open() ? 'true' : 'false'}
                     onClick={() => setOpen(!open())}
                     class="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-body outline-none transition-colors hover:bg-muted focus:bg-muted"
                   >

@@ -92,8 +92,8 @@ defineWebComponent<Props, Events>('kai-switch', {
   // The equality guard against the live attribute keeps the write-back the toggle
   // triggers (attributeChangedCallback → setter) from looping (mirrors
   // wireDisclosure's reflect structure).
-  createEffect(() => {
-    const c = checked();
+  // V2-PORT: checked() in the compute; the attribute toggle in the apply.
+  createEffect(checked, (c) => {
     if (c !== element.hasAttribute('checked')) element.toggleAttribute('checked', c);
   });
 

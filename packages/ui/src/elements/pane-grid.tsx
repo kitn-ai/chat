@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup, Index } from 'solid-js';
+import { createSignal, onSettled, onCleanup, For } from 'solid-js';
 import { defineWebComponent } from './define';
 import { PaneGrid } from '../ui/pane-grid';
 
@@ -68,7 +68,7 @@ defineWebComponent<Props>('kai-pane-grid', {
   // (and therefore not tiled) — authoring escape hatch, same as unslotted text.
   const [slotNames, setSlotNames] = createSignal<string[]>([]);
 
-  onMount(() => {
+  onSettled(() => {
     const read = () => {
       const names: string[] = [];
       let i = 0;
@@ -89,7 +89,8 @@ defineWebComponent<Props>('kai-pane-grid', {
     read();
     const observer = new MutationObserver(read);
     observer.observe(element, { childList: true });
-    onCleanup(() => observer.disconnect());
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => observer.disconnect();
   });
 
   return (
@@ -104,7 +105,7 @@ defineWebComponent<Props>('kai-pane-grid', {
         gap={props.gap as string | undefined}
         maximizedIndex={num(props.maximizedIndex) ?? null}
       >
-        <Index each={slotNames()}>{(name) => <slot name={name()} />}</Index>
+        <For keyed={false} each={slotNames()}>{(name) => <slot name={name()} />}</For>
       </PaneGrid>
     </>
   );

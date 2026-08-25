@@ -1,4 +1,5 @@
 // tests/components/file-tree.test.tsx
+import { flush } from 'solid-js';
 import { render, fireEvent } from '@solidjs/testing-library';
 import {
   buildFileTree,
@@ -89,6 +90,7 @@ describe('<FileTree>', () => {
     // find the index.html row
     const indexRow = getAllByRole('treeitem').find((el) => el.textContent?.includes('index.html'))!;
     fireEvent.click(indexRow);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(picked).not.toBeNull();
     expect(picked!.path).toBe('index.html');
     expect(picked!.file.type).toBe('html');
@@ -100,6 +102,7 @@ describe('<FileTree>', () => {
     expect(folder.getAttribute('aria-expanded')).toBe('true');
     expect(queryByText('app.ts')).toBeTruthy();
     fireEvent.click(folder);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(folder.getAttribute('aria-expanded')).toBe('false');
     expect(queryByText('app.ts')).toBeNull();
   });
@@ -234,6 +237,7 @@ describe('<FileTree> changed-files / diff presentation', () => {
     const toggle = getByRole('button', { name: 'Collapse all folders' });
     expect(queryByText('App.tsx')).toBeTruthy();
     fireEvent.click(toggle);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     // Every folder is now collapsed; nested files are gone and the label flips.
     const folders = getAllByRole('treeitem').filter((el) => el.getAttribute('data-tree-kind') === 'folder');
     expect(folders.every((el) => el.getAttribute('aria-expanded') === 'false')).toBe(true);
@@ -241,6 +245,7 @@ describe('<FileTree> changed-files / diff presentation', () => {
     const expand = getByRole('button', { name: 'Expand all folders' });
     expect(expand.textContent).toBe('Expand all');
     fireEvent.click(expand);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(queryByText('App.tsx')).toBeTruthy();
     expect(container.querySelector('[part="summary"]')).toBeTruthy();
   });

@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { test, expect, afterEach } from 'vitest';
 import { render } from '@solidjs/testing-library';
 import { ConfirmCard, type ConfirmCardData } from '../../src/components/confirm-card';
@@ -50,6 +51,7 @@ test('a payload-less action resolves without a payload key (optimistic matches r
     <ConfirmCard host={host} cardId="c1" data={{ body: 'ok?', actions: [{ id: 'go', label: 'Go' }] }} />
   ));
   getByText('Go').click();
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   const a = events.find((e) => e.kind === 'action') as Extract<CardEvent, { kind: 'action' }>;
   expect(a.action).toBe('go');
   expect('payload' in a).toBe(false);

@@ -1,4 +1,5 @@
 // tests/elements/artifact-element.test.tsx
+import { flush as flushSync } from 'solid-js';
 import '../../src/elements/file-tree';
 import '../../src/elements/artifact';
 import {
@@ -48,6 +49,7 @@ test('kai-file-tree fires a `select` event with detail.path on file click', asyn
   el.addEventListener('kai-select', (e) => (detail = (e as CustomEvent).detail));
   const fileRow = el.shadowRoot!.querySelector<HTMLElement>('[data-tree-kind="file"]')!;
   fileRow.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(detail).not.toBeNull();
   expect(detail!.path).toBe('index.html');
 });
@@ -93,6 +95,7 @@ test('kai-artifact tab toggle switches Preview/Code and fires tabchange', async 
     (t) => t.textContent?.includes('Code'),
   )!;
   codeTab.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(changed).not.toBeNull();
   expect(changed!.tab).toBe('code');
@@ -131,6 +134,7 @@ test('kai-artifact file-select emits navigate + fileselect and navigates the ifr
     (r) => r.textContent?.includes('about.html'),
   )!;
   aboutRow.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
 
   expect(events).toContain('navigate');
@@ -153,6 +157,7 @@ test('kai-artifact resolves a file url from src origin + path when url omitted',
   el.addEventListener('kai-navigate', (e) => (navUrl = (e as CustomEvent).detail.url));
   const row = el.shadowRoot!.querySelector<HTMLElement>('[data-tree-kind="file"]')!;
   row.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   // new URL('about.html', 'https://host.test/base/index.html') → .../base/about.html
   expect(navUrl).toBe('https://host.test/base/about.html');
@@ -194,6 +199,7 @@ test('expandable: expand button fires kai-maximize-intent (bubbles+composed) AND
   el.addEventListener('kai-maximize-change', (e) => (mc = (e as CustomEvent).detail));
   const expand = el.shadowRoot!.querySelector<HTMLElement>('[aria-label="Expand"]')!;
   expand.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(intent!.requested).toBe(true);
   expect(bubbles).toBe(true);
@@ -208,9 +214,11 @@ test('kai-maximize-state on the host flips the artifact button label', async () 
   document.body.appendChild(el);
   await flush();
   el.dispatchEvent(new CustomEvent('kai-maximize-state', { detail: { maximized: true }, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(el.shadowRoot!.querySelector('[aria-label="Collapse"]')).toBeTruthy();
   el.dispatchEvent(new CustomEvent('kai-maximize-state', { detail: { maximized: false }, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(el.shadowRoot!.querySelector('[aria-label="Expand"]')).toBeTruthy();
 });
@@ -241,6 +249,7 @@ test('readonly-path: input readonly + submit emits no navigate', async () => {
   expect(input.readOnly).toBe(true);
   input.value = 'https://x.test/b';
   input.closest('form')!.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(navs).toEqual([]);
 });

@@ -13,6 +13,7 @@
 // `input` diff-reconciliation fallback (spec §5.1) rather than the `beforeinput` path.
 // Caret placement, cancelation semantics and composition are NOT testable here and are
 // deliberately not asserted; they belong to the real-Chromium pass.
+import { flush as flushSync } from 'solid-js';
 import '../../src/elements/input';
 
 /** Let Solid's scheduler flush effects + the queued post-attach canonical sync. */
@@ -44,6 +45,7 @@ const type = (input: HTMLInputElement, text: string): void => {
   for (const ch of text) {
     input.value = `${input.value}${ch}`;
     input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   }
 };
 
@@ -51,6 +53,7 @@ const type = (input: HTMLInputElement, text: string): void => {
 const paste = (input: HTMLInputElement, text: string): void => {
   input.value = text;
   input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
 };
 
 const record = <T,>(el: HTMLElement, name: string): T[] => {
@@ -97,6 +100,7 @@ test('the same five props set as PROPERTIES mask too, and tel canonicalizes to d
   expect(inputs.at(-1)).toEqual({ value: '5551234567', formattedValue: '555-123-4567' });
 
   inner(el).dispatchEvent(new Event('blur'));
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
   expect(changes).toEqual([{ value: '5551234567', formattedValue: '555-123-4567' }]);
 

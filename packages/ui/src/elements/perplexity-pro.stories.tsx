@@ -32,7 +32,7 @@ import type { KaiTabItem } from '../ui/tabs';
 // compilation (they must match BYTE-FOR-BYTE or it errors TS2717), so the shared
 // ones are copied verbatim from perplexity.stories.tsx. kai-image and kai-reasoning
 // are declared here for the first time (no other story augments them).
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -193,7 +193,7 @@ function Cite(props: { i: number }) {
 
 // A small icon-only tool button used in the home composer's tool row. Lucide
 // glyphs not in the kit's curated icon registry are slotted as inline SVGs.
-function Tool(props: { tip: string; children: import('solid-js').JSX.Element }) {
+function Tool(props: { tip: string; children: import('@solidjs/web').JSX.Element }) {
   return (
     <kai-tooltip content={props.tip}>
       <kai-button variant="ghost" size="icon-sm" label={props.tip}>{props.children}</kai-button>
@@ -221,16 +221,17 @@ export const PerplexityPro: Story = {
       return needle ? RECENTS.filter((r) => (r.label ?? '').toLowerCase().includes(needle)) : RECENTS;
     };
     let recentsNavEl: El | undefined;
-    createEffect(() => { const items = filterRecents(sessionQuery()); if (recentsNavEl) recentsNavEl.items = items; });
+    // V2-PORT: tracked read in the compute; the element-prop write in the apply.
+    createEffect(() => filterRecents(sessionQuery()), (items) => { if (recentsNavEl) recentsNavEl.items = items; });
 
     // Keep the answer tab-strip's underline (a controlled kai-tabs) in lock-step
     // with the `tab` signal that drives the panel - including across remounts when
     // the top mode toggles away and back.
     let answerTabsEl: El | undefined;
-    createEffect(() => { const v = tab(); if (answerTabsEl) answerTabsEl.value = v; });
+    createEffect(tab, (v) => { if (answerTabsEl) answerTabsEl.value = v; }); // V2-PORT
 
     // Array/object props (and event wiring) are applied in each element's ref
-    // callback, NOT a one-shot onMount: the rails + main views live inside <Show>,
+    // callback, NOT a one-shot onSettled: the rails + main views live inside <Show>,
     // so they unmount/remount on mode/view changes; a ref runs on every (re)mount.
     return (
       <div class="relative h-screen w-full">

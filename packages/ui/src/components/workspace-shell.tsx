@@ -1,4 +1,5 @@
-import { Show, createSignal, createMemo, onMount, onCleanup, type JSX } from 'solid-js';
+import { Show, createSignal, createMemo, onSettled, onCleanup } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { createControllableSignal } from '../primitives/controllable';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../ui/resizable';
 import { cn } from '../utils/cn';
@@ -177,7 +178,11 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
     }
   };
 
-  onMount(() => {
+  // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+  // and register them once at the owner scope (same lifecycle as 1.x).
+  const settledDisposers: (() => void)[] = [];
+  onCleanup(() => { for (const d of settledDisposers) d(); });
+  onSettled(() => {
     if (typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width ?? rootEl.clientWidth;
@@ -185,7 +190,7 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
       applyBreakpoint(width);
     });
     ro.observe(rootEl);
-    onCleanup(() => ro.disconnect());
+    settledDisposers.push(() => ro.disconnect());
   });
 
   // --- widths ---

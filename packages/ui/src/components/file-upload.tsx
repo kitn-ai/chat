@@ -1,5 +1,6 @@
-import { type JSX, splitProps, createSignal, createContext, useContext, createEffect, onCleanup, Show } from 'solid-js';
-import { Portal } from 'solid-js/web';
+import { omit, createSignal, createContext, useContext, createEffect, onCleanup, Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
+import { Portal } from '@solidjs/web';
 import { cn } from '../utils/cn';
 
 interface FileUploadContextValue {
@@ -23,7 +24,8 @@ export interface FileUploadProps {
 }
 
 function FileUpload(props: FileUploadProps) {
-  const [local] = splitProps(props, ['onFilesAdded', 'children', 'multiple', 'accept', 'disabled']);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = props;
   let inputRef: HTMLInputElement | undefined;
   const [isDragging, setIsDragging] = createSignal(false);
   let dragCounter = 0;
@@ -39,7 +41,9 @@ function FileUpload(props: FileUploadProps) {
     }
   };
 
-  createEffect(() => {
+  // V2-PORT: a depless mount effect — empty compute; the listener wiring is the
+  // apply, and the in-effect onCleanup became the returned cleanup.
+  createEffect(() => undefined, () => {
     const handleDrag = (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
@@ -77,12 +81,12 @@ function FileUpload(props: FileUploadProps) {
     win.addEventListener('dragover', handleDrag);
     win.addEventListener('drop', handleDrop);
 
-    onCleanup(() => {
+    return () => {
       win.removeEventListener('dragenter', handleDragIn);
       win.removeEventListener('dragleave', handleDragOut);
       win.removeEventListener('dragover', handleDrag);
       win.removeEventListener('drop', handleDrop);
-    });
+    };
   });
 
   const handleFileSelect = (e: Event) => {
@@ -102,7 +106,7 @@ function FileUpload(props: FileUploadProps) {
   };
 
   return (
-    <FileUploadContext.Provider value={contextValue}>
+    <FileUploadContext value={contextValue}>
       <input
         type="file"
         ref={(el) => { inputRef = el; }}
@@ -114,7 +118,7 @@ function FileUpload(props: FileUploadProps) {
         disabled={local.disabled}
       />
       {local.children}
-    </FileUploadContext.Provider>
+    </FileUploadContext>
   );
 }
 
@@ -123,7 +127,9 @@ function FileUpload(props: FileUploadProps) {
 export interface FileUploadTriggerProps extends JSX.ButtonHTMLAttributes<HTMLButtonElement> {}
 
 function FileUploadTrigger(props: FileUploadTriggerProps) {
-  const [local, rest] = splitProps(props, ['class', 'children']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'class', 'children');
   const context = useContext(FileUploadContext);
 
   const handleClick = () => context?.inputRef?.click();
@@ -145,7 +151,9 @@ function FileUploadTrigger(props: FileUploadTriggerProps) {
 export interface FileUploadContentProps extends JSX.HTMLAttributes<HTMLDivElement> {}
 
 function FileUploadContent(props: FileUploadContentProps) {
-  const [local, rest] = splitProps(props, ['class']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'class');
   const context = useContext(FileUploadContext);
 
   return (

@@ -1,4 +1,5 @@
-import { type JSX, createContext, useContext, splitProps, Show } from 'solid-js';
+import { createContext, useContext, omit, Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
 import { HoverCardRoot, HoverCardTrigger, HoverCardContent } from '../ui/hover-card';
@@ -153,11 +154,13 @@ export interface AttachmentsProps extends JSX.HTMLAttributes<HTMLDivElement> {
 }
 
 function Attachments(props: AttachmentsProps) {
-  const [local, rest] = splitProps(props, ['variant', 'class', 'children']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'variant', 'class', 'children');
   const variant = () => local.variant ?? 'grid';
 
   return (
-    <AttachmentsContext.Provider value={{ get variant() { return variant(); } }}>
+    <AttachmentsContext value={{ get variant() { return variant(); } }}>
       <div
         class={cn(
           'flex items-start',
@@ -169,7 +172,7 @@ function Attachments(props: AttachmentsProps) {
       >
         {local.children}
       </div>
-    </AttachmentsContext.Provider>
+    </AttachmentsContext>
   );
 }
 
@@ -183,7 +186,9 @@ export interface AttachmentProps extends JSX.HTMLAttributes<HTMLDivElement> {
 }
 
 function Attachment(props: AttachmentProps) {
-  const [local, rest] = splitProps(props, ['data', 'onRemove', 'class', 'children']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'data', 'onRemove', 'class', 'children');
   // Read the getter reactively — DON'T destructure, or the variant is captured
   // once and the item never re-lays-out when the container variant changes.
   const ctx = useAttachmentsContext();
@@ -191,7 +196,7 @@ function Attachment(props: AttachmentProps) {
   const unsendable = () => getUnsendableNote(local.data);
 
   return (
-    <AttachmentContext.Provider
+    <AttachmentContext
       value={{
         get data() { return local.data; },
         get mediaCategory() { return mediaCategory(); },
@@ -246,7 +251,7 @@ function Attachment(props: AttachmentProps) {
         </Show>
         {local.children}
       </div>
-    </AttachmentContext.Provider>
+    </AttachmentContext>
   );
 }
 
@@ -259,7 +264,9 @@ export interface AttachmentPreviewProps extends JSX.HTMLAttributes<HTMLDivElemen
 }
 
 function AttachmentPreview(props: AttachmentPreviewProps) {
-  const [local, rest] = splitProps(props, ['fallbackIcon', 'class']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'fallbackIcon', 'class');
   const ctx = useAttachmentContext();
 
   const iconSize = () => ctx.variant === 'inline' ? 'size-3' : 'size-4';
@@ -332,7 +339,9 @@ export interface AttachmentInfoProps extends JSX.HTMLAttributes<HTMLDivElement> 
 }
 
 function AttachmentInfo(props: AttachmentInfoProps) {
-  const [local, rest] = splitProps(props, ['showMediaType', 'class']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'showMediaType', 'class');
   const ctx = useAttachmentContext();
   const label = () => getAttachmentLabel(ctx.data);
 
@@ -505,7 +514,9 @@ function AttachmentHoverCardContent(props: AttachmentHoverCardContentProps) {
 export interface AttachmentEmptyProps extends JSX.HTMLAttributes<HTMLDivElement> {}
 
 function AttachmentEmpty(props: AttachmentEmptyProps) {
-  const [local, rest] = splitProps(props, ['class', 'children']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'class', 'children');
   return (
     <div
       class={cn(

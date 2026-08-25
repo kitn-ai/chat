@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onMount, onCleanup, Show } from 'solid-js';
+import { createSignal, createEffect, onSettled, onCleanup, Show } from 'solid-js';
 import { defineWebComponent } from './define';
 import { createControllableSignal } from '../primitives/controllable';
 import { readSlots, CONVERSATIONS_SLOTS } from './slots';
@@ -94,7 +94,7 @@ defineWebComponent<Props, Events>('kai-conversations', {
   const [itemHosts, setItemHosts] = createSignal<HTMLElement[]>([]);
   // Which composition slots (header/empty/footer) the consumer has filled.
   const [slots, setSlots] = createSignal<Record<string, boolean>>({});
-  onMount(() => {
+  onSettled(() => {
     const read = () => {
       const nodes = [...element.querySelectorAll('kai-conversation')];
       setSlottedConversations(nodes.map(parseKaiConversationElement));
@@ -115,7 +115,8 @@ defineWebComponent<Props, Events>('kai-conversations', {
     read();
     const observer = new MutationObserver(read);
     observer.observe(element, { childList: true, attributes: true, subtree: true });
-    onCleanup(() => observer.disconnect());
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => observer.disconnect();
   });
 
   const itemMode = () => itemHosts().length > 0;
@@ -134,9 +135,16 @@ defineWebComponent<Props, Events>('kai-conversations', {
   });
   // Re-derive the bookkeeping whenever the children change (the MutationObserver
   // and the shadow slot's slotchange both funnel into itemHosts) or activeId moves.
-  createEffect(() => {
-    if (itemMode()) itemsController.sync();
-  });
+  // V2-PORT (R1): sync() used to be the tracked read-site (itemHosts and the
+  // controlled activeId flow through it); those reads now live EXPLICITLY in the
+  // compute — the apply is untracked, so leaving them inside sync() would stop
+  // the effect re-running on children/active changes.
+  createEffect(
+    () => ({ mode: itemMode(), items: itemHosts(), active: props.activeId }),
+    ({ mode }) => {
+      if (mode) itemsController.sync();
+    },
+  );
 
   // ── Rail collapse (controlled/uncontrolled, same pattern as kai-workspace) ──
   // `collapsed` (when set) wins; otherwise the element manages its own state,

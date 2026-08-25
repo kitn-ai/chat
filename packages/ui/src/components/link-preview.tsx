@@ -1,14 +1,5 @@
-import {
-  type JSX,
-  splitProps,
-  createSignal,
-  createEffect,
-  createMemo,
-  on,
-  onMount,
-  onCleanup,
-  Show,
-} from 'solid-js';
+import { omit, createSignal, createEffect, createMemo, onSettled, onCleanup, Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { Skeleton } from '../ui/skeleton';
 import { Link as LinkIcon } from 'lucide-solid';
@@ -46,7 +37,8 @@ function hasMetadata(data: LinkPreviewData): boolean {
  * host policy performs the navigation so it can veto/redirect.
  */
 export function LinkPreview(props: LinkPreviewProps): JSX.Element {
-  const [local] = splitProps(props, ['cardId', 'data', 'onEmit', 'class']);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = props;
 
   const emit = (event: CardEvent) => local.onEmit?.(event);
 
@@ -62,27 +54,18 @@ export function LinkPreview(props: LinkPreviewProps): JSX.Element {
   const effective = createMemo<LinkPreviewData>(() => ({ ...local.data, ...fetched() }));
 
   // Lifecycle `ready` once on mount.
-  onMount(() => emit({ kind: 'ready', cardId: local.cardId }));
+  onSettled(() => { emit({ kind: 'ready', cardId: local.cardId }); }); // V2-PORT (R2): braced — a non-function return crashes dev
 
   // Invalid URL → emit a single `error` (belt-and-suspenders; host also rejects bad schemes on open).
-  createEffect(
-    on(valid, (ok) => {
+  createEffect(valid, (ok) => {
       if (!ok) emit({ kind: 'error', cardId: local.cardId, message: `Invalid link url: ${url()}` });
-    }),
-  );
+    });
 
   // Bare-URL path: when there's no metadata AND a fetcher is configured, resolve once.
-  createEffect(
-    on(
-      () => [local.data, valid()] as const,
-      ([data, ok]) => {
+  createEffect(() => [local.data, valid()] as const, ([data, ok]) => {
         setImageBroken(false);
         if (!ok || hasMetadata(data) || !hasLinkPreviewFetcher()) return;
         let cancelled = false;
-        // Cancel a stale in-flight fetch if `data` changes before it resolves.
-        onCleanup(() => {
-          cancelled = true;
-        });
         setLoading(true);
         resolveLinkMetadata(data.url)
           .then((meta) => {
@@ -95,9 +78,12 @@ export function LinkPreview(props: LinkPreviewProps): JSX.Element {
           .finally(() => {
             if (!cancelled) setLoading(false);
           });
-      },
-    ),
-  );
+        // V2-PORT: the in-effect onCleanup became the apply's returned cleanup —
+        // cancels a stale in-flight fetch if `data` changes before it resolves.
+        return () => {
+          cancelled = true;
+        };
+      });
 
   const domain = createMemo(() => effective().domain ?? deriveDomain(url()) ?? url());
   const heading = createMemo(() => effective().siteName ?? domain());

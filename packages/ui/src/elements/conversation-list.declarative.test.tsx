@@ -12,7 +12,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
-import { For } from 'solid-js';
+import { For, flush } from 'solid-js';
 import { parseKaiConversationElement } from './conversation-list';
 import type { ConversationSummary } from '../types';
 
@@ -110,6 +110,7 @@ describe('conversation merge order', () => {
     ];
     const { getByText } = render(() => <ConvList items={items} onSelect={onSelect} />);
     fireEvent.click(getByText('API plan'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSelect).toHaveBeenCalledWith('c-42');
   });
 
@@ -138,6 +139,7 @@ describe('conversation merge order', () => {
     const parsed = parseKaiConversationElement(el);
     const { getByText } = render(() => <ConvList items={[parsed]} onSelect={onSelect} />);
     fireEvent.click(getByText('My conversation'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSelect).toHaveBeenCalledWith('c-99');
   });
 });

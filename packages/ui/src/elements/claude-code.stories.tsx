@@ -19,7 +19,7 @@ import type { ConversationSummary, ConversationGroup } from '../types';
 
 // kai-tasks, kai-command, and kai-icon are used as JSX elements here without their
 // stories' own facades, so declare their tags locally.
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -150,9 +150,9 @@ export const ClaudeCode: Story = {
     const toggleRail = () => (ws?.toggleAside as ((side: string) => void) | undefined)?.('start');
 
     // Array/object props (and event wiring) are applied in each element's ref
-    // callback, NOT a one-shot onMount. The Home view lives inside <Show>, so it
+    // callback, NOT a one-shot onSettled. The Home view lives inside <Show>, so it
     // unmounts/remounts on tab switch; a ref runs on every (re)mount, so the
-    // remounted elements keep their data + styling. onMount would run only once.
+    // remounted elements keep their data + styling. onSettled would run only once.
     return (
       <div class="relative h-screen w-full">
         {/* Size the placeholder glyphs large: a class-qualified ::part selector

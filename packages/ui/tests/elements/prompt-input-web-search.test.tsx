@@ -5,6 +5,7 @@
  * now belong exclusively to the `<kai-search>` filter field and conversation
  * filtering; the composer no longer answers to them (feat!, no alias).
  */
+import { flush as flushSync } from 'solid-js';
 import '../../src/elements/prompt-input';
 import '../../src/elements/chat';
 
@@ -37,6 +38,7 @@ test('kai-prompt-input: clicking the Globe dispatches kai-web-search (and not ka
   el.addEventListener('kai-web-search', () => webSearch++);
   el.addEventListener('kai-search', () => oldName++);
   globeButton(el)!.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
 
   expect(webSearch).toBe(1);
@@ -68,6 +70,7 @@ test('kai-chat: web-search shows the Globe and it dispatches kai-web-search', as
   el.addEventListener('kai-web-search', () => webSearch++);
   el.addEventListener('kai-search', () => oldName++);
   globe!.click();
+  flushSync(); // V2-FLUSH: v2 stages writes; commit before asserting
   await flush();
 
   expect(webSearch).toBe(1);

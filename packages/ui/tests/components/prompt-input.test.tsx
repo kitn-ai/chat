@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@solidjs/testing-library';
 import { PromptInput, PromptInputTextarea } from '../../src/components/prompt-input';
@@ -23,6 +24,7 @@ describe('PromptInput', () => {
     ));
     const editable = container.querySelector('[data-kai-composer-editable]') as HTMLElement;
     await fireEvent.keyDown(editable, { key: 'Enter', shiftKey: false });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSubmit).toHaveBeenCalled();
   });
 
@@ -35,6 +37,7 @@ describe('PromptInput', () => {
     ));
     const editable = container.querySelector('[data-kai-composer-editable]') as HTMLElement;
     await fireEvent.keyDown(editable, { key: 'Enter', shiftKey: true });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });

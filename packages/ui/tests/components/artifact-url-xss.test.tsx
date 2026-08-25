@@ -48,6 +48,7 @@
 // So two of the three sinks were live, and the two that were not are held shut
 // by attributes rather than by any decision the kit makes. All four are
 // filtered.
+import { flush } from 'solid-js';
 import { render, fireEvent } from '@solidjs/testing-library';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { Artifact, type ArtifactController, type ArtifactFile } from '../../src/components/artifact';
@@ -164,6 +165,7 @@ describe('artifact PDF fallback: a hostile url never reaches an href', () => {
     ));
     // What a user does in the Code tab: click the file.
     controller?.selectFile('report.pdf');
+    flush(); // V2-FLUSH: commit the staged controller write
     expect(fallbackOf(container)).not.toBeNull();
     for (const h of hrefs(container)) expect(isDangerous(h)).toBe(false);
   });
@@ -193,6 +195,7 @@ describe('artifact PDF fallback: legitimate urls still link', () => {
       />
     ));
     controller?.selectFile('docs/report.pdf');
+    flush(); // V2-FLUSH: commit the staged controller write
     expect(fallbackOf(container)).not.toBeNull();
     expect(hrefs(container)).toEqual(['docs/report.pdf', 'docs/report.pdf']);
   });
@@ -210,6 +213,7 @@ describe('artifact open-in-new-tab: window.open never receives a hostile url', (
     ));
     const button = getByLabelText('Open in new tab'); // the control really is there
     fireEvent.click(button);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     for (const call of open.mock.calls) expect(isDangerous(String(call[0]))).toBe(false);
   });
 
@@ -223,6 +227,7 @@ describe('artifact open-in-new-tab: window.open never receives a hostile url', (
     ));
     expect(controller).toBeDefined();
     controller?.openExternal();
+    flush(); // V2-FLUSH: commit the staged controller write
     for (const call of open.mock.calls) expect(isDangerous(String(call[0]))).toBe(false);
   });
 
@@ -232,6 +237,7 @@ describe('artifact open-in-new-tab: window.open never receives a hostile url', (
       <Artifact src="https://example.com/preview" openInTab />
     ));
     fireEvent.click(getByLabelText('Open in new tab'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(open).toHaveBeenCalledWith(
       'https://example.com/preview',
       '_blank',
@@ -257,6 +263,7 @@ describe('artifact preview iframe: a script url never reaches src', () => {
       <Artifact src="https://example.com/ok" controllerRef={(c) => (controller = c)} />
     ));
     controller?.navigate('javascript:window.__PWNED__=5');
+    flush(); // V2-FLUSH: commit the staged controller write
     const frame = container.querySelector('iframe');
     expect(frame).not.toBeNull();
     // Both the attribute and the property: `loadCurrent` assigns `iframeEl.src`

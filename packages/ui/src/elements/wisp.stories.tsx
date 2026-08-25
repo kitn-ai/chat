@@ -28,7 +28,7 @@ import { relativeTimeShort } from '../components/conversation-item';
 // copied byte-for-byte from the canonical sibling decls (mismatch errors TS2717).
 // 'kai-conversation-item' is declared here first (no sibling declares it yet);
 // 'kai-conversations' is canonical in chat-slots.stories.tsx and NOT redeclared.
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -190,6 +190,10 @@ function WispApp() {
     // The composed rail's state: the consumer owns the records AND the loop.
     const [recents, setRecents] = createSignal<Recent[]>(INITIAL_RECENTS);
     const [activeId, setActiveId] = createSignal('c0');
+    // V2-PORT: refs are unowned in v2 — the container's reactive activeId feed
+    // lives here (owned story scope) over the node the ref records below.
+    let conversationsEl: El | undefined;
+    createEffect(activeId, (id) => { if (conversationsEl) conversationsEl.activeId = id; });
     let ws: El | undefined;
     const toggleRail = () => (ws?.toggleAside as ((side: string) => void) | undefined)?.('start');
 
@@ -241,7 +245,10 @@ function WispApp() {
               // un-highlighted was exactly that. The per-row `active` binding
               // below covers the frames before the container's first item sync;
               // both derive from the same signal, so they never disagree.
-              createEffect(() => { (el as El).activeId = activeId(); });
+              // V2-PORT: refs are unowned in v2 — the reactive feed runs in the
+              // owned effect declared beside `activeId`; the ref records the node.
+              conversationsEl = el as El;
+              (el as El).activeId = activeId();
               el.addEventListener('kai-conversation-select', (e) => {
                 setActiveId((e as CustomEvent<{ id: string }>).detail.id);
               });

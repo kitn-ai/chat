@@ -1,4 +1,5 @@
-import { Index, type JSX } from 'solid-js';
+import { For, untrack } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../../utils/cn';
 import { normalizeVolumeBands } from '../../primitives/audio-bands';
 import { useSequencer } from '../../primitives/use-sequencer';
@@ -112,7 +113,7 @@ export function BarVisualizer(props: VariantProps & { barCount?: number }): JSX.
         maps by POSITION instead, so each bar's DOM node is created once and
         its `level` accessor updates in place.
       */}
-      <Index each={levels()}>
+      <For keyed={false} each={levels()}>
         {(level, i) => {
           // `index` is a plain number (stable per position under <Index>).
           // `highlighted`/`value` are live accessors, not plain values: the
@@ -125,7 +126,7 @@ export function BarVisualizer(props: VariantProps & { barCount?: number }): JSX.
             value: () => level(),
           };
           return (
-            props.children?.(item) ?? (
+            untrack(() => props.children)?.(item) ?? (
               // The lit state is a SECOND part TOKEN (`part(bar highlighted)`),
               // not a `data-*` attribute selector on `::part(bar)`: a CSS
               // attribute selector cannot follow a pseudo-element, so
@@ -136,7 +137,7 @@ export function BarVisualizer(props: VariantProps & { barCount?: number }): JSX.
               <div
                 part={item.highlighted() ? 'bar highlighted' : 'bar'}
                 data-kai-index={item.index}
-                data-kai-highlighted={item.highlighted()}
+                data-kai-highlighted={item.highlighted() ? 'true' : 'false'}
                 class={cn(
                   'rounded-full bg-current/10',
                   'data-[kai-highlighted=true]:bg-current',
@@ -169,7 +170,7 @@ export function BarVisualizer(props: VariantProps & { barCount?: number }): JSX.
             )
           );
         }}
-      </Index>
+      </For>
     </div>
   );
 }

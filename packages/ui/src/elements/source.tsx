@@ -1,4 +1,4 @@
-import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { createSignal, For, onCleanup, onSettled, Show } from 'solid-js';
 import { defineWebComponent } from './define';
 import { Source, SourceTrigger, SourceContent, SourceList } from '../components/source';
 // Public shape of the `sources` prop; lives in ./element-data-types so the ROOT
@@ -92,7 +92,7 @@ defineWebComponent<SourceListProps>('kai-sources', {
   // Read declarative <kai-source> children from light DOM.
   // The shadow root has no <slot> for them, so they are invisible — pure data carriers.
   const [slottedSources, setSlottedSources] = createSignal<KaiSourceItem[]>([]);
-  onMount(() => {
+  onSettled(() => {
     const read = () => {
       const nodes = [...element.querySelectorAll('kai-source')];
       setSlottedSources(nodes.map(parseKaiSourceElement));
@@ -100,7 +100,8 @@ defineWebComponent<SourceListProps>('kai-sources', {
     read();
     const observer = new MutationObserver(read);
     observer.observe(element, { childList: true, attributes: true, subtree: true });
-    onCleanup(() => observer.disconnect());
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => observer.disconnect();
   });
 
   // Prop sources take precedence; slotted children are appended after.

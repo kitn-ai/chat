@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup, untrack } from 'solid-js';
+import { createSignal, onSettled, onCleanup, untrack } from 'solid-js';
 import { defineWebComponent } from './define';
 import { readSlots, WORKSPACE_SLOTS } from './slots';
 import {
@@ -121,12 +121,13 @@ defineWebComponent<Props, Events>('kai-workspace', {
   // node, so each optional region renders ONLY when readSlots reports projected
   // light-DOM content (re-read on childList mutation). Main always renders.
   const [slots, setSlots] = createSignal<Record<string, boolean>>({});
-  onMount(() => {
+  onSettled(() => {
     const read = () => setSlots(readSlots(element, WORKSPACE_SLOTS));
     read();
     const observer = new MutationObserver(read);
     observer.observe(element, { childList: true });
-    onCleanup(() => observer.disconnect());
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => observer.disconnect();
   });
 
   // Reflect the read-back flags (the G-05 rule: a bare attribute parses to

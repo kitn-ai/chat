@@ -31,7 +31,7 @@ import type { KaiTabItem } from '../ui/tabs';
 // global augmentations across the compilation, so each declaration must match its
 // sibling story byte-for-byte or it errors TS2717. All blocks below are copied
 // verbatim from codex.stories.tsx / perplexity.stories.tsx.
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -196,7 +196,7 @@ function StatCard(props: { kpi: typeof KPIS[number] }) {
         <Icon class="size-4 text-muted-foreground" />
       </div>
       <div class="mt-2 text-2xl font-semibold tracking-tight text-foreground">{props.kpi.value}</div>
-      <div class="mt-1 flex items-center gap-1 text-xs font-medium" classList={{ 'text-tool-green': props.kpi.up, 'text-tool-red': !props.kpi.up }}>
+      <div class={["mt-1 flex items-center gap-1 text-xs font-medium", { 'text-tool-green': props.kpi.up, 'text-tool-red': !props.kpi.up }]}>
         {props.kpi.up ? <TrendingUp class="size-3.5" /> : <TrendingDown class="size-3.5" />}
         {props.kpi.up ? '+' : '-'}{props.kpi.delta}%
         <span class="text-muted-foreground font-normal">vs last month</span>
@@ -227,11 +227,11 @@ function HelmApp(props: { narrow: boolean }) {
                 const Icon = item.icon;
                 return (
                   <a
-                    class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors"
-                    classList={{
-                      'bg-muted font-medium text-foreground': item.active,
+                    class={["flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors", {
+                      'bg-muted font-medium text-foreground': !!item.active, // V2-PORT: ClassValue wants boolean
                       'text-muted-foreground hover:bg-muted/60': !item.active,
-                    }}
+                    }]}
+                   
                   >
                     <Icon class="size-4" /> {item.label}
                   </a>
@@ -272,13 +272,13 @@ function HelmApp(props: { narrow: boolean }) {
           </div>
 
           {/* KPI cards */}
-          <div class="grid gap-3" classList={{ 'grid-cols-1': props.narrow, 'grid-cols-2 lg:grid-cols-4': !props.narrow }}>
+          <div class={["grid gap-3", { 'grid-cols-1': props.narrow, 'grid-cols-2 lg:grid-cols-4': !props.narrow }]}>
             <For each={KPIS}>{(kpi) => <StatCard kpi={kpi} />}</For>
           </div>
 
           {/* chart + traffic */}
-          <div class="mt-3 grid gap-3" classList={{ 'grid-cols-1': props.narrow, 'grid-cols-3': !props.narrow }}>
-            <div class="rounded-xl border border-border bg-card p-4" classList={{ 'col-span-2': !props.narrow }}>
+          <div class={["mt-3 grid gap-3", { 'grid-cols-1': props.narrow, 'grid-cols-3': !props.narrow }]}>
+            <div class={["rounded-xl border border-border bg-card p-4", { 'col-span-2': !props.narrow }]}>
               <div class="mb-3 flex items-center justify-between">
                 <div class="text-sm font-semibold">Revenue over time</div>
                 <span class="text-xs font-medium text-tool-green">+12.4%</span>
@@ -338,7 +338,7 @@ function HelmApp(props: { narrow: boolean }) {
                       <kai-badge variant={c.plan === 'Free' ? 'outline' : 'secondary'}>{c.plan}</kai-badge>
                     </Show>
                     <div class="w-14 text-right text-sm font-medium tabular-nums">{c.mrr}</div>
-                    <span class="size-2 shrink-0 rounded-full" classList={{ 'bg-tool-green': c.ok, 'bg-tool-red': !c.ok }}></span>
+                    <span class={["size-2 shrink-0 rounded-full", { 'bg-tool-green': c.ok, 'bg-tool-red': !c.ok }]}></span>
                   </div>
                 )}
               </For>
@@ -374,7 +374,7 @@ export const Lovable: Story = {
     ];
 
     // Array/object props (and event wiring) are applied in each element's ref
-    // callback, NOT a one-shot onMount, so they survive remounts (the preview /
+    // callback, NOT a one-shot onSettled, so they survive remounts (the preview /
     // code panels live inside <Show> and remount on tab switch).
     return (
       <div class="flex h-screen flex-col bg-background text-foreground">

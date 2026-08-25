@@ -1,4 +1,5 @@
-import { createEffect, createSignal, onCleanup, Show, type Accessor, type JSX } from 'solid-js';
+import { createEffect, createSignal, onCleanup, Show, type Accessor } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { ArrowLeft } from 'lucide-solid';
 import { cn } from '../utils/cn';
 import { createPresence } from '../ui/overlay';
@@ -104,8 +105,10 @@ export function Screen(props: ScreenProps) {
   };
 
   // Drive inert + focus on the open/closed transition.
-  createEffect((wasOpen: boolean) => {
-    const open = isOpen();
+  // V2-PORT (R1): compute tracks isOpen; the inert/focus choreography (DOM reads
+  // and writes) is the apply. The removed initialValue seed became a default on
+  // the prev parameter, so a defaultOpen mount still runs the open branch.
+  createEffect(isOpen, (open, wasOpen = false) => {
     if (open && !wasOpen) {
       restoreFocus = (document.activeElement as HTMLElement) ?? null;
       applyInert();
@@ -118,9 +121,7 @@ export function Screen(props: ScreenProps) {
       restoreFocus = null;
       if (target && target.isConnected) queueMicrotask(() => target.focus());
     }
-    return open;
-    // Seed prev=false so a `defaultOpen` (open-at-mount) still runs the open branch.
-  }, false);
+  });
 
   onCleanup(releaseInert);
 

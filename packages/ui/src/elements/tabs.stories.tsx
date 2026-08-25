@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { onMount } from 'solid-js';
+import { onSettled } from 'solid-js';
 import './tabs';
 import type { KaiTabItem } from '../ui/tabs';
 
 // Declare the custom element tag for SolidJS JSX.
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
@@ -28,7 +28,7 @@ const ITEMS: KaiTabItem[] = [
 
 function Strip(props: { variant?: 'segmented' | 'underline'; defaultValue?: string }) {
   let el!: HTMLElement & { items?: KaiTabItem[] };
-  onMount(() => { el.items = ITEMS; });
+  onSettled(() => { el.items = ITEMS; });
   return (
     <kai-tabs
       ref={el}

@@ -1,17 +1,7 @@
-import {
-  type JSX,
-  For,
-  Show,
-  splitProps,
-  mergeProps,
-  createSignal,
-  createMemo,
-  createEffect,
-  on,
-  onMount,
-  ErrorBoundary,
-  createUniqueId,
-} from 'solid-js';
+import { For, Show, omit, createSignal, createMemo, createEffect, onSettled, Errored, createUniqueId } from 'solid-js';
+import { deferApply } from '../utils/defer-apply'; // V2-PORT: on(...,{defer:true}) replacement
+import { mergeDefaults } from '../utils/merge-defaults'; // V2-PORT: 1.x mergeProps semantics (undefined does not override)
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
 import { ProgressBar } from '../ui/progress-bar';
@@ -205,11 +195,9 @@ const DEFAULT_DATA: TasksCardData = { tasks: [] };
  * input order. Emits `ready` on mount and `error` for an unusable definition.
  */
 export function TasksCard(props: TasksCardProps): JSX.Element {
-  const merged = mergeProps({ cardId: 'kai-tasks' }, props);
-  const [local] = splitProps(merged, [
-    'data', 'cardId', 'heading', 'host', 'hostElement', 'class', 'resolution',
-    'value', 'defaultValue', 'disabled', 'readonly', 'onValueChange', 'controllerRef',
-  ]);
+  const merged = mergeDefaults({ cardId: 'kai-tasks' }, props);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = merged;
 
   const ctxHost = useCardHost();
   const uid = createUniqueId();
@@ -238,36 +226,29 @@ export function TasksCard(props: TasksCardProps): JSX.Element {
 
   // Seed selection from `value` (controlled) > `defaultValue` > per-task `checked`,
   // when a NEW definition arrives.
-  createEffect(
-    on(
-      () => local.data,
-      () => {
+  createEffect(() => local.data, () => {
         const seedIds = local.value ?? local.defaultValue ?? initialSelected(tasks());
         setSelected(new Set(validIds(seedIds)));
-      },
-    ),
-  );
+      });
 
   // Controlled selection: when the consumer drives `value`, mirror it into the set
   // (the controlled prop wins). Deferred so mount's seed runs first.
-  createEffect(on(() => local.value, (v) => {
+  createEffect(() => local.value, deferApply((v: string[] | undefined) => {
     if (!v) return;
     setSelected(new Set(validIds(v)));
-  }, { defer: true }));
+  }));
 
   // Fire the live change signal whenever the selection set changes (distinct from
   // the terminal submit). Deferred so the initial seed doesn't emit.
-  createEffect(on(selected, (s) => {
+  createEffect(selected, deferApply((s) => {
     local.onValueChange?.({ value: selectedInOrder(tasks(), s) });
-  }, { defer: true }));
+  }));
 
   // ready / error lifecycle emits.
-  createEffect(
-    on(valid, (ok) => {
+  createEffect(valid, (ok) => {
       if (ok) emit({ kind: 'ready', cardId: local.cardId });
       else emit({ kind: 'error', cardId: local.cardId, message: errorMessage() });
-    }),
-  );
+    });
 
   const groupDisabled = (): boolean => local.disabled === true;
   // Display-only: block all toggling/confirm and drop the interactive affordances,
@@ -332,7 +313,7 @@ export function TasksCard(props: TasksCardProps): JSX.Element {
   // card's latent selection model. select sets the checked ids local-only (no
   // submit); toggle drives one row; send confirms (same path as Confirm); focus
   // targets the group; dismiss/reopen drive the stub.
-  onMount(() => {
+  onSettled(() => {
     local.controllerRef?.({
       select: (taskIds) => {
         if (res.isResolved() || groupDisabled() || readOnly()) return;
@@ -367,12 +348,15 @@ export function TasksCard(props: TasksCardProps): JSX.Element {
 
   // Surface the resolved state for host styling. Only a `submit` resolution is the
   // "submitted" state; a deferred `dismissed` (or `expired`) is not.
-  createEffect(() => {
-    const el = local.hostElement;
-    if (!el) return;
-    if (res.resolution()?.kind === 'submit') el.setAttribute('data-kai-resolved', 'submitted');
-    else el.removeAttribute('data-kai-resolved');
-  });
+  // V2-PORT (R1): tracked reads in the compute; attribute writes in the apply.
+  createEffect(
+    () => ({ el: local.hostElement, submitted: res.resolution()?.kind === 'submit' }),
+    ({ el, submitted }) => {
+      if (!el) return;
+      if (submitted) el.setAttribute('data-kai-resolved', 'submitted');
+      else el.removeAttribute('data-kai-resolved');
+    },
+  );
 
   const resolvedSummary = createMemo(() => {
     const r = res.resolution();
@@ -392,7 +376,7 @@ export function TasksCard(props: TasksCardProps): JSX.Element {
 
   return (
     <Show when={valid()} fallback={<Card heading={local.heading} errorMessage={errorMessage()} />}>
-      <ErrorBoundary
+      <Errored
         fallback={() => {
           emit({ kind: 'error', cardId: local.cardId, message: 'The card failed to render.' });
           return <Card heading={local.heading} errorMessage="The card failed to render." />;
@@ -489,6 +473,14 @@ export function TasksCard(props: TasksCardProps): JSX.Element {
                 <Show when={showMaster()}>
                   {(() => {
                     const indeterminate = () => masterState() === 'indeterminate';
+                    // V2-PORT: the effect used to live INSIDE the ref callback,
+                    // which is unowned in v2 (it would leak, silently). It lives
+                    // in this owned render scope instead; the ref only records
+                    // the node, and the apply writes the IDL-only property.
+                    let masterEl: HTMLInputElement | undefined;
+                    createEffect(indeterminate, (ind) => {
+                      if (masterEl) masterEl.indeterminate = ind;
+                    });
                     return (
                       <label
                         class={cn(
@@ -506,12 +498,8 @@ export function TasksCard(props: TasksCardProps): JSX.Element {
                           class="kai-checkbox"
                           checked={masterState() === 'checked'}
                           disabled={groupDisabled() || readOnly()}
-                          aria-checked={indeterminate() ? 'mixed' : masterState() === 'checked'}
-                          ref={(el) => {
-                            createEffect(() => {
-                              el.indeterminate = indeterminate();
-                            });
-                          }}
+                          aria-checked={indeterminate() ? 'mixed' : masterState() === 'checked' ? 'true' : 'false'}
+                          ref={(el) => { masterEl = el; el.indeterminate = indeterminate(); }}
                           onChange={(e) => toggleAll(e.currentTarget.checked)}
                         />
                         <span>Select all</span>
@@ -572,7 +560,7 @@ export function TasksCard(props: TasksCardProps): JSX.Element {
           </Show>
         </Card>
         </Show>
-      </ErrorBoundary>
+      </Errored>
     </Show>
   );
 }

@@ -9,7 +9,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup } from '@solidjs/testing-library';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { SlottedConversationItem } from './conversation-item';
 
 afterEach(cleanup);
@@ -69,6 +69,7 @@ describe('SlottedConversationItem', () => {
     expect(row.hasAttribute('data-active')).toBe(false);
 
     setActive(true);
+    flush(); // V2-FLUSH: commit the staged write
     expect(body.getAttribute('aria-current')).toBe('true');
     // The styling hook stays on the row (the whole visual box).
     expect(row.hasAttribute('data-active')).toBe(true);

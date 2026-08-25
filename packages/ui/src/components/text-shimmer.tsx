@@ -1,6 +1,7 @@
-import { type JSX, splitProps } from 'solid-js';
+import { omit } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
-import { Dynamic } from 'solid-js/web';
+import { Dynamic } from '@solidjs/web';
 
 export interface TextShimmerProps extends JSX.HTMLAttributes<HTMLElement> {
   as?: string;
@@ -10,7 +11,9 @@ export interface TextShimmerProps extends JSX.HTMLAttributes<HTMLElement> {
 }
 
 function TextShimmer(props: TextShimmerProps) {
-  const [local, rest] = splitProps(props, ['as', 'class', 'duration', 'spread', 'children']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'as', 'class', 'duration', 'spread', 'children');
 
   const dynamicSpread = () => Math.min(Math.max(local.spread ?? 20, 5), 45);
   const tag = () => local.as ?? 'span';

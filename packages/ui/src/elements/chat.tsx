@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount } from 'solid-js';
+import { createSignal, onCleanup, onSettled } from 'solid-js';
 import { defineWebComponent } from './define';
 import { CHAT_SLOTS, readSlots } from './slots';
 import { ChatThread, type ChatThreadProps, type ChatThreadContextUsage, type ChatThreadController } from '../components/chat-thread';
@@ -110,12 +110,13 @@ defineWebComponent<Props, Events>('kai-chat', {
   // so slot names never drift between the view, the facade, and the docs.
   const [slots, setSlots] = createSignal<Record<string, boolean>>({});
   const slot = (name: string) => slots()[name] === true;
-  onMount(() => {
+  onSettled(() => {
     const read = () => setSlots(readSlots(element, CHAT_SLOTS));
     read();
     const observer = new MutationObserver(read);
     observer.observe(element, { childList: true });
-    onCleanup(() => observer.disconnect());
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => observer.disconnect();
   });
 
   // Reflect streaming state to a host attribute so slotted composer/notice CSS

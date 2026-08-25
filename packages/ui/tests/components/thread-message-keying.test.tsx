@@ -35,7 +35,7 @@
  */
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { render, fireEvent, cleanup } from '@solidjs/testing-library';
-import { createSignal, type Accessor } from 'solid-js';
+import { createSignal, type Accessor, flush } from 'solid-js';
 import { ChatThread } from '../../src/components/chat-thread';
 import { Thread } from '../../src/components/thread';
 import { createAssistantStream, type AssistantStream } from '../../src/state';
@@ -103,7 +103,9 @@ function isOpen(panel: HTMLElement | null): boolean {
  *  arguments are still arriving. */
 function openTurn(stream: AssistantStream) {
   stream.appendText('Let me check the weather.');
+  flush(); // V2-FLUSH: commit the staged delta
   stream.upsertTool('call_1', { type: 'get_weather', state: 'input-streaming', input: { city: 'Par' } });
+  flush(); // V2-FLUSH: commit the staged delta
 }
 
 /** Everything a stream does AFTER the user clicked: the arguments settle, the
@@ -111,10 +113,15 @@ function openTurn(stream: AssistantStream) {
  *  object; each one used to close the panel. */
 function keepStreaming(stream: AssistantStream) {
   stream.upsertTool('call_1', { state: 'input-available', input: { city: 'Paris' } });
+  flush(); // V2-FLUSH: commit the staged delta
   stream.appendText(' One moment.');
+  flush(); // V2-FLUSH: commit the staged delta
   stream.upsertTool('call_1', { state: 'output-available', output: { forecast: 'Light rain' } });
+  flush(); // V2-FLUSH: commit the staged delta
   stream.appendText(' Pack an umbrella.');
+  flush(); // V2-FLUSH: commit the staged delta
   stream.done();
+  flush(); // V2-FLUSH: commit the staged delta
 }
 
 /** The shared body: open a disclosure mid-stream, push more deltas, and require
@@ -127,6 +134,7 @@ function assertSurvivesDeltas(container: HTMLElement, stream: AssistantStream) {
   expect(isOpen(panelBefore), 'the tool panel starts closed').toBe(false);
 
   fireEvent.click(trigger);
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
   expect(isOpen(panelOf(container, contentId!)), 'clicking the trigger must open the panel').toBe(true);
 
   keepStreaming(stream);
@@ -161,12 +169,15 @@ describe('ChatThread — message list keying under a live stream', () => {
     const { messages, stream } = streamingThread();
     const { container } = render(() => <ChatThread messages={messages()} />);
     stream.appendReasoning('Paris in autumn', { label: 'Thinking' });
+    flush(); // V2-FLUSH: commit the staged delta
 
     const row = container.querySelector<HTMLElement>('[part="row"]');
     expect(row, 'the assistant row must render').toBeTruthy();
 
     stream.appendReasoning(' is usually wet.');
+    flush(); // V2-FLUSH: commit the staged delta
     stream.appendText('It rains.');
+    flush(); // V2-FLUSH: commit the staged delta
 
     expect(
       container.querySelector<HTMLElement>('[part="row"]'),
@@ -185,6 +196,7 @@ describe('ChatThread — message list keying under a live stream', () => {
     const contentId = trigger.getAttribute('aria-controls')!;
     const panelBefore = panelOf(container, contentId);
     fireEvent.click(trigger);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(isOpen(panelOf(container, contentId))).toBe(true);
 
     // Load-earlier-messages: an older turn arrives at the FRONT of the list.

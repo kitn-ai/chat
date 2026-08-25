@@ -2,7 +2,7 @@
 // <kai-remote> — Shadow-DOM facade that mounts a sandboxed cross-origin iframe
 // card via mountRemoteCard(), re-emits every CardEvent as a bubbling+composed
 // kai-card CustomEvent, and validates the provider-origin before mounting.
-import { createEffect, createSignal, onCleanup, onMount } from 'solid-js';
+import { createEffect, createSignal, onCleanup, onSettled } from 'solid-js';
 import { defineWebComponent } from './define';
 import { mountRemoteCard } from '../remote/host-embed';
 import type { RemoteCardHandle } from '../remote/host-embed';
@@ -118,7 +118,7 @@ defineWebComponent<Props>(
     policy: undefined,
   },
   (props, { element }) => {
-    // Lifted out of onMount so the theme effect (below) can re-push context to the
+    // Lifted out of onSettled so the theme effect (below) can re-push context to the
     // live bridge after mount. `undefined` until the iframe is successfully mounted.
     let handle: RemoteCardHandle | undefined;
 
@@ -126,10 +126,13 @@ defineWebComponent<Props>(
     // define.tsx): the `theme` prop is 'light' | 'dark' | 'auto' (default 'auto',
     // which follows the OS `prefers-color-scheme`). Tracked reactively so a host /
     // Storybook theme toggle flows through the effect below.
-    const [systemDark, setSystemDark] = createSignal(false);
-    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      setSystemDark(mq.matches);
+    // V2-PORT: v2 rejects signal writes in an owned body — SEED from the media
+    // query instead of writing right after creation.
+    const mq = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-color-scheme: dark)')
+      : undefined;
+    const [systemDark, setSystemDark] = createSignal(mq?.matches ?? false);
+    if (mq) {
       const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches);
       mq.addEventListener('change', onChange);
       onCleanup(() => mq.removeEventListener('change', onChange));
@@ -139,7 +142,11 @@ defineWebComponent<Props>(
       return theme === 'dark' || (theme === 'auto' && systemDark());
     };
 
-    onMount(() => {
+    // V2-PORT: onCleanup is forbidden inside onSettled; collect the teardowns
+    // and register them once at the owner scope (same lifecycle as 1.x).
+    const settledDisposers: (() => void)[] = [];
+    onCleanup(() => { for (const d of settledDisposers) d(); });
+    onSettled(() => {
       const shadow = element.shadowRoot;
       if (!shadow) return;
 
@@ -203,7 +210,7 @@ defineWebComponent<Props>(
         return;
       }
 
-      onCleanup(() => {
+      settledDisposers.push(() => {
         handle?.destroy();
         handle = undefined;
       });
@@ -214,12 +221,13 @@ defineWebComponent<Props>(
     // elements). No-op until the iframe has mounted (handle is set). The bridge
     // does a dispose+remount on a genuine theme change — see provider-runtime.ts;
     // token/locale refreshes stay silent.
-    createEffect(() => {
-      const mode = isDark() ? 'dark' : 'light';
-      handle?.updateContext({ theme: { mode } });
-    });
+    // V2-PORT: isDark in the compute; the bridge push in the apply.
+    createEffect(
+      () => (isDark() ? 'dark' as const : 'light' as const),
+      (mode) => { handle?.updateContext({ theme: { mode } }); },
+    );
 
-    // This element renders purely into the shadow root via onMount — no JSX return needed.
+    // This element renders purely into the shadow root via onSettled — no JSX return needed.
     return <></>;
   },
 );

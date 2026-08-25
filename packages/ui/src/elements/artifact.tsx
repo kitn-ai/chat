@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup } from 'solid-js';
+import { createSignal, onSettled, onCleanup } from 'solid-js';
 import { defineWebComponent } from './define';
 import { Artifact, type ArtifactController, type ArtifactFile, type ArtifactTab } from '../components/artifact';
 
@@ -141,10 +141,11 @@ defineWebComponent<Props, Events>('kai-artifact', {
   };
 
   // Authoritative reconcile: the resizable tells us the effective state.
-  onMount(() => {
+  onSettled(() => {
     const onState = (e: Event) => setMaximized((e as CustomEvent<{ maximized: boolean }>).detail.maximized);
     element.addEventListener('kai-maximize-state', onState);
-    onCleanup(() => element.removeEventListener('kai-maximize-state', onState));
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => element.removeEventListener('kai-maximize-state', onState);
   });
 
   return (

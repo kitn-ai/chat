@@ -1,4 +1,5 @@
-import { splitProps, Show, For, createSignal, createEffect, on } from 'solid-js';
+import { omit, Show, For, createSignal, createEffect } from 'solid-js';
+import { deferApply } from '../utils/defer-apply'; // V2-PORT: on(...,{defer:true}) replacement
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
 import { Tooltip } from '../ui/tooltip';
@@ -45,7 +46,8 @@ export interface VoiceInputProps {
 }
 
 export function VoiceInput(props: VoiceInputProps) {
-  const [local] = splitProps(props, ['onTranscribe', 'onTranscription', 'disabled', 'class']);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = props;
   const { isRecording, start, stop } = useVoiceRecorder();
   const speech = useSpeechRecognition({ interim: props.interim });
   const [isProcessing, setIsProcessing] = createSignal(false);
@@ -140,9 +142,9 @@ export function VoiceInput(props: VoiceInputProps) {
   // initial mount value (a spurious {recording:false}) — only real start/stop
   // transitions fire. Drives BOTH manual (click) and programmatic (start/stop)
   // since they all flip the active path's signal (MediaRecorder or recognition).
-  createEffect(on(isActive, (recording) => {
+  createEffect(isActive, deferApply((recording) => {
     props.onRecordingChange?.(recording);
-  }, { defer: true }));
+  }));
 
   // Imperative controller (Pattern C): hand the facade a start/stop handle.
   // start() runs the active path; stop() ends the in-progress session (resolving

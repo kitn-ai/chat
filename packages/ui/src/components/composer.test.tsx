@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { Composer } from './composer';
 import { createEntityEl, ZWSP } from './composer-dom';
 
@@ -22,6 +22,7 @@ describe('Composer view', () => {
     const el = editable(container);
     el.textContent = 'hi there';
     fireEvent.input(el);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onChange).toHaveBeenCalled();
     const arg = onChange.mock.calls.at(-1)![0];
     expect(arg.text).toBe('hi there');
@@ -34,8 +35,10 @@ describe('Composer view', () => {
     const { container } = render(() => <Composer value="go" onSubmit={onSubmit} />);
     const el = editable(container);
     fireEvent.keyDown(el, { key: 'Enter', shiftKey: true });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSubmit).not.toHaveBeenCalled();
     fireEvent.keyDown(el, { key: 'Enter' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit.mock.calls[0][0].text).toBe('go');
   });
@@ -44,6 +47,7 @@ describe('Composer view', () => {
     const onSubmit = vi.fn();
     const { container } = render(() => <Composer value="go" disabled onSubmit={onSubmit} />);
     fireEvent.keyDown(editable(container), { key: 'Enter' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });
@@ -59,13 +63,17 @@ describe('Composer controlled value reactivity', () => {
 
     // Update to a plain string
     setValue('updated text');
+    flush(); // V2-FLUSH: commit the staged write
     // SolidJS effects run synchronously in the same microtask in the test env
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(el.textContent).toContain('updated text');
 
     // Update to a doc with entity-like text
     setValue('new value');
+    flush(); // V2-FLUSH: commit the staged write
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(el.textContent).toContain('new value');
   });
 });
@@ -85,6 +93,7 @@ describe('Composer entity pills', () => {
     range.selectNodeContents(el); range.collapse(false);
     const sel = window.getSelection()!; sel.removeAllRanges(); sel.addRange(range);
     fireEvent.keyDown(el, { key: 'Backspace' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onEntityRemove).toHaveBeenCalledWith(skill);
     expect(el.querySelector('[data-kai-entity]')).toBeNull();
   });
@@ -97,8 +106,10 @@ describe('Composer focus events', () => {
     const { container } = render(() => <Composer onFocus={onFocus} onBlur={onBlur} />);
     const el = editable(container);
     fireEvent.focus(el);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onFocus).toHaveBeenCalledTimes(1);
     fireEvent.blur(el);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onBlur).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { render, fireEvent, screen } from '@solidjs/testing-library';
 import { ChatConfig } from '../../src/primitives/chat-config';
 import { Dropdown, DropdownTrigger, DropdownContent, DropdownItem } from '../../src/ui/dropdown';
@@ -19,6 +20,7 @@ test('dropdown content portals into the configured mount node when open', () => 
   ));
 
   fireEvent.click(screen.getByTestId('trg'));
+  flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
   expect(mount.textContent).toContain('Item A');
   mount.remove();

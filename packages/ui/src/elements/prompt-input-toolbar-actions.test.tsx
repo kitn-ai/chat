@@ -6,6 +6,7 @@
  * (Constructable Stylesheets, shadow roots) unsuitable for jsdom.
  * This mirrors the pattern in prompt-input-stoppable.test.tsx.
  */
+import { flush } from 'solid-js';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
@@ -72,6 +73,7 @@ describe('DefaultPromptInput custom toolbar actions', () => {
       (b) => b.getAttribute('aria-label') === 'Attach',
     )!;
     fireEvent.click(attachBtn);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onAction).toHaveBeenCalledOnce();
     expect(onAction).toHaveBeenCalledWith('attach');
   });
@@ -85,6 +87,7 @@ describe('DefaultPromptInput custom toolbar actions', () => {
       (b) => b.getAttribute('aria-label') === 'Bookmark',
     )!;
     fireEvent.click(bookmarkBtn);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onAction).toHaveBeenCalledWith('bookmark');
   });
 
@@ -103,6 +106,7 @@ describe('DefaultPromptInput custom toolbar actions', () => {
       (b) => b.getAttribute('aria-label') === 'Attach',
     )!;
     fireEvent.click(attachBtn);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSubmit).not.toHaveBeenCalled();
   });
 

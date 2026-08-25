@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount } from 'solid-js';
+import { createSignal, onCleanup, onSettled } from 'solid-js';
 import { defineWebComponent } from './define';
 import { Card, type CardAppearance, type CardOrientation } from '../ui/card';
 
@@ -85,7 +85,7 @@ defineWebComponent<Props, Events>('kai-card', {
   });
   const [hasBody, setHasBody] = createSignal(false);
 
-  onMount(() => {
+  onSettled(() => {
     const read = () => {
       const next = {} as Record<SlotName, boolean>;
       for (const name of SLOT_NAMES) next[name] = !!element.querySelector(`:scope > [slot="${name}"]`);
@@ -102,7 +102,8 @@ defineWebComponent<Props, Events>('kai-card', {
     read();
     const observer = new MutationObserver(read);
     observer.observe(element, { childList: true, characterData: true, subtree: true });
-    onCleanup(() => observer.disconnect());
+    // V2-PORT: in-onSettled onCleanup -> returned cleanup (fires on disposal)
+return () => observer.disconnect();
   });
 
   const region = (name: SlotName) => (filled()[name] ? <slot name={name} /> : undefined);

@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
 import { ChatThread } from './chat-thread';
 import type { ChatMessage } from '../elements/chat-types';
@@ -96,12 +96,14 @@ describe('ChatThread action-row feedback', () => {
 
     // Vote up.
     fireEvent.click(getByLabelText('Like'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await tick();
     expect(getByLabelText('Like')).toHaveAttribute('aria-pressed', 'true');
     expect(getByLabelText('Dislike').closest('[data-feedback-collapsed]')).not.toBeNull();
 
     // Simulate a stream chunk: a NEW array ref + the SAME id with longer content.
     setMessages([assistant('Hello, world — now with more tokens')]);
+    flush(); // V2-FLUSH: commit the staged write
     await tick();
 
     // The vote must survive the re-render: like still pressed, dislike still collapsed.
@@ -114,11 +116,13 @@ describe('ChatThread action-row feedback', () => {
     try {
       const { getByLabelText } = render(() => <ChatThread messages={[assistant('Copy me')]} />);
       fireEvent.click(getByLabelText('Copy'));
+      flush(); // V2-FLUSH: v2 stages writes; commit before asserting
       expect(writeText).toHaveBeenCalledWith('Copy me');
       // The copy button now shows the emerald check (aria-label flips to "Copied").
       expect(getByLabelText('Copied')).toBeInTheDocument();
       // After the 2s window it reverts.
       vi.advanceTimersByTime(2000);
+      flush(); // V2-FLUSH: v2 stages writes; commit before asserting
       expect(getByLabelText('Copy')).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
@@ -131,10 +135,12 @@ describe('ChatThread action-row feedback', () => {
       <ChatThread messages={[assistant('Hi')]} onMessageAction={onMessageAction} />
     ));
     fireEvent.click(getByLabelText('Like'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onMessageAction).toHaveBeenLastCalledWith({ messageId: 'a1', action: 'like', state: 'on' });
     await tick();
     // Re-tap the same vote to clear it.
     fireEvent.click(getByLabelText('Like'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onMessageAction).toHaveBeenLastCalledWith({ messageId: 'a1', action: 'like', state: 'off' });
   });
 
@@ -144,6 +150,7 @@ describe('ChatThread action-row feedback', () => {
       <ChatThread messages={[assistant('Hi')]} onMessageAction={onMessageAction} />
     ));
     fireEvent.click(getByLabelText('Copy'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onMessageAction).toHaveBeenLastCalledWith({ messageId: 'a1', action: 'copy' });
   });
 
@@ -160,16 +167,19 @@ describe('ChatThread action-row feedback', () => {
     const { getByLabelText } = render(() => <ChatThread messages={[assistant('Hi')]} />);
 
     fireEvent.click(getByLabelText('Copy'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(toastSpy).toHaveBeenCalledWith('Copied to clipboard', expect.anything());
 
     toastSpy.mockClear();
     fireEvent.click(getByLabelText('Like'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(toastSpy).toHaveBeenCalledWith('Thanks for your feedback', expect.anything());
     await tick();
 
     // Un-vote: no toast.
     toastSpy.mockClear();
     fireEvent.click(getByLabelText('Like'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(toastSpy).not.toHaveBeenCalled();
   });
 });
@@ -190,8 +200,10 @@ describe('ChatThread composer reset on submit', () => {
 
     el.textContent = 'hello there';
     fireEvent.input(el);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     fireEvent.keyDown(el, { key: 'Enter' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ value: 'hello there' }));
     expect(el.textContent?.trim() ?? '').toBe(''); // draft cleared
   });
@@ -205,6 +217,7 @@ describe('ChatThread composer reset on submit', () => {
     expect(el.textContent).toContain('locked');
 
     fireEvent.keyDown(el, { key: 'Enter' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ value: 'locked' }));
     expect(el.textContent).toContain('locked'); // controlled — unchanged until the host clears it
   });

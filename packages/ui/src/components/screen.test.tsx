@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
@@ -46,6 +47,7 @@ describe('Screen', () => {
       </Screen>
     ));
     fireEvent.click(getByRole('button', { name: 'Back' }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
@@ -57,6 +59,7 @@ describe('Screen', () => {
       </Screen>
     ));
     fireEvent.keyDown(getByRole('dialog'), { key: 'Escape' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
@@ -111,6 +114,7 @@ describe('Screen', () => {
     expect(sibling).toHaveAttribute('aria-hidden', 'true');
 
     setOpen(false);
+    flush(); // V2-FLUSH: commit the staged write
     expect(sibling).not.toHaveAttribute('inert');
     expect(sibling).not.toHaveAttribute('aria-hidden');
 

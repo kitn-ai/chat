@@ -4,7 +4,7 @@ import { Mail, Lock, Eye, EyeOff, Github, ArrowRight, Sparkles } from 'lucide-so
 import './input';
 
 // Declare the custom element tag for SolidJS JSX.
-declare module 'solid-js' {
+declare module '@solidjs/web' { // V2-PORT: the JSX namespace moved
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {

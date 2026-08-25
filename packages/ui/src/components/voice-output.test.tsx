@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
@@ -52,6 +53,7 @@ describe('VoiceOutput — native path (speechSynthesis)', () => {
     expect(onSpeakingChange).not.toHaveBeenCalled();
 
     lastUtterance?.onstart?.();
+    flush(); // V2-FLUSH: commit the staged speaking-state write
     expect(onSpeakingChange).toHaveBeenLastCalledWith(true);
   });
 
@@ -63,11 +65,14 @@ describe('VoiceOutput — native path (speechSynthesis)', () => {
     const btn = getByRole('button');
 
     fireEvent.click(btn);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(speakSpy).toHaveBeenCalledTimes(1);
     lastUtterance?.onstart?.();
+    flush(); // V2-FLUSH: commit the staged speaking-state write
     expect(onSpeakingChange).toHaveBeenLastCalledWith(true);
 
     fireEvent.click(btn);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(cancelSpy).toHaveBeenCalled();
     expect(onSpeakingChange).toHaveBeenLastCalledWith(false);
   });
@@ -81,9 +86,11 @@ describe('VoiceOutput — native path (speechSynthesis)', () => {
 
     controller.speak();
     lastUtterance?.onstart?.();
+    flush(); // V2-FLUSH: commit the staged speaking-state write
     expect(onSpeakingChange).toHaveBeenLastCalledWith(true);
 
     lastUtterance?.onend?.();
+    flush(); // V2-FLUSH: commit the staged speaking-state write
     expect(onSpeakingChange).toHaveBeenLastCalledWith(false);
   });
 
@@ -102,7 +109,9 @@ describe('VoiceOutput — native path (speechSynthesis)', () => {
 
     controller.speak();
     lastUtterance?.onstart?.();
+    flush(); // V2-FLUSH: commit the staged speaking-state write
     lastUtterance?.onerror?.({ error: 'not-allowed' });
+    flush(); // V2-FLUSH: commit the staged speaking-state write
 
     expect(onError).toHaveBeenCalledWith({
       source: 'synthesis',
@@ -121,10 +130,13 @@ describe('VoiceOutput — native path (speechSynthesis)', () => {
 
     controller.speak();
     lastUtterance?.onstart?.();
+    flush(); // V2-FLUSH: commit the staged speaking-state write
     // What the platform reports when the APP calls cancel() (stop, or a new
     // speak() pre-empting): the app asked for it, so it is not a failure.
     lastUtterance?.onerror?.({ error: 'interrupted' });
+    flush(); // V2-FLUSH: commit the staged speaking-state write
     lastUtterance?.onerror?.({ error: 'canceled' });
+    flush(); // V2-FLUSH: commit the staged speaking-state write
 
     expect(onError).not.toHaveBeenCalled();
   });
@@ -191,11 +203,14 @@ describe('VoiceOutput — model path (synthesize)', () => {
     controller.speak();
     await Promise.resolve(); // synthesize resolves; play() is still pending
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSpeakingChange).not.toHaveBeenCalled();
 
     resolvePlay();
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onSpeakingChange).toHaveBeenLastCalledWith(true);
   });
 
@@ -214,7 +229,9 @@ describe('VoiceOutput — model path (synthesize)', () => {
 
     controller.speak();
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     expect(onError).toHaveBeenCalledWith({
       source: 'synthesis',
@@ -239,8 +256,11 @@ describe('VoiceOutput — model path (synthesize)', () => {
 
     controller.speak();
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await Promise.resolve();
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     expect(onError).toHaveBeenCalledWith({
       source: 'synthesis',

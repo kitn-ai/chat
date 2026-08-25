@@ -1,4 +1,5 @@
-import { type JSX, splitProps, createSignal, Show, For } from 'solid-js';
+import { omit, createSignal, Show, For } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent, type CollapsibleController } from '../ui/collapsible';
 import { Button } from '../ui/button';
@@ -99,11 +100,16 @@ function ToolStateBadge(props: { state: ToolPart['state'] }) {
 }
 
 function Tool(props: ToolProps) {
-  const [local, rest] = splitProps(props, ['toolPart', 'defaultOpen', 'disabled', 'controllerRef', 'class']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'toolPart', 'defaultOpen', 'disabled', 'controllerRef', 'class');
   // Drive the Collapsible UNCONTROLLED (seed from defaultOpen) and read its open
   // state via the controller it hands up — that same controller is forwarded to
   // the facade so wireDisclosure can drive show/hide/toggle.
-  const [api, setApi] = createSignal<CollapsibleController>();
+  // V2-PORT: the controller is handed up SYNCHRONOUSLY from Collapsible's body,
+  // which v2's dev guard treats as an owned-scope write; ownedWrite is the
+  // sanctioned opt-in for exactly this handoff (reactivity unchanged).
+  const [api, setApi] = createSignal<CollapsibleController | undefined>(undefined, { ownedWrite: true });
   const isOpen = () => api()?.open() ?? (local.defaultOpen ?? false);
 
   const state = () => local.toolPart.state;

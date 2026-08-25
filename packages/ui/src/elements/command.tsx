@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, createUniqueId, on } from 'solid-js';
+import { createEffect, createMemo, createSignal, createUniqueId } from 'solid-js';
 import { CommandList, type CommandGroup } from '../ui/command';
 import { defineWebComponent } from './define';
 import type { KaiCommandItem } from './element-data-types';
@@ -89,20 +89,22 @@ defineWebComponent<Props, Events>('kai-command', {
   const flatIds = createMemo<string[]>(() => filteredItems().map((item) => item.id));
 
   /** Clamp/reset activeId when the filtered list changes. */
-  createEffect(() => {
-    const ids = flatIds();
-    const current = activeId();
-    if (!current || !ids.includes(current)) {
-      setActiveId(ids[0]);
-    }
-  });
+  // V2-PORT: tracked reads in the compute; the clamp write in the apply.
+  createEffect(
+    () => ({ ids: flatIds(), current: activeId() }),
+    ({ ids, current }) => {
+      if (!current || !ids.includes(current)) {
+        setActiveId(ids[0]);
+      }
+    },
+  );
 
   /** Mirror the active/highlighted item out as `kai-active-change` whenever it
    *  changes (Arrow keys or a filter-driven re-clamp). Skips the initial settle
    *  by only firing when the value actually differs from the previous one. */
-  createEffect(on(activeId, (id, prev) => {
+  createEffect(activeId, (id, prev) => {
     if (id !== prev) dispatch('kai-active-change', { id });
-  }));
+  });
 
   function select(id: string) {
     dispatch('kai-select', { id });

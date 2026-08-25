@@ -62,8 +62,8 @@ defineWebComponent<Props, Events>('kai-editable-label', {
     configurable: true,
     enumerable: true,
   });
-  createEffect(() => {
-    const v = value();
+  // V2-PORT: the value signal is the tracked read; the attribute writes are the apply.
+  createEffect(value, (v) => {
     if (v) {
       if (element.getAttribute('value') !== v) element.setAttribute('value', v);
     } else if (element.hasAttribute('value')) {
@@ -79,9 +79,11 @@ defineWebComponent<Props, Events>('kai-editable-label', {
   // override the property with a side-effecting `Object.defineProperty` — doing so
   // fires the setter during solid-element's upgrade and corrupts the signal.
   const [editing, setEditing] = createSignal(flag('editing'));
-  createEffect(() => setEditing(flag('editing')));
-  createEffect(() => {
-    if (editing()) {
+  // V2-PORT: flag read in the compute; the write in the apply.
+  createEffect(() => flag('editing'), (v) => { setEditing(v); });
+  // V2-PORT: editing signal in the compute; attribute reflection in the apply.
+  createEffect(editing, (on) => {
+    if (on) {
       if (!element.hasAttribute('editing')) element.setAttribute('editing', '');
     } else if (element.hasAttribute('editing')) {
       element.removeAttribute('editing');

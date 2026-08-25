@@ -1,15 +1,6 @@
-import {
-  type JSX,
-  For,
-  Show,
-  splitProps,
-  mergeProps,
-  createMemo,
-  createEffect,
-  on,
-  onMount,
-  ErrorBoundary,
-} from 'solid-js';
+import { For, Show, omit, createMemo, createEffect, onSettled, Errored } from 'solid-js';
+import { mergeDefaults } from '../utils/merge-defaults'; // V2-PORT: 1.x mergeProps semantics (undefined does not override)
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
 import { Card } from './card';
@@ -172,18 +163,9 @@ export interface ConfirmCardProps {
  * close affordance, and `error` for an unusable definition (inline error state).
  */
 export function ConfirmCard(props: ConfirmCardProps): JSX.Element {
-  const merged = mergeProps({ cardId: 'kai-confirm', autofocus: false }, props);
-  const [local] = splitProps(merged, [
-    'data',
-    'cardId',
-    'heading',
-    'host',
-    'hostElement',
-    'autofocus',
-    'class',
-    'resolution',
-    'controllerRef',
-  ]);
+  const merged = mergeDefaults({ cardId: 'kai-confirm', autofocus: false }, props);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = merged;
 
   const ctxHost = useCardHost();
 
@@ -211,12 +193,10 @@ export function ConfirmCard(props: ConfirmCardProps): JSX.Element {
   });
 
   // ready / error lifecycle emits.
-  createEffect(
-    on(valid, (ok) => {
+  createEffect(valid, (ok) => {
       if (ok) emit({ kind: 'ready', cardId: local.cardId });
       else emit({ kind: 'error', cardId: local.cardId, message: errorMessage() });
-    }),
-  );
+    });
 
   const onAction = (action: ConfirmAction): void => {
     if (res.isResolved()) return; // single-shot
@@ -259,7 +239,7 @@ export function ConfirmCard(props: ConfirmCardProps): JSX.Element {
   // ── Imperative controller (Pattern C): hand the facade a handle over the
   //    card's latent action/dismiss capabilities. Every method drives the SAME
   //    internal path the buttons drive, so the same kai-card events fire. ──────────
-  onMount(() => {
+  onSettled(() => {
     local.controllerRef?.({
       // Focus the default (or first) action button on demand.
       focus: (options) => focusTarget()?.focus(options),
@@ -279,17 +259,19 @@ export function ConfirmCard(props: ConfirmCardProps): JSX.Element {
   });
 
   // Surface the resolved action id for host styling.
-  createEffect(() => {
-    const el = local.hostElement;
-    if (!el) return;
-    const r = res.resolution();
-    if (r && r.kind === 'action') el.setAttribute('data-kai-resolved', r.action);
-    else el.removeAttribute('data-kai-resolved');
-  });
+  // V2-PORT (R1): tracked reads in the compute; attribute writes in the apply.
+  createEffect(
+    () => ({ el: local.hostElement, r: res.resolution() }),
+    ({ el, r }) => {
+      if (!el) return;
+      if (r && r.kind === 'action') el.setAttribute('data-kai-resolved', r.action);
+      else el.removeAttribute('data-kai-resolved');
+    },
+  );
 
   return (
     <Show when={valid()} fallback={<Card heading={local.heading} errorMessage={errorMessage()} />}>
-      <ErrorBoundary
+      <Errored
         fallback={() => {
           emit({ kind: 'error', cardId: local.cardId, message: 'The card failed to render.' });
           return <Card heading={local.heading} errorMessage="The card failed to render." />;
@@ -380,7 +362,7 @@ export function ConfirmCard(props: ConfirmCardProps): JSX.Element {
           </div>
         </Card>
         </Show>
-      </ErrorBoundary>
+      </Errored>
     </Show>
   );
 }

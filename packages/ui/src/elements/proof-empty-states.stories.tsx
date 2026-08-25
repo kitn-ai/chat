@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { For, type Component } from 'solid-js';
-import { Dynamic } from 'solid-js/web';
+import { Dynamic } from '@solidjs/web';
 import { SearchX, Rocket, TriangleAlert, WifiOff, RotateCw, Plus } from 'lucide-solid';
 
 // Labs/Proofs: a TOKEN-DRIVEN proof. No feature components, no kai-* elements - just
