@@ -3,7 +3,7 @@
 
 # @kitn.ai/ui
 
-> Framework-agnostic, Shadow-DOM web components for building AI chat interfaces — works in React, Vue, Angular, Svelte, or plain HTML. 83 custom elements, every one prefixed `kai-` (e.g. `<kai-chat>`, `<kai-artifact>`): streaming responses, markdown + code rendering, reasoning/tool panels, attachments, conversation sidebar, voice input. Zero framework dependency for consumers; the SolidJS runtime it is authored in is bundled in, so the host needs nothing.
+> Framework-agnostic, Shadow-DOM web components for building AI chat interfaces — works in React, Vue, Angular, Svelte, or plain HTML. 84 custom elements, every one prefixed `kai-` (e.g. `<kai-chat>`, `<kai-artifact>`): streaming responses, markdown + code rendering, reasoning/tool panels, attachments, conversation sidebar, voice input. Zero framework dependency for consumers; the SolidJS runtime it is authored in is bundled in, so the host needs nothing.
 
 ## Install
 
@@ -37,7 +37,7 @@ Drop an element into any framework (React, Vue, plain HTML). Data in via JS prop
 - `<kai-prompt-input>` — standalone composer with send button.
 
 **Layer 2 — composable primitives** (`import { … } from '@kitn.ai/ui'`):
-All 83 elements are also exported individually. Use them for custom layouts or features `<kai-chat>` does not expose (ChainOfThought, FeedbackBar, ThinkingBar, VoiceInput, …). Your bundler tree-shakes the rest.
+All 84 elements are also exported individually. Use them for custom layouts or features `<kai-chat>` does not expose (ChainOfThought, FeedbackBar, ThinkingBar, VoiceInput, …). Your bundler tree-shakes the rest.
 
 ## Key rules for the web components
 
@@ -151,7 +151,7 @@ For Tailwind builds: `@import "@kitn.ai/ui/theme.css"` in your CSS.
 
 ## Docs
 
-- Full element reference (all 83 elements, every prop/event): ./llms-full.txt — https://kitn.dev/llms-full.txt
+- Full element reference (all 84 elements, every prop/event): ./llms-full.txt — https://kitn.dev/llms-full.txt
 - Machine-readable Custom Elements Manifest: https://unpkg.com/@kitn.ai/ui/dist/custom-elements.json
 - Working examples: https://github.com/kitn-ai/ui/tree/main/examples
 - Storybook: https://storybook.kitn.dev
@@ -248,7 +248,7 @@ The same reassign rule applies to every array/object property (`models`, `contex
 
 ---
 
-## Element reference (83 elements, generated from custom-elements.json)
+## Element reference (84 elements, generated from custom-elements.json)
 
 Every element also accepts the `theme` attribute. Array/object properties are marked with a `—` attribute: they must be set as JS properties.
 
@@ -1848,6 +1848,23 @@ _No events._
 | `::part(body)` | The scrolling body region (the default slot). — `kai-pane::part(body) { padding: 1rem }` |
 | `::part(controls)` | The window-control cluster (maximize/close, and split/dock when enabled). — `kai-pane::part(controls) { gap: 0.25rem }` |
 | `::part(footer)` | A pinned row below the body (e.g. a composer). |
+
+---
+
+### `kai-pane-grid` / `PaneGrid`
+
+**Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
+
+| Property | Attribute | Type | Description |
+|---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
+| `minPaneWidth` | `min-pane-width` | `undefined \| number` | Minimum width of every pane, in px, before columns drop / the grid scrolls. Defaults to `280`. Attribute: `min-pane-width`. |
+| `minPaneHeight` | `min-pane-height` | `undefined \| number` | Minimum height of every pane, in px, before the grid scrolls vertically. Defaults to `200`. Attribute: `min-pane-height`. |
+| `maxColumns` | `max-columns` | `undefined \| number` | Column cap when the container is wide (default `3`). Attribute: `max-columns`. |
+| `gap` | `gap` | `undefined \| string` | Gap between panes, any CSS length. Defaults to the kit gap (`var(--kai-pane-grid-gap, 0.5rem)`). Attribute: `gap`. |
+| `maximizedIndex` | — | `undefined \| number \| null` | When set to a valid child index, render ONLY that pane full-bleed: a simple maximize hook the consumer drives (pair it with `<kai-pane>`'s `kai-maximize` event). Clear it (or point out of range) for the full tiled grid. Attribute: `maximized-index`. |
+
+_No events._
 
 ---
 

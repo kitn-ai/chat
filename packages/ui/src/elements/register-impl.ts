@@ -94,6 +94,7 @@ import './setting-item';
 // Multi-agent workspace primitives (graduated from SolidJS prototypes)
 import './pane';
 import './pane-group';
+import './pane-grid';
 import './agent-card';
 import './dialog';
 import './dock';

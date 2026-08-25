@@ -448,8 +448,8 @@ const EXEMPT: Record<string, { kind: 'story-only' | 'nothing'; reason: string }>
 
   // ---- nothing: no test, no element story.
   'kai-pane': {
-    kind: 'nothing',
-    reason: 'no test, no element story; the only hits are slots.test.ts registry fixtures. Sizing and collapse are unexercised.',
+    kind: 'story-only',
+    reason: 'rendered by the Labs/Pane Grid story (as kai-pane-grid tiles) but asserted nowhere; no behavioural test. Sizing and collapse are unexercised.',
   },
   'kai-pane-group': {
     kind: 'nothing',

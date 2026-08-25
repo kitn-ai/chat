@@ -1131,6 +1131,21 @@ export interface KaiPaneElement extends HTMLElement {
   status?: { tone: "working" | "idle" | "done" | "error" | "blocked"; label?: string; pulse?: boolean };
 }
 
+export interface KaiPaneGridElement extends HTMLElement {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** Minimum width of every pane, in px, before columns drop / the grid scrolls. Defaults to `280`. Attribute: `min-pane-width`. */
+  minPaneWidth?: number;
+  /** Minimum height of every pane, in px, before the grid scrolls vertically. Defaults to `200`. Attribute: `min-pane-height`. */
+  minPaneHeight?: number;
+  /** Column cap when the container is wide (default `3`). Attribute: `max-columns`. */
+  maxColumns?: number;
+  /** Gap between panes, any CSS length. Defaults to the kit gap (`var(--kai-pane-grid-gap, 0.5rem)`). Attribute: `gap`. */
+  gap?: string;
+  /** When set to a valid child index, render ONLY that pane full-bleed: a simple maximize hook the consumer drives (pair it with `<kai-pane>`'s `kai-maximize` event). Clear it (or point out of range) for the full tiled grid. Attribute: `maximized-index`. */
+  maximizedIndex?: number | null;
+}
+
 export interface KaiPaneGroupElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
@@ -1810,6 +1825,7 @@ declare global {
     'kai-nav': KaiNavElement;
     'kai-notice': KaiNoticeElement;
     'kai-pane': KaiPaneElement;
+    'kai-pane-grid': KaiPaneGridElement;
     'kai-pane-group': KaiPaneGroupElement;
     'kai-popover': KaiPopoverElement;
     'kai-progress-bar': KaiProgressBarElement;
@@ -1911,6 +1927,7 @@ declare module 'react' {
       'kai-nav': KaiElementJsxProps;
       'kai-notice': KaiElementJsxProps;
       'kai-pane': KaiElementJsxProps;
+      'kai-pane-grid': KaiElementJsxProps;
       'kai-pane-group': KaiElementJsxProps;
       'kai-popover': KaiElementJsxProps;
       'kai-progress-bar': KaiElementJsxProps;
@@ -2786,6 +2803,21 @@ export interface KaiPaneElementProps {
   status?: { tone: "working" | "idle" | "done" | "error" | "blocked"; label?: string; pulse?: boolean };
 }
 
+export interface KaiPaneGridElementProps {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** Minimum width of every pane, in px, before columns drop / the grid scrolls. Defaults to `280`. Attribute: `min-pane-width`. */
+  minPaneWidth?: number;
+  /** Minimum height of every pane, in px, before the grid scrolls vertically. Defaults to `200`. Attribute: `min-pane-height`. */
+  minPaneHeight?: number;
+  /** Column cap when the container is wide (default `3`). Attribute: `max-columns`. */
+  maxColumns?: number;
+  /** Gap between panes, any CSS length. Defaults to the kit gap (`var(--kai-pane-grid-gap, 0.5rem)`). Attribute: `gap`. */
+  gap?: string;
+  /** When set to a valid child index, render ONLY that pane full-bleed: a simple maximize hook the consumer drives (pair it with `<kai-pane>`'s `kai-maximize` event). Clear it (or point out of range) for the full tiled grid. Attribute: `maximized-index`. */
+  maximizedIndex?: number | null;
+}
+
 export interface KaiPaneGroupElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
@@ -3619,6 +3651,10 @@ export interface KaiPaneElementEvents {
   onKaiSplit?: (event: CustomEvent) => void;
 }
 
+export interface KaiPaneGridElementEvents {
+
+}
+
 export interface KaiPaneGroupElementEvents {
   /** A tab was selected (click, Enter/Space, or arrow-key move). `detail.id` is the tab's id. */
   onKaiTabChange?: (event: CustomEvent<{ id: string }>) => void;
@@ -3947,6 +3983,8 @@ declare module 'vue' {
     KaiNotice: KaiVueElement<KaiNoticeElementProps, KaiNoticeElementEvents>;
     'kai-pane': KaiVueElement<KaiPaneElementProps, KaiPaneElementEvents>;
     KaiPane: KaiVueElement<KaiPaneElementProps, KaiPaneElementEvents>;
+    'kai-pane-grid': KaiVueElement<KaiPaneGridElementProps, KaiPaneGridElementEvents>;
+    KaiPaneGrid: KaiVueElement<KaiPaneGridElementProps, KaiPaneGridElementEvents>;
     'kai-pane-group': KaiVueElement<KaiPaneGroupElementProps, KaiPaneGroupElementEvents>;
     KaiPaneGroup: KaiVueElement<KaiPaneGroupElementProps, KaiPaneGroupElementEvents>;
     'kai-popover': KaiVueElement<KaiPopoverElementProps, KaiPopoverElementEvents>;
