@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, writeFileSync, existsSync, readFileSync, mkdirSync } from 'node:fs';
+import {
+  mkdtempSync,
+  writeFileSync,
+  existsSync,
+  readFileSync,
+  mkdirSync,
+  readdirSync,
+  statSync,
+  utimesSync,
+  renameSync,
+} from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { runCli } from './cli';
@@ -13,6 +24,41 @@ const PKG_ROOT = resolve(import.meta.dirname, '../../..');
 const PACK_CACHE_DIR = join(PKG_ROOT, '.kai-test-cache');
 
 /**
+ * Content fingerprint of a directory tree — every file's relative path,
+ * byte size and mtime folded into one hash, same "hash what actually
+ * changed" shape as `installKey()` in dev.ts (which hashes the emitted
+ * package.json rather than trusting a version number). A plain version
+ * number is NOT enough here: release-please only bumps package.json's
+ * version at merge, so the normal mid-branch case is "dist/ rebuilt,
+ * version unchanged" — keying the pack cache on version alone would reuse a
+ * stale tarball built from a PRIOR dist/, silently defeating the point of
+ * packing THIS checkout's own build (the repo's own "a cached build looks
+ * exactly like a successful one" trap). Hashing dist/package.json alone
+ * isn't enough either — a src-only rebuild changes the compiled JS/d.ts
+ * without touching that one file.
+ */
+function distFingerprint(distDir: string): string {
+  const hash = createHash('sha256');
+  const walk = (dir: string): string[] => {
+    const out: string[] = [];
+    const entries = [...readdirSync(dir, { withFileTypes: true })].sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) out.push(...walk(full));
+      else out.push(full);
+    }
+    return out;
+  };
+  for (const file of walk(distDir)) {
+    const stat = statSync(file);
+    hash.update(file.slice(distDir.length));
+    hash.update(String(stat.size));
+    hash.update(String(stat.mtimeMs));
+  }
+  return hash.digest('hex').slice(0, 16);
+}
+
+/**
  * The tarball `compile`'s integration test installs against, packed from
  * THIS checkout's own built dist/ — never a hand-placed evidence file (that
  * would be gitignored and red on any fresh clone/CI, the repo's most
@@ -21,10 +67,12 @@ const PACK_CACHE_DIR = join(PKG_ROOT, '.kai-test-cache');
  * branch's own codegen can't build against; packing the local build is the
  * honest way to get a spec that has it.
  *
- * Cached by version under a gitignored dir inside packages/ui so repeat runs
- * (and both `compile` tests, if a second one lands) don't re-pack. When
- * dist/ is missing, fails loudly with the exact fix — same convention as
- * the MCP manifest tests' "Missing build artifact" — never a silent skip.
+ * Cached under a gitignored dir inside packages/ui, keyed by version AND
+ * dist/'s content fingerprint (see distFingerprint) so repeat runs with an
+ * unchanged build don't re-pack, but a rebuilt dist/ with the same version
+ * (the normal mid-branch case) does. When dist/ is missing, fails loudly
+ * with the exact fix — same convention as the MCP manifest tests' "Missing
+ * build artifact" — never a silent skip.
  */
 function packedUiTarball(): string {
   const distDir = join(PKG_ROOT, 'dist');
@@ -37,10 +85,17 @@ function packedUiTarball(): string {
     );
   }
   const pkg = JSON.parse(readFileSync(join(PKG_ROOT, 'package.json'), 'utf8')) as { version: string };
-  const tarballPath = join(PACK_CACHE_DIR, `kitn.ai-ui-${pkg.version}.tgz`);
+  const fingerprint = distFingerprint(distDir);
+  const tarballPath = join(PACK_CACHE_DIR, `kitn.ai-ui-${pkg.version}-${fingerprint}.tgz`);
   if (!existsSync(tarballPath)) {
     mkdirSync(PACK_CACHE_DIR, { recursive: true });
+    // `npm pack` names its own output (kitn.ai-ui-<version>.tgz — the scoped
+    // package's plain convention, no room for our fingerprint suffix), so
+    // pack under that name and rename into our content-keyed filename
+    // afterward, rather than trying to steer npm's naming.
     execFileSync('npm', ['pack', '--silent', '--pack-destination', PACK_CACHE_DIR], { cwd: PKG_ROOT });
+    const packedName = join(PACK_CACHE_DIR, `kitn.ai-ui-${pkg.version}.tgz`);
+    renameSync(packedName, tarballPath);
   }
   return tarballPath;
 }
@@ -124,6 +179,23 @@ describe('kai CLI', () => {
     const { io, lines } = collect();
     expect(await runCli(['frobnicate'], io)).toBe(2);
     expect(lines.join('\n')).toMatch(/usage/i);
+  });
+
+  it('distFingerprint (the pack-cache key): changes when dist/ content changes, independent of any version string', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-fingerprint-'));
+    writeFileSync(join(dir, 'index.js'), 'export const x = 1;');
+    const before = distFingerprint(dir);
+
+    // The normal mid-branch case a version-only key would miss: dist/
+    // rebuilt (same file, new content) with nothing about "version" in
+    // sight — release-please only bumps package.json at merge. Force the
+    // mtime forward too so this can't pass by an unlucky same-mtime write.
+    writeFileSync(join(dir, 'index.js'), 'export const x = 2;');
+    const future = new Date(Date.now() + 5000);
+    utimesSync(join(dir, 'index.js'), future, future);
+
+    const after = distFingerprint(dir);
+    expect(after).not.toBe(before);
   });
 
   it('compile: missing path prints usage and exits 2', async () => {
