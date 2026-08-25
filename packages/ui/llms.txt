@@ -149,8 +149,10 @@ For Tailwind builds: `@import "@kitn.ai/ui/theme.css"` in your CSS.
 
 ## Docs
 
-- Full element reference (all 84 elements, every prop/event): ./llms-full.txt — https://kitn.dev/llms-full.txt
+- Element reference (all 84 elements, every prop/event/method/slot/part): the "Element reference" section of ./llms-full.txt — https://kitn.dev/llms-full.txt
 - Programmatic layer (`@kitn.ai/ui/state` + `@kitn.ai/ui/wire`: streaming folds, the mock responder, the SSE readers/encoders): the "Programmatic layer" section of llms-full.txt
+- How to build a chat app in 5 steps (install → pick a layer → handle submit + stream → wire features → theme, with working code): the "How to build a chat app in 5 steps" section of llms-full.txt
+- Streaming recipe (the two rules that bite: reassign new references per chunk, fold deltas onto the trailing text part): the "Streaming recipe" section of llms-full.txt
 - Machine-readable Custom Elements Manifest: https://unpkg.com/@kitn.ai/ui/dist/custom-elements.json
 - Working examples: https://github.com/kitn-ai/ui/tree/main/examples
 - Storybook: https://storybook.kitn.dev
