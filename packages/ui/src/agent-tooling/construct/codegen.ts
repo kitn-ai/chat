@@ -369,19 +369,14 @@ ${emitProviderSetup(c)}
 //     from an absent prop.
 //   - suggestions / models: omitted (undefined), same effect — no starter
 //     prompts, no model switcher.
-//   - attachments (the paperclip): NOT gateable from here. ChatThread has no
-//     \`attach\` passthrough — unlike webSearch/voice, its internal composer
-//     always wires a live onAttachmentsChange handler to DefaultPromptInput
-//     (chat-thread.tsx's own attachment-tracking signal needs one
-//     unconditionally), so the paperclip shows regardless of what this file
-//     passes or omits. The disabling prop DOES exist one layer down
-//     (DefaultPromptInputProps.attach, also on the standalone kai-prompt-input
-//     /kai-default-input elements) but ChatThread never forwards it — a real
-//     kit gap, escalated rather than routed around by hand-composing a
-//     replacement composer (the exact pattern the previous round stopped).
+//   - attachments (the paperclip): gated via ChatThread's \`attach\` prop
+//     (kit gap closed — ChatThread now forwards it to DefaultPromptInput,
+//     mirroring webSearch/voice). \`attach={false}\` here since the construct
+//     schema has no capabilities.attachments field yet; Task 9 flips this to
+//     \`attach={c.capabilities?.attachments === true}\` once that field lands.
 export function App() {
   return (
-${emitLayoutOpen(c)}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false} />
+${emitLayoutOpen(c)}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false} attach={false} />
 ${emitLayoutClose(c)}  );
 }
 `;
