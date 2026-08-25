@@ -7,12 +7,19 @@
 // reading dist/custom-elements.json.
 //
 // Outputs (all deterministic — no timestamps/random):
-//   - llms.txt              (repo root, committed + npm `files`)
-//   - llms-full.txt         (repo root, committed + npm `files`)
-//   - dist/llms/llms.txt    (copy, shipped in the npm package)
-//   - dist/llms/llms-full.txt
+//   - llms.txt              (package root, committed + npm `files`)
+//   - llms-full.txt         (package root, committed + npm `files`)
+//
+// The package-root copies are CANONICAL and the ONLY ones shipped
+// (owner-ruled 2026-08-25). A `dist/llms/` copy of each used to ship too —
+// ~293 KB of duplicate llms-full weight in every install — and the two copies
+// were observed to drift (a stale dist copy without the programmatic markers
+// beside a current root copy). The MCP's programmatic-topic slicer reads the
+// root copy (src/agent-tooling/mcp/tools/reference.ts), and `generate()`
+// below removes any stale `dist/llms/` left by an earlier build so it cannot
+// keep shipping — dist/ is packed wholesale.
 
-import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 // The `/state` + `/wire` section, derived from the shipped dist/*.d.ts (F-46).
@@ -514,17 +521,17 @@ export function generate(elementsInput) {
     '',
   ].join('\n') + '\n';
 
-  mkdirSync(resolve(root, 'dist/llms'), { recursive: true });
   writeFileSync(resolve(root, 'llms.txt'), llmsTxt);
   writeFileSync(resolve(root, 'llms-full.txt'), llmsFull);
-  writeFileSync(resolve(root, 'dist/llms/llms.txt'), llmsTxt);
-  writeFileSync(resolve(root, 'dist/llms/llms-full.txt'), llmsFull);
-  // NO standalone programmatic.md: the MCP's { name: "programmatic" } topic
-  // slices the marker-fenced section back out of dist/llms/llms-full.txt, so
-  // a separate copy would be ~50 KB of duplicate tarball weight (verify:pack
-  // is the guard that priced it). Remove a stale copy from earlier builds so
-  // it cannot keep shipping — dist/ is packed wholesale.
-  rmSync(resolve(root, 'dist/llms/programmatic.md'), { force: true });
+  // NO dist/llms/ copies (owner-ruled 2026-08-25) and NO standalone
+  // programmatic.md: the package-root files above are the canonical, only
+  // shipped copies, and the MCP's { name: "programmatic" } topic slices the
+  // marker-fenced section back out of the root llms-full.txt. Each duplicate
+  // was real tarball weight (verify:pack priced them — ~50 KB for
+  // programmatic.md, ~293 KB for the dist llms-full copy). Remove stale
+  // copies from earlier builds so they cannot keep shipping — dist/ is
+  // packed wholesale.
+  rmSync(resolve(root, 'dist/llms'), { recursive: true, force: true });
 
   console.log(
     `✓ llms.txt + llms-full.txt written (${count} elements, ${programmatic.exportCount} state/wire exports)`,

@@ -634,9 +634,9 @@ export interface KaiContextElement extends HTMLElement {
 export interface KaiConversationItemElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The row's identity, handed to the container's selection contract. In the element this is the `conversation-id` attribute (host `id` is the fallback). Standalone caveat: outside `<kai-conversations>` the row is inert. It emits no event of its own (activation surfaces as `kai-conversation-select` on the container), and Enter/Space + roving tabindex are the container's, so a hand-composed rail must add its own click and key handling. */
+  /** The row's identity: the `conversation-id` attribute (host `id` is the fallback). Inside `<kai-conversations>` it is handed to the container's selection contract (`kai-conversation-select`); standalone it is the `id` in this element's own `kai-select` detail. */
   conversationId?: string;
-  /** Selected state. Reflected as `aria-current` on the row body and a `data-active` styling hook on the row; the container drives it from its `activeId`. */
+  /** Selected state. Reflected as `aria-current` on the row body and a `data-active` styling hook on the row; inside a container the container drives it from its `activeId`, standalone you set it yourself. */
   active?: boolean;
   /** Dense single-line row padding. */
   compact?: boolean;
@@ -1654,7 +1654,7 @@ export interface KaiThreadElement extends HTMLElement {
 export interface KaiToastRegionElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. Omit for an empty region, which is the normal resting state and how the imperative `toast()` API starts. Data-driven and imperative are EITHER/OR per app: `toast()` mounts its own region on `document.body` and never adopts one you placed in markup, so mixing the two gives you two overlapping regions. */
+  /** The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. Omit for an empty region, which is the normal resting state and how the imperative `toast()` API starts. Note the handover: the first `toast()` call ADOPTS a region you placed in markup (no second region mounts) and binds the imperative store to this property, replacing any array you set. Drive a region as data OR via `toast()`, not both at once. */
   toasts: { id: string; message: string; variant?: "neutral" | "success" | "warning" | "error" | "info"; appearance?: "pill" | "card"; inverse?: boolean; description?: string; action?: { label: string; onAction: () => void | false }; duration?: number; dismissible?: boolean; target?: HTMLElement }[];
   /** Stack anchor: `'top-center'` (default), `'top-right'`, `'bottom-center'`, … */
   position?: "top-center" | "top-right" | "top-left" | "bottom-center" | "bottom-right" | "bottom-left";
@@ -2390,9 +2390,9 @@ export interface KaiContextElementProps {
 export interface KaiConversationItemElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The row's identity, handed to the container's selection contract. In the element this is the `conversation-id` attribute (host `id` is the fallback). Standalone caveat: outside `<kai-conversations>` the row is inert. It emits no event of its own (activation surfaces as `kai-conversation-select` on the container), and Enter/Space + roving tabindex are the container's, so a hand-composed rail must add its own click and key handling. */
+  /** The row's identity: the `conversation-id` attribute (host `id` is the fallback). Inside `<kai-conversations>` it is handed to the container's selection contract (`kai-conversation-select`); standalone it is the `id` in this element's own `kai-select` detail. */
   conversationId?: string;
-  /** Selected state. Reflected as `aria-current` on the row body and a `data-active` styling hook on the row; the container drives it from its `activeId`. */
+  /** Selected state. Reflected as `aria-current` on the row body and a `data-active` styling hook on the row; inside a container the container drives it from its `activeId`, standalone you set it yourself. */
   active?: boolean;
   /** Dense single-line row padding. */
   compact?: boolean;
@@ -3258,7 +3258,7 @@ export interface KaiThreadElementProps {
 export interface KaiToastRegionElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. Omit for an empty region, which is the normal resting state and how the imperative `toast()` API starts. Data-driven and imperative are EITHER/OR per app: `toast()` mounts its own region on `document.body` and never adopts one you placed in markup, so mixing the two gives you two overlapping regions. */
+  /** The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. Omit for an empty region, which is the normal resting state and how the imperative `toast()` API starts. Note the handover: the first `toast()` call ADOPTS a region you placed in markup (no second region mounts) and binds the imperative store to this property, replacing any array you set. Drive a region as data OR via `toast()`, not both at once. */
   toasts?: { id: string; message: string; variant?: "neutral" | "success" | "warning" | "error" | "info"; appearance?: "pill" | "card"; inverse?: boolean; description?: string; action?: { label: string; onAction: () => void | false }; duration?: number; dismissible?: boolean; target?: HTMLElement }[];
   /** Stack anchor: `'top-center'` (default), `'top-right'`, `'bottom-center'`, … */
   position?: "top-center" | "top-right" | "top-left" | "bottom-center" | "bottom-right" | "bottom-left";
@@ -3499,7 +3499,8 @@ export interface KaiContextElementEvents {
 }
 
 export interface KaiConversationItemElementEvents {
-
+  /** STANDALONE activation only (F-45 tier 2, owner-ruled 2026-08-25): the row was activated (click, Enter or Space on its body) while the item is NOT a direct child of `<kai-conversations>`. `id` is the row's identity: the `conversation-id` attribute, else the host `id`. Inside a container this never fires: activation surfaces once, as `kai-conversation-select` on the container. */
+  onKaiSelect?: (event: CustomEvent<{ id: string }>) => void;
 }
 
 export interface KaiConversationsElementEvents {

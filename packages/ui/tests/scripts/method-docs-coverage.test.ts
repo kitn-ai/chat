@@ -314,16 +314,10 @@ const MARKDOWN_ARTIFACTS: MarkdownArtifact[] = [
     minCoveredElements: meta.length,
     spot: 'kai-resizable',
   },
-  {
-    // The npm copy of the same file. Build-only, so skipped when absent.
-    label: 'packages/ui/dist/llms/llms-full.txt',
-    path: resolve(pkgRoot, 'dist/llms/llms-full.txt'),
-    heading: /^\*\*Methods\*\*/,
-    sectionFor: (text, tag) => llmsSections(text).get(tag),
-    minCoveredElements: meta.length,
-    spot: 'kai-resizable',
-    optional: true,
-  },
+  // No dist/llms/ entry: the package-root llms-full.txt above is the canonical
+  // and ONLY shipped copy (owner-ruled 2026-08-25). The dist/llms/ duplicate
+  // this used to also check no longer exists — gen-llms.mjs stopped emitting it
+  // and removes stale copies.
   {
     // NOT fully generated. This file is hand-written prose with generated tables
     // spliced between `<!-- spec:TAG -->` markers, and the generator only splices

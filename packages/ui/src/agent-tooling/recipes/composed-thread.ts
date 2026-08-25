@@ -49,12 +49,15 @@ export const composedThread: CodeRecipe = {
       'walk `result.toolCalls` after the read and call `stream.upsertTool(id, { state: ' +
       "'output-available', output })`, or the panel sits at input-available forever.",
     'The toast region is driven as DATA (`toasts` property, `kai-dismiss` event) because ' +
-      'this app places its own `<kai-toast-region>`. Data-driven and the imperative ' +
-      '`toast()` are either/or: `toast()` auto-mounts its OWN region and will not adopt ' +
-      'yours, so mixing them renders two.',
-    'A standalone `<kai-conversation-item>` is presentational: activation events, roving ' +
-      "tabindex and Enter/Space live in `<kai-conversations>`'s controller, so outside it " +
-      'the click listener — and any keyboard story — is yours.',
+      'this app places its own `<kai-toast-region>` and owns the array. Note: `toast()` ' +
+      'ADOPTS a markup-placed region (it creates its own only when none exists) and binds ' +
+      'its store over `toasts`, replacing a data-driven array — so per region, own the ' +
+      'array or call `toast()`, not both.',
+    'A standalone `<kai-conversation-item>` (outside `<kai-conversations>`) activates ' +
+      'itself: its body is a tabbable button and click / Enter / Space fire `kai-select` ' +
+      'on the item with `{ id }` (non-bubbling — listen on the item). What it does NOT ' +
+      "carry is the container's list story — roving tabindex and arrow-key traversal " +
+      'stay yours in a hand-rolled rail.',
     '`<kai-thread>` fills the height its parent gives it and scrolls internally, which is ' +
       'why `.pane` is a flex column and `.thread` is `flex: 1; min-height: 0`.',
   ],
@@ -263,8 +266,9 @@ async function main() {
 
   // ── toasts ────────────────────────────────────────────────────────────────
   // Driven as data rather than through the imperative toast(), because this app
-  // places its own <kai-toast-region> and owns the list. The two are either/or:
-  // toast() auto-mounts its OWN region and will not adopt this one.
+  // places its own <kai-toast-region> and owns the list. Don't ALSO call
+  // toast(): it would adopt this region and bind its own store over the
+  // toasts property, replacing the array this module owns.
   let toasts: ToastItem[] = [];
   const setToasts = (next: ToastItem[]) => {
     toasts = next;
@@ -305,11 +309,15 @@ async function main() {
           : 'Empty';
         row.append(meta);
 
-        // kai-conversation-item has no selection event of its own — it renders
-        // a button row and leaves activation to the host, so a plain click
-        // listener is the wiring. (Inside <kai-conversations> the CONTAINER
-        // owns activation and the keyboard story; standalone, both are yours.)
-        row.addEventListener('click', () => select(conversation.id));
+        // Standalone rows activate THEMSELVES: outside <kai-conversations>
+        // the item's body is a tabbable button and click / Enter / Space fire
+        // kai-select on the item (non-bubbling — listen on the row, and take
+        // the id from detail rather than re-deriving it). What standalone rows
+        // do not get is the container's LIST story: roving tabindex and
+        // arrow-key traversal stay yours in a hand-rolled rail.
+        row.addEventListener('kai-select', (e) => {
+          select((e as CustomEvent<{ id: string }>).detail.id);
+        });
         return row;
       }),
     );

@@ -9,10 +9,13 @@
 // element, so it carries its own shadow root + the shared kit stylesheet — it's
 // viewport-positioned AND fully kit-styled, never a raw div.
 //
-// CREATES, never adopts: `ensureMounted` does not look for a
-// `<kai-toast-region>` already in the markup, so an app that places and drives
-// its own region (the declarative mode) must not also call `toast()` — the
-// first call mounts a second, overlapping region. Pick one mode per app.
+// ADOPTS, else creates (F-48, owner-ruled 2026-08-25): `ensureMounted` first
+// looks for a connected `<kai-toast-region>` already in the document and binds
+// the store to it, so an app that placed its own region and also calls
+// `toast()` gets ONE region, not two overlapping ones. It creates a region only
+// when none exists. With two or more candidate regions the choice is genuinely
+// ambiguous — the first in document order wins, and a one-time console.warn
+// says so (decide loudly).
 //
 // SSR-safe: every DOM touch is guarded by `typeof document`. On the server,
 // raising a toast is an inert no-op (the store updates, nothing mounts).
@@ -161,26 +164,75 @@ function resolveDuration(item: Pick<ToastItem, 'duration' | 'action'>): number {
 }
 
 /**
- * Lazily create the single `<kai-toast-region>` host on `document.body` and
- * bind the store to its `toasts` property. Idempotent + SSR-safe. The element
- * upgrade (its `defineWebComponent` registration) happens when the elements
- * bundle loads; setting the property before/after upgrade both work because
+ * Lazily resolve the single `<kai-toast-region>` host for a target and bind the
+ * store to its `toasts` property. Idempotent + SSR-safe. The element upgrade
+ * (its `defineWebComponent` registration) happens when the elements bundle
+ * loads; setting the property before/after upgrade both work because
  * `customElement` reflects late-set properties.
  *
- * It CREATES a region — it never queries the document for, or adopts, a
- * `<kai-toast-region>` the app placed in markup. Imperative `toast()` and a
- * hand-placed data-driven region are therefore either/or: an app that owns its
- * own region must not also call `toast()`, or two overlapping regions render.
+ * ADOPT-IF-PRESENT (F-48, owner-ruled 2026-08-25): a connected
+ * `<kai-toast-region>` already in the document (same `target`, not already
+ * claimed for another target) is adopted — the store binds to IT, and no
+ * second region mounts. Adoption respects the region's authored attributes
+ * (position/stack/…): config from `configureToasts()` is not stamped onto an
+ * adopted region here, though an explicit `configureToasts()` call still
+ * updates every region, adopted included. Binding the store REPLACES a
+ * `toasts` array the app set as data — after the first `toast()` call the
+ * imperative store owns the adopted region's list. Only when no candidate
+ * exists is a fresh region created on `document.body`. Two or more candidates
+ * for the same target are genuinely ambiguous: the first in document order
+ * wins, with a one-time console.warn (decide loudly).
+ *
+ * If an adopted (or created) region later leaves the DOM, the cache entry is
+ * dropped and the next call resolves fresh — adopt again if a region exists,
+ * else create — so a removed region never becomes a dead cache entry that
+ * swallows toasts.
  */
 // One region per distinct target (the `null` key = the global / viewport region).
 // Every region binds the SAME store proxy and filters to its own target, so a
 // toast routes to the region for its `target`.
 const regions = new Map<HTMLElement | null, HTMLElement>();
 
+// Decide-loudly, once: ambiguity between 2+ candidate regions is warned about a
+// single time per page, not on every toast.
+let warnedAmbiguousRegions = false;
+
+/** Read a region element's `target` property (undefined pre-upgrade → null =
+ *  the global region). */
+function regionTarget(el: HTMLElement): HTMLElement | null {
+  return (el as unknown as { target?: HTMLElement }).target ?? null;
+}
+
 export function ensureMounted(target: HTMLElement | null = null): HTMLElement | undefined {
   if (typeof document === 'undefined') return undefined;
   const cached = regions.get(target);
   if (cached && cached.isConnected) return cached;
+  // The region this key resolved to left the DOM — drop the dead entry so it
+  // can never swallow toasts, and resolve fresh below.
+  if (cached) regions.delete(target);
+
+  // Adopt a region the app already placed (F-48). Regions this store already
+  // claimed for OTHER targets are not candidates.
+  const claimed = new Set(regions.values());
+  const candidates = Array.from(
+    document.querySelectorAll<HTMLElement>('kai-toast-region'),
+  ).filter((el) => el.isConnected && !claimed.has(el) && regionTarget(el) === target);
+  if (candidates.length > 1 && !warnedAmbiguousRegions) {
+    warnedAmbiguousRegions = true;
+    console.warn(
+      `[kitn] toast(): ${candidates.length} candidate <kai-toast-region> elements are in the ` +
+        'document; adopting the first in document order. Keep one region per target so the ' +
+        'imperative toast() API has an unambiguous home.',
+    );
+  }
+  const adopted = candidates[0];
+  if (adopted) {
+    (adopted as unknown as { toasts: ToastItem[] }).toasts = toasts as ToastItem[];
+    regions.set(target, adopted);
+    setMounted(true);
+    return adopted;
+  }
+
   const el = document.createElement('kai-toast-region') as HTMLElement;
   // Append FIRST so the element upgrades, THEN bind. Setting a property before
   // upgrade loses it: component-register resets every prop in the constructor on

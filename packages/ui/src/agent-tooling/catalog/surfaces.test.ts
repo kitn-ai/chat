@@ -6,6 +6,7 @@ import '../../elements/attachments';
 import '../../elements/chat';
 import type { ChatMessage } from '../../elements/chat-types';
 import '../../elements/composer';
+import '../../elements/conversation-item';
 import '../../elements/conversation-list';
 import '../../elements/resizable';
 import '../../elements/thread';
@@ -221,7 +222,7 @@ function mountConversations(): ConvEl {
 afterEach(() => {
   document
     .querySelectorAll(
-      'kai-chat, kai-conversations, kai-resizable, kai-artifact, kai-thread, kai-composer, kai-attachments, kai-toast-region',
+      'kai-chat, kai-conversations, kai-conversation-item, kai-resizable, kai-artifact, kai-thread, kai-composer, kai-attachments, kai-toast-region, nav',
     )
     .forEach((e) => e.remove());
 });
@@ -485,8 +486,8 @@ describe('surface recipe wiring, executed against the real elements', () => {
     expect(region.shadowRoot!.textContent).toContain('other-toast-body');
 
     // Data-driven region: the host owns the array, dismissal is a filter +
-    // reassign (the imperative toast() path owns its own auto-mounted region
-    // instead — the two are either/or).
+    // reassign (the imperative toast() path would instead adopt this region
+    // and bind its own store over `toasts` — one API per region).
     const dismissed: string[] = [];
     region.addEventListener('kai-dismiss', (e) => {
       const { id } = (e as CustomEvent<{ id: string }>).detail;
@@ -505,6 +506,88 @@ describe('surface recipe wiring, executed against the real elements', () => {
     expect(region.shadowRoot!.textContent).toContain(kept);
 
     drove('kai-toast-region', 'kai-dismiss', 'kai-toast-region', 'toasts');
+  });
+
+  it('a STANDALONE kai-conversation-item fires kai-select {id} and the host swap re-renders kai-thread (F-45 tier 2)', async () => {
+    // The composed-thread rail: rows in a plain <nav>, NOT inside
+    // <kai-conversations> — the placement where the item activates itself.
+    const rail = document.createElement('nav');
+    const row = document.createElement('kai-conversation-item') as HTMLElement & {
+      conversationId?: string;
+    };
+    row.conversationId = 'c2';
+    row.textContent = 'Second thread';
+    rail.appendChild(row);
+    document.body.appendChild(rail);
+
+    const thread = document.createElement('kai-thread') as ChatEl;
+    thread.messages = threads.c1.map((m) => ({ ...m }));
+    document.body.appendChild(thread);
+    await flush();
+
+    // POSITIVE CONTROL: the starting thread is really on screen.
+    expect(thread.shadowRoot!.textContent).toContain('thread-one-body');
+    expect(thread.shadowRoot!.textContent).not.toContain('thread-two-body');
+    // The standalone body is a real button-role tab stop (the a11y half of the ruling).
+    const body = row.shadowRoot!.querySelector<HTMLElement>('[data-kai-item-body]')!;
+    expect(body.getAttribute('role')).toBe('button');
+    expect(body.getAttribute('tabindex')).toBe('0');
+
+    // The host edge, written the way the recipe describes it: listen on the
+    // row itself (events-non-bubbling), take the id from detail, assign a NEW
+    // array of NEW objects to the thread.
+    let detail: { id: string } | null = null;
+    row.addEventListener('kai-select', (e) => {
+      detail = (e as CustomEvent<{ id: string }>).detail;
+      thread.messages = threads[detail!.id].map((m) => ({ ...m }));
+    });
+
+    body.click();
+    await flush();
+
+    expect(detail).toEqual({ id: 'c2' });
+    expect(thread.shadowRoot!.textContent).toContain('thread-two-body');
+    expect(thread.shadowRoot!.textContent).not.toContain('thread-one-body');
+
+    drove('kai-conversation-item', 'kai-select', 'kai-thread', 'messages');
+    rail.remove();
+    thread.remove();
+  });
+
+  it('inside <kai-conversations> the item does NOT fire kai-select — the container\'s event is the only one (no double-fire)', async () => {
+    // The other half of the F-45 ruling: slotted as a direct child, NOTHING
+    // changes — the ratified parent-item contract stays the single activation
+    // path.
+    const rail = document.createElement('kai-conversations') as ConvEl;
+    rail.groups = groups;
+    rail.conversations = [];
+    const row = document.createElement('kai-conversation-item') as HTMLElement & {
+      conversationId?: string;
+    };
+    row.conversationId = 'c1';
+    row.textContent = 'First thread';
+    rail.appendChild(row);
+    document.body.appendChild(rail);
+    await flush();
+    await flush(); // the container's controller stamps slotted bodies on its re-sync
+
+    const selects: string[] = [];
+    const itemSelects: string[] = [];
+    rail.addEventListener('kai-conversation-select', (e) => {
+      selects.push((e as CustomEvent<{ id: string }>).detail.id);
+    });
+    row.addEventListener('kai-select', (e) => {
+      itemSelects.push((e as CustomEvent<{ id: string }>).detail.id);
+    });
+
+    const body = row.shadowRoot!.querySelector<HTMLElement>('[data-kai-item-body]')!;
+    body.click();
+    await flush();
+
+    // POSITIVE CONTROL first — the container really handled the activation —
+    // then the pin: the item itself stayed silent.
+    expect(selects).toEqual(['c1']);
+    expect(itemSelects).toEqual([]);
   });
 
   // ── the COMPOSITION record, executed the same way ────────────────────────

@@ -157,7 +157,7 @@ You only touch the element directly to **own the toast list yourself** (e.g. dri
 ```
 
 <Aside type="caution" title="One region">
-The imperative `toast()` and the declarative element share one store. If you mount your own `<kai-toast-region>`, place exactly one — a second region would render the same stack twice.
+`toast()` adopts a `<kai-toast-region>` you already placed in markup and creates its own only when none exists, so mixing the two never renders a second stack. Adoption keeps your authored attributes but binds the imperative store to the `toasts` property, replacing an array you were driving as data — per region, own the array or call `toast()`, not both. Place exactly one region: with several, the first in document order wins and a one-time console warning flags the ambiguity.
 </Aside>
 
 A toast item has the same shape as a `toast()` call:

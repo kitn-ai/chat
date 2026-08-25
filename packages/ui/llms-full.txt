@@ -1952,11 +1952,15 @@ _No events._
 | Property | Attribute | Type | Description |
 |---|---|---|---|
 | `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
-| `conversationId` | `conversation-id` | `undefined \| string` | The row's identity, handed to the container's selection contract. In the element this is the `conversation-id` attribute (host `id` is the fallback). Standalone caveat: outside `<kai-conversations>` the row is inert. It emits no event of its own (activation surfaces as `kai-conversation-select` on the container), and Enter/Space + roving tabindex are the container's, so a hand-composed rail must add its own click and key handling. |
-| `active` | `active` | `undefined \| false \| true` | Selected state. Reflected as `aria-current` on the row body and a `data-active` styling hook on the row; the container drives it from its `activeId`. |
+| `conversationId` | `conversation-id` | `undefined \| string` | The row's identity: the `conversation-id` attribute (host `id` is the fallback). Inside `<kai-conversations>` it is handed to the container's selection contract (`kai-conversation-select`); standalone it is the `id` in this element's own `kai-select` detail. |
+| `active` | `active` | `undefined \| false \| true` | Selected state. Reflected as `aria-current` on the row body and a `data-active` styling hook on the row; inside a container the container drives it from its `activeId`, standalone you set it yourself. |
 | `compact` | `compact` | `undefined \| false \| true` | Dense single-line row padding. |
 
-_No events._
+**Events** (non-bubbling `CustomEvent`s — listen directly on the element):
+
+| Event | `detail` type | Description |
+|---|---|---|
+| `kai-select` | `CustomEvent<{ id: string }>` | STANDALONE activation only (F-45 tier 2, owner-ruled 2026-08-25): the row was activated (click, Enter or Space on its body) while the item is NOT a direct child of `<kai-conversations>`. `id` is the row's identity: the `conversation-id` attribute, else the host `id`. Inside a container this never fires: activation surfaces once, as `kai-conversation-select` on the container. |
 
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
@@ -3741,7 +3745,7 @@ _No events._
 | Property | Attribute | Type | Description |
 |---|---|---|---|
 | `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
-| `toasts` | — | `undefined \| { id: string; message: string; variant?: undefined \| "neutral" \| "success" \| "warning" \| "error" \| "info"; appearance?: undefined \| "pill" \| "card"; inverse?: undefined \| false \| true; description?: undefined \| string; action?: undefined \| { label: string; onAction: () => void \| false }; duration?: undefined \| number; dismissible?: undefined \| false \| true; target?: undefined \| HTMLElement }[]` | The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. Omit for an empty region, which is the normal resting state and how the imperative `toast()` API starts. Data-driven and imperative are EITHER/OR per app: `toast()` mounts its own region on `document.body` and never adopts one you placed in markup, so mixing the two gives you two overlapping regions. |
+| `toasts` | — | `undefined \| { id: string; message: string; variant?: undefined \| "neutral" \| "success" \| "warning" \| "error" \| "info"; appearance?: undefined \| "pill" \| "card"; inverse?: undefined \| false \| true; description?: undefined \| string; action?: undefined \| { label: string; onAction: () => void \| false }; duration?: undefined \| number; dismissible?: undefined \| false \| true; target?: undefined \| HTMLElement }[]` | The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. Omit for an empty region, which is the normal resting state and how the imperative `toast()` API starts. Note the handover: the first `toast()` call ADOPTS a region you placed in markup (no second region mounts) and binds the imperative store to this property, replacing any array you set. Drive a region as data OR via `toast()`, not both at once. |
 | `position` | `position` | `undefined \| "top-center" \| "top-right" \| "top-left" \| "bottom-center" \| "bottom-right" \| "bottom-left"` | Stack anchor: `'top-center'` (default), `'top-right'`, `'bottom-center'`, … |
 | `max` | `max` | `undefined \| number` | Max simultaneously-visible toasts; the rest queue. Defaults to `3`. |
 | `stack` | `stack` | `undefined \| "expanded" \| "collapsed"` | Stacking: 'expanded' (default, full column) \| 'collapsed' (Sonner-style pile that expands on hover/focus). Attribute: stack. |

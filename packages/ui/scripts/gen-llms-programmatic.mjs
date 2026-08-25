@@ -21,10 +21,12 @@
 // The section is written into llms-full.txt by gen-llms.mjs, fenced by the
 // PROGRAMMATIC_MARKERS below, and the MCP's
 // `component_reference({ name: "programmatic" })` topic serves it by slicing
-// those markers back out of the shipped dist/llms/llms-full.txt — one
-// derivation, two doors, ZERO extra shipped bytes. (It used to also write a
-// standalone dist/llms/programmatic.md; that was ~50 KB of pure duplication in
-// the tarball and verify:pack is the guard that priced it.)
+// those markers back out of the shipped package-root llms-full.txt — the
+// canonical, only shipped copy (owner-ruled 2026-08-25; the dist/llms/
+// duplicate is gone) — one derivation, two doors, ZERO extra shipped bytes.
+// (It used to also write a standalone dist/llms/programmatic.md; that was
+// ~50 KB of pure duplication in the tarball and verify:pack is the guard that
+// priced it.)
 
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';

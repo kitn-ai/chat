@@ -566,13 +566,16 @@ function renderInvariantAppendix(): string[] {
 const PROGRAMMATIC_ALIASES = ['programmatic', 'state', 'wire', 'state-wire'] as const;
 
 /**
- * The `/state` + `/wire` appendix (rung-6 F-46): served from
- * `dist/llms/programmatic.md`, which `build:api` DERIVES from the shipped
- * `dist/state/*.d.ts` + `dist/wire/*.d.ts` (scripts/gen-llms-programmatic.mjs)
- * and which also lands verbatim in llms-full.txt. Read, never restated: this
- * tool restating one signature by hand is exactly the drift the generator
- * exists to remove. The file sits beside the manifest in both contexts
- * (bundled bin and source/vitest), so its resolution is the manifest's.
+ * The `/state` + `/wire` appendix (rung-6 F-46): a marker-fenced section of the
+ * package-root `llms-full.txt`, which `build:api` DERIVES from the shipped
+ * `dist/state/*.d.ts` + `dist/wire/*.d.ts` (scripts/gen-llms-programmatic.mjs).
+ * Read, never restated: this tool restating one signature by hand is exactly
+ * the drift the generator exists to remove. The root copy is the CANONICAL and
+ * ONLY shipped copy (owner-ruled 2026-08-25): a second copy under `dist/llms/`
+ * used to ship too, ~293 KB of duplicate tarball weight — and it once went
+ * stale against the root while both claimed to be the artifact. It resolves
+ * relative to the manifest (`dist/custom-elements.json`), whose parent's
+ * parent is the package root in both contexts — bundled bin and source/vitest.
  */
 /**
  * The fence gen-llms-programmatic.mjs writes around the section inside
@@ -589,12 +592,12 @@ function renderProgrammaticAppendix(): string {
   // its own: a standalone copy was ~50 KB of duplicate tarball weight
   // (verify:pack priced it), and slicing keeps one derivation with zero extra
   // shipped bytes.
-  const path = join(dirname(resolveManifestPath()), 'llms', 'llms-full.txt');
+  const path = join(dirname(resolveManifestPath()), '..', 'llms-full.txt');
   const missing = (what: string) =>
     `Missing build artifact: ${what}\n\n` +
     'The programmatic-layer reference is generated from the shipped dist/*.d.ts by the ' +
-    'build (a marker-fenced section of dist/llms/llms-full.txt). Run `nx build ui` (or ' +
-    '`npm run build:api` in packages/ui) and ask again. It is deliberately not restated ' +
+    'build (a marker-fenced section of the package-root llms-full.txt). Run `nx build ui` ' +
+    '(or `npm run build:api` in packages/ui) and ask again. It is deliberately not restated ' +
     'here: a hand-typed copy would drift from the declarations your editor shows.';
   if (!existsSync(path)) return missing(path);
   const full = readFileSync(path, 'utf-8');

@@ -132,6 +132,8 @@ Each item takes a default slot for the title plus three named slots: `leading` (
 
 Keyboard order: the row bodies share a single roving tab stop (Tab enters at the active row, arrow keys move between rows), and each row's menu trigger keeps its natural place in the tab order, directly after its row. The menu sits BESIDE the activation body in the accessibility tree, never inside it, so your trigger stays reachable without tripping accessibility checkers on nested controls.
 
+**Standalone rows.** Outside `<kai-conversations>` — a hand-rolled rail, or any wrapper that isn't the container itself — a `<kai-conversation-item>` activates itself: its body is a tabbable button and click, Enter or Space fire `kai-select` on the item with `{ id }` in the detail (non-bubbling, so listen on the row). What standalone rows don't get is the container's list story — roving tabindex and arrow-key traversal stay yours. Inside the container nothing changes: `kai-conversation-select` on the container is the one activation event, and the item stays silent.
+
 **The batteries boundary.** With item children present, the built-in search filter, grouping, and empty state do not apply to your rows: your loop owns them. The chrome still renders (header, search box, new-chat, footer slots) and `kai-search` still fires, so filter your own loop off the event. The `conversations` array is ignored while any item child is present, and data rows return when the last one leaves.
 
 ## Slots

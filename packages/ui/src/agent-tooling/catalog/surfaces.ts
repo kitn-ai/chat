@@ -247,11 +247,11 @@ export const surfaceRecipes: TSurfaceRecipe[] = [
     // recipe (../recipes/composed-thread.ts, served by component_reference
     // { name: "composed-thread" } and compiled by verify:scaffold), which is
     // also this record's corpus. Ingredients with no wiring edge below are
-    // still real members of the composition: kai-conversation-item is
-    // presentational standalone (activation lives in <kai-conversations>'s
-    // controller, so the rail rows get a host click listener, not an event
-    // edge), and kai-feedback-bar's events terminate in the host rather than
-    // setting another element's property.
+    // still real members of the composition: kai-feedback-bar's events
+    // terminate in the host rather than setting another element's property.
+    // (kai-conversation-item used to be in that list as "presentational
+    // standalone"; since F-45 tier 2 a standalone row activates itself, so
+    // the rail is a real kai-select edge below.)
     id: 'composed-thread',
     intent:
       'A full chat surface composed by hand from standalone elements — no <kai-chat>. ' +
@@ -288,7 +288,14 @@ export const surfaceRecipes: TSurfaceRecipe[] = [
         event: 'kai-dismiss',
         to: 'kai-toast-region',
         property: 'toasts',
-        note: 'detail is {id}; the region is driven as DATA because this app places its own — the imperative toast() auto-mounts a second region and never adopts a markup-placed one, so the two APIs are either/or',
+        note: 'detail is {id}; the region is driven as DATA because this app places its own and owns the array — the imperative toast() would ADOPT this markup-placed region (it mounts its own only when none exists) and bind its store over the toasts property, so pick one API per region',
+      },
+      {
+        from: 'kai-conversation-item',
+        event: 'kai-select',
+        to: 'kai-thread',
+        property: 'messages',
+        note: 'detail is {id}; STANDALONE rows only (F-45 tier 2) — outside <kai-conversations> the row body is a tabbable button and click / Enter / Space fire kai-select on the item (non-bubbling: listen on the row). Inside a container this never fires; the container\'s kai-conversation-select is the one activation event. The container\'s list story (roving tabindex, arrow keys) stays the host\'s job in a hand-rolled rail',
       },
     ],
     invariants: [
