@@ -15,6 +15,10 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+// The `/state` + `/wire` section, derived from the shipped dist/*.d.ts (F-46).
+// A separate module because it parses declarations with the TypeScript API,
+// which nothing else in this file needs.
+import { buildProgrammaticSection } from './gen-llms-programmatic.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -185,6 +189,7 @@ For Tailwind builds: \`@import "@kitn.ai/ui/theme.css"\` in your CSS.
 ## Docs
 
 - Full element reference (all ${count} elements, every prop/event): ./llms-full.txt — https://kitn.dev/llms-full.txt
+- Programmatic layer (\`@kitn.ai/ui/state\` + \`@kitn.ai/ui/wire\`: streaming folds, the mock responder, the SSE readers/encoders): the "Programmatic layer" section of llms-full.txt
 - Machine-readable Custom Elements Manifest: https://unpkg.com/@kitn.ai/ui/dist/custom-elements.json
 - Working examples: https://github.com/kitn-ai/ui/tree/main/examples
 - Storybook: https://storybook.kitn.dev
@@ -478,6 +483,9 @@ export function generate(elementsInput) {
   const llmsTxt = `${HEADER_NOTE}\n${llmsBody}\n`;
 
   const elementSection = els.map(renderElement).join('\n\n');
+  // Derived from dist/state/*.d.ts + dist/wire/*.d.ts — the layer a builder
+  // that leaves <kai-chat> writes against, previously on no surface (F-46).
+  const programmatic = buildProgrammaticSection();
   const llmsFull = [
     HEADER_NOTE,
     '# @kitn.ai/ui — Full Reference',
@@ -494,6 +502,10 @@ export function generate(elementsInput) {
     '',
     '---',
     '',
+    programmatic.markdown,
+    '',
+    '---',
+    '',
     `## Element reference (${count} elements, generated from custom-elements.json)`,
     '',
     'Every element also accepts the `theme` attribute. Array/object properties are marked with a `—` attribute: they must be set as JS properties.',
@@ -507,8 +519,13 @@ export function generate(elementsInput) {
   writeFileSync(resolve(root, 'llms-full.txt'), llmsFull);
   writeFileSync(resolve(root, 'dist/llms/llms.txt'), llmsTxt);
   writeFileSync(resolve(root, 'dist/llms/llms-full.txt'), llmsFull);
+  // The same section alone, for the MCP's component_reference
+  // { name: "programmatic" } topic — one derivation, two doors.
+  writeFileSync(resolve(root, 'dist/llms/programmatic.md'), programmatic.markdown + '\n');
 
-  console.log(`✓ llms.txt + llms-full.txt written (${count} elements)`);
+  console.log(
+    `✓ llms.txt + llms-full.txt written (${count} elements, ${programmatic.exportCount} state/wire exports)`,
+  );
   return count;
 }
 

@@ -9,6 +9,7 @@ import { cardTagForType, cardHostTags, entryForTag, getElement, listElements } f
 import { invariants } from '../catalog/invariants';
 import { surfaceRecipes } from '../catalog/surfaces';
 import type { TInvariant } from '../catalog/catalog-types';
+import { listCodeRecipes, getCodeRecipe } from '../recipes';
 
 describe('component_reference', () => {
   it('returns kai-chat props + events', async () => {
@@ -879,5 +880,94 @@ describe('component_reference — Task 4: no repeated universal records', () => 
     // (5386 B) are meant to stay inline in full, so this number moves with the
     // catalog's own prose, not with rendering choices.
     expect(sharedBytes).toBeLessThan(12000);
+  });
+});
+
+describe('component_reference — programmatic layer + code recipes (rung-6 F-46 / F-49)', () => {
+  it('serves the /state + /wire appendix, generated from the shipped declarations', async () => {
+    const text = await textFor({ name: 'programmatic' });
+    expect(text, 'run `npm run build:api` in packages/ui — the appendix is a build artifact').not.toContain(
+      'Missing build artifact',
+    );
+    // The residual hard core F-46 measured at zero on every surface. Each of
+    // these must now answer without a .d.ts excursion.
+    for (const sym of [
+      'createAssistantStream',
+      'appendTextPart',
+      'appendReasoningPart',
+      'upsertToolPart',
+      'createMockResponder',
+      'MockTurn',
+      'MockToolCall',
+      'readOpenAIStream',
+      'readAnthropicStream',
+      'readModelStream',
+      'toOpenAIMessages',
+      'toAnthropicMessages',
+      'ChatRequestBody',
+      'upsertTool',
+    ]) {
+      expect(text, `programmatic appendix does not mention ${sym}`).toContain(sym);
+    }
+    // F-47: the host-resolves-the-call seam is stated, not implied — and so is
+    // its one exception, a call the PROVIDER already executed in-stream.
+    expect(text).toMatch(/HOST RESOLVES TOOL CALLS/i);
+    expect(text).toContain('providerExecuted');
+    // Derived, not restated: the appendix must carry the generator's own
+    // provenance marker, because a hand-typed copy would not.
+    expect(text).toContain('gen-llms-programmatic');
+  });
+
+  it('"state", "wire" and "state-wire" are aliases for the same appendix', async () => {
+    const canonical = await textFor({ name: 'programmatic' });
+    for (const alias of ['state', 'wire', 'state-wire']) {
+      expect(await textFor({ name: alias })).toBe(canonical);
+    }
+  });
+
+  it('the list output points at the programmatic topic and every code recipe', async () => {
+    const list = await textFor({});
+    expect(list).toContain('{ name: "programmatic" }');
+    for (const r of listCodeRecipes()) {
+      expect(list, `list does not offer code recipe ${r.id}`).toContain(`{ name: "${r.id}" }`);
+    }
+  });
+
+  it('the composed-thread recipe serves complete files with the F-44 correction', async () => {
+    const text = await textFor({ name: 'composed-thread' });
+    // The files, whole.
+    expect(text).toContain('### `index.html`');
+    expect(text).toContain('### `src/main.ts`');
+    expect(text).toContain('### `src/styles.css`');
+    // The programmatic layer in use — this recipe is F-46's API driven for real.
+    expect(text).toContain('createAssistantStream');
+    expect(text).toContain('createMockResponder');
+    expect(text).toContain('readOpenAIStream');
+    // F-44, corrected at the source: attachments stage as data: URIs, and the
+    // object-URL line the rung-6 builder shipped must not exist anywhere in it.
+    expect(text).toContain('readAsDataURL');
+    expect(text).not.toContain('URL.createObjectURL');
+    // The host resolves the announced tool call (F-47), in code.
+    expect(text).toContain("state: 'output-available'");
+  });
+
+  it('the composed-thread markup places no <kai-chat> — that is the premise', () => {
+    const recipe = getCodeRecipe('composed-thread');
+    expect(recipe).toBeDefined();
+    const html = recipe!.files.filter((f) => f.lang === 'html');
+    expect(html.length).toBeGreaterThan(0);
+    for (const f of html) {
+      expect(f.code, `${f.path} places <kai-chat>`).not.toContain('<kai-chat');
+    }
+  });
+
+  it('no code-recipe id shadows an element tag or a reserved topic', () => {
+    const tags = new Set(listElements());
+    const reserved = new Set(['list', 'invariants', 'recipes', 'programmatic', 'state', 'wire', 'state-wire']);
+    expect(listCodeRecipes().length).toBeGreaterThan(0);
+    for (const r of listCodeRecipes()) {
+      expect(tags.has(r.id), `code recipe id ${r.id} shadows an element tag`).toBe(false);
+      expect(reserved.has(r.id), `code recipe id ${r.id} shadows a reserved topic`).toBe(false);
+    }
   });
 });

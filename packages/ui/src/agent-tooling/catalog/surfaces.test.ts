@@ -2,10 +2,16 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import '../../elements/artifact';
+import '../../elements/attachments';
 import '../../elements/chat';
 import type { ChatMessage } from '../../elements/chat-types';
+import '../../elements/composer';
 import '../../elements/conversation-list';
 import '../../elements/resizable';
+import '../../elements/thread';
+import '../../elements/toast';
+import type { AttachmentData } from '../../components/attachment-types';
+import type { ToastItem } from '../../primitives/toast-store';
 import type { ConversationGroup, ConversationSummary } from '../../types';
 import { InventoryEntry, SurfaceRecipe } from './catalog-types';
 import { readLabsTitles } from './labs-titles';
@@ -213,7 +219,11 @@ function mountConversations(): ConvEl {
 }
 
 afterEach(() => {
-  document.querySelectorAll('kai-chat, kai-conversations, kai-resizable, kai-artifact').forEach((e) => e.remove());
+  document
+    .querySelectorAll(
+      'kai-chat, kai-conversations, kai-resizable, kai-artifact, kai-thread, kai-composer, kai-attachments, kai-toast-region',
+    )
+    .forEach((e) => e.remove());
 });
 
 describe('surface recipe wiring, executed against the real elements', () => {
@@ -384,6 +394,117 @@ describe('surface recipe wiring, executed against the real elements', () => {
     expect(group.hasAttribute('data-maximized')).toBe(false);
 
     drove('kai-artifact', 'kai-maximize-change', 'kai-resizable', 'maximizedIndex');
+  });
+
+  // ── the composed-thread recipe's edges (no kai-chat anywhere) ────────────
+
+  it("kai-submit on a STANDALONE kai-composer carries detail.text and the host append renders in kai-thread", async () => {
+    const thread = document.createElement('kai-thread') as ChatEl;
+    thread.messages = threads.c1;
+    document.body.appendChild(thread);
+    const composer = document.createElement('kai-composer') as HTMLElement;
+    document.body.appendChild(composer);
+    await flush();
+
+    // POSITIVE CONTROL: the starting turn renders, the submitted text does not
+    // yet, so the append assertion below cannot pass vacuously.
+    expect(thread.shadowRoot!.textContent).toContain('thread-one-body');
+    expect(thread.shadowRoot!.textContent).not.toContain('composed by hand');
+
+    // The host edge as the recipe writes it. NOTE the detail shape: the bare
+    // composer emits { doc, text, entities } — `text`, not kai-chat's `value`.
+    let text: string | null = null;
+    composer.addEventListener('kai-submit', (e) => {
+      text = (e as CustomEvent<{ text: string }>).detail.text;
+      thread.messages = [
+        ...thread.messages,
+        { id: 'm-new', role: 'user', parts: [{ type: 'text', text: text! }] },
+      ];
+    });
+
+    const editable = composer.shadowRoot!.querySelector<HTMLElement>('[data-kai-composer-editable]')!;
+    editable.textContent = 'composed by hand';
+    editable.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    editable.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }));
+    await flush();
+
+    expect(text).toBe('composed by hand');
+    expect(thread.shadowRoot!.textContent).toContain('composed by hand');
+    // The prior turn survives: an append, not a replace.
+    expect(thread.shadowRoot!.textContent).toContain('thread-one-body');
+
+    drove('kai-composer', 'kai-submit', 'kai-thread', 'messages');
+  });
+
+  it('kai-remove carries {id} and the host filter re-renders kai-attachments', async () => {
+    const tray = document.createElement('kai-attachments') as HTMLElement & { items: AttachmentData[] };
+    tray.setAttribute('removable', '');
+    let items: AttachmentData[] = [
+      { id: 'a1', type: 'file', filename: 'first-note.txt', mediaType: 'text/plain', url: 'data:text/plain;base64,aGk=' },
+      { id: 'a2', type: 'file', filename: 'second-note.txt', mediaType: 'text/plain', url: 'data:text/plain;base64,aGk=' },
+    ];
+    tray.items = items;
+    document.body.appendChild(tray);
+    await flush();
+
+    // POSITIVE CONTROL.
+    expect(tray.shadowRoot!.textContent).toContain('first-note.txt');
+    expect(tray.shadowRoot!.textContent).toContain('second-note.txt');
+
+    // The tray never mutates its own list: the host filters and reassigns.
+    let detail: { id: string } | null = null;
+    tray.addEventListener('kai-remove', (e) => {
+      detail = (e as CustomEvent<{ id: string }>).detail;
+      items = items.filter((i) => i.id !== detail!.id);
+      tray.items = items;
+    });
+
+    tray.shadowRoot!.querySelector<HTMLElement>('button[aria-label="Remove"]')!.click();
+    await flush();
+
+    expect(detail).toEqual({ id: 'a1' });
+    expect(tray.shadowRoot!.textContent).not.toContain('first-note.txt');
+    expect(tray.shadowRoot!.textContent).toContain('second-note.txt');
+
+    drove('kai-attachments', 'kai-remove', 'kai-attachments', 'items');
+  });
+
+  it('kai-dismiss carries the toast id and the host filter re-renders kai-toast-region', async () => {
+    const region = document.createElement('kai-toast-region') as HTMLElement & { toasts: ToastItem[] };
+    // Long durations so the auto-dismiss timer cannot race the click below.
+    let toasts: ToastItem[] = [
+      { id: 't1', message: 'saved-toast-body', duration: 60_000 },
+      { id: 't2', message: 'other-toast-body', duration: 60_000 },
+    ];
+    region.toasts = toasts;
+    document.body.appendChild(region);
+    await flush();
+
+    // POSITIVE CONTROL.
+    expect(region.shadowRoot!.textContent).toContain('saved-toast-body');
+    expect(region.shadowRoot!.textContent).toContain('other-toast-body');
+
+    // Data-driven region: the host owns the array, dismissal is a filter +
+    // reassign (the imperative toast() path owns its own auto-mounted region
+    // instead — the two are either/or).
+    const dismissed: string[] = [];
+    region.addEventListener('kai-dismiss', (e) => {
+      const { id } = (e as CustomEvent<{ id: string }>).detail;
+      dismissed.push(id);
+      toasts = toasts.filter((t) => t.id !== id);
+      region.toasts = toasts;
+    });
+
+    region.shadowRoot!.querySelector<HTMLElement>('button[aria-label="Dismiss"]')!.click();
+    await flush();
+
+    expect(dismissed.length).toBe(1);
+    const gone = dismissed[0] === 't1' ? 'saved-toast-body' : 'other-toast-body';
+    const kept = dismissed[0] === 't1' ? 'other-toast-body' : 'saved-toast-body';
+    expect(region.shadowRoot!.textContent).not.toContain(gone);
+    expect(region.shadowRoot!.textContent).toContain(kept);
+
+    drove('kai-toast-region', 'kai-dismiss', 'kai-toast-region', 'toasts');
   });
 
   // ── the COMPOSITION record, executed the same way ────────────────────────
