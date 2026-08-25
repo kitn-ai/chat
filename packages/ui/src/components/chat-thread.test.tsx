@@ -53,6 +53,31 @@ describe('ChatThread header composition', () => {
   });
 });
 
+// `attach` passthrough: mirrors the existing webSearch/voice pattern (ChatThreadProps
+// -> the composer fallback branch -> DefaultPromptInput), but with the OPPOSITE
+// default direction. webSearch/voice default OFF when undeclared (`props.webSearch
+// === true`); attach must default ON when undeclared, so kit consumers who never
+// heard of this prop keep today's behavior (attach visible) and only an explicit
+// `attach={false}` hides it — forwarded as `props.attach` unchanged, not coerced.
+describe('ChatThread attach passthrough', () => {
+  const attachButton = (container: HTMLElement) => container.querySelector('button[aria-label="Attach files"]');
+
+  it('shows the attach button when attach is undeclared (default)', () => {
+    const { container } = render(() => <ChatThread messages={[]} />);
+    expect(attachButton(container)).toBeTruthy();
+  });
+
+  it('shows the attach button when attach is explicitly true', () => {
+    const { container } = render(() => <ChatThread messages={[]} attach={true} />);
+    expect(attachButton(container)).toBeTruthy();
+  });
+
+  it('removes the attach button when attach is explicitly false', () => {
+    const { container } = render(() => <ChatThread messages={[]} attach={false} />);
+    expect(attachButton(container)).toBeNull();
+  });
+});
+
 describe('ChatThread suggestions gating', () => {
   const SUGGESTIONS = ['What can you do?', 'Tell me a joke'];
   const oneMessage = [{ id: '1', role: 'user' as const, parts: [{ type: 'text' as const, text: 'hi' }] }];

@@ -410,6 +410,8 @@ export interface KaiChatElement extends HTMLElement {
   composerActions?: boolean;
   /** INJECT: footer row below the composer (disclaimers, token meter, …). */
   footer?: boolean;
+  /** When `false`, hides the built-in paperclip attach button. Defaults to `true` (undeclared keeps today's behavior: attach visible), matching `DefaultPromptInput`'s own default — only an explicit `false` hides it. */
+  attach?: boolean;
   /** Show a web-search (Globe) button in the input toolbar; calls `onWebSearch`. */
   webSearch?: boolean;
   /** Show a Voice (Mic) button in the input toolbar; fires a `voice` event. */
@@ -2220,6 +2222,8 @@ export interface KaiChatElementProps {
   composerActions?: boolean;
   /** INJECT: footer row below the composer (disclaimers, token meter, …). */
   footer?: boolean;
+  /** When `false`, hides the built-in paperclip attach button. Defaults to `true` (undeclared keeps today's behavior: attach visible), matching `DefaultPromptInput`'s own default — only an explicit `false` hides it. */
+  attach?: boolean;
   /** Show a web-search (Globe) button in the input toolbar; calls `onWebSearch`. */
   webSearch?: boolean;
   /** Show a Voice (Mic) button in the input toolbar; fires a `voice` event. */

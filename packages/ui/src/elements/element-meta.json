@@ -1545,6 +1545,15 @@
         "displayType": "undefined | false | true"
       },
       {
+        "name": "attach",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "When `false`, hides the built-in paperclip attach button. Defaults to `true` (undeclared keeps today's behavior: attach visible), matching `DefaultPromptInput`'s own default — only an explicit `false` hides it.",
+        "default": "true",
+        "displayType": "undefined | false | true"
+      },
+      {
         "name": "webSearch",
         "type": "undefined | false | true",
         "optional": true,

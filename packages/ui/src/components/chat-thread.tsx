@@ -125,6 +125,10 @@ export interface ChatThreadProps {
   accept?: MediaTypeFilter;
   /** Files the composer refused because `accept` excluded them. */
   onAttachmentsRejected?: (rejected: RejectedAttachment[]) => void;
+  /** When `false`, hides the built-in paperclip attach button. Defaults to
+   *  `true` (undeclared keeps today's behavior: attach visible), matching
+   *  `DefaultPromptInput`'s own default — only an explicit `false` hides it. */
+  attach?: boolean;
   /** Show a web-search (Globe) button in the input toolbar; calls `onWebSearch`. */
   webSearch?: boolean;
   /** Show a Voice (Mic) button in the input toolbar; fires a `voice` event. */
@@ -436,7 +440,7 @@ export function ChatThread(props: ChatThreadProps) {
                     value={current()} placeholder={props.placeholder} loading={props.loading === true}
                     suggestions={visibleSuggestions()} attachments={attachments()}
                     accept={props.accept} onAttachmentsRejected={props.onAttachmentsRejected}
-                    webSearch={props.webSearch === true} voice={props.voice === true}
+                    attach={props.attach} webSearch={props.webSearch === true} voice={props.voice === true}
                     triggers={props.triggers} kindIcons={props.kindIcons}
                     onValueChange={handleChange} onSubmit={handleSubmit} onSuggestionClick={handleSuggestionClick}
                     onAttachmentsChange={(a) => { setAttachments(a); props.onAttachmentsChange?.(a); }}

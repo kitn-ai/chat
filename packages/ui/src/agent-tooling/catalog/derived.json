@@ -857,6 +857,12 @@
           "fn": false
         },
         {
+          "name": "attach",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
           "name": "webSearch",
           "scalar": true,
           "optional": true,
