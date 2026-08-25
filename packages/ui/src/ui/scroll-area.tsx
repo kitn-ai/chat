@@ -1,4 +1,5 @@
-import { type JSX, splitProps } from 'solid-js';
+import { omit } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 
 export type ScrollOrientation = 'vertical' | 'horizontal' | 'both';
@@ -11,7 +12,9 @@ export interface ScrollAreaProps extends JSX.HTMLAttributes<HTMLDivElement> {
 }
 
 export function ScrollArea(props: ScrollAreaProps) {
-  const [local, rest] = splitProps(props, ['children', 'class', 'orientation']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'children', 'class', 'orientation');
   const overflow = () =>
     local.orientation === 'horizontal' ? 'overflow-x-auto overflow-y-hidden'
       : local.orientation === 'both' ? 'overflow-auto'

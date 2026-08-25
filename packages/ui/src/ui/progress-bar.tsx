@@ -1,4 +1,5 @@
-import { type JSX, Show, splitProps, createUniqueId } from 'solid-js';
+import { Show, omit, createUniqueId } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 
 export type ProgressTone = 'primary' | 'success' | 'warning' | 'error' | 'info';
@@ -32,9 +33,10 @@ export interface ProgressBarProps extends JSX.HTMLAttributes<HTMLDivElement> {
  * `prefers-reduced-motion: no-preference`.
  */
 export function ProgressBar(props: ProgressBarProps) {
-  const [local, rest] = splitProps(props, [
-    'value', 'max', 'label', 'tone', 'class', 'aria-label', 'aria-labelledby',
-  ]);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 
+    'value', 'max', 'label', 'tone', 'class', 'aria-label', 'aria-labelledby');
   const labelId = createUniqueId();
   const max = () => local.max ?? 100;
   // Clamp value into [0, max]; drive both the fill width and aria-valuenow off it

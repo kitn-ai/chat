@@ -58,7 +58,7 @@ export function Switch(props: SwitchProps) {
         type="button"
         role="switch"
         ref={props.buttonRef}
-        aria-checked={isOn()}
+        aria-checked={isOn() ? 'true' : 'false'}
         aria-label={props.label}
         disabled={props.disabled}
         onClick={toggle}

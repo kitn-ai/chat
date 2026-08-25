@@ -1,4 +1,5 @@
-import { type JSX, splitProps, Show } from 'solid-js';
+import { omit, Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 
 export interface AvatarProps extends JSX.HTMLAttributes<HTMLDivElement> {
@@ -11,7 +12,9 @@ export interface AvatarProps extends JSX.HTMLAttributes<HTMLDivElement> {
 const sizeClasses = { sm: 'h-6 w-6 text-[10px]', md: 'h-8 w-8 text-xs', lg: 'h-10 w-10 text-sm' };
 
 export function Avatar(props: AvatarProps) {
-  const [local, rest] = splitProps(props, ['src', 'alt', 'fallback', 'size', 'class']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'src', 'alt', 'fallback', 'size', 'class');
   const size = () => local.size ?? 'md';
   return (
     <div class={cn('inline-flex items-center justify-center rounded-md bg-accent font-semibold text-accent-foreground flex-shrink-0', sizeClasses[size()], local.class)} {...rest}>

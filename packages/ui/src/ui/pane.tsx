@@ -1,4 +1,5 @@
-import { type JSX, Show } from 'solid-js';
+import { Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { Maximize2, Minimize2, X, Columns2, PanelRight } from 'lucide-solid';
 import { cn } from '../utils/cn';
 

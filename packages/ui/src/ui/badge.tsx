@@ -1,4 +1,5 @@
-import { type JSX, splitProps } from 'solid-js';
+import { omit } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../utils/cn';
 
@@ -16,6 +17,8 @@ const badgeVariants = cva('inline-flex items-center justify-center rounded-full 
 export interface BadgeProps extends JSX.HTMLAttributes<HTMLSpanElement>, VariantProps<typeof badgeVariants> {}
 
 export function Badge(props: BadgeProps) {
-  const [local, rest] = splitProps(props, ['variant', 'class', 'children']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'variant', 'class', 'children');
   return <span class={cn(badgeVariants({ variant: local.variant }), local.class)} {...rest}>{local.children}</span>;
 }

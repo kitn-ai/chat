@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@solidjs/testing-library';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../../src/ui/collapsible';
 
 describe('Collapsible', () => {
@@ -15,6 +15,7 @@ describe('Collapsible', () => {
     const trg = screen.getByTestId('trg');
     expect(trg.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(trg);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(open()).toBe(true);
     expect(trg.getAttribute('aria-expanded')).toBe('true');
   });
@@ -42,6 +43,7 @@ describe('Collapsible', () => {
     const trg = screen.getByTestId('trg');
     expect(trg.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(trg);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(trg.getAttribute('aria-expanded')).toBe('true');
   });
 
@@ -56,6 +58,7 @@ describe('Collapsible', () => {
     const trg = screen.getByTestId('trg');
     expect(trg.getAttribute('data-state')).toBe('closed');
     fireEvent.click(trg);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(trg.getAttribute('data-state')).toBe('open');
   });
 
@@ -71,6 +74,7 @@ describe('Collapsible', () => {
     expect(trg.getAttribute('aria-expanded')).toBe('false');
     expect(trg.getAttribute('aria-controls')).toBeTruthy();
     fireEvent.click(trg);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(open()).toBe(true);
   });
 
@@ -84,6 +88,7 @@ describe('Collapsible', () => {
     ));
     expect(screen.getByTestId('body').hasAttribute('inert')).toBe(true);
     fireEvent.click(screen.getByTestId('trg'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(screen.getByTestId('body').hasAttribute('inert')).toBe(false);
   });
 
@@ -108,6 +113,7 @@ describe('Collapsible', () => {
       </Collapsible>
     ));
     fireEvent.click(screen.getByTestId('trg'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(called).toBe(true);
   });
 });

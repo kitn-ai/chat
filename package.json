@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.24.0",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "nx run-many -t dev -p ui docs",
     "example:react": "pnpm --filter @kitn.ai/ui-example-react dev",
@@ -22,11 +24,18 @@
     "nx": "^23.0.1"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["nx", "esbuild", "@parcel/watcher"],
+    "onlyBuiltDependencies": [
+      "nx",
+      "esbuild",
+      "@parcel/watcher"
+    ],
     "overrides": {
       "storybook": "10.4.2",
       "storybook-solidjs-vite": "10.1.1",
       "vitest": "4.1.2"
+    },
+    "patchedDependencies": {
+      "lucide-solid@0.400.0": "patches/lucide-solid@0.400.0.patch"
     }
   }
 }

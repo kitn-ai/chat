@@ -12,7 +12,7 @@
     "outDir": "dist",
     "declaration": true,
     "jsx": "preserve",
-    "jsxImportSource": "solid-js",
+    "jsxImportSource": "@solidjs/web",
     "baseUrl": "."
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],

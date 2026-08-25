@@ -1,0 +1,34 @@
+diff --git a/dist/source/Icon.jsx b/dist/source/Icon.jsx
+index 5a99ad1ace1cbc2a75a7f8ab36bf4e126620bbe8..5968372d649ed2eec3502b0da0b2fcff2acbe313 100644
+--- a/dist/source/Icon.jsx
++++ b/dist/source/Icon.jsx
+@@ -6,8 +6,8 @@
+ */
+ 
+ // src/Icon.tsx
+-import { For, splitProps } from "solid-js";
+-import { Dynamic } from "solid-js/web";
++import { For, omit } from "solid-js";
++import { Dynamic } from "@solidjs/web";
+ import defaultAttributes from "./defaultAttributes";
+ 
+ // ../shared/src/utils.ts
+@@ -18,7 +18,8 @@ var mergeClasses = (...classes) => classes.filter((className, index, array) => {
+ 
+ // src/Icon.tsx
+ var Icon = (props) => {
+-  const [localProps, rest] = splitProps(props, [
++  const localProps = props;
++  const rest = omit(props,
+     "color",
+     "size",
+     "strokeWidth",
+@@ -27,7 +28,7 @@ var Icon = (props) => {
+     "name",
+     "iconNode",
+     "absoluteStrokeWidth"
+-  ]);
++  );
+   return <svg
+     {...defaultAttributes}
+     width={localProps.size ?? defaultAttributes.width}

@@ -1,4 +1,5 @@
-import { type JSX, Show, splitProps, createUniqueId, createEffect, onCleanup, untrack } from 'solid-js';
+import { Show, omit, createUniqueId, createEffect, onCleanup } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import type { CaseMode } from '../primitives/field-mask';
 import { fieldSemantics, type FieldSemanticType } from '../primitives/field-semantics';
@@ -112,11 +113,14 @@ const SEARCH_RESET =
  * the hint/error text is linked via `aria-describedby`.
  */
 export function Input(props: InputProps): JSX.Element {
-  const [local, rest] = splitProps(props, [
+  // V2-PORT: splitProps has no v2 counterpart for the picked half — `local` aliases
+  // `props` (reads stay reactive) and `rest` is `omit` of the same key list.
+  const local = props;
+  const rest = omit(props,
     'class', 'label', 'hint', 'error', 'size', 'invalid',
     'leading', 'trailing', 'onValueInput', 'onValueChange', 'onBlur', 'id', 'disabled',
     'format', 'guide', 'semantic', 'caseMode', 'copyPolicy', 'onMaskReject',
-  ]);
+  );
 
   const id = local.id ?? createUniqueId();
   const hintId = `${id}-hint`;
@@ -186,33 +190,44 @@ export function Input(props: InputProps): JSX.Element {
     );
   };
 
-  createEffect(() => {
-    // Everything reactive is read HERE, so the effect re-runs on a config change or an
-    // affix toggle and on nothing else.
-    const format = maskFormat();
-    const config = {
-      guide: local.guide,
-      semantic: local.semantic,
-      caseMode: local.caseMode,
-      copyPolicy: local.copyPolicy,
-    };
-    // WHICH NODE IS MOUNTED. `Input` caches two `<input>`s and `<Show>` swaps between
-    // them when a leading/trailing affix appears or disappears — the one legitimate node
-    // change in this file (spec §8.1). The `ref` of a node fires only when it is BUILT, and
-    // the cached node is built once, so a toggle back to an existing node notifies
-    // nobody. Re-attachment therefore has to be explicit, and this read is what makes it
-    // happen. Everything else about this widget is pinned to keeping the SAME node alive
-    // (`tests/ui/input-node-identity.test.tsx`), which is the only reason a long-lived
-    // masker on it is safe at all.
-    //
-    // THE ASSUMPTION THIS RELIES ON, stated: `plainEl`/`rowEl` are plain mutable refs, so
-    // this reads a node only because Solid runs the `<Show>` render effect that BUILDS it
-    // (and its `ref`) before this user effect. If that ever stopped holding, `el` would be
-    // `undefined` on the toggle and the branch below would detach with nothing queued to
-    // re-attach — silently. The affix tests in the node-identity file are what would catch it.
-    const el = hasAffix() ? rowEl : plainEl;
+  // V2-PORT (R1): the tracked reads live in the COMPUTE; the imperative body is the
+  // APPLY (untracked by construction, so the former untrack() wrapper is gone). The
+  // node read moved INTO the apply on purpose — in v2 the compute phase runs BEFORE
+  // the render effect that builds a Show branch and fires its ref, so a compute-side
+  // read of `plainEl`/`rowEl` sees `undefined` at mount and on every affix toggle and
+  // the mask silently never attaches (spike report Q-B, order3.json). The apply phase
+  // runs AFTER render, which is when the refs are set.
+  createEffect(
+    () => ({
+      // Everything reactive is read HERE, so the effect re-runs on a config change or an
+      // affix toggle and on nothing else.
+      format: maskFormat(),
+      config: {
+        guide: local.guide,
+        semantic: local.semantic,
+        caseMode: local.caseMode,
+        copyPolicy: local.copyPolicy,
+      },
+      affix: hasAffix(),
+    }),
+    ({ format, config, affix }) => {
+      // WHICH NODE IS MOUNTED. `Input` caches two `<input>`s and `<Show>` swaps between
+      // them when a leading/trailing affix appears or disappears — the one legitimate node
+      // change in this file (spec §8.1). The `ref` of a node fires only when it is BUILT, and
+      // the cached node is built once, so a toggle back to an existing node notifies
+      // nobody. Re-attachment therefore has to be explicit, and this read is what makes it
+      // happen. Everything else about this widget is pinned to keeping the SAME node alive
+      // (`tests/ui/input-node-identity.test.tsx`), which is the only reason a long-lived
+      // masker on it is safe at all.
+      //
+      // THE ASSUMPTION THIS RELIES ON, stated: `plainEl`/`rowEl` are plain mutable refs,
+      // read in the APPLY phase, which v2 runs after the render effects that build the
+      // Show branch and fire its ref. If this read ever moved back into the compute it
+      // would see `undefined` on the toggle and the branch below would detach with
+      // nothing queued to re-attach — silently. The affix tests in the node-identity
+      // file are what would catch it.
+      const el = affix ? rowEl : plainEl;
 
-    untrack(() => {
       if (format === undefined || el === undefined) {
         detachMask();
         return;
@@ -251,8 +266,8 @@ export function Input(props: InputProps): JSX.Element {
         // A bad pattern falls back to a plain text field, loudly (spec §7.3).
         warnBadFormat(format, err, false);
       }
-    });
-  });
+    },
+  );
 
   onCleanup(detachMask);
 

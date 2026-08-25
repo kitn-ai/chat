@@ -53,7 +53,7 @@ const src = (code: string) => ({
 });
 
 /** A stand-in for the host page the dock floats over. */
-function HostPage(props: { children?: import('solid-js').JSX.Element; note?: string }) {
+function HostPage(props: { children?: import('@solidjs/web').JSX.Element; note?: string }) {
   return (
     <div class="min-h-[32rem] bg-background p-8 text-foreground">
       <h1 class="text-xl font-semibold">Aurora — Pricing</h1>

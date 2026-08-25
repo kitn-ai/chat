@@ -1,5 +1,6 @@
-import { type JSX, Show, splitProps, mergeProps, createSignal, createUniqueId } from 'solid-js';
-import { Dynamic } from 'solid-js/web';
+import { Show, omit, merge, createSignal, createUniqueId } from 'solid-js';
+import type { JSX } from '@solidjs/web';
+import { Dynamic } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { X } from 'lucide-solid';
 
@@ -77,11 +78,13 @@ export interface CardProps extends JSX.HTMLAttributes<HTMLDivElement> {
  * nests interactive controls inside a button/link.
  */
 export function Card(props: CardProps): JSX.Element {
-  const merged = mergeProps(
+  const merged = merge(
     { appearance: 'outlined' as CardAppearance, orientation: 'vertical' as CardOrientation, collapse: '28rem', dense: false },
     props,
   );
-  const [local, rest] = splitProps(merged, [
+  // V2-PORT: splitProps -> alias + omit.
+  const local = merged;
+  const rest = omit(merged, 
     'appearance',
     'orientation',
     'collapse',
@@ -100,8 +103,7 @@ export function Card(props: CardProps): JSX.Element {
     'clickable',
     'onCardClick',
     'class',
-    'children',
-  ]);
+    'children');
 
   const [open, setOpen] = createSignal(true);
   const dismiss = (event: MouseEvent) => {

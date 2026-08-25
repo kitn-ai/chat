@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onCleanup, type Accessor } from 'solid-js';
+import { createSignal, createEffect, type Accessor } from 'solid-js';
 import { reduceToBands, reduceToVolume } from './audio-bands';
 
 export interface AudioAnalysisOptions {
@@ -218,14 +218,18 @@ export function useAudioAnalysis(
   const [bands, setBands] = createSignal<number[]>(new Array(resolveBandCount(opts.bands)).fill(0));
   const [volume, setVolume] = createSignal(0);
 
+  // V2-PORT: tracked reads (the source accessor, a possibly-reactive band count) are
+  // the COMPUTE; the audio-graph construction, signal writes and rAF loop are the
+  // APPLY, whose returned cleanup replaces the in-effect onCleanup.
   createEffect(() => {
     const src = source();
-    // Read INSIDE the effect, not from the outer `opts.bands` closure: when
+    // Read INSIDE the compute, not from the outer `opts.bands` closure: when
     // this is an accessor, calling it here is what makes the effect track it,
     // so a later change reruns this whole setup (new analyser, right-sized
     // arrays) instead of leaving the old bucket count wired up forever.
     const bandCount = resolveBandCount(opts.bands);
-
+    return { src, bandCount };
+  }, ({ src, bandCount }) => {
     // Reset to a correctly-sized zero array whenever the source or the band
     // count changes, so a stale picture never lingers after the mic stops or
     // the requested resolution changes.
@@ -320,7 +324,8 @@ export function useAudioAnalysis(
     };
     raf = requestAnimationFrame(step);
 
-    onCleanup(() => {
+    // V2-PORT: in-effect onCleanup -> the apply's returned cleanup.
+    return () => {
       cancelFrame(raf);
       stopResume();
       bandsAnalyser.disconnect();
@@ -333,7 +338,7 @@ export function useAudioAnalysis(
       // tear the source down for everyone still using it.
       node.disconnect(bandsAnalyser);
       node.disconnect(volumeAnalyser);
-    });
+    };
   });
 
   return { bands, volume };

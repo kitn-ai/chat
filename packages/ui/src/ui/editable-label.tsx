@@ -1,4 +1,5 @@
-import { type JSX, Show, createSignal, createEffect, untrack } from 'solid-js';
+import { Show, createSignal, createEffect, untrack } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { Input } from './input';
 
@@ -31,12 +32,14 @@ export function EditableLabel(props: EditableLabelProps): JSX.Element {
   // `editing` is seeded from the controlled prop and follows it; double-click /
   // commit / cancel toggle it locally without touching the prop (no feedback loop).
   const [editing, setEditing] = createSignal(!!props.editing);
-  createEffect(() => setEditing(!!props.editing));
+  // V2-PORT: signal writes are side effects, so they live in the APPLY half.
+  createEffect(() => !!props.editing, (v) => { setEditing(v); });
 
   // The displayed text. Seeded from `value`, kept in sync with it, and updated
   // optimistically on a successful rename so the read view shows the new label.
   const [text, setText] = createSignal(props.value);
-  createEffect(() => setText(props.value));
+  // V2-PORT: as above — tracked read in the compute, the write in the apply.
+  createEffect(() => props.value, (v) => { setText(v); });
 
   let root: HTMLElement | undefined;
   // Set before an Enter/Esc unmounts the field so its teardown blur does not
@@ -47,7 +50,9 @@ export function EditableLabel(props: EditableLabelProps): JSX.Element {
     const input = root?.querySelector('input');
     if (input) { input.focus(); input.select(); }
   };
-  createEffect(() => { if (editing()) queueMicrotask(focusSelect); });
+  // V2-PORT (R1): `focusSelect` walks the DOM under `root`, so it runs in the APPLY,
+  // after the render phase has built the Show branch that holds the input.
+  createEffect(editing, (on) => { if (on) queueMicrotask(focusSelect); });
 
   const enterEdit = () => { if (!props.disabled) setEditing(true); };
 

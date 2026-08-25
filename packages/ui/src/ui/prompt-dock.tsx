@@ -1,4 +1,5 @@
-import { type JSX, Show } from 'solid-js';
+import { Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 
 /** How the tray frames the input — the SPATIAL axis (padding/inset only).

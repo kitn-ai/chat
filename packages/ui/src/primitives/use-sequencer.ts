@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onCleanup, createMemo, type Accessor } from 'solid-js';
+import { createSignal, createEffect, createMemo, type Accessor } from 'solid-js';
 
 /**
  * One requestAnimationFrame loop emitting a monotonically increasing tick
@@ -22,9 +22,9 @@ export function useSequencer(interval: () => number): Accessor<number> {
   // `uniformShapeKey` in `shader-canvas.tsx`.
   const intervalMs = createMemo(() => interval());
 
-  createEffect(() => {
-    const ms = intervalMs();
-
+  // V2-PORT: the memoized interval is the COMPUTE; the reset write and rAF loop are
+  // the APPLY, whose returned cleanup replaces the in-effect onCleanup.
+  createEffect(intervalMs, (ms) => {
     // Reset on every interval change so a state transition restarts the
     // sequence from its first frame rather than resuming mid-pattern.
     // With the memo, this only fires on real changes (the interval VALUE),
@@ -65,7 +65,8 @@ export function useSequencer(interval: () => number): Accessor<number> {
     };
 
     raf = requestAnimationFrame(step);
-    onCleanup(() => cancelFrame(raf));
+    // V2-PORT: in-effect onCleanup -> the apply's returned cleanup.
+    return () => cancelFrame(raf);
   });
 
   return tick;

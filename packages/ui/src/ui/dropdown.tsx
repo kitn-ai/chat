@@ -1,8 +1,6 @@
-import {
-  createContext, useContext, createSignal, createUniqueId, Show, onCleanup, splitProps,
-  type JSX, type Accessor,
-} from 'solid-js';
-import { Portal } from 'solid-js/web';
+import { createContext, useContext, createSignal, createEffect, createUniqueId, Show, onCleanup, omit, type Accessor } from 'solid-js';
+import type { JSX } from '@solidjs/web';
+import { Portal } from '@solidjs/web';
 import { ChevronRight, Check } from 'lucide-solid';
 import { cn } from '../utils/cn';
 import { useChatConfig } from '../primitives/chat-config';
@@ -24,7 +22,9 @@ interface DropdownCtx {
   /** Currently-mounted submenu surfaces, for the dismiss "inside" test. */
   subMenus: Accessor<HTMLElement[]>;
 }
-const Ctx = createContext<DropdownCtx>();
+// V2-PORT: v2's useContext THROWS when the resolved value is undefined; a `null`
+// default restores the 1.x absent-provider behavior the consumers here handle.
+const Ctx = createContext<DropdownCtx | null>(null);
 const useDropdown = () => {
   const c = useContext(Ctx);
   if (!c) throw new Error('Dropdown parts must be used within <Dropdown>');
@@ -176,13 +176,13 @@ export function Dropdown(props: DropdownProps) {
   // observe open state via wireDisclosure. Mirrors HoverCardRoot.controllerRef.
   props.controllerRef?.({ open, setOpen: (v: boolean) => setOpen(v) });
   return (
-    <Ctx.Provider value={{
+    <Ctx value={{
       open, setOpen, triggerId: createUniqueId(), menuId: createUniqueId(),
       setTrigger, setMenu, trigger, menu, openedViaKeyboard: viaKb,
       registerSubMenu, subMenus,
     }}>
       {props.children}
-    </Ctx.Provider>
+    </Ctx>
   );
 }
 
@@ -191,7 +191,7 @@ export function DropdownTrigger(props: DropdownTriggerProps) {
   // Forward extra attributes (e.g. aria-label for an icon-only trigger). The
   // controlled wiring below (id/aria-*/onClick/onKeyDown/class/type) is applied
   // AFTER the spread so it always wins over a caller-supplied duplicate.
-  const [, rest] = splitProps(props, ['as', 'children', 'class']);
+  const rest = omit(props, 'as', 'children', 'class'); // V2-PORT: splitProps -> omit
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -205,7 +205,7 @@ export function DropdownTrigger(props: DropdownTriggerProps) {
       ref={ctx.setTrigger}
       id={ctx.triggerId}
       aria-haspopup="menu"
-      aria-expanded={ctx.open()}
+      aria-expanded={ctx.open() ? 'true' : 'false'}
       aria-controls={ctx.open() ? ctx.menuId : undefined}
       onClick={() => ctx.setOpen(!ctx.open())}
       onKeyDown={onKeyDown}
@@ -443,7 +443,7 @@ interface DropdownSubCtx {
   /** schedule a deferred close, tolerating a pointer crossing the gap to the submenu */
   scheduleClose: () => void;
 }
-const SubCtx = createContext<DropdownSubCtx>();
+const SubCtx = createContext<DropdownSubCtx | null>(null); // V2-PORT: see Ctx above
 const useDropdownSub = () => {
   const c = useContext(SubCtx);
   if (!c) throw new Error('DropdownSub parts must be used within <DropdownSub>');
@@ -487,13 +487,13 @@ export function DropdownSub(props: DropdownSubProps) {
   };
   onCleanup(cancelClose);
   return (
-    <SubCtx.Provider value={{
+    <SubCtx value={{
       open, setOpen, triggerId: createUniqueId(), menuId: createUniqueId(),
       setTrigger, setMenu, trigger, menu, openedViaKeyboard: viaKb,
       cancelClose, scheduleClose,
     }}>
       {props.children}
-    </SubCtx.Provider>
+    </SubCtx>
   );
 }
 
@@ -520,7 +520,7 @@ export function DropdownSubTrigger(props: DropdownSubTriggerProps) {
       role="menuitem"
       tabindex={-1}
       aria-haspopup="menu"
-      aria-expanded={sub.open()}
+      aria-expanded={sub.open() ? 'true' : 'false'}
       aria-controls={sub.open() ? sub.menuId : undefined}
       onClick={() => sub.setOpen(!sub.open())}
       onKeyDown={onKeyDown}
@@ -593,6 +593,23 @@ export function DropdownSubContent(props: DropdownSubContentProps) {
     }
   };
 
+  // V2-PORT: ref callbacks are UNOWNED in v2 — an `onCleanup` inside one silently
+  // no-ops (spike Q-D), so the parent-registry cleanup that used to live in the ref
+  // below moved here. The ref still registers (it is the moment the node exists);
+  // this owned effect unregisters when the presence Show unmounts the surface, and
+  // the component-scope onCleanup covers outright disposal.
+  let unregisterSub: (() => void) | undefined;
+  const registerSub = (el: HTMLElement) => {
+    unregisterSub?.();
+    unregisterSub = parent.registerSubMenu(el);
+  };
+  createEffect(() => presence.present(), (present) => {
+    if (present) return;
+    unregisterSub?.();
+    unregisterSub = undefined;
+  });
+  onCleanup(() => { unregisterSub?.(); unregisterSub = undefined; });
+
   return (
     <Show when={presence.present()}>
       <Portal mount={config.portalMount()}>
@@ -600,8 +617,7 @@ export function DropdownSubContent(props: DropdownSubContentProps) {
           ref={(el) => {
             sub.setMenu(el); presence.setRef(el);
             // Tell the parent menu this surface is part of its tree (outside-click).
-            const unregister = parent.registerSubMenu(el);
-            onCleanup(unregister);
+            registerSub(el);
             if (sub.openedViaKeyboard()) {
               queueMicrotask(() => firstMenuItem(el)?.focus());
             }

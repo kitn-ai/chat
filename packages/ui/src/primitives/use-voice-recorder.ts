@@ -17,8 +17,15 @@ export function useVoiceRecorder(options: UseVoiceRecorderOptions = {}) {
   async function start(): Promise<Blob> {
     setError(null);
     chunks = [];
+    // V2-PORT: the catch below used to read `stream()` to find the live stream, but
+    // v2 stages writes — a same-tick read after `setStream(mediaStream)` returns the
+    // LAST COMMITTED value (undefined), which would leave the microphone open on the
+    // exact failure path this exists to close. Track the live stream in a plain
+    // variable instead of reading it back through the signal.
+    let acquired: MediaStream | undefined;
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      acquired = mediaStream;
       setStream(mediaStream);
       mediaRecorder = new MediaRecorder(mediaStream, { mimeType });
       mediaRecorder.ondataavailable = (e) => {
@@ -39,7 +46,7 @@ export function useVoiceRecorder(options: UseVoiceRecorderOptions = {}) {
       // though something after it threw, e.g. an unsupported mimeType
       // rejected by `new MediaRecorder(...)`. Leaving that stream open would
       // keep the microphone live with no indication anything is recording.
-      const liveStream = stream();
+      const liveStream = acquired; // V2-PORT: see the note above start()'s try
       if (liveStream) {
         liveStream.getTracks().forEach((t) => t.stop());
         setStream(undefined);

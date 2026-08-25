@@ -1,5 +1,8 @@
 import { defineConfig } from 'vitest/config';
-import solidPlugin from 'vite-plugin-solid';
+// V2-PORT: @solidjs/vite-plugin is the Solid 2 compiler plugin (jsxImportSource
+// @solidjs/web). Pinned to the `latest`-tag build — the `next` tag is OLDER
+// (next.28 vs next.32); see docs/superpowers/research/2026-08-24-solid-v2-spike.md Q-E #7.
+import solidPlugin from '@solidjs/vite-plugin';
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

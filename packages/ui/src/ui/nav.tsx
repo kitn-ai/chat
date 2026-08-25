@@ -1,4 +1,5 @@
-import { For, Show, type JSX, createSignal, splitProps } from 'solid-js';
+import { For, Show, createSignal, omit } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { ChevronRight } from 'lucide-solid';
 import { cn } from '../utils/cn';
 import { renderIcon } from './icon';
@@ -73,9 +74,10 @@ export interface NavProps extends JSX.HTMLAttributes<HTMLElement> {
 }
 
 export function Nav(props: NavProps) {
-  const [local, rest] = splitProps(props, [
-    'items', 'value', 'onItemSelect', 'onItemAction', 'onItemClose', 'defaultCollapsed', 'class',
-  ]);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 
+    'items', 'value', 'onItemSelect', 'onItemAction', 'onItemClose', 'defaultCollapsed', 'class');
 
   // Groups default to expanded; `defaultCollapsed` seeds the closed set. Using a
   // Set keyed by item id keeps expand state independent of the items reference,
@@ -170,7 +172,7 @@ function NavRows(props: NavRowsProps) {
                 type="button"
                 disabled={item.disabled}
                 aria-current={active() ? 'page' : undefined}
-                aria-expanded={isGroup() ? expanded() : undefined}
+                aria-expanded={isGroup() ? (expanded() ? 'true' : 'false') : undefined}
                 aria-label={ariaLabel()}
                 onClick={onClick}
                 onKeyDown={onKeyDown}

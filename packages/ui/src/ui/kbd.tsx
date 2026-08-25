@@ -1,4 +1,5 @@
-import { type JSX, For, Show, splitProps } from 'solid-js';
+import { For, Show, omit } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 
 export type KbdPlatform = 'auto' | 'mac' | 'other';
@@ -83,7 +84,9 @@ const SIZE: Record<'sm' | 'md', string> = {
  * When `keys` is omitted, the children render verbatim (use any custom content).
  */
 export function Kbd(props: KbdProps): JSX.Element {
-  const [local, rest] = splitProps(props, ['keys', 'platform', 'size', 'class', 'children']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'keys', 'platform', 'size', 'class', 'children');
   const mac = () => resolvePlatform(local.platform ?? 'other') === 'mac';
   const tokens = () =>
     (local.keys ?? '')

@@ -28,7 +28,7 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { Input } from '../../src/ui/input';
 
@@ -151,7 +151,9 @@ describe('Input — opting into a mask', () => {
     type(el, '555123');
     expect(el.value).toBe('555-123');
 
-    expect(() => setFormat('#'.repeat(500))).not.toThrow();
+    // V2-FLUSH: writes stage until the microtask; flush() commits the reconfigure
+    // here so the warn/atomicity assertions below stay synchronous.
+    expect(() => { setFormat('#'.repeat(500)); flush(); }).not.toThrow();
 
     expect(warn).toHaveBeenCalledTimes(1);
     expect(container.querySelector('input')).toBe(el);
@@ -171,7 +173,9 @@ describe('Input — opting into a mask', () => {
 
     // Reconfigure repeatedly with the same bad format still in place.
     setCaseMode('upper');
+    flush(); // V2-FLUSH: commit each reconfigure separately, as v1 ran them
     setCaseMode('preserve');
+    flush(); // V2-FLUSH
 
     expect(warn).toHaveBeenCalledTimes(1);
     const message = String(warn.mock.calls[0]?.[0] ?? '');
@@ -228,6 +232,7 @@ describe('Input — reactive re-configuration', () => {
     expect(el.value).toBe('555-123-4567');
 
     setFormat('###-####');
+    flush(); // V2-FLUSH: commit the staged reconfigure before asserting
 
     expect(container.querySelector('input')).toBe(el); // re-configured, not rebuilt
     expect(el.value).toBe('555-1234');
@@ -250,6 +255,7 @@ describe('Input — reactive re-configuration', () => {
     expect(onValueInput).toHaveBeenLastCalledWith('5551234567');
 
     setSemantic('custom');
+    flush(); // V2-FLUSH: commit the staged reconfigure before asserting
     expect(container.querySelector('input')).toBe(el);
     expect(el.value).toBe('555-123-4567');
 
@@ -267,6 +273,7 @@ describe('Input — reactive re-configuration', () => {
     expect(el.value).toBe('555');
 
     setFormat(undefined);
+    flush(); // V2-FLUSH: commit the staged detach before asserting
     expect(container.querySelector('input')).toBe(el);
 
     // Unmasked from here: the literal goes in untouched.

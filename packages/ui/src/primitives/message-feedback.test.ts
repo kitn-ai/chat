@@ -11,7 +11,7 @@
  * `message` object during streaming never resets it).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createRoot } from 'solid-js';
+import { createRoot, flush } from 'solid-js';
 import type { ChatMessage } from '../elements/chat-types';
 
 const toastSpy = vi.fn();
@@ -37,90 +37,98 @@ describe('createMessageFeedback', () => {
   afterEach(() => { vi.useRealTimers(); });
 
   it('toggles a vote on/off, resolves it, and emits the right state', () => {
-    createRoot((dispose) => {
-      const emit = vi.fn();
-      const fb = createMessageFeedback({ emit });
-      const m = msg();
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [emit, dispose] = createRoot((d) => [vi.fn(), d] as const);
+    const fb = createMessageFeedback({ emit });
+    const m = msg();
 
-      // set
-      fb.handleAction(m, 'like');
-      expect(fb.resolveFeedback(m)).toBe('like');
-      expect(emit).toHaveBeenLastCalledWith({ messageId: 'm1', action: 'like', state: 'on' });
-      expect(toastSpy).toHaveBeenCalledWith('Thanks for your feedback', expect.anything());
+    // set
+    fb.handleAction(m, 'like');
+    flush(); // V2-FLUSH: commit the staged write
+    expect(fb.resolveFeedback(m)).toBe('like');
+    expect(emit).toHaveBeenLastCalledWith({ messageId: 'm1', action: 'like', state: 'on' });
+    expect(toastSpy).toHaveBeenCalledWith('Thanks for your feedback', expect.anything());
 
-      // switch to the other vote (no un-vote in between)
-      fb.handleAction(m, 'dislike');
-      expect(fb.resolveFeedback(m)).toBe('dislike');
-      expect(emit).toHaveBeenLastCalledWith({ messageId: 'm1', action: 'dislike', state: 'on' });
+    // switch to the other vote (no un-vote in between)
+    fb.handleAction(m, 'dislike');
+    flush(); // V2-FLUSH: commit the staged write
+    expect(fb.resolveFeedback(m)).toBe('dislike');
+    expect(emit).toHaveBeenLastCalledWith({ messageId: 'm1', action: 'dislike', state: 'on' });
 
-      // re-tap to clear → off, no toast
-      toastSpy.mockClear();
-      fb.handleAction(m, 'dislike');
-      expect(fb.resolveFeedback(m)).toBeUndefined();
-      expect(emit).toHaveBeenLastCalledWith({ messageId: 'm1', action: 'dislike', state: 'off' });
-      expect(toastSpy).not.toHaveBeenCalled();
+    // re-tap to clear → off, no toast
+    toastSpy.mockClear();
+    fb.handleAction(m, 'dislike');
+    flush(); // V2-FLUSH: commit the staged write
+    expect(fb.resolveFeedback(m)).toBeUndefined();
+    expect(emit).toHaveBeenLastCalledWith({ messageId: 'm1', action: 'dislike', state: 'off' });
+    expect(toastSpy).not.toHaveBeenCalled();
 
-      dispose();
-    });
+    dispose();
   });
 
   it('controlled m.feedback wins over the internal optimistic map', () => {
-    createRoot((dispose) => {
-      const fb = createMessageFeedback({ emit: vi.fn() });
-      const controlled = msg({ feedback: 'like' });
-      // even after an internal dislike, the controlled value wins
-      fb.handleAction({ id: 'm1', parts: [{ type: 'text', text: 'x' }] }, 'dislike');
-      expect(fb.resolveFeedback(controlled)).toBe('like');
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [fb, dispose] = createRoot((d) => [createMessageFeedback({ emit: vi.fn() }), d] as const);
+    const controlled = msg({ feedback: 'like' });
+    // even after an internal dislike, the controlled value wins
+    fb.handleAction({ id: 'm1', parts: [{ type: 'text', text: 'x' }] }, 'dislike');
+    flush(); // V2-FLUSH: commit the staged write
+    expect(fb.resolveFeedback(controlled)).toBe('like');
+    dispose();
   });
 
   it('copy writes the clipboard, marks copied, toasts, emits without state, and auto-clears', () => {
     vi.useFakeTimers();
-    createRoot((dispose) => {
-      const emit = vi.fn();
-      const fb = createMessageFeedback({ emit });
-      const m = msg({ parts: [{ type: 'text', text: 'Copy me' }] });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [emit, dispose] = createRoot((d) => [vi.fn(), d] as const);
+    const fb = createMessageFeedback({ emit });
+    const m = msg({ parts: [{ type: 'text', text: 'Copy me' }] });
 
-      fb.handleAction(m, 'copy');
-      expect(writeText).toHaveBeenCalledWith('Copy me');
-      expect(fb.isCopied('m1')).toBe(true);
-      expect(toastSpy).toHaveBeenCalledWith('Copied to clipboard', expect.anything());
-      expect(emit).toHaveBeenLastCalledWith({ messageId: 'm1', action: 'copy' });
+    fb.handleAction(m, 'copy');
+    flush(); // V2-FLUSH: commit the staged write
+    expect(writeText).toHaveBeenCalledWith('Copy me');
+    expect(fb.isCopied('m1')).toBe(true);
+    expect(toastSpy).toHaveBeenCalledWith('Copied to clipboard', expect.anything());
+    expect(emit).toHaveBeenLastCalledWith({ messageId: 'm1', action: 'copy' });
 
-      vi.advanceTimersByTime(2000);
-      expect(fb.isCopied('m1')).toBe(false);
-      dispose();
-    });
+    vi.advanceTimersByTime(2000);
+    flush(); // V2-FLUSH: the timer handler's write is staged; commit
+    expect(fb.isCopied('m1')).toBe(false);
+    dispose();
   });
 
   it('copy concatenates only text parts, skipping reasoning/tool/card parts', () => {
-    createRoot((dispose) => {
-      const fb = createMessageFeedback({ emit: vi.fn() });
-      const m = msg({
-        parts: [
-          { type: 'text', text: 'A' },
-          { type: 'reasoning', text: 'thinking...' },
-          { type: 'tool', tool: { type: 'get_weather', state: 'output-available' } },
-          { type: 'card', envelope: { type: 'weather-card', id: 'c1', data: {} } },
-          { type: 'text', text: 'B' },
-        ],
-      });
-
-      fb.handleAction(m, 'copy');
-      expect(writeText).toHaveBeenCalledWith('AB');
-      dispose();
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [fb, dispose] = createRoot((d) => [createMessageFeedback({ emit: vi.fn() }), d] as const);
+    const m = msg({
+      parts: [
+        { type: 'text', text: 'A' },
+        { type: 'reasoning', text: 'thinking...' },
+        { type: 'tool', tool: { type: 'get_weather', state: 'output-available' } },
+        { type: 'card', envelope: { type: 'weather-card', id: 'c1', data: {} } },
+        { type: 'text', text: 'B' },
+      ],
     });
+
+    fb.handleAction(m, 'copy');
+    flush(); // V2-FLUSH: commit the staged write
+    expect(writeText).toHaveBeenCalledWith('AB');
+    dispose();
   });
 
   it('passes non-feedback actions through with no state and no toast', () => {
-    createRoot((dispose) => {
-      const emit = vi.fn();
-      const fb = createMessageFeedback({ emit });
-      fb.handleAction(msg(), 'regenerate');
-      expect(emit).toHaveBeenLastCalledWith({ messageId: 'm1', action: 'regenerate' });
-      expect(toastSpy).not.toHaveBeenCalled();
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [emit, dispose] = createRoot((d) => [vi.fn(), d] as const);
+    const fb = createMessageFeedback({ emit });
+    fb.handleAction(msg(), 'regenerate');
+    flush(); // V2-FLUSH: commit the staged write
+    expect(emit).toHaveBeenLastCalledWith({ messageId: 'm1', action: 'regenerate' });
+    expect(toastSpy).not.toHaveBeenCalled();
+    dispose();
   });
 });

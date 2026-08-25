@@ -17,8 +17,9 @@
 // SSR-safe: every DOM touch is guarded by `typeof document`. On the server,
 // raising a toast is an inert no-op (the store updates, nothing mounts).
 
-import { createRoot, createSignal } from 'solid-js';
-import { createStore, produce } from 'solid-js/store';
+// V2-PORT: the `solid-js/store` subpath is gone — `createStore` lives on `solid-js`,
+// setters are draft-first, and `produce` is subsumed by the draft callback.
+import { createRoot, createSignal, createStore } from 'solid-js';
 import type { ToastPosition } from '../components/toast';
 
 export type ToastVariant = 'neutral' | 'success' | 'warning' | 'error' | 'info';
@@ -141,9 +142,12 @@ const { toasts, setToasts, mounted, setMounted } = createRoot(() => {
   return { toasts: list, setToasts: setList, mounted: isMounted, setMounted: setIsMounted };
 });
 
-/** The live toast list (reactive). The region facade binds to this. */
+/** The live toast list (reactive). The region facade binds to this.
+ *  V2-PORT: v2 types a store view as `Readonly<T>`; the public signature keeps the
+ *  mutable array type it always had (callers never mutate it — they bind it to the
+ *  region's `toasts` property), so the read view is cast back. */
 export function getToasts(): ToastItem[] {
-  return toasts;
+  return toasts as ToastItem[];
 }
 
 let counter = 0;
@@ -203,9 +207,11 @@ export function isToastRegionMounted(): boolean {
 function upsert(item: ToastItem): void {
   const idx = toasts.findIndex((t) => t.id === item.id);
   if (idx >= 0) {
-    setToasts(idx, item);
+    // V2-PORT: path setter -> draft mutation.
+    setToasts((list) => { list[idx] = item; });
   } else {
-    setToasts(produce((list) => { list.push(item); }));
+    // V2-PORT: produce() -> the draft callback (drafts subsume produce).
+    setToasts((list) => { list.push(item); });
   }
 }
 
@@ -219,7 +225,8 @@ function makeHandle(id: string): ToastHandle {
     dismiss: () => dismiss(id),
     update: (patch) => {
       const idx = toasts.findIndex((t) => t.id === id);
-      if (idx >= 0) setToasts(idx, (prev) => ({ ...prev, ...patch }));
+      // V2-PORT: path setter -> draft mutation.
+      if (idx >= 0) setToasts((list) => { list[idx] = { ...list[idx], ...patch }; });
     },
   };
 }
@@ -278,7 +285,7 @@ export const toast: ToastFn = Object.assign(
     error: (message: string, opts?: ToastOptions) => raise(message, opts, 'error'),
     info: (message: string, opts?: ToastOptions) => raise(message, opts, 'info'),
     dismiss,
-    clear: () => setToasts([]),
+    clear: () => setToasts(() => []), // V2-PORT: value form -> returning callback
   },
 );
 

@@ -1,4 +1,5 @@
-import { createContext, useContext, type Accessor, type JSX } from 'solid-js';
+import { createContext, useContext, type Accessor } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 
 export type ProseSize = 'xs' | 'sm' | 'base' | 'lg';
 
@@ -44,9 +45,9 @@ export function ChatConfig(props: ChatConfigProps) {
   };
 
   return (
-    <ChatConfigContext.Provider value={value}>
+    <ChatConfigContext value={value}>
       {props.children}
-    </ChatConfigContext.Provider>
+    </ChatConfigContext>
   );
 }
 

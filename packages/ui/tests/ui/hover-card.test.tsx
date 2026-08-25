@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@solidjs/testing-library';
 import { HoverCardRoot, HoverCardTrigger, HoverCardContent } from '../../src/ui/hover-card';
@@ -31,12 +32,17 @@ describe('HoverCard determinism (HC-1)', () => {
     const trg = screen.getByTestId('trg').parentElement!;
     for (let i = 0; i < 5; i++) {
       fireEvent.pointerEnter(trg);
+      flush(); // V2-FLUSH: v2 stages writes; commit before asserting
       vi.advanceTimersByTime(100);
+      flush(); // V2-FLUSH: timer/focus handlers wrote signals; commit
       expect(screen.queryByTestId('content')).toBeTruthy();
       fireEvent.pointerLeave(trg);
+      flush(); // V2-FLUSH: v2 stages writes; commit before asserting
       vi.advanceTimersByTime(100);
+      flush(); // V2-FLUSH: timer/focus handlers wrote signals; commit
       // createPresence unmounts on the next microtask in jsdom — flush it.
       await Promise.resolve();
+      flush(); // V2-FLUSH: the microtask's setPresent write is itself staged
       expect(screen.queryByTestId('content')).toBeNull();
     }
   });
@@ -45,11 +51,15 @@ describe('HoverCard determinism (HC-1)', () => {
     setup();
     const trg = screen.getByTestId('trg').parentElement!;
     fireEvent.pointerEnter(trg);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     vi.advanceTimersByTime(100);
+    flush(); // V2-FLUSH: timer/focus handlers wrote signals; commit
     const content = screen.getByTestId('content').closest('[data-hovercard-content]')!;
     fireEvent.pointerLeave(trg);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     fireEvent.pointerEnter(content); // enters before closeDelay elapses
     vi.advanceTimersByTime(100);
+    flush(); // V2-FLUSH: timer/focus handlers wrote signals; commit
     expect(screen.queryByTestId('content')).toBeTruthy();
   });
 
@@ -81,9 +91,11 @@ describe('HoverCard determinism (HC-1)', () => {
 
     // Real focus, and assert it LANDED before believing anything downstream.
     button.focus();
+    flush(); // V2-FLUSH: timer/focus handlers wrote signals; commit
     expect(document.activeElement).toBe(button);
 
     vi.advanceTimersByTime(100);
+    flush(); // V2-FLUSH: timer/focus handlers wrote signals; commit
     expect(screen.queryByTestId('content')).toBeTruthy();
   });
 
@@ -99,9 +111,11 @@ describe('HoverCard determinism (HC-1)', () => {
 
     const trigger = container.querySelector('span') as HTMLElement;
     trigger.focus();
+    flush(); // V2-FLUSH: timer/focus handlers wrote signals; commit
     expect(document.activeElement, 'the trigger itself must be able to hold focus').toBe(trigger);
 
     vi.advanceTimersByTime(100);
+    flush(); // V2-FLUSH: timer/focus handlers wrote signals; commit
     expect(screen.queryByTestId('inert-content')).toBeTruthy();
   });
 
@@ -109,11 +123,16 @@ describe('HoverCard determinism (HC-1)', () => {
     setup();
     const trg = screen.getByTestId('trg').parentElement!;
     fireEvent.focusIn(trg);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     vi.advanceTimersByTime(100);
+    flush(); // V2-FLUSH: timer/focus handlers wrote signals; commit
     const content = screen.getByTestId('content').closest('[data-hovercard-content]')!;
     fireEvent.focusOut(trg, { relatedTarget: content });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     fireEvent.focusIn(content);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     vi.advanceTimersByTime(100);
+    flush(); // V2-FLUSH: timer/focus handlers wrote signals; commit
     expect(screen.queryByTestId('content')).toBeTruthy();
   });
 
@@ -121,10 +140,14 @@ describe('HoverCard determinism (HC-1)', () => {
     setup();
     const trg = screen.getByTestId('trg').parentElement!;
     fireEvent.pointerEnter(trg);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     vi.advanceTimersByTime(100);
+    flush(); // V2-FLUSH: timer/focus handlers wrote signals; commit
     expect(screen.queryByTestId('content')).toBeTruthy();
     fireEvent.keyDown(document, { key: 'Escape' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await Promise.resolve(); // microtask unmount
+    flush(); // V2-FLUSH: the microtask's setPresent write is itself staged
     expect(screen.queryByTestId('content')).toBeNull();
   });
 });
@@ -144,7 +167,9 @@ describe('HoverCard safe-area (transparent-gap bridge + closeDelay default)', ()
     setupDefaults();
     const trg = screen.getByTestId('trg').parentElement!;
     fireEvent.pointerEnter(trg);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     vi.advanceTimersByTime(0); // openDelay default 0
+    flush(); // V2-FLUSH: timer handler wrote signals; commit
     const shell = document.querySelector('[data-hovercard-content]') as HTMLElement;
     expect(shell).toBeTruthy();
     // Outer shell holds the positioning + transparent background, NOT the card classes.
@@ -166,11 +191,15 @@ describe('HoverCard safe-area (transparent-gap bridge + closeDelay default)', ()
     setupDefaults();
     const trg = screen.getByTestId('trg').parentElement!;
     fireEvent.pointerEnter(trg);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     vi.advanceTimersByTime(0);
+    flush(); // V2-FLUSH: timer/focus handlers wrote signals; commit
     expect(screen.queryByTestId('content')).toBeTruthy();
     // Leave the trigger, then advance LESS than the 300ms default close window.
     fireEvent.pointerLeave(trg);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     vi.advanceTimersByTime(100);
+    flush(); // V2-FLUSH: timer/focus handlers wrote signals; commit
     expect(screen.queryByTestId('content')).toBeTruthy(); // still open at 100ms
   });
 
@@ -178,10 +207,15 @@ describe('HoverCard safe-area (transparent-gap bridge + closeDelay default)', ()
     setupDefaults();
     const trg = screen.getByTestId('trg').parentElement!;
     fireEvent.pointerEnter(trg);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     vi.advanceTimersByTime(0);
+    flush(); // V2-FLUSH: timer/focus handlers wrote signals; commit
     fireEvent.pointerLeave(trg);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     vi.advanceTimersByTime(300);
+    flush(); // V2-FLUSH: timer/focus handlers wrote signals; commit
     await Promise.resolve();
+    flush(); // V2-FLUSH: the microtask's setPresent write is itself staged
     expect(screen.queryByTestId('content')).toBeNull();
   });
 });

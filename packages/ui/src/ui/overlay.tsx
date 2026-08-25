@@ -1,7 +1,8 @@
 import {
-  createSignal, createEffect, onCleanup, splitProps, type Accessor, type JSX,
+  createSignal, createEffect, omit, type Accessor,
 } from 'solid-js';
-import { Dynamic } from 'solid-js/web';
+import { Dynamic } from '@solidjs/web';
+import type { JSX } from '@solidjs/web';
 import {
   computePosition, autoUpdate, offset, flip, shift, arrow, hide,
   getOverflowAncestors, type Placement,
@@ -21,8 +22,13 @@ export function createPresence(show: Accessor<boolean>) {
   let generation = 0;
   const setRef = (el: Element) => { node = el; };
 
-  createEffect((prev: boolean | undefined) => {
-    const visible = show();
+  // V2-PORT (R1): the `node` ref read and every signal write sit in the APPLY, which
+  // runs after render (the compute would see a stale/unset `node`). The old
+  // `return visible` prev-memory is now the compute value itself — the apply receives
+  // (current, previous). The conditional in-effect `onCleanup` became the apply's
+  // returned cleanup, which v2 runs before the next apply and on disposal (same
+  // contract onCleanup had here).
+  createEffect(show, (visible, prev) => {
     if (visible) {
       generation++;
       setPresent(true);
@@ -37,7 +43,7 @@ export function createPresence(show: Accessor<boolean>) {
       if (!el || !hasAnim) {
         const gen = ++generation;
         queueMicrotask(() => { if (gen === generation) setPresent(false); });
-        return visible;
+        return;
       }
       const animEl = el as HTMLElement;
       const onEnd = (e: AnimationEvent) => {
@@ -46,9 +52,8 @@ export function createPresence(show: Accessor<boolean>) {
         setPresent(false);
       };
       animEl.addEventListener('animationend', onEnd);
-      onCleanup(() => animEl.removeEventListener('animationend', onEnd));
+      return () => animEl.removeEventListener('animationend', onEnd);
     }
-    return visible;
   });
 
   return { present, state, setRef };
@@ -64,9 +69,10 @@ export type AsTag = string | ((props: Record<string, any>) => JSX.Element);
  * aria-*) are forwarded. `children` is left in `rest` so it forwards naturally.
  */
 export function As(props: { as?: AsTag; children?: JSX.Element; [k: string]: any }) {
-  const [local, rest] = splitProps(props, ['as']);
-  if (typeof local.as === 'function') return local.as(rest);
-  return <Dynamic component={local.as ?? 'span'} {...rest} />;
+  // V2-PORT: splitProps -> omit; the picked half reads straight off `props`.
+  const rest = omit(props, 'as');
+  if (typeof props.as === 'function') return props.as(rest);
+  return <Dynamic component={props.as ?? 'span'} {...rest} />;
 }
 
 export interface UsePositionOptions {
@@ -175,9 +181,15 @@ export function usePosition(
   // edge — Floating UI's `hide` middleware. autoUpdate keeps this live on scroll.
   const [hidden, setHidden] = createSignal(false);
 
-  createEffect(() => {
-    const ref = reference();
-    const float = floating();
+  // V2-PORT (R1): `reference`/`floating` are SIGNALS of elements (set from ref
+  // callbacks), so reading them in the compute is the tracked dependency this effect
+  // wants; everything imperative (observers, listeners, the position writes) moved to
+  // the apply. Note `options.arrowEl` is now read only inside `update()`, i.e.
+  // untracked — which matches the documented contract above ("options are read at
+  // setup time; reactive option changes will not reposition until the next tick").
+  createEffect(
+    () => ({ ref: reference(), float: floating() }),
+    ({ ref, float }) => {
     if (!ref || !float) return;
     const update = () => {
       // `hide()` is read last so it reflects the final, shifted/flipped position.
@@ -226,11 +238,12 @@ export function usePosition(
     const disconnectWatch = options.onDisconnect
       ? watchAnchorGone(ref, options.onDisconnect)
       : undefined;
-    onCleanup(() => {
+    // V2-PORT: in-effect onCleanup -> the apply's returned cleanup.
+    return () => {
       cleanup();
       ro?.disconnect();
       disconnectWatch?.();
-    });
+    };
   });
 
   return { pos, arrowPos, hidden };
@@ -253,8 +266,10 @@ export interface UseDismissOptions {
  * variables, not stale values.
  */
 export function useDismiss(opts: UseDismissOptions) {
-  createEffect(() => {
-    if (!opts.enabled()) return;
+  // V2-PORT: tracked read (enabled) in the compute; listener wiring in the apply,
+  // with the in-effect onCleanup becoming the returned cleanup.
+  createEffect(() => opts.enabled(), (enabled) => {
+    if (!enabled) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') opts.onDismiss('escape'); };
     const onPointer = (e: PointerEvent) => {
       const target = e.target as Node;
@@ -269,9 +284,10 @@ export function useDismiss(opts: UseDismissOptions) {
     const doc = document;
     doc.addEventListener('keydown', onKey);
     doc.addEventListener('pointerdown', onPointer, true);
-    onCleanup(() => {
+    // V2-PORT: in-effect onCleanup -> the apply's returned cleanup.
+    return () => {
       doc.removeEventListener('keydown', onKey);
       doc.removeEventListener('pointerdown', onPointer, true);
-    });
+    };
   });
 }

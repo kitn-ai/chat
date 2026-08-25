@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { createRoot } from 'solid-js';
+import { createRoot, flush } from 'solid-js';
 import { useSpeechRecognition } from './use-speech-recognition';
 
 // Minimal fake SpeechRecognition: captures handlers, and lets a test drive a
@@ -50,14 +50,14 @@ afterEach(() => uninstallFake());
 describe('useSpeechRecognition', () => {
   it('returns isSupported + isListening signal + control functions', () => {
     installFake();
-    createRoot((dispose) => {
-      const r = useSpeechRecognition();
-      expect(r.isSupported).toBe(true);
-      expect(r.isListening()).toBe(false);
-      expect(typeof r.start).toBe('function');
-      expect(typeof r.stop).toBe('function');
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [r, dispose] = createRoot((d) => [useSpeechRecognition(), d] as const);
+    expect(r.isSupported).toBe(true);
+    expect(r.isListening()).toBe(false);
+    expect(typeof r.start).toBe('function');
+    expect(typeof r.stop).toBe('function');
+    dispose();
   });
 
   it('detects the webkit-prefixed constructor', () => {
@@ -72,33 +72,38 @@ describe('useSpeechRecognition', () => {
 
   it('reports unsupported when no constructor is present', () => {
     uninstallFake();
-    createRoot((dispose) => {
-      const r = useSpeechRecognition();
-      expect(r.isSupported).toBe(false);
-      expect(r.start()).rejects.toThrow(/not supported/i);
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [r, dispose] = createRoot((d) => [useSpeechRecognition(), d] as const);
+    expect(r.isSupported).toBe(false);
+    expect(r.start()).rejects.toThrow(/not supported/i);
+    dispose();
   });
 
   it('start() flips isListening and applies the lang', () => {
     installFake();
-    createRoot((dispose) => {
-      const r = useSpeechRecognition();
-      void r.start({ lang: 'fr-FR' });
-      expect(r.isListening()).toBe(true);
-      expect(last!.start).toHaveBeenCalled();
-      expect(last!.lang).toBe('fr-FR');
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [r, dispose] = createRoot((d) => [useSpeechRecognition(), d] as const);
+    void r.start({ lang: 'fr-FR' });
+    flush(); // V2-FLUSH: commit the staged write
+    expect(r.isListening()).toBe(true);
+    expect(last!.start).toHaveBeenCalled();
+    expect(last!.lang).toBe('fr-FR');
+    dispose();
   });
 
   it('resolves start() with the final transcript on end, and clears isListening', async () => {
     installFake();
     await createRoot(async (dispose) => {
       const r = useSpeechRecognition();
+      // V2-SHAPE: leave the root's synchronous owned scope before driving writes.
+      await Promise.resolve();
       const pending = r.start({ lang: 'en-US' });
+      flush(); // V2-FLUSH: commit the staged write
       last!.emitFinal('hello world');
       r.stop(); // fires onend → resolves with the accumulated final text
+      flush(); // V2-FLUSH: commit the staged write
       await expect(pending).resolves.toBe('hello world');
       expect(r.isListening()).toBe(false);
       dispose();
@@ -107,23 +112,23 @@ describe('useSpeechRecognition', () => {
 
   it('forwards interim partials to onInterim when interim is enabled', () => {
     installFake();
-    createRoot((dispose) => {
-      const r = useSpeechRecognition({ interim: true });
-      const onInterim = vi.fn();
-      void r.start({ onInterim });
-      expect(last!.interimResults).toBe(true);
-      last!.emitInterim('hel');
-      expect(onInterim).toHaveBeenCalledWith('hel');
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [r, dispose] = createRoot((d) => [useSpeechRecognition({ interim: true }), d] as const);
+    const onInterim = vi.fn();
+    void r.start({ onInterim });
+    expect(last!.interimResults).toBe(true);
+    last!.emitInterim('hel');
+    expect(onInterim).toHaveBeenCalledWith('hel');
+    dispose();
   });
 
   it('stop() is a no-op when not listening', () => {
     installFake();
-    createRoot((dispose) => {
-      const r = useSpeechRecognition();
-      expect(() => r.stop()).not.toThrow();
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [r, dispose] = createRoot((d) => [useSpeechRecognition(), d] as const);
+    expect(() => r.stop()).not.toThrow();
+    dispose();
   });
 });

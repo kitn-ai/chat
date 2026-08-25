@@ -1,5 +1,6 @@
-import { createSignal, createUniqueId, onCleanup, Show, type JSX, type Accessor, splitProps } from 'solid-js';
-import { Portal } from 'solid-js/web';
+import { createSignal, createUniqueId, onCleanup, Show, type Accessor, omit } from 'solid-js';
+import type { JSX } from '@solidjs/web';
+import { Portal } from '@solidjs/web';
 import { type Placement } from '@floating-ui/dom';
 import { cn } from '../utils/cn';
 import { useChatConfig } from '../primitives/chat-config';
@@ -29,7 +30,8 @@ export interface TooltipProps {
 }
 
 export function Tooltip(props: TooltipProps) {
-  const [local] = splitProps(props, ['content', 'children', 'class', 'openDelay', 'closeDelay', 'placement', 'defaultOpen', 'disabled', 'controllerRef', 'dismissOnClick']);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = props;
   const config = useChatConfig();
   const id = createUniqueId();
   const [open, setOpen] = createSignal(local.defaultOpen ?? false);

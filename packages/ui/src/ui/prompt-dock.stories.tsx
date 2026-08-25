@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { type JSX } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { PromptDock } from './prompt-dock';
 import { PromptInput, PromptInputTextarea, PromptInputActions } from '../components/prompt-input';
 import { Button } from './button';

@@ -1,12 +1,5 @@
-import {
-  createContext,
-  useContext,
-  createSignal,
-  createUniqueId,
-  splitProps,
-  type JSX,
-  type Accessor,
-} from 'solid-js';
+import { createContext, useContext, createSignal, createUniqueId, omit, type Accessor } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 
 // Extend SolidJS JSX to allow `bool:inert` (forces setAttribute so jsdom reflects it as an attribute).
@@ -25,7 +18,9 @@ interface CollapsibleCtx {
   disabled: Accessor<boolean>;
 }
 
-const Ctx = createContext<CollapsibleCtx>();
+// V2-PORT: v2's useContext THROWS when the resolved value is undefined; a `null`
+// default restores the 1.x absent-provider behavior the consumers here handle.
+const Ctx = createContext<CollapsibleCtx | null>(null);
 
 const useCollapsible = () => {
   const c = useContext(Ctx);
@@ -54,7 +49,9 @@ export interface CollapsibleProps {
 }
 
 export function Collapsible(props: CollapsibleProps) {
-  const [local, rest] = splitProps(props, ['open', 'defaultOpen', 'onOpenChange', 'disabled', 'controllerRef', 'children', 'class']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'open', 'defaultOpen', 'onOpenChange', 'disabled', 'controllerRef', 'children', 'class');
   const [uncontrolled, setUncontrolled] = createSignal(local.defaultOpen ?? false);
   const isControlled = () => local.open !== undefined;
   const open = () => (isControlled() ? !!local.open : uncontrolled());
@@ -76,7 +73,7 @@ export function Collapsible(props: CollapsibleProps) {
   local.controllerRef?.({ open, setOpen });
   const contentId = createUniqueId();
   return (
-    <Ctx.Provider value={{ open, toggle, contentId, disabled }}>
+    <Ctx value={{ open, toggle, contentId, disabled }}>
       <div
         class={local.class}
         {...rest}
@@ -86,7 +83,7 @@ export function Collapsible(props: CollapsibleProps) {
       >
         {local.children}
       </div>
-    </Ctx.Provider>
+    </Ctx>
   );
 }
 
@@ -101,11 +98,13 @@ export interface CollapsibleTriggerProps {
 
 export function CollapsibleTrigger(props: CollapsibleTriggerProps) {
   const ctx = useCollapsible();
-  const [local, rest] = splitProps(props, ['children', 'class', 'as', 'onClick']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'children', 'class', 'as', 'onClick');
 
   const triggerProps = () => ({
     type: 'button' as const,
-    'aria-expanded': ctx.open(),
+    'aria-expanded': ctx.open() ? 'true' as const : 'false' as const,
     'aria-controls': ctx.contentId,
     disabled: ctx.disabled() || undefined,
     'data-expanded': ctx.open() ? '' : undefined,
@@ -144,7 +143,9 @@ export interface CollapsibleContentProps {
 
 export function CollapsibleContent(props: CollapsibleContentProps) {
   const ctx = useCollapsible();
-  const [local, rest] = splitProps(props, ['children', 'class']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'children', 'class');
   return (
     <div
       {...rest}
@@ -155,7 +156,7 @@ export function CollapsibleContent(props: CollapsibleContentProps) {
         'grid transition-[grid-template-rows] duration-200 ease-out',
         ctx.open() ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
       )}
-      bool:inert={!ctx.open()}
+      inert={!ctx.open()} // V2-PORT: bool: namespace removed; boolean attr handled natively
     >
       <div class={cn('overflow-hidden', local.class)}>{local.children}</div>
     </div>

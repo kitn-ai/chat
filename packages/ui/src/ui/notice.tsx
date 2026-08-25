@@ -1,4 +1,5 @@
-import { type JSX, Show, createSignal } from 'solid-js';
+import { Show, createSignal } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { Info, TriangleAlert, CircleAlert, CircleCheck, X } from 'lucide-solid';
 import { cn } from '../utils/cn';
 import { renderIcon } from './icon';

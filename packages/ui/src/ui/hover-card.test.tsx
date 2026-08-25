@@ -7,6 +7,7 @@
  * trigger carry layout classes itself, so callers can make it the flex row
  * instead of wrapping the content in an extra div.
  */
+import { flush } from 'solid-js';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup } from '@solidjs/testing-library';
@@ -57,7 +58,9 @@ describe('HoverCardTrigger keyboard reachability', () => {
     vi.useFakeTimers();
     try {
       el.focus();
+      flush(); // V2-FLUSH: timer/focus handlers wrote signals; commit
       vi.advanceTimersByTime(50);
+      flush(); // V2-FLUSH: timer/focus handlers wrote signals; commit
       return document.querySelector('[data-testid="card"]');
     } finally {
       vi.useRealTimers();
@@ -66,6 +69,7 @@ describe('HoverCardTrigger keyboard reachability', () => {
 
   const focusable = (el: Element | null) => {
     (el as HTMLElement).focus();
+    flush(); // V2-FLUSH: timer/focus handlers wrote signals; commit
     return document.activeElement === el;
   };
 

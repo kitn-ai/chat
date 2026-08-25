@@ -1,4 +1,5 @@
-import { type JSX, Show, splitProps } from 'solid-js';
+import { Show, omit } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { Bell, MoreHorizontal } from 'lucide-solid';
 import { cn } from '../utils/cn';
 
@@ -93,20 +94,8 @@ const TONE_LABEL: Record<AgentStatusTone, string> = {
  * card jumps out of the periphery - the attention-routing signal.
  */
 export function AgentCard(props: AgentCardProps) {
-  const [local] = splitProps(props, [
-    'name',
-    'status',
-    'needsAttention',
-    'active',
-    'onActivate',
-    'onClick',
-    'onMenu',
-    'class',
-    // leading/subtitle/lastLine are accepted but no longer rendered (back-compat).
-    'leading',
-    'subtitle',
-    'lastLine',
-  ]);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = props;
 
   const tone = (): AgentStatusTone => local.status.tone;
   const activate = () => {

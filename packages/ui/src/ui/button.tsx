@@ -1,4 +1,5 @@
-import { type JSX, splitProps } from 'solid-js';
+import { omit } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../utils/cn';
 
@@ -38,7 +39,9 @@ export interface ButtonProps extends JSX.ButtonHTMLAttributes<HTMLButtonElement>
 }
 
 export function Button(props: ButtonProps) {
-  const [local, rest] = splitProps(props, ['variant', 'size', 'align', 'full', 'class', 'children']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'variant', 'size', 'align', 'full', 'class', 'children');
   return (
     <button class={cn(buttonVariants({ variant: local.variant, size: local.size, align: local.align }), local.full && 'w-full', local.class)} {...rest}>
       {local.children}

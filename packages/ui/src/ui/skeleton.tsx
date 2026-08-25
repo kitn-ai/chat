@@ -1,4 +1,5 @@
-import { type JSX, splitProps, For, Show } from 'solid-js';
+import { omit, For, Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 
 export type SkeletonVariant = 'text' | 'rect' | 'circle';
@@ -23,7 +24,9 @@ const rounding = (variant?: SkeletonVariant) =>
   variant === 'circle' ? 'rounded-full' : variant === 'text' ? 'rounded' : 'rounded-md';
 
 function Skeleton(props: SkeletonProps) {
-  const [local, rest] = splitProps(props, ['class', 'variant', 'width', 'height', 'lines', 'style']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'class', 'variant', 'width', 'height', 'lines', 'style');
 
   const hasWidth = () => local.width != null;
   const hasHeight = () => local.height != null;

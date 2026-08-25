@@ -1,4 +1,5 @@
-import { createSignal, Show, type JSX, type Accessor } from 'solid-js';
+import { createSignal, Show, type Accessor } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import type { Placement } from '@floating-ui/dom';
 import { cn } from '../utils/cn';
 import { createPresence, usePosition, useDismiss } from './overlay';

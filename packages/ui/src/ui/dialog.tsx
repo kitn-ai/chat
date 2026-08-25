@@ -1,7 +1,8 @@
 import {
-  createEffect, createSignal, createUniqueId, Show, type Accessor, type JSX,
+  createEffect, createSignal, createUniqueId, Show, type Accessor,
 } from 'solid-js';
-import { Portal } from 'solid-js/web';
+import { Portal } from '@solidjs/web';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { useChatConfig } from '../primitives/chat-config';
 import { createPresence } from './overlay';
@@ -122,8 +123,10 @@ export function Dialog(props: DialogProps) {
 
   // Move focus into the panel on open; restore it on close. Seeded prev=false so a
   // `defaultOpen` (open-at-mount) still runs the open branch.
-  createEffect((wasOpen: boolean) => {
-    const open = isOpen();
+  // V2-PORT (R1): compute tracks `isOpen`; the focus moves (DOM reads: the deep
+  // active element, the `panel` ref) are the APPLY, which runs after render. The
+  // removed `initialValue: false` seed became a default on the prev parameter.
+  createEffect(isOpen, (open, wasOpen = false) => {
     if (open && !wasOpen) {
       restoreFocus = deepActiveElement();
       queueMicrotask(() => panel?.focus());
@@ -132,8 +135,7 @@ export function Dialog(props: DialogProps) {
       restoreFocus = null;
       if (target && target.isConnected) queueMicrotask(() => target.focus());
     }
-    return open;
-  }, false);
+  });
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {

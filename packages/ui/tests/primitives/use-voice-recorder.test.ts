@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { createRoot } from 'solid-js';
+import { createRoot, flush } from 'solid-js';
 import { useVoiceRecorder } from '../../src/primitives/use-voice-recorder';
 
 afterEach(() => {
@@ -37,7 +37,10 @@ describe('useVoiceRecorder', () => {
 
     await createRoot(async (dispose) => {
       const { stream, start } = useVoiceRecorder();
+      // V2-SHAPE: leave the root's synchronous owned scope before driving writes.
+      await Promise.resolve();
       await expect(start()).rejects.toThrow('unsupported mimeType');
+      flush(); // V2-FLUSH: the failure path's stream reset is staged; commit
       // The mic must not be left open with no visible recording in progress.
       expect(stream()).toBeUndefined();
       expect(stoppedTracks).toEqual(['stopped']);

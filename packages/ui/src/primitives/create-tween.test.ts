@@ -1,142 +1,190 @@
-import { describe, it, expect, vi } from 'vitest';
-import { createRoot, createEffect } from 'solid-js';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { createRoot, createEffect, flush } from 'solid-js';
 import { createTween } from './create-tween';
 import { installFakeClock } from '../test-utils/fake-clock';
 
 /** Drive RAF manually so we can step time deterministically. */
 const { advance } = installFakeClock();
 
+// V2-SHAPE helper: a tween must be CREATED under a root (it registers onCleanup)
+// but DRIVEN outside it — v2 rejects reactive writes inside a root's synchronous
+// owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE). Roots are disposed after each test.
+const tweenRoots: (() => void)[] = [];
+function ownedTween(initial: number): ReturnType<typeof createTween> {
+  let d!: () => void;
+  const t = createRoot((dd) => { d = dd; return createTween(initial); });
+  tweenRoots.push(d);
+  return t;
+}
+afterEach(() => { while (tweenRoots.length) tweenRoots.pop()!(); flush(); });
+
 describe('createTween', () => {
   it('starts at the initial value', () => {
-    createRoot((dispose) => {
-      const t = createTween(0.3);
-      expect(t.value()).toBe(0.3);
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [t, dispose] = createRoot((d) => [createTween(0.3), d] as const);
+    expect(t.value()).toBe(0.3);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('sets instantly when duration is 0', () => {
-    createRoot((dispose) => {
-      const t = createTween(0);
-      t.to(0.9, { duration: 0 });
-      expect(t.value()).toBe(0.9);
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [t, dispose] = createRoot((d) => [createTween(0), d] as const);
+    t.to(0.9, { duration: 0 });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.value()).toBe(0.9);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('sets instantly when no transition is given', () => {
-    createRoot((dispose) => {
-      const t = createTween(0);
-      t.to(0.5);
-      expect(t.value()).toBe(0.5);
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [t, dispose] = createRoot((d) => [createTween(0), d] as const);
+    t.to(0.5);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.value()).toBe(0.5);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('lands exactly on the target when the duration elapses', () => {
-    createRoot((dispose) => {
-      const t = createTween(0);
-      t.to(1, { duration: 0.5 });
-      advance(500);
-      expect(t.value()).toBeCloseTo(1, 6);
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [t, dispose] = createRoot((d) => [createTween(0), d] as const);
+    t.to(1, { duration: 0.5 });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    advance(500);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.value()).toBeCloseTo(1, 6);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('moves monotonically toward the target part-way through', () => {
-    createRoot((dispose) => {
-      const t = createTween(0);
-      t.to(1, { duration: 1, ease: 'linear' });
-      advance(250);
-      const quarter = t.value();
-      expect(quarter).toBeGreaterThan(0);
-      expect(quarter).toBeLessThan(1);
-      advance(250);
-      expect(t.value()).toBeGreaterThan(quarter);
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [t, dispose] = createRoot((d) => [createTween(0), d] as const);
+    t.to(1, { duration: 1, ease: 'linear' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    advance(250);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    const quarter = t.value();
+    expect(quarter).toBeGreaterThan(0);
+    expect(quarter).toBeLessThan(1);
+    advance(250);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.value()).toBeGreaterThan(quarter);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('eases out, so it covers more than half the distance at the halfway point', () => {
-    createRoot((dispose) => {
-      const t = createTween(0);
-      t.to(1, { duration: 1, ease: 'easeOut' });
-      advance(500);
-      expect(t.value()).toBeGreaterThan(0.5);
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [t, dispose] = createRoot((d) => [createTween(0), d] as const);
+    t.to(1, { duration: 1, ease: 'easeOut' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    advance(500);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.value()).toBeGreaterThan(0.5);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('ping-pongs between the two values of an array target', () => {
-    createRoot((dispose) => {
-      const t = createTween(0);
-      t.to([0.2, 0.8], { duration: 1, ease: 'linear' });
-      advance(1000);
-      expect(t.value()).toBeCloseTo(0.8, 2);
-      advance(1000);
-      expect(t.value()).toBeCloseTo(0.2, 2);
-      advance(1000);
-      expect(t.value()).toBeCloseTo(0.8, 2);
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [t, dispose] = createRoot((d) => [createTween(0), d] as const);
+    t.to([0.2, 0.8], { duration: 1, ease: 'linear' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    advance(1000);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.value()).toBeCloseTo(0.8, 2);
+    advance(1000);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.value()).toBeCloseTo(0.2, 2);
+    advance(1000);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.value()).toBeCloseTo(0.8, 2);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('starts an array target from its first value', () => {
-    createRoot((dispose) => {
-      const t = createTween(0);
-      t.to([0.2, 0.8], { duration: 1, ease: 'linear' });
-      advance(0);
-      expect(t.value()).toBeCloseTo(0.2, 2);
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [t, dispose] = createRoot((d) => [createTween(0), d] as const);
+    t.to([0.2, 0.8], { duration: 1, ease: 'linear' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    advance(0);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.value()).toBeCloseTo(0.2, 2);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('overshoots past the target with a bouncy spring', () => {
-    createRoot((dispose) => {
-      const t = createTween(0);
-      t.to(1, { type: 'spring', duration: 1, bounce: 0.5 });
-      let peak = 0;
-      for (let i = 0; i < 40; i++) {
-        advance(25);
-        peak = Math.max(peak, t.value());
-      }
-      expect(peak).toBeGreaterThan(1);
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [t, dispose] = createRoot((d) => [createTween(0), d] as const);
+    t.to(1, { type: 'spring', duration: 1, bounce: 0.5 });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    let peak = 0;
+    for (let i = 0; i < 40; i++) {
+      advance(25);
+      flush(); // V2-FLUSH: v2 stages writes; commit before reading
+      peak = Math.max(peak, t.value());
+    }
+    expect(peak).toBeGreaterThan(1);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('settles on the target after a spring completes', () => {
-    createRoot((dispose) => {
-      const t = createTween(0);
-      t.to(1, { type: 'spring', duration: 1, bounce: 0.3 });
-      for (let i = 0; i < 60; i++) advance(25);
-      expect(t.value()).toBeCloseTo(1, 2);
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [t, dispose] = createRoot((d) => [createTween(0), d] as const);
+    t.to(1, { type: 'spring', duration: 1, bounce: 0.3 });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    for (let i = 0; i < 60; i++) advance(25);
+    flush(); // V2-FLUSH: commit the staged frame writes before reading
+    expect(t.value()).toBeCloseTo(1, 2);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('a new target interrupts the one in flight rather than queueing', () => {
-    createRoot((dispose) => {
-      const t = createTween(0);
-      t.to(1, { duration: 1, ease: 'linear' });
-      advance(500);
-      t.to(0, { duration: 0 });
-      expect(t.value()).toBe(0);
-      advance(500);
-      expect(t.value()).toBe(0);
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [t, dispose] = createRoot((d) => [createTween(0), d] as const);
+    t.to(1, { duration: 1, ease: 'linear' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    advance(500);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    t.to(0, { duration: 0 });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.value()).toBe(0);
+    advance(500);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.value()).toBe(0);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('stops animating after dispose', () => {
-    let t!: ReturnType<typeof createTween>;
-    createRoot((dispose) => {
-      t = createTween(0);
-      t.to(1, { duration: 1, ease: 'linear' });
-      dispose();
-    });
+    // V2-SHAPE: create in a root, drive and dispose OUTSIDE it (see ownedTween).
+    let dispose!: () => void;
+    const t = createRoot((d) => { dispose = d; return createTween(0); });
+    t.to(1, { duration: 1, ease: 'linear' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
     const before = t.value();
     advance(1000);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
     expect(t.value()).toBe(before);
   });
 
@@ -145,86 +193,112 @@ describe('createTween', () => {
   // the listening spring) is still in flight. It is a real signal, so an
   // effect reading it re-runs the moment a tween settles.
   it('animating() starts false', () => {
-    createRoot((dispose) => {
-      const t = createTween(0.3);
-      expect(t.animating()).toBe(false);
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [t, dispose] = createRoot((d) => [createTween(0.3), d] as const);
+    expect(t.animating()).toBe(false);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('animating() is true while a tween is in flight and false once it lands', () => {
-    createRoot((dispose) => {
-      const t = createTween(0);
-      t.to(1, { duration: 0.5 });
-      expect(t.animating()).toBe(true);
-      advance(250);
-      expect(t.animating()).toBe(true);
-      advance(250);
-      expect(t.animating()).toBe(false);
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [t, dispose] = createRoot((d) => [createTween(0), d] as const);
+    t.to(1, { duration: 0.5 });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.animating()).toBe(true);
+    advance(250);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.animating()).toBe(true);
+    advance(250);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.animating()).toBe(false);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('animating() stays false for an instant to() -- duration 0 or no transition', () => {
-    createRoot((dispose) => {
-      const t = createTween(0);
-      t.to(1, { duration: 0 });
-      expect(t.animating()).toBe(false);
-      t.to(0.5);
-      expect(t.animating()).toBe(false);
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [t, dispose] = createRoot((d) => [createTween(0), d] as const);
+    t.to(1, { duration: 0 });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.animating()).toBe(false);
+    t.to(0.5);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.animating()).toBe(false);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('animating() stays true across ping-pong legs (a pulse never settles)', () => {
-    createRoot((dispose) => {
-      const t = createTween(0);
-      t.to([0.2, 0.8], { duration: 0.5, ease: 'linear' });
-      expect(t.animating()).toBe(true);
-      advance(500); // first leg lands, reverses
-      expect(t.animating()).toBe(true);
-      advance(500); // second leg lands, reverses again
-      expect(t.animating()).toBe(true);
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [t, dispose] = createRoot((d) => [createTween(0), d] as const);
+    t.to([0.2, 0.8], { duration: 0.5, ease: 'linear' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.animating()).toBe(true);
+    advance(500); // first leg lands, reverses
+    flush(); // V2-FLUSH: commit the staged frame writes before reading
+    expect(t.animating()).toBe(true);
+    advance(500); // second leg lands, reverses again
+    flush(); // V2-FLUSH: commit the staged frame writes before reading
+    expect(t.animating()).toBe(true);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('animating() goes false when an instant to() interrupts an in-flight tween', () => {
-    createRoot((dispose) => {
-      const t = createTween(0);
-      t.to(1, { duration: 1 });
-      advance(300);
-      expect(t.animating()).toBe(true);
-      t.to(0.4, { duration: 0 });
-      expect(t.animating()).toBe(false);
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [t, dispose] = createRoot((d) => [createTween(0), d] as const);
+    t.to(1, { duration: 1 });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    advance(300);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.animating()).toBe(true);
+    t.to(0.4, { duration: 0 });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.animating()).toBe(false);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('animating() is true for the full duration of a spring and false after it settles', () => {
-    createRoot((dispose) => {
-      const t = createTween(0);
-      t.to(1, { type: 'spring', duration: 1, bounce: 0.35 });
-      advance(500);
-      expect(t.animating()).toBe(true);
-      for (let i = 0; i < 30; i++) advance(25);
-      expect(t.animating()).toBe(false);
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [t, dispose] = createRoot((d) => [createTween(0), d] as const);
+    t.to(1, { type: 'spring', duration: 1, bounce: 0.35 });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    advance(500);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(t.animating()).toBe(true);
+    for (let i = 0; i < 30; i++) advance(25);
+    flush(); // V2-FLUSH: commit the staged frame writes before reading
+    expect(t.animating()).toBe(false);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('eases from the moment to() is called, even after a long idle gap', () => {
-    createRoot((dispose) => {
-      const t = createTween(0);
-      t.to(1, { duration: 1, ease: 'linear' });
-      advance(1000);                 // first tween completes, loop goes idle
-      expect(t.value()).toBeCloseTo(1, 6);
-      advance(5000);                 // long idle with no tween running
-      t.to(0, { duration: 1, ease: 'linear' });
-      advance(500);                  // half of the NEW tween's duration
-      expect(t.value()).toBeCloseTo(0.5, 1);   // must ease, not snap to 0
-      dispose();
-    });
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [t, dispose] = createRoot((d) => [createTween(0), d] as const);
+    t.to(1, { duration: 1, ease: 'linear' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    advance(1000);                 // first tween completes, loop goes idle
+    flush(); // V2-FLUSH: commit the staged frame writes before reading
+    expect(t.value()).toBeCloseTo(1, 6);
+    advance(5000);                 // long idle with no tween running
+    flush(); // V2-FLUSH: commit the staged frame writes before reading
+    t.to(0, { duration: 1, ease: 'linear' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    advance(500);                  // half of the NEW tween's duration
+    flush(); // V2-FLUSH: commit the staged frame writes before reading
+    expect(t.value()).toBeCloseTo(0.5, 1);   // must ease, not snap to 0
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 });
 
@@ -242,92 +316,105 @@ describe('named easings as cubic beziers', () => {
   // tween's frame instead of running both.
 
   it('easeOut matches the (0, 0, 0.58, 1) curve: steeper than linear at the midpoint', () => {
-    createRoot((dispose) => {
-      const eased = createTween(0);
-      eased.to(1, { duration: 1, ease: 'easeOut' });
-      advance(500);
-      const easedAtHalf = eased.value();
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [eased, dispose] = createRoot((d) => [createTween(0), d] as const);
+    eased.to(1, { duration: 1, ease: 'easeOut' });
+    advance(500);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    const easedAtHalf = eased.value();
 
-      const linear = createTween(0);
-      linear.to(1, { duration: 1, ease: 'linear' });
-      advance(500);
-      const linearAtHalf = linear.value();
+    const linear = createTween(0);
+    linear.to(1, { duration: 1, ease: 'linear' });
+    advance(500);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    const linearAtHalf = linear.value();
 
-      expect(easedAtHalf).toBeCloseTo(0.68, 2);
-      expect(easedAtHalf).toBeGreaterThan(linearAtHalf);
-      dispose();
-    });
+    expect(easedAtHalf).toBeCloseTo(0.68, 2);
+    expect(easedAtHalf).toBeGreaterThan(linearAtHalf);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('easeIn matches the (0.42, 0, 1, 1) curve: shallower than linear at the midpoint', () => {
-    createRoot((dispose) => {
-      const eased = createTween(0);
-      eased.to(1, { duration: 1, ease: 'easeIn' });
-      advance(500);
-      const easedAtHalf = eased.value();
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [eased, dispose] = createRoot((d) => [createTween(0), d] as const);
+    eased.to(1, { duration: 1, ease: 'easeIn' });
+    advance(500);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    const easedAtHalf = eased.value();
 
-      const linear = createTween(0);
-      linear.to(1, { duration: 1, ease: 'linear' });
-      advance(500);
-      const linearAtHalf = linear.value();
+    const linear = createTween(0);
+    linear.to(1, { duration: 1, ease: 'linear' });
+    advance(500);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    const linearAtHalf = linear.value();
 
-      expect(easedAtHalf).toBeCloseTo(0.32, 2);
-      expect(easedAtHalf).toBeLessThan(linearAtHalf);
-      dispose();
-    });
+    expect(easedAtHalf).toBeCloseTo(0.32, 2);
+    expect(easedAtHalf).toBeLessThan(linearAtHalf);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('easeInOut matches the (0.42, 0, 0.58, 1) curve: at the midpoint, and symmetric about it', () => {
-    createRoot((dispose) => {
-      const mid = createTween(0);
-      mid.to(1, { duration: 1, ease: 'easeInOut' });
-      advance(500);
-      expect(mid.value()).toBeCloseTo(0.5, 2);
+    // V2-SHAPE: create inside the root, DRIVE outside it — v2 rejects reactive
+    // writes inside a root's synchronous owned scope (REACTIVE_WRITE_IN_OWNED_SCOPE).
+    const [mid, dispose] = createRoot((d) => [createTween(0), d] as const);
+    mid.to(1, { duration: 1, ease: 'easeInOut' });
+    advance(500);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    expect(mid.value()).toBeCloseTo(0.5, 2);
 
-      const early = createTween(0);
-      early.to(1, { duration: 1, ease: 'easeInOut' });
-      advance(250);
-      const atQuarter = early.value();
+    const early = createTween(0);
+    early.to(1, { duration: 1, ease: 'easeInOut' });
+    advance(250);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    const atQuarter = early.value();
 
-      const late = createTween(0);
-      late.to(1, { duration: 1, ease: 'easeInOut' });
-      advance(750);
-      const atThreeQuarters = late.value();
+    const late = createTween(0);
+    late.to(1, { duration: 1, ease: 'easeInOut' });
+    advance(750);
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
+    const atThreeQuarters = late.value();
 
-      expect(atQuarter).toBeCloseTo(1 - atThreeQuarters, 2);
-      dispose();
-    });
+    expect(atQuarter).toBeCloseTo(1 - atThreeQuarters, 2);
+    dispose();
+    flush(); // V2-FLUSH: v2 stages writes; commit before reading
   });
 
   it('every named easing returns exactly 0 at t = 0 and exactly 1 at t = 1', () => {
-    createRoot((dispose) => {
+    {
       for (const ease of NAMES) {
-        const t = createTween(0);
+        const t = ownedTween(0); // V2-SHAPE
         t.to(1, { duration: 1, ease });
+        flush(); // V2-FLUSH: v2 stages writes; commit before reading
         advance(0);
+        flush(); // V2-FLUSH: v2 stages writes; commit before reading
         expect(t.value()).toBe(0);
         advance(1000);
+        flush(); // V2-FLUSH: v2 stages writes; commit before reading
         expect(t.value()).toBe(1);
       }
-      dispose();
-    });
+    }
   });
 
   it('every named easing is monotonically non-decreasing across a sweep of t', () => {
-    createRoot((dispose) => {
+    {
       for (const ease of NAMES) {
-        const t = createTween(0);
+        const t = ownedTween(0); // V2-SHAPE
         t.to(1, { duration: 1, ease });
+        flush(); // V2-FLUSH: v2 stages writes; commit before reading
         let previous = t.value();
         for (let i = 0; i < 20; i++) {
           advance(50); // 0.05 of the 1s duration per step
+          flush(); // V2-FLUSH: commit the staged frame writes before reading
           const current = t.value();
           expect(current).toBeGreaterThanOrEqual(previous);
           previous = current;
         }
       }
-      dispose();
-    });
+    }
   });
 });
 
@@ -397,16 +484,16 @@ describe('createTween: a frame timestamp that predates the tween origin', () => 
   it.each(['linear', 'easeIn', 'easeOut', 'easeInOut'] as const)(
     "'%s' holds at the start value instead of running backwards",
     (ease) => {
-      createRoot((dispose) => {
+      {
         withPreOriginFrame((fireFrameAt) => {
-          const t = createTween(FROM);
+          const t = ownedTween(FROM); // V2-SHAPE
           t.to(TO, { duration: 1, ease });
+          flush(); // V2-FLUSH: v2 stages writes; commit before reading
           expect(EARLY).toBeLessThan(performance.now()); // the frame really is in the past
           fireFrameAt(EARLY);
           expect(t.value()).toBe(FROM);
         });
-        dispose();
-      });
+      }
     },
   );
 
@@ -416,39 +503,41 @@ describe('createTween: a frame timestamp that predates the tween origin', () => 
   // returned ~5.9, putting the value at ~3.36 -- roughly seven times the
   // distance to the target, in the wrong direction, on the first frame.
   it('a spring holds at the start value instead of diverging exponentially', () => {
-    createRoot((dispose) => {
+    {
       withPreOriginFrame((fireFrameAt) => {
-        const t = createTween(FROM);
+        const t = ownedTween(FROM); // V2-SHAPE
         t.to(TO, { type: 'spring', duration: 1, bounce: 0.4 });
+        flush(); // V2-FLUSH: v2 stages writes; commit before reading
         expect(EARLY).toBeLessThan(performance.now());
         fireFrameAt(EARLY);
         expect(t.value()).toBe(FROM);
       });
-      dispose();
-    });
+    }
   });
 
   // The clamp must HOLD the tween, not cancel it: an early frame is still a
   // frame, so the loop has to stay armed and the tween has to animate normally
   // from its real origin once the timestamps catch up.
   it('stays armed through an early frame and still lands on the target', () => {
-    createRoot((dispose) => {
+    {
       withPreOriginFrame((fireFrameAt) => {
-        const t = createTween(FROM);
+        const t = ownedTween(FROM); // V2-SHAPE
         t.to(TO, { duration: 1, ease: 'linear' });
+        flush(); // V2-FLUSH: v2 stages writes; commit before reading
         fireFrameAt(EARLY);
         expect(t.value()).toBe(FROM);
         expect(t.animating()).toBe(true);
 
         fireFrameAt(ORIGIN + 500); // halfway through, measured from the origin
+        flush(); // V2-FLUSH: commit the staged frame writes before reading
         expect(t.value()).toBeCloseTo(FROM + (TO - FROM) / 2, 6);
 
         fireFrameAt(ORIGIN + 1000);
+        flush(); // V2-FLUSH: commit the staged frame writes before reading
         expect(t.value()).toBe(TO);
         expect(t.animating()).toBe(false);
       });
-      dispose();
-    });
+    }
   });
 });
 
@@ -518,8 +607,12 @@ describe('createTween: does not depend on its own value merely by being .to()\'d
       const t = createRoot((d) => {
         dispose = d;
         const tween = createTween(0);
-        createEffect(() => {
-          runs++;
+        // V2-PORT: two-argument effect — the counter is the (empty-dep) compute,
+        // the imperative .to() drive is the apply. The original one-arg shape was
+        // pinning that .to() does not create a dependency on the tween's own value;
+        // in v2 the apply phase is untracked by construction, so the pin holds
+        // structurally and this test now guards against regressions in test shape.
+        createEffect(() => { runs++; }, () => {
           tween.to(10, { duration: 0.15, ease: 'linear' });
         });
         return tween;
@@ -532,6 +625,7 @@ describe('createTween: does not depend on its own value merely by being .to()\'d
       // re-arms -- so if `.to()` were tracking this tween's own signal, every
       // one of these would re-enter the effect.
       for (let i = 0; i < 20; i++) advance(10);
+      flush(); // V2-FLUSH: commit the staged frame writes before reading
 
       // The bug, reproduced in isolation: reading `value()` inside `.to()`
       // without `untrack()` made this effect depend on `t`'s own signal, so
@@ -541,6 +635,7 @@ describe('createTween: does not depend on its own value merely by being .to()\'d
       expect(t.value()).toBeCloseTo(10, 0);
     } finally {
       dispose();
+      flush(); // V2-FLUSH: v2 stages writes; commit before reading
     }
   });
 
@@ -551,7 +646,8 @@ describe('createTween: does not depend on its own value merely by being .to()\'d
         dispose = d;
         const first = createTween(0);
         const second = createTween(0);
-        createEffect(() => {
+        // V2-PORT: see the note on the effect above.
+        createEffect(() => {}, () => {
           first.to(10, { duration: 0.15, ease: 'linear' });
           second.to(10, { duration: 0.15, ease: 'linear' });
         });
@@ -564,6 +660,7 @@ describe('createTween: does not depend on its own value merely by being .to()\'d
       // precondition this test needs (a single-slot stub would silently drop
       // one of them and prove nothing).
       for (let i = 0; i < 20; i++) advance(10);
+      flush(); // V2-FLUSH: commit the staged frame writes before reading
 
       expect(first.value()).toBeCloseTo(10, 0);
       // Before the fix, this stayed at EXACTLY 0 forever: the first tween's
@@ -573,6 +670,7 @@ describe('createTween: does not depend on its own value merely by being .to()\'d
       expect(second.value()).toBeCloseTo(10, 0);
     } finally {
       dispose();
+      flush(); // V2-FLUSH: v2 stages writes; commit before reading
     }
   });
 });

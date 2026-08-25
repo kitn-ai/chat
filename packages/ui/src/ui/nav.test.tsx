@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
@@ -38,12 +39,14 @@ describe('Nav', () => {
     const onItemSelect = vi.fn();
     const { getByText } = render(() => <Nav items={ITEMS} onItemSelect={onItemSelect} />);
     fireEvent.click(getByText('Alpha'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onItemSelect).toHaveBeenCalledWith('a');
   });
   it('does not fire for a disabled item', () => {
     const onItemSelect = vi.fn();
     const { getByText } = render(() => <Nav items={ITEMS} onItemSelect={onItemSelect} />);
     fireEvent.click(getByText('Gamma'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onItemSelect).not.toHaveBeenCalled();
   });
   it('renders a trailing badge', () => {
@@ -87,9 +90,11 @@ describe('Nav — nested groups', () => {
     const { getByText, queryByText } = render(() => <Nav items={NESTED} />);
     const parent = getByText('Acme').closest('button')!;
     fireEvent.click(parent);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(parent).toHaveAttribute('aria-expanded', 'false');
     expect(queryByText('Refactor auth')).not.toBeInTheDocument();
     fireEvent.click(parent);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(parent).toHaveAttribute('aria-expanded', 'true');
     expect(queryByText('Refactor auth')).toBeInTheDocument();
   });
@@ -104,6 +109,7 @@ describe('Nav — nested groups', () => {
     const { getByText, queryByText } = render(() => <Nav items={NESTED} defaultCollapsed={['acme']} />);
     const parent = getByText('Acme').closest('button')!;
     fireEvent.keyDown(parent, { key: 'ArrowRight' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(parent).toHaveAttribute('aria-expanded', 'true');
     expect(queryByText('Refactor auth')).toBeInTheDocument();
   });
@@ -177,6 +183,7 @@ describe('Nav — trailing action / closable', () => {
     const actionBtn = container.querySelector<HTMLButtonElement>('[data-nav-action="action"]')!;
     expect(actionBtn).not.toBeNull();
     fireEvent.click(actionBtn);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onItemAction).toHaveBeenCalledWith('a', { icon: 'pencil', label: 'Rename' });
     expect(onItemSelect).not.toHaveBeenCalled();
   });
@@ -189,6 +196,7 @@ describe('Nav — trailing action / closable', () => {
     ));
     const closeBtn = container.querySelector<HTMLButtonElement>('[data-nav-action="close"]')!;
     fireEvent.click(closeBtn);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onItemClose).toHaveBeenCalledWith('b');
     expect(onItemSelect).not.toHaveBeenCalled();
   });
@@ -200,6 +208,7 @@ describe('Nav — trailing action / closable', () => {
       <Nav items={withTrailing} onItemSelect={onItemSelect} onItemAction={onItemAction} />
     ));
     fireEvent.click(getByText('Alpha'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(onItemSelect).toHaveBeenCalledWith('a');
     expect(onItemAction).not.toHaveBeenCalled();
   });

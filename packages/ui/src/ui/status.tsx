@@ -1,4 +1,5 @@
-import { type JSX, Show, splitProps } from 'solid-js';
+import { Show, omit } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 
 export type StatusKind = 'new' | 'online' | 'busy' | 'away' | 'offline';
@@ -24,7 +25,9 @@ export interface StatusProps extends JSX.HTMLAttributes<HTMLSpanElement> {
 }
 
 export function Status(props: StatusProps) {
-  const [local, rest] = splitProps(props, ['status', 'size', 'pulse', 'label', 'class']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'status', 'size', 'pulse', 'label', 'class');
   const kind = () => local.status ?? 'new';
   return (
     <span

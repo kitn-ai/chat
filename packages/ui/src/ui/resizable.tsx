@@ -1,4 +1,5 @@
-import { type JSX, splitProps, createSignal, createEffect, createContext, useContext, For, Show, children as resolveChildren } from 'solid-js';
+import { omit, createSignal, createEffect, createContext, useContext, For, Show, children as resolveChildren } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 
 // --- Types ---
@@ -12,7 +13,9 @@ interface ResizableContextValue {
   orientation: Orientation;
 }
 
-export const ResizableContext = createContext<ResizableContextValue>();
+// V2-PORT: v2's useContext THROWS when the resolved value is undefined; a `null`
+// default restores the 1.x absent-provider behavior the consumers here handle.
+export const ResizableContext = createContext<ResizableContextValue | null>(null);
 
 /**
  * Normalize a px-or-% size into a CSS length string usable as `flex-basis`.
@@ -106,11 +109,13 @@ export interface ResizablePanelGroupProps extends JSX.HTMLAttributes<HTMLDivElem
 }
 
 function ResizablePanelGroup(props: ResizablePanelGroupProps) {
-  const [local, rest] = splitProps(props, ['orientation', 'children', 'class']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'orientation', 'children', 'class');
   const orientation = () => local.orientation ?? 'horizontal';
 
   return (
-    <ResizableContext.Provider value={{ orientation: orientation() }}>
+    <ResizableContext value={{ orientation: orientation() }}>
       <div
         class={cn(
           'flex h-full w-full',
@@ -122,7 +127,7 @@ function ResizablePanelGroup(props: ResizablePanelGroupProps) {
       >
         {local.children}
       </div>
-    </ResizableContext.Provider>
+    </ResizableContext>
   );
 }
 
@@ -143,9 +148,11 @@ export interface ResizablePanelProps extends JSX.HTMLAttributes<HTMLDivElement> 
 }
 
 function ResizablePanel(props: ResizablePanelProps) {
-  const [local, rest] = splitProps(props, [
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props,
     'defaultSize', 'minSize', 'maxSize', 'locked', 'hidden', 'children', 'class', 'style',
-  ]);
+  );
   // GRID-FILL model: the panel sizes itself on the MAIN axis via flex-basis (or
   // flex:1 when flexible) as a flex item of the group — the handle rewrites that
   // basis, so the drag math is plain flex. For the FILL it is itself a
@@ -270,9 +277,11 @@ function readBound(el: HTMLElement, kind: 'min' | 'max', containerPx: number, fa
 }
 
 function ResizableHandle(props: ResizableHandleProps) {
-  const [local, rest] = splitProps(props, [
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props,
     'handle', 'onPanelResize', 'class', 'keyboardStep', 'static', 'orientation',
-  ]);
+  );
   const ctx = useContext(ResizableContext);
   const orientation = () => local.orientation ?? ctx?.orientation ?? 'horizontal';
   const [isDragging, setIsDragging] = createSignal(false);
@@ -531,7 +540,7 @@ function ResizableHandle(props: ResizableHandleProps) {
       onDblClick={handleDblClick}
       onKeyDown={handleKeyDown}
       role="separator"
-      tabIndex={isStatic() ? undefined : 0}
+      tabindex={isStatic() ? undefined : 0}
       data-orientation={orientation()}
       data-static={isStatic() ? '' : undefined}
       aria-orientation={isHoriz() ? 'vertical' : 'horizontal'}
@@ -607,9 +616,8 @@ export interface ResizableProps {
  * `ResizablePanelGroup` + explicit `ResizableHandle`s.
  */
 function Resizable(props: ResizableProps) {
-  const [local] = splitProps(props, [
-    'orientation', 'onChange', 'handle', 'class', 'children', 'maximizedIndex', 'onMaximizeChange',
-  ]);
+  // V2-PORT: splitProps with no rest half -> plain alias (reads stay reactive).
+  const local = props;
   const orientation = () => local.orientation ?? 'horizontal';
 
   // Resolve children to the actual panel elements so we can read their props.
@@ -641,12 +649,12 @@ function Resizable(props: ResizableProps) {
     return target && !target.hidden ? [target] : all.filter((p) => !p.hidden);
   };
 
-  // Notify on change of the maximized index (defer the initial null run).
-  let prevMax: number | null | undefined;
-  createEffect(() => {
-    const m = maxIdx();
-    if (prevMax === undefined) { prevMax = m; return; }
-    if (m !== prevMax) { prevMax = m; local.onMaximizeChange?.(m); }
+  // Notify on change of the maximized index (defer the initial run).
+  // V2-PORT: compute tracks maxIdx; the apply's prev parameter (undefined on the
+  // first run) replaces the hand-rolled prevMax sentinel.
+  createEffect(maxIdx, (m, prev) => {
+    if (prev === undefined) return;
+    if (m !== prev) local.onMaximizeChange?.(m);
   });
 
   function emitChange() {
@@ -662,7 +670,7 @@ function Resizable(props: ResizableProps) {
   }
 
   return (
-    <ResizableContext.Provider value={{ orientation: orientation() }}>
+    <ResizableContext value={{ orientation: orientation() }}>
       <div
         class={cn(
           'flex h-full w-full',
@@ -686,7 +694,7 @@ function Resizable(props: ResizableProps) {
           )}
         </For>
       </div>
-    </ResizableContext.Provider>
+    </ResizableContext>
   );
 }
 

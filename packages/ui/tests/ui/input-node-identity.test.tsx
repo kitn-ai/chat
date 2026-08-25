@@ -22,7 +22,7 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { Input } from '../../src/ui/input';
 
@@ -33,6 +33,12 @@ afterEach(cleanup);
 function press(el: HTMLInputElement, ch: string) {
   el.value = el.value + ch;
   el.dispatchEvent(new Event('input', { bubbles: true }));
+  // V2-FLUSH: v2 stages ordinary writes and commits on the next microtask, so the
+  // signal/DOM state a keystroke produced is committed here to keep the per-key
+  // assertions (and the invalid-accessor re-run they guard) synchronous. This is
+  // what makes the identity assertions non-vacuous under v2 — same recipe as the
+  // spike's flushed copy of this file (Q-A).
+  flush();
 }
 
 describe('Input keeps its DOM node across keystrokes (K-D12a)', () => {
@@ -48,6 +54,7 @@ describe('Input keeps its DOM node across keystrokes (K-D12a)', () => {
         onValueInput={setValue}
       />
     ));
+    flush(); // V2-FLUSH: commit the mount-time effects before reading the DOM
 
     const first = container.querySelector('input') as HTMLInputElement;
     expect(first).toBeTruthy();
@@ -77,6 +84,7 @@ describe('Input keeps its DOM node across keystrokes (K-D12a)', () => {
     expect(el.getAttribute('aria-invalid')).toBeNull();
 
     setInvalid(true);
+    flush(); // V2-FLUSH: the class/attribute writes are staged until the microtask
 
     // Same node, new attributes — the whole point of the fix.
     expect(container.querySelector('input')).toBe(el);
@@ -111,6 +119,7 @@ describe('Input keeps its DOM node across keystrokes (K-D12a)', () => {
         onValueInput={setValue}
       />
     ));
+    flush(); // V2-FLUSH: commit the mount-time mask attach before typing
 
     const first = container.querySelector('input') as HTMLInputElement;
     first.focus();
@@ -158,6 +167,7 @@ describe('Input keeps its DOM node across keystrokes (K-D12a)', () => {
         onValueInput={setValue}
       />
     ));
+    flush(); // V2-FLUSH: commit the mount-time mask attach before typing
 
     const plain = container.querySelector('input') as HTMLInputElement;
     expect(plain.getAttribute('part')).toBe('field input');
@@ -165,6 +175,7 @@ describe('Input keeps its DOM node across keystrokes (K-D12a)', () => {
     expect(plain.value).toBe('555');
 
     setAffix(true);
+    flush(); // V2-FLUSH: the Show swap and the mask re-attach commit together (Q-C)
 
     const row = container.querySelector('input') as HTMLInputElement;
     expect(row).not.toBe(plain); // the sanctioned identity change
@@ -187,6 +198,7 @@ describe('Input keeps its DOM node across keystrokes (K-D12a)', () => {
         onValueInput={setValue}
       />
     ));
+    flush(); // V2-FLUSH: commit the mount-time effects before reading the DOM
 
     const el = container.querySelector('input') as HTMLInputElement;
     expect(el.getAttribute('part')).toBe('input');

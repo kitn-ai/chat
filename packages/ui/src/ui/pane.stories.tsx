@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { type JSX } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { Bot, Terminal } from 'lucide-solid';
 import { Pane } from './pane';
 import { componentDescription } from '../stories/docs/element-controls';

@@ -1,4 +1,5 @@
-import { type JSX, For, children as resolveChildren } from 'solid-js';
+import { For, children as resolveChildren } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 
 export interface PaneGridProps {

@@ -15,7 +15,7 @@
     "allowJs": true,
     "checkJs": false,
     "jsx": "preserve",
-    "jsxImportSource": "solid-js",
+    "jsxImportSource": "@solidjs/web",
     "baseUrl": "."
   },
   "allowJsIs": "A note on `allowJs`, because it looks like the kind of loosening the comment above forbids and is the opposite. tests/scripts/ imports two plain build scripts (scripts/_ts-helpers.mjs, scripts/run-storybook-tests.mjs). WITHOUT allowJs TypeScript will not read them, so under noImplicitAny each import is a TS7016 error and every function it brings in is `any` — the calls go unchecked. WITH it, TypeScript infers real signatures from the .mjs and the calls are checked; `checkJs` stays off, so the .mjs bodies are inferred from, not checked. Measured when it went in: it added exactly those 2 files to the program and nothing else (`include` names no JS extension, so only IMPORTED JavaScript is reachable), it cleared the TS7016 that had tests/scripts/display-name.test.ts quarantined, and it immediately reported a now-unnecessary `@ts-expect-error` in tests/scripts/storybook-retry-report.test.ts which had been suppressing that same missing-declarations error. That directive is deleted and the import is typed.",

@@ -1,4 +1,5 @@
-import { For, Show, type JSX } from 'solid-js';
+import { For, Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { renderIcon } from './icon';
 import { Kbd } from './kbd';
@@ -67,7 +68,7 @@ export function CommandList(props: CommandListProps): JSX.Element {
                   {(row) => (
                     <button
                       role="option"
-                      aria-selected={row.id === props.activeId}
+                      aria-selected={row.id === props.activeId ? 'true' : 'false'}
                       class={cn(
                         'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors',
                         row.id === props.activeId

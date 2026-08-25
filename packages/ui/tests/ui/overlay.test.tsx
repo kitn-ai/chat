@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@solidjs/testing-library';
-import { createSignal } from 'solid-js';
+import { createSignal, flush } from 'solid-js';
 import { createPresence, As, useDismiss, usePosition } from '../../src/ui/overlay';
 
 // jsdom (v24) does not implement the PointerEvent constructor. useDismiss
@@ -37,7 +37,9 @@ describe('createPresence', () => {
     });
     expect(present()).toBe(true);
     setShow(false);
+    flush(); // V2-FLUSH: commit the staged hide so the close effect queues its microtask
     await Promise.resolve();
+    flush(); // V2-FLUSH: the microtask's setPresent write is itself staged
     expect(present()).toBe(false);
   });
 
@@ -221,6 +223,7 @@ describe('useDismiss', () => {
       return null;
     });
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(dismissed).toBe(1);
   });
 
@@ -234,8 +237,10 @@ describe('useDismiss', () => {
       return null;
     });
     inside.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(dismissed).toBe(0);
     document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(dismissed).toBe(1);
     inside.remove();
   });

@@ -65,7 +65,7 @@ export const ModelMenu: Story = {
             <span style={{ 'font-weight': 600 }}>GPT-5.5</span>
             <span class="text-caption text-muted-foreground">Flagship</span>
           </button>
-          <button type="button" class={row} aria-expanded={legacyOpen()} onClick={() => setLegacyOpen(!legacyOpen())}>
+          <button type="button" class={row} aria-expanded={legacyOpen() ? 'true' : 'false'} onClick={() => setLegacyOpen(!legacyOpen())}>
             Legacy models {legacyOpen() ? '▴' : '▾'}
           </button>
           <Show when={legacyOpen()}>
@@ -92,7 +92,7 @@ export const ModelMenu: Story = {
           <span style={{ 'font-weight': 600 }}>GPT-5.5</span>
           <span class="text-caption text-muted-foreground">Flagship</span>
         </button>
-        <button type="button" class={row} aria-expanded={legacyOpen()} onClick={() => setLegacyOpen(!legacyOpen())}>
+        <button type="button" class={row} aria-expanded={legacyOpen() ? 'true' : 'false'} onClick={() => setLegacyOpen(!legacyOpen())}>
           Legacy models {legacyOpen() ? '▴' : '▾'}
         </button>
         <Show when={legacyOpen()}>

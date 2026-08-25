@@ -8,6 +8,7 @@
  * internal hover/focus flags so it stays closed until a genuine new hover/focus.
  * `dismissOnClick={false}` opts out.
  */
+import { flush } from 'solid-js';
 import { describe, it, expect, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent, within } from '@solidjs/testing-library';
@@ -36,9 +37,11 @@ describe('Tooltip', () => {
 
     // openDelay defaults to 600ms on pointer-enter — focus opens immediately.
     fireEvent.focusIn(trigger);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(tooltip()).toBeInTheDocument();
 
     fireEvent.focusOut(trigger, { relatedTarget: document.body });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await tick();
     expect(tooltip()).not.toBeInTheDocument();
   });
@@ -53,9 +56,11 @@ describe('Tooltip', () => {
     const triggerSpan = trigger.parentElement!; // <As as="span"> carries the aria + handlers
 
     fireEvent.focusIn(trigger);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(tooltip()).toBeInTheDocument();
 
     fireEvent.click(trigger);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     // click closes open() synchronously — aria-describedby is the reliable signal
     // (the portal node lingers one microtask via createPresence's exit handling).
     expect(triggerSpan).not.toHaveAttribute('aria-describedby');
@@ -73,9 +78,11 @@ describe('Tooltip', () => {
     const triggerSpan = trigger.parentElement!;
 
     fireEvent.focusIn(trigger);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(triggerSpan).toHaveAttribute('aria-describedby');
 
     fireEvent.pointerDown(trigger);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(triggerSpan).not.toHaveAttribute('aria-describedby');
   });
 
@@ -92,10 +99,12 @@ describe('Tooltip', () => {
     const triggerSpan = trigger.parentElement!; // <As as="span"> carries the aria + handlers
 
     fireEvent.focusIn(trigger);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(triggerSpan).toHaveAttribute('aria-describedby');
     expect(tooltip()).toBeInTheDocument();
 
     fireEvent.click(trigger);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await tick();
     // Without the flag reset, focusInside would keep open() true here.
     expect(triggerSpan).not.toHaveAttribute('aria-describedby');
@@ -112,14 +121,17 @@ describe('Tooltip', () => {
     const triggerSpan = trigger.parentElement!; // <As as="span"> carries the aria link
 
     fireEvent.focusIn(trigger);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(triggerSpan).toHaveAttribute('aria-describedby');
     expect(tooltip()).toBeInTheDocument();
 
     // Opted out — open() stays true through click and pointerdown. aria-describedby
     // is the reliable open() signal (the portal node's exit timing is animation-driven).
     fireEvent.click(trigger);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(triggerSpan).toHaveAttribute('aria-describedby');
     fireEvent.pointerDown(trigger);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(triggerSpan).toHaveAttribute('aria-describedby');
     expect(tooltip()).toBeInTheDocument();
   });

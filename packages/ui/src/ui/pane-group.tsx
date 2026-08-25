@@ -1,4 +1,5 @@
-import { type JSX, For, Show } from 'solid-js';
+import { For, Show } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { MoreHorizontal, X } from 'lucide-solid';
 import { type PaneStatusTone } from './pane';
 import { cn } from '../utils/cn';

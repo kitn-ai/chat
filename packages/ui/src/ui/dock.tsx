@@ -1,6 +1,7 @@
 import {
-  createEffect, createSignal, createUniqueId, Show, untrack, type Accessor, type JSX,
+  createEffect, createSignal, createUniqueId, Show, untrack, type Accessor,
 } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { MessageCircle, X } from 'lucide-solid';
 
 /** Which corner the dock sits in. LOGICAL, so `-end` follows the writing direction
@@ -366,8 +367,12 @@ export function Dock(props: DockProps) {
   // opposite — it is a guest on someone's page and must not steal focus on load, from
   // `default-open` OR from `open`. Same mechanism, opposite default, and the
   // difference is exactly the modal/non-modal split.
-  createEffect((wasOpen: boolean) => {
-    const open = isOpen();
+  // V2-PORT (R1): compute tracks `isOpen`; the focus choreography (DOM reads via
+  // `focusOnOpen`/`launcher`) is the APPLY, which runs after render. The removed
+  // `initialValue` argument became a default on the apply's prev parameter, so the
+  // mount run still compares against the seeded open value rather than `false`.
+  const seededOpen = untrack(() => props.open ?? props.defaultOpen ?? false);
+  createEffect(isOpen, (open, wasOpen = seededOpen) => {
     if (open !== wasOpen) {
       // The attributes and inline styles below are written by render effects, which
       // Solid runs before this one; the microtask is belt-and-braces for a state
@@ -376,8 +381,7 @@ export function Dock(props: DockProps) {
       if (open) queueMicrotask(focusOnOpen);
       else queueMicrotask(() => launcher?.focus());
     }
-    return open;
-  }, untrack(() => props.open ?? props.defaultOpen ?? false));
+  });
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key !== 'Escape' || !isOpen()) return;
@@ -428,7 +432,7 @@ export function Dock(props: DockProps) {
           data-closed={isOpen() ? undefined : ''}
           // `inert` is the half that actually stops Tab: a visibility:hidden panel is
           // already skipped by most AT, but a focusable control inside it is not.
-          bool:inert={!isOpen()}
+          inert={!isOpen()} // V2-PORT: bool: namespace removed
           // INLINE, unlike the geometry: the closed state must beat any consumer rule,
           // and it is the half a test can read without a layout engine.
           style={{

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createRoot, createSignal } from 'solid-js';
+import { createRoot, createSignal, flush } from 'solid-js';
 import { useAudioAnalysis } from './use-audio-analysis';
 import * as audioBandsModule from './audio-bands';
 
@@ -154,6 +154,7 @@ function advanceFrames(n: number, stepMs = 40) {
   for (let i = 0; i < n; i++) {
     fakeNow += stepMs;
     flushFrame(fakeNow);
+    flush(); // V2-FLUSH: the frame handler wrote signals; commit
   }
 }
 
@@ -305,6 +306,7 @@ describe('useAudioAnalysis', () => {
       // zero-fill.
       expect(bands()).toEqual([0, 0, 0]);
       flushFrame();
+      flush(); // V2-FLUSH: the frame handler wrote signals; commit
       // rawSignalLevel defaults to loud (see FakeAnalyser above), so a
       // flushed frame reports non-zero data. This is the hook's entire
       // purpose, so it gets its own assertion instead of relying on another
@@ -335,6 +337,7 @@ describe('useAudioAnalysis', () => {
         useAudioAnalysis(() => fakeStream(), { bands: 3 });
         await Promise.resolve();
         flushFrame();
+        flush(); // V2-FLUSH: the frame handler wrote signals; commit
         expect(spy).toHaveBeenCalled();
         const [, , loPass, hiPass] = spy.mock.calls[0]!;
         expect(loPass).toBe(100);
@@ -391,6 +394,7 @@ describe('useAudioAnalysis', () => {
         await Promise.resolve();
         expect(created.streamSources).toHaveLength(1);
         flushFrame();
+        flush(); // V2-FLUSH: the frame handler wrote signals; commit
         expect(a.bands().some((x) => x > 0)).toBe(true);
         expect(b.bands().some((x) => x > 0)).toBe(true);
         dispose();
@@ -404,6 +408,7 @@ describe('useAudioAnalysis', () => {
         await Promise.resolve();
         expect(created.streamSources).toHaveLength(1);
         flushFrame();
+        flush(); // V2-FLUSH: the frame handler wrote signals; commit
         consumers.forEach((c) => {
           expect(c.volume()).toBeGreaterThan(0);
         });
@@ -431,6 +436,7 @@ describe('useAudioAnalysis', () => {
         expect(created.streamFullDisconnects).toBe(0);
 
         flushFrame();
+        flush(); // V2-FLUSH: the frame handler wrote signals; commit
         expect(a.bands().some((x) => x > 0)).toBe(true);
 
         dispose();
@@ -564,6 +570,7 @@ describe('useAudioAnalysis', () => {
         await Promise.resolve();
         expect(bands()).toEqual([0, 0, 0, 0, 0, 0]);
         flushFrame();
+        flush(); // V2-FLUSH: the frame handler wrote signals; commit
         expect(bands()).toHaveLength(6);
         dispose();
       });
@@ -575,6 +582,7 @@ describe('useAudioAnalysis', () => {
         const { bands } = useAudioAnalysis(() => fakeStream(), { bands: bandCount });
         await Promise.resolve();
         flushFrame();
+        flush(); // V2-FLUSH: the frame handler wrote signals; commit
         expect(bands()).toHaveLength(3);
 
         setBandCount(7);
@@ -587,6 +595,7 @@ describe('useAudioAnalysis', () => {
         expect(bands()).toEqual([0, 0, 0, 0, 0, 0, 0]);
 
         flushFrame();
+        flush(); // V2-FLUSH: the frame handler wrote signals; commit
         expect(bands()).toHaveLength(7);
         dispose();
       });

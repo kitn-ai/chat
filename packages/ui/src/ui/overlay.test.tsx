@@ -44,6 +44,11 @@ describe('createPresence', () => {
       const el = document.createElement('div');
       document.body.appendChild(el);
       setRef(el);
+      // V2-SHAPE: v2 rejects reactive writes inside an owned scope's synchronous
+      // execution (REACTIVE_WRITE_IN_OWNED_SCOPE); one microtask exits the root's
+      // sync scope so the drives below run as plain external writes, as they
+      // effectively did under 1.x.
+      await micro();
 
       setShow(true);
       await flush();
@@ -69,6 +74,7 @@ describe('createPresence', () => {
       const el = document.createElement('div');
       document.body.appendChild(el);
       setRef(el);
+      await micro(); // V2-SHAPE: see the note in the first cycle test
 
       for (let i = 0; i < 2; i++) {
         setShow(true);
@@ -97,6 +103,11 @@ describe('createPresence', () => {
       const el = document.createElement('div');
       document.body.appendChild(el);
       setRef(el);
+      // V2-SHAPE: v2 rejects reactive writes inside an owned scope's synchronous
+      // execution (REACTIVE_WRITE_IN_OWNED_SCOPE); one microtask exits the root's
+      // sync scope so the drives below run as plain external writes, as they
+      // effectively did under 1.x.
+      await micro();
 
       setShow(true);
       await flush();
@@ -120,6 +131,11 @@ describe('createPresence', () => {
       const el = document.createElement('div');
       document.body.appendChild(el);
       setRef(el);
+      // V2-SHAPE: v2 rejects reactive writes inside an owned scope's synchronous
+      // execution (REACTIVE_WRITE_IN_OWNED_SCOPE); one microtask exits the root's
+      // sync scope so the drives below run as plain external writes, as they
+      // effectively did under 1.x.
+      await micro();
 
       setShow(true);
       await flush();
@@ -143,6 +159,11 @@ describe('createPresence', () => {
       const el = document.createElement('div');
       document.body.appendChild(el);
       setRef(el);
+      // V2-SHAPE: v2 rejects reactive writes inside an owned scope's synchronous
+      // execution (REACTIVE_WRITE_IN_OWNED_SCOPE); one microtask exits the root's
+      // sync scope so the drives below run as plain external writes, as they
+      // effectively did under 1.x.
+      await micro();
 
       setShow(true);
       await flush();

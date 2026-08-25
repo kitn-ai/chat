@@ -1,4 +1,5 @@
-import { type JSX, splitProps } from 'solid-js';
+import { omit } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 import { useAutoResize } from '../primitives/use-auto-resize';
 
@@ -8,7 +9,9 @@ export interface TextareaProps extends JSX.TextareaHTMLAttributes<HTMLTextAreaEl
 }
 
 export function Textarea(props: TextareaProps) {
-  const [local, rest] = splitProps(props, ['class', 'maxHeight', 'autoResize']);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 'class', 'maxHeight', 'autoResize');
   const { ref } = useAutoResize({ maxHeight: local.maxHeight });
   return (
     <textarea

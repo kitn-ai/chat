@@ -1,4 +1,5 @@
-import { type JSX, For, Show, mergeProps } from 'solid-js';
+import { For, Show, merge } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { cn } from '../utils/cn';
 
 export interface SegmentedOption {
@@ -35,7 +36,7 @@ const SIZE: Record<'sm' | 'md', string> = {
  * key navigation that moves selection between segments.
  */
 export function Segmented(props: SegmentedProps): JSX.Element {
-  const merged = mergeProps({ size: 'md' as const }, props);
+  const merged = merge({ size: 'md' as const }, props);
   const buttons: HTMLButtonElement[] = [];
 
   const currentIndex = () => merged.options.findIndex((o) => o.value === merged.value);
@@ -84,7 +85,7 @@ export function Segmented(props: SegmentedProps): JSX.Element {
               type="button"
               part="segment"
               ref={(el) => { buttons[i()] = el; }}
-              aria-pressed={selected()}
+              aria-pressed={selected() ? 'true' : 'false'}
               tabindex={focusable() ? 0 : -1}
               onClick={() => merged.onChange(opt.value)}
               class={cn(

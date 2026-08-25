@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
@@ -28,6 +29,7 @@ describe('Popover', () => {
       </Popover>
     ));
     fireEvent.click(getByText('Open menu'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(queryByText('Panel body')).toBeInTheDocument();
     expect(onOpenChange).toHaveBeenCalledWith(true);
   });
@@ -41,8 +43,10 @@ describe('Popover', () => {
     ));
     const trigger = getByText('Open menu');
     fireEvent.click(trigger);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(queryByText('Panel body')).toBeInTheDocument();
     fireEvent.click(trigger);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await tick();
     expect(queryByText('Panel body')).not.toBeInTheDocument();
     expect(onOpenChange).toHaveBeenLastCalledWith(false);
@@ -55,8 +59,10 @@ describe('Popover', () => {
       </Popover>
     ));
     fireEvent.click(getByText('Open menu'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(queryByText('Panel body')).toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'Escape' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await tick();
     expect(queryByText('Panel body')).not.toBeInTheDocument();
   });
@@ -68,9 +74,12 @@ describe('Popover', () => {
       </Popover>
     ));
     fireEvent.click(getByText('Open menu'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     fireEvent.pointerDown(getByText('Panel body'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     expect(queryByText('Panel body')).toBeInTheDocument();
     fireEvent.pointerDown(document.body);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     await tick();
     expect(queryByText('Panel body')).not.toBeInTheDocument();
   });
@@ -92,6 +101,7 @@ describe('Popover', () => {
       </Popover>
     ));
     fireEvent.click(getByText('Open menu'));
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     // controlled: stays closed until the parent flips `open`
     expect(queryByText('Panel body')).not.toBeInTheDocument();
     expect(onOpenChange).toHaveBeenCalledWith(true);

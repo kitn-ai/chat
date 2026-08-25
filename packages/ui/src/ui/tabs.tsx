@@ -1,4 +1,5 @@
-import { For, type JSX, splitProps } from 'solid-js';
+import { For, omit } from 'solid-js';
+import type { JSX } from '@solidjs/web';
 import { renderIcon } from './icon';
 import { cn } from '../utils/cn';
 
@@ -65,9 +66,10 @@ export interface TabsProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, 'onC
  * keyboard nav, disabled items skipped.
  */
 export function Tabs(props: TabsProps) {
-  const [local, rest] = splitProps(props, [
-    'items', 'value', 'variant', 'block', 'disabled', 'onChange', 'ref', 'class',
-  ]);
+  // V2-PORT: splitProps -> alias + omit.
+  const local = props;
+  const rest = omit(props, 
+    'items', 'value', 'variant', 'block', 'disabled', 'onChange', 'ref', 'class');
   const items = () => local.items ?? [];
   const variant = (): TabsVariant => local.variant ?? 'segmented';
 

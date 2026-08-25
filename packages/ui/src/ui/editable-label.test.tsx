@@ -1,3 +1,4 @@
+import { flush } from 'solid-js';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
@@ -18,6 +19,7 @@ describe('EditableLabel', () => {
   it('dblclick enters edit mode with the value selected', async () => {
     const { container } = render(() => <EditableLabel value="Project Alpha" />);
     fireEvent.dblClick(container.querySelector('[part="text"]')!);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     const input = container.querySelector('input')!;
     expect(input).toBeInTheDocument();
@@ -31,10 +33,13 @@ describe('EditableLabel', () => {
     const onRename = vi.fn();
     const { container } = render(() => <EditableLabel value="Old" onRename={onRename} />);
     fireEvent.dblClick(container.querySelector('[part="text"]')!);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     const input = container.querySelector('input')!;
     fireEvent.input(input, { target: { value: 'New' } });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     fireEvent.keyDown(input, { key: 'Enter' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     expect(onRename).toHaveBeenCalledTimes(1);
     expect(onRename).toHaveBeenCalledWith('New');
@@ -47,10 +52,13 @@ describe('EditableLabel', () => {
     const onCancel = vi.fn();
     const { container } = render(() => <EditableLabel value="Keep" onRename={onRename} onCancel={onCancel} />);
     fireEvent.dblClick(container.querySelector('[part="text"]')!);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     const input = container.querySelector('input')!;
     fireEvent.input(input, { target: { value: 'Discard' } });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
     fireEvent.keyDown(input, { key: 'Escape' });
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onRename).not.toHaveBeenCalled();
@@ -62,9 +70,11 @@ describe('EditableLabel', () => {
     const onRename = vi.fn();
     const { container } = render(() => <EditableLabel value="Same" onRename={onRename} />);
     fireEvent.dblClick(container.querySelector('[part="text"]')!);
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     const input = container.querySelector('input')!;
     fireEvent.keyDown(input, { key: 'Enter' }); // value left unchanged
+    flush(); // V2-FLUSH: v2 stages writes; commit before asserting
 
     expect(onRename).not.toHaveBeenCalled();
     expect(container.querySelector('[part="text"]')).toHaveTextContent('Same');

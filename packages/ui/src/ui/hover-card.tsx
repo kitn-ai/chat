@@ -1,8 +1,6 @@
-import {
-  createContext, useContext, createSignal, createUniqueId, Show, splitProps, onCleanup,
-  type JSX, type Accessor,
-} from 'solid-js';
-import { Portal } from 'solid-js/web';
+import { createContext, useContext, createSignal, createUniqueId, Show, omit, onCleanup, type Accessor } from 'solid-js';
+import type { JSX } from '@solidjs/web';
+import { Portal } from '@solidjs/web';
 import { type Placement } from '@floating-ui/dom';
 import { cn } from '../utils/cn';
 import { useChatConfig } from '../primitives/chat-config';
@@ -24,7 +22,9 @@ interface HoverCardCtx {
    *  `enter()`: a card that cannot open must not be in the tab order either. */
   disabled: Accessor<boolean>;
 }
-const Ctx = createContext<HoverCardCtx>();
+// V2-PORT: v2's useContext THROWS when the resolved value is undefined; a `null`
+// default restores the 1.x absent-provider behavior the consumers here handle.
+const Ctx = createContext<HoverCardCtx | null>(null);
 const useHoverCard = () => {
   const c = useContext(Ctx);
   if (!c) throw new Error('HoverCard parts must be used within <HoverCardRoot>');
@@ -76,7 +76,7 @@ export function HoverCardRoot(props: HoverCardRootProps) {
   onCleanup(() => clearTimeout(timer));
 
   return (
-    <Ctx.Provider value={{
+    <Ctx value={{
       open, enter, leave, close,
       setTrigger, setContent,
       trigger, content,
@@ -84,7 +84,7 @@ export function HoverCardRoot(props: HoverCardRootProps) {
       disabled: () => props.disabled ?? false,
     }}>
       {props.children}
-    </Ctx.Provider>
+    </Ctx>
   );
 }
 
@@ -177,6 +177,13 @@ export function HoverCardTrigger(props: HoverCardTriggerProps) {
   // anybody should get.
   const isFocusable = () => (props.focusable ?? detectedInert()) && !ctx.disabled();
 
+  // V2-PORT: ref callbacks are UNOWNED in v2, so `onCleanup` inside the ref below
+  // silently no-ops (spike Q-D). Listener teardown registered from the ref lands in
+  // this component-scoped list instead, drained at component disposal — the same
+  // moment the old in-ref onCleanup ran (the trigger node is created once).
+  const refDisposers: (() => void)[] = [];
+  onCleanup(() => { for (const dispose of refDisposers) dispose(); refDisposers.length = 0; });
+
   return (
     <As
       as="span"
@@ -221,7 +228,7 @@ export function HoverCardTrigger(props: HoverCardTriggerProps) {
         const leave = () => ctx.leave();
         el.addEventListener('focusin', enter);
         el.addEventListener('focusout', leave);
-        onCleanup(() => {
+        refDisposers.push(() => {
           el.removeEventListener('focusin', enter);
           el.removeEventListener('focusout', leave);
         });
@@ -234,10 +241,10 @@ export function HoverCardTrigger(props: HoverCardTriggerProps) {
         evaluate();
         for (const slot of Array.from(el.querySelectorAll('slot'))) {
           slot.addEventListener('slotchange', evaluate);
-          onCleanup(() => slot.removeEventListener('slotchange', evaluate));
+          refDisposers.push(() => slot.removeEventListener('slotchange', evaluate));
         }
       }}
-      tabIndex={isFocusable() ? 0 : undefined}
+      tabindex={isFocusable() ? 0 : undefined}
       aria-describedby={isFocusable() && ctx.open() ? ctx.contentId : undefined}
       onPointerEnter={ctx.enter}
       onPointerLeave={ctx.leave}
@@ -335,7 +342,8 @@ export function HoverCardContent(props: HoverCardContentProps) {
 export interface HoverCardProps { trigger: JSX.Element; children: JSX.Element; class?: string; openDelay?: number; closeDelay?: number; placement?: Placement; }
 
 export function HoverCard(props: HoverCardProps) {
-  const [local] = splitProps(props, ['trigger', 'children', 'class', 'openDelay', 'closeDelay', 'placement']);
+  // V2-PORT: splitProps with no rest half -> plain alias.
+  const local = props;
   return (
     <HoverCardRoot openDelay={local.openDelay} closeDelay={local.closeDelay}>
       <HoverCardTrigger>{local.trigger}</HoverCardTrigger>
