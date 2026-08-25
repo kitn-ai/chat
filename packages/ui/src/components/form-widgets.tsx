@@ -3,13 +3,22 @@ import { cn } from '../utils/cn';
 import { Textarea } from '../ui/textarea';
 import { Input, FIELD_BASE as inputBase } from '../ui/input';
 import { Star } from 'lucide-solid';
-import type { FormField } from './form';
+import type { FieldMaskHint, FormField } from './form';
 
 /** The shared prop shape every leaf widget receives from FieldRow. */
 export interface WidgetProps {
   id: string;
   value: unknown;
   field: FormField;
+  /**
+   * The field's resolved format hints (spec §7.3), or an empty resolution.
+   *
+   * RESOLVED IN `FieldRow`, not here. The row already has to resolve them to render
+   * the format hint text and put its id in `aria-describedby`, and resolving the same
+   * untrusted `x-kai-*` keys a second time in the widget would warn twice about the
+   * same bad hint and could disagree with what the row said out loud.
+   */
+  mask?: FieldMaskHint;
   disabled: boolean;
   placeholder?: string;
   required: boolean;
@@ -65,6 +74,16 @@ export function TextWidget(
       disabled={props.disabled}
       minLength={props.field.minLength}
       maxLength={props.field.maxLength}
+      // Masking (spec §7.3). Each is `undefined` for a field with no format hints, so
+      // an unhinted field renders exactly the input it rendered before. The hint TEXT
+      // is deliberately not passed as `Input`'s own `hint`: `FieldRow` renders it and
+      // owns the `aria-describedby` chain, and `Input`'s hint would mint a second one
+      // (spec §6). The submitted value is the CANONICAL one — `Input` emits canonical
+      // through `onValueInput` whenever a mask is active (spec §4), which is what
+      // makes "exactly one value per field" true without this widget choosing.
+      format={props.mask?.format}
+      guide={props.mask?.guide}
+      semantic={props.mask?.semantic}
       {...ariaProps(props)}
       onValueInput={(value) => props.onInput(value)}
       onValueChange={() => props.onBlur()}

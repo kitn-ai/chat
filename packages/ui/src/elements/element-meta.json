@@ -4141,14 +4141,14 @@
       },
       {
         "name": "data",
-        "type": "undefined | { type: \"object\"; title?: undefined | string; description?: undefined | string; required?: undefined | string[]; properties: Record<string, { type: \"string\" | \"number\" | \"integer\" | \"boolean\" | \"array\" | \"object\"; title?: undefined | string; description?: undefined | string; default?: unknown; enum?: undefined | unknown[]; format?: undefined | \"email\" | \"uri\" | \"url\" | \"date\" | \"date-time\" | \"time\"; minimum?: undefined | number; maximum?: undefined | number; minLength?: undefined | number; maxLength?: undefined | number; pattern?: undefined | string; minItems?: undefined | number; maxItems?: undefined | number; items?: undefined | Record<string, unknown> | { enum: unknown[] }; properties?: undefined | Record<string, Record<string, unknown>>; required?: undefined | string[]; readOnly?: undefined | false | true; \"x-kai-widget\"?: undefined | \"textarea\" | \"slider\" | \"rating\" | \"radio\" | \"select\" | \"checkbox\" | \"password\" | \"switch\"; \"x-kai-placeholder\"?: undefined | string; \"x-kai-step\"?: undefined | number }>; \"x-kai-order\"?: undefined | string[]; \"x-kai-inlineMax\"?: undefined | number; \"x-kai-submitLabel\"?: undefined | string; \"x-kai-dismissible\"?: undefined | false | true; \"x-kai-actions\"?: undefined | { id: string; label: string; variant?: undefined | \"default\" | \"ghost\" | \"outline\" }[] }",
+        "type": "undefined | { type: \"object\"; title?: undefined | string; description?: undefined | string; required?: undefined | string[]; properties: Record<string, { type: \"string\" | \"number\" | \"integer\" | \"boolean\" | \"array\" | \"object\"; title?: undefined | string; description?: undefined | string; default?: unknown; enum?: undefined | unknown[]; format?: undefined | \"email\" | \"uri\" | \"url\" | \"date\" | \"date-time\" | \"time\"; minimum?: undefined | number; maximum?: undefined | number; minLength?: undefined | number; maxLength?: undefined | number; pattern?: undefined | string; minItems?: undefined | number; maxItems?: undefined | number; items?: undefined | Record<string, unknown> | { enum: unknown[] }; properties?: undefined | Record<string, Record<string, unknown>>; required?: undefined | string[]; readOnly?: undefined | false | true; \"x-kai-widget\"?: undefined | \"textarea\" | \"slider\" | \"rating\" | \"radio\" | \"select\" | \"checkbox\" | \"password\" | \"switch\"; \"x-kai-placeholder\"?: undefined | string; \"x-kai-step\"?: undefined | number; \"x-kai-format\"?: undefined | \"tel\" | \"ssn\" | \"credit-card\" | \"custom\"; \"x-kai-mask\"?: undefined | string; \"x-kai-mask-guide\"?: undefined | string }>; \"x-kai-order\"?: undefined | string[]; \"x-kai-inlineMax\"?: undefined | number; \"x-kai-submitLabel\"?: undefined | string; \"x-kai-dismissible\"?: undefined | false | true; \"x-kai-actions\"?: undefined | { id: string; label: string; variant?: undefined | \"default\" | \"ghost\" | \"outline\" }[] }",
         "optional": true,
         "scalar": false,
         "description": "The form definition: a JSON Schema (`type:'object'`) + `x-kai-*` UI hints (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object', properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for the full shape. It IS self-referential (`FormField.properties` is another `FormField` map), and the generated `element-types.d.ts` inlines every named type, so the shipped declaration bottoms out in a `Record<string, unknown>` placeholder one level down rather than carrying the recursion. That is why `FormDefinition` is a `type` alias: an interface gets no implicit index signature, so it would not be assignable to that placeholder.",
         "typeName": "FormDefinition",
-        "typeShape": "{ type: \"object\"; title?: undefined | string; description?: undefined | string; required?: undefined | string[]; properties: Record<string, { type: \"string\" | \"number\" | \"integer\" | \"boolean\" | \"array\" | \"object\"; title?: undefined | string; description?: undefined | string; default?: unknown; enum?: undefined | unknown[]; format?: undefined | \"email\" | \"uri\" | \"url\" | \"date\" | \"date-time\" | \"time\"; minimum?: undefined | number; maximum?: undefined | number; minLength?: undefined | number; maxLength?: undefined | number; pattern?: undefined | string; minItems?: undefined | number; maxItems?: undefined | number; items?: undefined | Record<string, unknown> | { enum: unknown[] }; properties?: undefined | Record<string, Record<string, unknown>>; required?: undefined | string[]; readOnly?: undefined | false | true; \"x-kai-widget\"?: undefined | \"textarea\" | \"slider\" | \"rating\" | \"radio\" | \"select\" | \"checkbox\" | \"password\" | \"switch\"; \"x-kai-placeholder\"?: undefined | string; \"x-kai-step\"?: undefined | number }>; \"x-kai-order\"?: undefined | string[]; \"x-kai-inlineMax\"?: undefined | number; \"x-kai-submitLabel\"?: undefined | string; \"x-kai-dismissible\"?: undefined | false | true; \"x-kai-actions\"?: undefined | { id: string; label: string; variant?: undefined | \"default\" | \"ghost\" | \"outline\" }[] }",
+        "typeShape": "{ type: \"object\"; title?: undefined | string; description?: undefined | string; required?: undefined | string[]; properties: Record<string, { type: \"string\" | \"number\" | \"integer\" | \"boolean\" | \"array\" | \"object\"; title?: undefined | string; description?: undefined | string; default?: unknown; enum?: undefined | unknown[]; format?: undefined | \"email\" | \"uri\" | \"url\" | \"date\" | \"date-time\" | \"time\"; minimum?: undefined | number; maximum?: undefined | number; minLength?: undefined | number; maxLength?: undefined | number; pattern?: undefined | string; minItems?: undefined | number; maxItems?: undefined | number; items?: undefined | Record<string, unknown> | { enum: unknown[] }; properties?: undefined | Record<string, Record<string, unknown>>; required?: undefined | string[]; readOnly?: undefined | false | true; \"x-kai-widget\"?: undefined | \"textarea\" | \"slider\" | \"rating\" | \"radio\" | \"select\" | \"checkbox\" | \"password\" | \"switch\"; \"x-kai-placeholder\"?: undefined | string; \"x-kai-step\"?: undefined | number; \"x-kai-format\"?: undefined | \"tel\" | \"ssn\" | \"credit-card\" | \"custom\"; \"x-kai-mask\"?: undefined | string; \"x-kai-mask-guide\"?: undefined | string }>; \"x-kai-order\"?: undefined | string[]; \"x-kai-inlineMax\"?: undefined | number; \"x-kai-submitLabel\"?: undefined | string; \"x-kai-dismissible\"?: undefined | false | true; \"x-kai-actions\"?: undefined | { id: string; label: string; variant?: undefined | \"default\" | \"ghost\" | \"outline\" }[] }",
         "typeImport": "FormDefinition",
-        "displayType": "undefined | { type: \"object\"; title?: undefined | string; description?: undefined | string; required?: undefined | string[]; properties: Record<string, { type: \"string\" | \"number\" | \"integer\" | \"boolean\" | \"array\" | \"object\"; title?: undefined | string; description?: undefined | string; default?: unknown; enum?: undefined | unknown[]; format?: undefined | \"email\" | \"uri\" | \"url\" | \"date\" | \"date-time\" | \"time\"; minimum?: undefined | number; maximum?: undefined | number; minLength?: undefined | number; maxLength?: undefined | number; pattern?: undefined | string; minItems?: undefined | number; maxItems?: undefined | number; items?: undefined | Record<string, unknown> | { enum: unknown[] }; properties?: undefined | Record<string, Record<string, unknown>>; required?: undefined | string[]; readOnly?: undefined | false | true; \"x-kai-widget\"?: undefined | \"textarea\" | \"slider\" | \"rating\" | \"radio\" | \"select\" | \"checkbox\" | \"password\" | \"switch\"; \"x-kai-placeholder\"?: undefined | string; \"x-kai-step\"?: undefined | number }>; \"x-kai-order\"?: undefined | string[]; \"x-kai-inlineMax\"?: undefined | number; \"x-kai-submitLabel\"?: undefined | string; \"x-kai-dismissible\"?: undefined | false | true; \"x-kai-actions\"?: undefined | { id: string; label: string; variant?: undefined | \"default\" | \"ghost\" | \"outline\" }[] }"
+        "displayType": "undefined | { type: \"object\"; title?: undefined | string; description?: undefined | string; required?: undefined | string[]; properties: Record<string, { type: \"string\" | \"number\" | \"integer\" | \"boolean\" | \"array\" | \"object\"; title?: undefined | string; description?: undefined | string; default?: unknown; enum?: undefined | unknown[]; format?: undefined | \"email\" | \"uri\" | \"url\" | \"date\" | \"date-time\" | \"time\"; minimum?: undefined | number; maximum?: undefined | number; minLength?: undefined | number; maxLength?: undefined | number; pattern?: undefined | string; minItems?: undefined | number; maxItems?: undefined | number; items?: undefined | Record<string, unknown> | { enum: unknown[] }; properties?: undefined | Record<string, Record<string, unknown>>; required?: undefined | string[]; readOnly?: undefined | false | true; \"x-kai-widget\"?: undefined | \"textarea\" | \"slider\" | \"rating\" | \"radio\" | \"select\" | \"checkbox\" | \"password\" | \"switch\"; \"x-kai-placeholder\"?: undefined | string; \"x-kai-step\"?: undefined | number; \"x-kai-format\"?: undefined | \"tel\" | \"ssn\" | \"credit-card\" | \"custom\"; \"x-kai-mask\"?: undefined | string; \"x-kai-mask-guide\"?: undefined | string }>; \"x-kai-order\"?: undefined | string[]; \"x-kai-inlineMax\"?: undefined | number; \"x-kai-submitLabel\"?: undefined | string; \"x-kai-dismissible\"?: undefined | false | true; \"x-kai-actions\"?: undefined | { id: string; label: string; variant?: undefined | \"default\" | \"ghost\" | \"outline\" }[] }"
       },
       {
         "name": "cardId",
@@ -4513,7 +4513,7 @@
         "type": "undefined | string",
         "optional": true,
         "scalar": true,
-        "description": "Controlled value. Settable and reflected to the `value` attribute. `el.value = 'hi'` drives it (no event); typing updates it and fires `kai-input`. Read `el.value` for live state.",
+        "description": "Controlled value, and always the CANONICAL one when a mask is active: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom` (spec §4). Settable and reflected to the `value` attribute. `el.value = '5551234567'` drives it (no event) and is re-fitted to the mask on the way in, so the field shows `555-123-4567`. Read `el.value` for live state; the formatted text rides along on every `kai-input` / `kai-change` detail as `formattedValue`.",
         "displayType": "undefined | string"
       },
       {
@@ -4612,20 +4612,66 @@
         "scalar": true,
         "description": "Virtual-keyboard hint forwarded to the inner input (e.g. `numeric`, `email`).",
         "displayType": "undefined | string"
+      },
+      {
+        "name": "format",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Mask pattern: `#` a digit, `@` a letter or digit, `*` an obscurable letter or digit, and every other character a positional literal (`@@@-####` → `CHG-4821`). The literal `default` is the opt-in sentinel: it resolves to the default format of `semantic` (`tel` → `###-###-####`). A bare `semantic` never starts masking on its own, so an opt-in token is what turns tier 2 on.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "guide",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Placeholder guide shown at unfilled positions, aligned position for position with `format`: `mm/dd/yyyy` against `##/##/####`. Spaces are a valid guide character, so a guide of blanks and separators is how a phone field shows its shape without showing letters. Without a guide the field shows only up to the last typed character. A guide is a visual aid, never an accessible name: keep the `hint` text as well.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "semantic",
+        "type": "undefined | \"credit-card\" | \"custom\" | \"ssn\" | \"tel\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Semantic field type: `tel` · `ssn` · `credit-card` · `custom`. On its own it sets `inputmode` / `autocomplete` / `spellcheck` / `autocorrect` / `autocapitalize` and decides the canonical value; it never starts masking by itself.",
+        "displayType": "undefined | \"credit-card\" | \"custom\" | \"ssn\" | \"tel\""
+      },
+      {
+        "name": "caseMode",
+        "type": "undefined | \"preserve\" | \"upper\" | \"lower\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Case folding applied to typed and pasted text: `preserve` (default) · `upper` · `lower`. Attribute: `case-mode`.",
+        "displayType": "undefined | \"preserve\" | \"upper\" | \"lower\""
+      },
+      {
+        "name": "copyPolicy",
+        "type": "undefined | \"formatted\" | \"canonical\" | \"obscured\" | \"blocked\"",
+        "optional": true,
+        "scalar": true,
+        "description": "What a copy or cut of a masked field puts on the clipboard: `canonical` (default) · `formatted` · `obscured` · `blocked`. Attribute: `copy-policy`.",
+        "displayType": "undefined | \"formatted\" | \"canonical\" | \"obscured\" | \"blocked\""
       }
     ],
     "events": [
       {
         "name": "kai-change",
-        "detail": "{ value: string }",
-        "description": "The value was committed (blur).",
-        "displayDetail": "{ value: string }"
+        "detail": "{ value: string; formattedValue: string }",
+        "description": "The value was committed (blur). Same detail shape as `kai-input`.",
+        "displayDetail": "{ value: string; formattedValue: string }"
       },
       {
         "name": "kai-input",
-        "detail": "{ value: string }",
-        "description": "The value changed per keystroke.",
-        "displayDetail": "{ value: string }"
+        "detail": "{ value: string; formattedValue: string }",
+        "description": "The value changed per keystroke. `value` is the canonical value (what a backend wants); `formattedValue` is the text on screen. With no mask the two are equal.",
+        "displayDetail": "{ value: string; formattedValue: string }"
+      },
+      {
+        "name": "kai-input-rejected",
+        "detail": "{ reason: \"full\" | \"wrong-class\" | \"over-capacity\" | \"format-change-clipped\"; data: string }",
+        "description": "A mask refused, or partly refused, some content. The reasons are `full` (no free position left), `wrong-class` (a letter into a digit position), `over-capacity` (a paste longer than the mask holds; what fits was kept), and `format-change-clipped` (the `format` changed under a value that no longer fits). `data` is the content that was refused. The first three are USER-INPUT errors, and are the ones worth announcing in a polite live region. `format-change-clipped` is not one: it follows the app changing its own configuration, so it reports and nothing more. None of the four touches validity, so `invalid` and `error` stay the consumer decision.",
+        "displayDetail": "{ reason: \"full\" | \"wrong-class\" | \"over-capacity\" | \"format-change-clipped\"; data: string }"
       }
     ],
     "methods": [
@@ -4642,10 +4688,22 @@
         "description": "Select the inner input's text."
       },
       {
+        "name": "getRawValue",
+        "params": "",
+        "returns": "string",
+        "description": "The canonical value: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom`, and the field text when no mask is on. Identical to reading `el.value`; it carries the name spec §5.8 uses for the submitted form of a masked field, so code written against that name finds it. The mask engine has a third, narrower notion of raw (the fill characters with no literals at all) and that one is internal: it is not what any backend wants and it is not exposed here."
+      },
+      {
+        "name": "getFormattedValue",
+        "params": "",
+        "returns": "string",
+        "description": "The text on screen, literals and guide included. The counterpart to `formattedValue` on the `kai-input` / `kai-change` details, for a consumer that needs it outside an event."
+      },
+      {
         "name": "clear",
         "params": "",
         "returns": "void",
-        "description": "Empty the value and fire `kai-change` with `''`."
+        "description": "Empty the value and fire `kai-change` with `''`. On a masked field this resets the mask itself, not just the text on screen, so the next character starts over."
       }
     ],
     "composedFrom": [

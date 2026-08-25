@@ -1,0 +1,92 @@
+[
+  {
+    "key": "4",
+    "active": {
+      "tag": "input",
+      "id": "f-oncall-chn1o9",
+      "value": "4",
+      "sameNode": true
+    }
+  },
+  {
+    "key": "1",
+    "active": {
+      "tag": "input",
+      "id": "f-oncall-chn1o9",
+      "value": "41",
+      "sameNode": true
+    }
+  },
+  {
+    "key": "5",
+    "active": {
+      "tag": "input",
+      "id": "f-oncall-chn1o9",
+      "value": "415",
+      "sameNode": true
+    }
+  },
+  {
+    "key": "5",
+    "active": {
+      "tag": "input",
+      "id": "f-oncall-chn1o9",
+      "value": "415-5",
+      "sameNode": true
+    }
+  },
+  {
+    "key": "5",
+    "active": {
+      "tag": "input",
+      "id": "f-oncall-chn1o9",
+      "value": "415-55",
+      "sameNode": true
+    }
+  },
+  {
+    "key": "5",
+    "active": {
+      "tag": "input",
+      "id": "f-oncall-chn1o9",
+      "value": "415-555",
+      "sameNode": true
+    }
+  },
+  {
+    "key": "0",
+    "active": {
+      "tag": "input",
+      "id": "f-oncall-chn1o9",
+      "value": "415-555-0",
+      "sameNode": true
+    }
+  },
+  {
+    "key": "1",
+    "active": {
+      "tag": "input",
+      "id": "f-oncall-chn1o9",
+      "value": "415-555-01",
+      "sameNode": true
+    }
+  },
+  {
+    "key": "4",
+    "active": {
+      "tag": "input",
+      "id": "f-oncall-chn1o9",
+      "value": "415-555-014",
+      "sameNode": true
+    }
+  },
+  {
+    "key": "2",
+    "active": {
+      "tag": "input",
+      "id": "f-oncall-chn1o9",
+      "value": "415-555-0142",
+      "sameNode": true
+    }
+  }
+]

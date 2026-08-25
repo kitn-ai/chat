@@ -1,0 +1,151 @@
+---
+title: Field Formats & Masks
+description: Opt-in input masks on kai-input and form cards - the token vocabulary, semantic field types, canonical values, and the accessibility contract you inherit.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A ticket id, a phone number, a date: fields with a fixed shape read better when the field enforces the shape as you type. `<kai-input>` and the [form card](/components/form/) share one mask engine for that. It is strictly opt-in: a field with no `format` behaves exactly as before, and a semantic type on its own never starts masking.
+
+```html
+<kai-input label="Change ticket" format="@@@-####" case-mode="upper"
+           hint="Three letters, a dash, four digits."></kai-input>
+```
+
+Typing `chg4821` shows `CHG-4821`. Pasting `chg 4821` or `CHG-4821` lands on the same value. `el.value` and every `kai-input` / `kai-change` event detail carry `CHG-4821`, once, as the field's single canonical value.
+
+## The token vocabulary
+
+A `format` string is read one character at a time:
+
+| Token | Accepts |
+|---|---|
+| `#` | one digit |
+| `@` | one letter or digit |
+| `*` | one letter or digit, obscurable in display |
+| anything else | a literal, shown at its position |
+
+Literals are identified by **position, not by character class**. That is the load-bearing rule: under `V-***`, pasting `V-123` yields `V-123`, because the pattern's leading letter is consumed as the literal it is rather than read as user input. Unknown characters are always literals, never new tokens, and a format longer than 64 characters is refused outright (the same cap the form card's `x-kai-mask` declares).
+
+`guide` shows placeholder text at the unfilled positions, aligned position for position with `format`:
+
+```html
+<kai-input label="Maintenance window" format="##/##/####" guide="mm/dd/yyyy"
+           hint="mm/dd/yyyy. Shape only - the date is not checked."></kai-input>
+```
+
+<Aside type="caution">
+A date mask is a **mask, not date validation**. `##/##/####` enforces digits in the right positions and nothing else: it does not know there is no 13th month or that February is short, and `99/99/9999` fits it. Whether a date exists, or is allowed, stays your call - validate it where you validate everything else.
+</Aside>
+
+Without a `guide` the field shows text only up to the last typed character. A guide is a visual aid, never an accessible description; keep the text `hint` (see [Accessibility](#accessibility-what-you-inherit)).
+
+## Semantic field types
+
+`semantic` names what the field *is*. On its own it sets the attributes a browser and a screen reader already understand (`inputmode`, `autocomplete`, `spellcheck`, `autocorrect`, `autocapitalize`) and decides the canonical value. It never turns masking on by itself; `format="default"` is the opt-in that resolves the type's standard mask.
+
+| `semantic` | `inputmode` | `autocomplete` | `format="default"` resolves to | Canonical value |
+|---|---|---|---|---|
+| `tel` | `tel` | `tel` | `###-###-####` | digits only |
+| `ssn` | `numeric` | `off` (no standard token exists) | `###-##-####` | digits only |
+| `credit-card` | `numeric` | `cc-number` | `#### #### #### ####` | digits only |
+| `custom` | inherited | inherited | none - `format` is the mask | formatted, trailing placeholders trimmed |
+
+```html
+<kai-input label="On-call contact" semantic="tel" format="default"></kai-input>
+```
+
+## Normalization
+
+Input is normalized leniently, whether it arrives by keystroke, paste, autofill, drag, or a programmatic `el.value =` write:
+
+- A character of the wrong class for its position is discarded; the position waits for the next one. That is what absorbs separators and spaces: `chg 4821`, `CHG-4821` and `chg4821` all normalize to the same value under `@@@-####`.
+- A literal in the input is consumed where the pattern's literal sits, so a pattern's own prefix is never re-read as content.
+- `case-mode` folds accepted letters: `preserve` (default), `upper`, or `lower`.
+- Capacity is the number of fill positions. What fits is kept; what does not is reported (below), never silently dropped.
+
+## One canonical value per field
+
+A masked field has one submitted form, decided by its semantic type, not by a prop and not by the model:
+
+- `tel`, `ssn`, `credit-card` submit **digits only**. Separators are presentation; every backend re-derives them.
+- `custom` submits the **formatted text with trailing placeholders trimmed**. The literals are part of the datum: `CHG-4821` is the ticket id, `4821` is not. An empty field submits `''`, never the bare template.
+
+`el.value`, the `value` in every `kai-input` / `kai-change` event detail, and what a form card puts in its submission are all this canonical value. The text on screen rides along as `formattedValue` on the same details, or via `el.getFormattedValue()`. There is deliberately no raw-or-formatted switch: a per-field toggle would make the same field round-trip differently depending on who set it.
+
+## Rejections are loud
+
+A refused edit leaves the text unchanged and fires `kai-input-rejected`:
+
+| `reason` | Meaning |
+|---|---|
+| `full` | no free position left |
+| `wrong-class` | e.g. a letter into a digit position |
+| `over-capacity` | a paste longer than the mask holds; what fit was kept |
+| `format-change-clipped` | the `format` prop changed under a value that no longer fits |
+
+The first three are user-input errors and are worth announcing in a polite live region. None of the four touches validity: `invalid` and `error` stay yours.
+
+```js
+field.addEventListener('kai-input-rejected', (e) => {
+  liveRegion.textContent = e.detail.reason === 'wrong-class'
+    ? 'That character does not fit here.'
+    : 'The field is full.';
+});
+```
+
+## Accessibility: what you inherit
+
+The mask engine carries the Section 508 / WCAG 2.2 AA plumbing so you do not re-derive it per field:
+
+- A semantic type sets `inputmode` and `autocomplete`, which is WCAG 1.3.5 (Identify Input Purpose) done at the field.
+- The `hint` text is linked to the control with `aria-describedby`. The form card does the same with the mask's own format hint. A visual guide is **not** an accessible description, so always state the expected format in text.
+- The caret never rests inside a literal run, and clamping is confined to within-field placement: Tab, Shift-Tab, Home, End, select-all and find-in-page behave natively. No auto-advance, no split boxes.
+- IME composition is never interrupted; reconciliation happens once, when the composition ends. Dictation and Android word suggestions arrive through the same safe path.
+- Browser autofill is normalized through the mask, not rejected, so the `autocomplete` tokens keep paying off.
+
+What stays yours: announcing rejections (wire `kai-input-rejected` to a live region), and all validation. The kit ships no Luhn check, no phone-number parsing, no date-reality check - a mask shapes what is typed; whether the value is acceptable is an app decision.
+
+## Form cards: letting the model ask for a format
+
+A model-authored [form card](/components/form/) declares formats per field with three `x-kai-*` hints in its schema:
+
+- **`x-kai-format`** - enum: `tel` · `ssn` · `credit-card` · `custom`. Enum-constrained on the projected tool schema, so even a small model picks a valid token instead of inventing a mask dialect.
+- **`x-kai-mask`** - the token string, read only with `x-kai-format: "custom"` (capped at 64 characters).
+- **`x-kai-mask-guide`** - the display guide; derived from the pattern when absent. A misaligned guide is dropped with a console warning and the mask survives.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "ticket": {
+      "type": "string",
+      "title": "Change ticket",
+      "pattern": "^CHG-[0-9]{4}$",
+      "x-kai-format": "custom",
+      "x-kai-mask": "CHG-####"
+    },
+    "window": {
+      "type": "string",
+      "title": "Maintenance window",
+      "description": "mm/dd/yyyy. A mask, not a date check.",
+      "x-kai-format": "custom",
+      "x-kai-mask": "##/##/####",
+      "x-kai-mask-guide": "mm/dd/yyyy"
+    },
+    "oncall": {
+      "type": "string",
+      "title": "On-call contact",
+      "x-kai-format": "tel"
+    }
+  }
+}
+```
+
+The submission carries each field's canonical value (`CHG-4821`, digits for the phone), and the payload validates against the same schema it rendered from. Note the ticket field: `x-kai-mask` shapes typing, the ordinary JSON Schema `pattern` is still the only check. The two are declared separately on purpose.
+
+Everything a model emits is untrusted. An `x-kai-format` outside the enum, a mask over the cap, or a pattern with no fill positions degrades that field to a plain text input with a console warning - loudly, never a guess.
+
+<Aside type="note">
+**An app cannot pin a format onto a model-authored form.** `cardTools({ require })` narrows a projected tool schema by dot-path, but a form card's payload is itself a JSON Schema: there is no node at `properties.ticketId` for a rule to land on, so the call throws rather than silently narrowing nothing. App-side format pinning is unavailable. An app that needs a specific format on a specific field authors the form definition itself and sends the envelope, instead of letting the model write the form. The enum makes a model-authored format *likely* to be valid; authoring the form is what makes it certain.
+</Aside>

@@ -11,7 +11,27 @@
     "description": { "type": "string" },
     "required": { "type": "array", "items": { "type": "string" } },
     "properties": {
-      "type": "object"
+      "type": "object",
+      "description": "The fields to collect, keyed by property name. Each value is a JSON Schema field definition (type, title, description, enum, minimum/maximum, minLength/maxLength, pattern, items) plus optional x-kai-* UI hints. Only the display-format hints are spelled out below; the rest of a field definition is ordinary JSON Schema.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "x-kai-format": {
+            "description": "Display format for a string field. `tel`, `ssn` and `credit-card` apply that type's standard mask and submit digits only; `custom` masks with `x-kai-mask` and submits the formatted value. Omit it for a plain text field.",
+            "enum": ["tel", "ssn", "credit-card", "custom"]
+          },
+          "x-kai-mask": {
+            "description": "The mask pattern, used only with `x-kai-format: \"custom\"`: `#` one digit, `@` one letter or digit, `*` one letter or digit that may be obscured; every other character is a literal shown as typed, e.g. `CHG-####`.",
+            "type": "string",
+            "maxLength": 64
+          },
+          "x-kai-mask-guide": {
+            "description": "Placeholder text shown at the unfilled positions of the mask, aligned character for character with the pattern (`mm/dd/yyyy` for `##/##/####`). Derived from the pattern when omitted.",
+            "type": "string",
+            "maxLength": 64
+          }
+        }
+      }
     },
     "x-kai-order": { "type": "array", "items": { "type": "string" } },
     "x-kai-inlineMax": { "type": "integer", "minimum": 1 },

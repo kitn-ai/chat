@@ -1,0 +1,17 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Deploy the payments service to production"
+    },
+    {
+      "role": "assistant",
+      "content": "Deploying **payments** to production needs two things I will not guess: the target region and the change ticket it is authorised under. Fill these in and I will draft the approval.[card parameters id=call_mt7t9bqw_0] the operator submitted {\"region\":\"us-east-1\",\"ticket\":\"CHG-4821\"}."
+    }
+  ],
+  "intent": "deploy-approval",
+  "params": {
+    "region": "us-east-1",
+    "ticket": "CHG-4821"
+  }
+}

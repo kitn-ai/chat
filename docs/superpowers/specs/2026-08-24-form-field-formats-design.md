@@ -194,8 +194,12 @@ against the same JSON Schema it was rendered from, and a field carrying two shap
 non-canonical form stays reachable on the element (a `formattedValue` getter / the `kai-input`
 event detail) for consumers who need both.
 
-A consumer who disagrees overrides per field on the *element* surface (`value-type="formatted"` on
-`<kai-input>`); that prop exists and is not model-settable.
+~~A consumer who disagrees overrides per field on the *element* surface
+(`value-type="formatted"` on `<kai-input>`); that prop exists and is not model-settable.~~
+**Superseded by O-5 (below):** no `value-type` prop is surfaced on `<kai-input>`. Canonical form
+per semantic type is the whole contract, so there is no per-field override to reach for; a consumer
+who needs the other form reads `formattedValue` off the `kai-input` / `kai-change` detail or calls
+`el.getFormattedValue()`. Struck through rather than deleted so the decision stays legible.
 
 ---
 

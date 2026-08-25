@@ -1,0 +1,47 @@
+[
+  {
+    "id": "f-region-gzq80i",
+    "tag": "select",
+    "value": "us-east-1",
+    "placeholder": null,
+    "inputmode": null,
+    "autocomplete": null,
+    "describedby": "f-region-gzq80i-desc"
+  },
+  {
+    "id": "f-ticket-3doz57",
+    "tag": "input",
+    "value": "CHG-####",
+    "placeholder": "CHG-4821",
+    "inputmode": null,
+    "autocomplete": null,
+    "describedby": "f-ticket-3doz57-desc f-ticket-3doz57-fmt"
+  },
+  {
+    "id": "f-window-t0ampo",
+    "tag": "input",
+    "value": "mm/dd/yyyy",
+    "placeholder": "",
+    "inputmode": null,
+    "autocomplete": null,
+    "describedby": "f-window-t0ampo-desc f-window-t0ampo-fmt"
+  },
+  {
+    "id": "f-oncall-chn1o9",
+    "tag": "input",
+    "value": "",
+    "placeholder": "",
+    "inputmode": "tel",
+    "autocomplete": "tel",
+    "describedby": "f-oncall-chn1o9-desc f-oncall-chn1o9-fmt"
+  },
+  {
+    "id": "f-note-3epbut",
+    "tag": "textarea",
+    "value": "",
+    "placeholder": "Anything the on-call should know.",
+    "inputmode": null,
+    "autocomplete": null,
+    "describedby": "f-note-3epbut-desc"
+  }
+]

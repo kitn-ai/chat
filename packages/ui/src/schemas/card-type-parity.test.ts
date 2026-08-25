@@ -186,11 +186,15 @@ const DIVERGENCES: readonly Divergence[] = [
     path: '$.properties',
     why:
       "DELIBERATE and load-bearing. kai-form's data IS a JSON Schema, so `properties` is a " +
-      'map of field definitions. The schema stops at `{"type":"object"}` rather than ' +
-      'describing `FormField` (20 keys, the x-kai-widget enum, the recursion) because ' +
-      'describing it fully means handing a model a meta-schema to fill in. TypeScript can ' +
-      'afford `Record<string, FormField>`; the model-facing document cannot. This is the ' +
-      'single reason FormDefinition cannot be generated from its schema.',
+      'map of field definitions. The schema does not describe `FormField` (20-odd keys, the ' +
+      'x-kai-widget enum, the recursion) because describing it fully means handing a model a ' +
+      'meta-schema to fill in. TypeScript can afford `Record<string, FormField>`; the ' +
+      'model-facing document cannot. This is the single reason FormDefinition cannot be ' +
+      'generated from its schema. What the field node DOES declare is the display-format ' +
+      'hints (x-kai-format / x-kai-mask / x-kai-mask-guide, form-field-formats spec §7.3), ' +
+      'because the enum on x-kai-format is the whole reason a small model picks a valid ' +
+      'token — that is an `additionalProperties` subschema, which this key-set parity check ' +
+      'does not walk, so the omission this divergence declares is unchanged.',
   },
   {
     kind: 'schema-omits-shape',

@@ -1,0 +1,130 @@
+[
+  {
+    "name": "the masked fields are all on the card",
+    "pass": true,
+    "detail": {
+      "ticketId": "f-ticket-3doz57",
+      "windowId": "f-window-t0ampo",
+      "oncallId": "f-oncall-chn1o9"
+    }
+  },
+  {
+    "name": "the change-ticket input took focus",
+    "pass": true,
+    "detail": {
+      "id": "f-ticket-3doz57",
+      "value": "CHG-####"
+    }
+  },
+  {
+    "name": "typing `chg4821` ONE KEY AT A TIME shows CHG-4821",
+    "pass": true,
+    "detail": {
+      "finalValue": "CHG-4821"
+    }
+  },
+  {
+    "name": "focus stayed on the SAME input node for every key",
+    "pass": true,
+    "detail": {
+      "lostAt": []
+    }
+  },
+  {
+    "name": "the maintenance-window input took focus",
+    "pass": true,
+    "detail": {
+      "id": "f-window-t0ampo",
+      "value": "mm/dd/yyyy"
+    }
+  },
+  {
+    "name": "the DATE mask formats 09152026 into 09/15/2026 via pressSequentially",
+    "pass": true,
+    "detail": {
+      "value": "09/15/2026",
+      "focused": {
+        "tag": "input",
+        "id": "f-window-t0ampo",
+        "value": "09/15/2026",
+        "sameNode": true
+      }
+    }
+  },
+  {
+    "name": "the on-call input took focus",
+    "pass": true,
+    "detail": {
+      "id": "f-oncall-chn1o9",
+      "value": ""
+    }
+  },
+  {
+    "name": "the `tel` SEMANTIC formats 4155550142 as 415-555-0142 on screen",
+    "pass": true,
+    "detail": {
+      "finalValue": "415-555-0142"
+    }
+  },
+  {
+    "name": "and `tel` carried its tier-1 attributes onto the control",
+    "pass": true,
+    "detail": {
+      "id": "f-oncall-chn1o9",
+      "tag": "input",
+      "value": "415-555-0142",
+      "placeholder": "",
+      "inputmode": "tel",
+      "autocomplete": "tel",
+      "describedby": "f-oncall-chn1o9-desc f-oncall-chn1o9-fmt"
+    }
+  },
+  {
+    "name": "the SUBMITTED ticket is the canonical masked value CHG-4821",
+    "pass": true,
+    "detail": {
+      "params": {
+        "region": "us-east-1",
+        "ticket": "CHG-4821",
+        "window": "09/15/2026",
+        "oncall": "4155550142"
+      }
+    }
+  },
+  {
+    "name": "the submitted date keeps its literals (custom canonical = formatted)",
+    "pass": true,
+    "detail": {
+      "window": "09/15/2026"
+    }
+  },
+  {
+    "name": "the submitted phone number is DIGITS (tel canonical strips separators)",
+    "pass": true,
+    "detail": {
+      "oncall": "4155550142"
+    }
+  },
+  {
+    "name": "the next turn reads CHG-4821 back",
+    "pass": true,
+    "detail": {
+      "hasTicket": true
+    }
+  },
+  {
+    "name": "the next turn reads the window back",
+    "pass": true,
+    "detail": {
+      "hasWindow": true
+    }
+  },
+  {
+    "name": "the run the board is showing carries the TYPED ticket, not a default",
+    "pass": true,
+    "detail": {
+      "approved": "Approve deploy",
+      "boardApi": "{\"runId\":\"run-mt7t8kzf\",\"service\":\"payments\",\"region\":\"us-east-1\",\"ticket\":\"CHG-4821\",\"status\":\"deploying\",\"steps\":[{\"id\":\"build\",\"label\":\"Build image\",\"description\":\"payments:18c2afa — multi-stage build\",\"state\":\"running\"},{\"id\":\"migrate\",\"label\":\"Run migrations\",\"description\":\"3 pending migrations"
+    }
+  }
+]

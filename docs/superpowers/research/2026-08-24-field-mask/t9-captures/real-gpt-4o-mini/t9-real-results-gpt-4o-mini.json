@@ -1,0 +1,104 @@
+[
+  {
+    "name": "the request the app SENT UPSTREAM carries the kai_parameters tool",
+    "pass": true,
+    "detail": {
+      "tools": [
+        "kai_approval",
+        "kai_parameters",
+        "kai_options",
+        "kai_checklist"
+      ],
+      "model": "openai/gpt-4o-mini",
+      "upstreamCalls": 2
+    }
+  },
+  {
+    "name": "x-kai-format / x-kai-mask / x-kai-mask-guide are present in the REQUEST BYTES",
+    "pass": true,
+    "detail": {
+      "format": true,
+      "mask": true,
+      "guide": true,
+      "bytes": 12169
+    }
+  },
+  {
+    "name": "and they sit on the FIELD schema of the form tool, with x-kai-format enum-constrained",
+    "pass": true,
+    "detail": {
+      "fieldKeys": [
+        "x-kai-format",
+        "x-kai-mask",
+        "x-kai-mask-guide"
+      ],
+      "enum": [
+        "tel",
+        "ssn",
+        "credit-card",
+        "custom"
+      ]
+    }
+  },
+  {
+    "name": "the model answered with a form card",
+    "pass": true,
+    "detail": {
+      "title": "Deployment Parameters for Payments Service",
+      "fields": [
+        "region",
+        "change_ticket",
+        "maintenance_window_start_date",
+        "on_call_contact_number"
+      ],
+      "attempts": 2
+    }
+  },
+  {
+    "name": "what the model did with the hints",
+    "observation": {
+      "fieldsDeclaringAMask": [
+        {
+          "field": "maintenance_window_start_date",
+          "format": "custom",
+          "mask": "##/##/####",
+          "guide": "mm/dd/yyyy"
+        },
+        {
+          "field": "on_call_contact_number",
+          "format": "tel"
+        }
+      ],
+      "allFields": [
+        {
+          "field": "region",
+          "title": "Region",
+          "format": null,
+          "mask": null,
+          "pattern": null
+        },
+        {
+          "field": "change_ticket",
+          "title": "Change Ticket",
+          "format": null,
+          "mask": null,
+          "pattern": "^CHG-\\d{4}$"
+        },
+        {
+          "field": "maintenance_window_start_date",
+          "title": "Maintenance Window Start Date",
+          "format": "custom",
+          "mask": "##/##/####",
+          "pattern": "^(0[1-9]|1[0-2])/(?:(0[1-9]|[12][0-9]|3[01])|([1-9]))/\\d{4}$"
+        },
+        {
+          "field": "on_call_contact_number",
+          "title": "On-Call Contact Number",
+          "format": "tel",
+          "mask": null,
+          "pattern": "^\\(\\d{3}\\) \\d{3}-\\d{4}$"
+        }
+      ]
+    }
+  }
+]

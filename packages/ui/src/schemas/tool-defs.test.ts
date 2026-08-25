@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { cardFromToolCall, cardTypeFromToolName, KAI_TOOL_PREFIX } from './from-tool-call';
 import { cardSchemaNames, cardSchemas, type CardSchema } from './index';
 import { ANTHROPIC_STRICT, OPENAI_STRICT, checkProviderSubset } from './provider-subsets';
+import { FIELD_SEMANTIC_TYPES } from '../primitives/field-semantics';
 import {
   CARD_TOOL_DESCRIPTIONS,
   UnsupportedCardToolSchemaError,
@@ -201,6 +202,51 @@ describe('cardTools: the non-strict projection (the default, and the proven mode
     };
     expect(Object.keys(form.properties)).toContain('x-kai-order');
     expect(Object.keys(form.properties)).toContain('x-kai-submitLabel');
+  });
+
+  // O-1, PINNED AS A LIMITATION rather than left as prose (form-field-formats spec
+  // §7.3). `require` cannot narrow a form card's FIELDS, because the form payload is
+  // itself a JSON Schema and there is no node at `properties.ticketId` to land on. The
+  // documented behavior is the loud one — a TypeError naming the path — and this is
+  // here so that "an app can pin x-kai-format on a field" cannot quietly become true
+  // (or quietly become a SILENT no-op, which is the worse of the two ways to move).
+  it('cannot narrow a FORM FIELD, and says so instead of silently narrowing nothing', () => {
+    expect(() =>
+      cardTools({ provider: 'jsonschema', require: { form: [{ path: 'properties.ticketId', required: ['x-kai-format'] }] } }),
+    ).toThrow(/does not resolve/);
+  });
+
+  // The same distinction, one level deeper, and the DECISION for task 7: the
+  // field-format hints (`x-kai-format` / `x-kai-mask` / `x-kai-mask-guide`) are
+  // things the MODEL fills in on a field it is authoring, not hints our renderer
+  // reads off the tool schema. They must survive the projection on every provider
+  // or the feature does not exist on the wire at all — a stripped `x-kai-format`
+  // means the model is never told the four tokens and never emits one.
+  //
+  // They survive for the same structural reason `x-kai-order` does: they are
+  // property NAMES inside a `properties` map, not keywords applied to a node, and
+  // `project()` recurses `properties` by name. Nothing was added to the strip list
+  // to make this true, and nothing may be added that would make it false.
+  it('keeps the FIELD-FORMAT hints, with the enum intact, on all three providers', () => {
+    const fieldNodeOf = (params: unknown): Record<string, { enum?: unknown[] }> => {
+      const root = params as { properties: { properties: { additionalProperties: { properties: Record<string, { enum?: unknown[] }> } } } };
+      return root.properties.properties.additionalProperties.properties;
+    };
+
+    for (const [label, params] of [
+      ['jsonschema', cardTools({ provider: 'jsonschema' }).find((d) => d.name === 'kai_form')!.schema],
+      ['openai', openai().find((d) => d.function.name === 'kai_form')!.function.parameters],
+      ['anthropic', anthropic().find((d) => d.name === 'kai_form')!.input_schema],
+    ] as const) {
+      const node = fieldNodeOf(params);
+      expect(Object.keys(node), label).toEqual(
+        expect.arrayContaining(['x-kai-format', 'x-kai-mask', 'x-kai-mask-guide']),
+      );
+      // The enum is the whole point (spec §7.3, cheap-model reliability): a model
+      // picks a token from a list it can see. Reaching the wire as a bare string
+      // would be the silent half-failure.
+      expect(node['x-kai-format']!.enum, label).toEqual([...FIELD_SEMANTIC_TYPES]);
+    }
   });
 
   // The inverse maps tool input to `envelope.data` VERBATIM and sets no

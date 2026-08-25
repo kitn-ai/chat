@@ -1988,6 +1988,87 @@ A grouped, filterable command / mention palette (the `@`-picker pattern).
 
 ---
 
+### `<kai-input>` / `Input`
+
+<!-- spec:kai-input -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `type` | `type` | `undefined | string` | `'text'` | Native input type: `text` (default) · `email` · `url` · `search` · `tel` · `password` · `number`. Single-line only. |
+| `value` | `value` | `undefined | string` | — | Controlled value, and always the CANONICAL one when a mask is active: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom` (spec §4). Settable and reflected to the `value` attribute. `el.value = '5551234567'` drives it (no event) and is re-fitted to the mask on the way in, so the field shows `555-123-4567`. Read `el.value` for live state; the formatted text rides along on every `kai-input` / `kai-change` detail as `formattedValue`. |
+| `placeholder` | `placeholder` | `undefined | string` | — | Placeholder shown when empty. |
+| `label` | `label` | `undefined | string` | — | Field label, linked to the input. |
+| `hint` | `hint` | `undefined | string` | — | Helper text below the control. |
+| `error` | `error` | `undefined | string` | — | Error text; flips the field invalid (`aria-invalid` + destructive border). |
+| `size` | `size` | `undefined | "sm" | "md"` | `'md'` | Control density: `sm` or `md`. Defaults to `md`. |
+| `disabled` | `disabled` | `undefined | false | true` | — | Disable interaction. |
+| `readonly` | `readonly` | `undefined | false | true` | — | Make the input read-only. |
+| `required` | `required` | `undefined | false | true` | — | Mark the input required. |
+| `invalid` | `invalid` | `undefined | false | true` | — | Force the invalid state without an `error` string. |
+| `name` | `name` | `undefined | string` | — | Form-control name. |
+| `autocomplete` | `autocomplete` | `undefined | string` | — | Autofill hint forwarded to the inner input (e.g. `email`, `current-password`). |
+| `inputmode` | `inputmode` | `undefined | string` | — | Virtual-keyboard hint forwarded to the inner input (e.g. `numeric`, `email`). |
+| `format` | `format` | `undefined | string` | — | Mask pattern: `#` a digit, `@` a letter or digit, `*` an obscurable letter or digit, and every other character a positional literal (`@@@-####` → `CHG-4821`). The literal `default` is the opt-in sentinel: it resolves to the default format of `semantic` (`tel` → `###-###-####`). A bare `semantic` never starts masking on its own, so an opt-in token is what turns tier 2 on. |
+| `guide` | `guide` | `undefined | string` | — | Placeholder guide shown at unfilled positions, aligned position for position with `format`: `mm/dd/yyyy` against `##/##/####`. Spaces are a valid guide character, so a guide of blanks and separators is how a phone field shows its shape without showing letters. Without a guide the field shows only up to the last typed character. A guide is a visual aid, never an accessible name: keep the `hint` text as well. |
+| `semantic` | `semantic` | `undefined | "credit-card" | "custom" | "ssn" | "tel"` | — | Semantic field type: `tel` · `ssn` · `credit-card` · `custom`. On its own it sets `inputmode` / `autocomplete` / `spellcheck` / `autocorrect` / `autocapitalize` and decides the canonical value; it never starts masking by itself. |
+| `caseMode` | `case-mode` | `undefined | "preserve" | "upper" | "lower"` | — | Case folding applied to typed and pasted text: `preserve` (default) · `upper` · `lower`. Attribute: `case-mode`. |
+| `copyPolicy` | `copy-policy` | `undefined | "formatted" | "canonical" | "obscured" | "blocked"` | — | What a copy or cut of a masked field puts on the clipboard: `canonical` (default) · `formatted` · `obscured` · `blocked`. Attribute: `copy-policy`. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-change` | `{ value: string; formattedValue: string }` | The value was committed (blur). Same detail shape as `kai-input`. |
+| `kai-input` | `{ value: string; formattedValue: string }` | The value changed per keystroke. `value` is the canonical value (what a backend wants); `formattedValue` is the text on screen. With no mask the two are equal. |
+| `kai-input-rejected` | `{ reason: "full" | "wrong-class" | "over-capacity" | "format-change-clipped"; data: string }` | A mask refused, or partly refused, some content. The reasons are `full` (no free position left), `wrong-class` (a letter into a digit position), `over-capacity` (a paste longer than the mask holds; what fits was kept), and `format-change-clipped` (the `format` changed under a value that no longer fits). `data` is the content that was refused. The first three are USER-INPUT errors, and are the ones worth announcing in a polite live region. `format-change-clipped` is not one: it follows the app changing its own configuration, so it reports and nothing more. None of the four touches validity, so `invalid` and `error` stay the consumer decision. |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-input').focus(…)`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `focus` | `(options?: FocusOptions): void` | Focus the inner input (the host can't reach into the shadow root). |
+| `select` | `(): void` | Select the inner input's text. |
+| `getRawValue` | `(): string` | The canonical value: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom`, and the field text when no mask is on. Identical to reading `el.value`; it carries the name spec §5.8 uses for the submitted form of a masked field, so code written against that name finds it. The mask engine has a third, narrower notion of raw (the fill characters with no literals at all) and that one is internal: it is not what any backend wants and it is not exposed here. |
+| `getFormattedValue` | `(): string` | The text on screen, literals and guide included. The counterpart to `formattedValue` on the `kai-input` / `kai-change` details, for a consumer that needs it outside an event. |
+| `clear` | `(): void` | Empty the value and fire `kai-change` with `''`. On a masked field this resets the mask itself, not just the text on screen, so the next character starts over. |
+
+#### Slots
+
+Project your own markup with `slot="name"` on a light-DOM child.
+
+| Slot | Mode | Description |
+|------|------|-------------|
+| `leading` | inject | A glyph, prefix, or affix at the start of the field, inside the border. |
+| `trailing` | inject | A button, unit, or affix at the end of the field, inside the border. |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-input::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(field)` | The bordered control box (the row wrapping any affixes plus the input). Restyle its border, radius, surface, or focus ring. <br>`kai-input::part(field) { border-radius: 0.75rem }` |
+| `::part(input)` | The inner input element. Restyle its text, padding, or placeholder. <br>`kai-input::part(input) { font-variant-numeric: tabular-nums }` |
+| `::part(label)` | The field label above the control. Restyle its typography or spacing. <br>`kai-input::part(label) { font-weight: 600 }` |
+| `::part(hint)` | The hint or error line below the control. Restyle its typography. <br>`kai-input::part(hint) { font-style: italic }` |
+
+#### Composed from
+
+`UI/Input`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-input -->
+
+Single-line text field with a label, hint and error, plus opt-in format masks: `format` (`#` digit · `@` letter/digit · `*` obscurable, everything else a positional literal), `guide`, `semantic` (`tel` · `ssn` · `credit-card` · `custom`), `case-mode` and `copy-policy`. `value` is always the canonical form (digits for the digit types, the formatted text for `custom`); the on-screen text rides along as `formattedValue` on the event details. A date mask shapes typing only, it is not date validation.
+
+---
+
 ## ChatMessage schema
 
 A message's content is an **ordered `parts` array**. There is no `content` string: it was removed in 0.20.0. Text, reasoning, tool calls, generative-UI cards, citations and file attachments all live in `parts`, in the order the model produced them, so a post-tool answer renders below its tool panel instead of being glued onto the pre-tool text.

@@ -3,6 +3,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   widgetFor,
+  resolveFieldMask,
   humanize,
   orderedKeys,
   coerceValue,
@@ -64,6 +65,54 @@ describe('widgetFor — the mapping table', () => {
     // An out-of-enum hint must be ignored (forward-compatible), not break.
     const field = { type: 'string', 'x-kai-widget': 'wormhole' } as unknown as FormField;
     expect(widgetFor(field, DEFAULT_INLINE_MAX)).toBe('text');
+  });
+
+  // THE PIN (spec §7.3): `x-kai-format` selects FORMATTING, never a widget.
+  //
+  // The temptation is real — `format: 'email'` two lines up in `widgetFor` picks a
+  // widget, so the next reader may "finish the pattern" and switch on `x-kai-format`
+  // here too. That would be a different feature: a `tel` field would stop being a text
+  // field with a mask and start being whatever the new branch returned, and `custom`
+  // would have no widget to name at all. Masking is a property of the CONTROL, resolved
+  // in `resolveFieldMask` and handed to `Input`; the widget stays `text`.
+  test('x-kai-format is NOT a widget selector — every token still resolves to `text`', () => {
+    for (const token of ['tel', 'ssn', 'credit-card', 'custom']) {
+      const field = { type: 'string', 'x-kai-format': token } as unknown as FormField;
+      expect(widgetFor(field, DEFAULT_INLINE_MAX), token).toBe('text');
+    }
+    // …and it does not override an explicit widget hint either, in either direction.
+    const withHint = { type: 'string', 'x-kai-format': 'tel', 'x-kai-widget': 'textarea' } as unknown as FormField;
+    expect(widgetFor(withHint, DEFAULT_INLINE_MAX)).toBe('textarea');
+    // A mask on a field the mapping sends elsewhere does not drag it back to `text`.
+    const long = { type: 'string', maxLength: 400, 'x-kai-format': 'custom', 'x-kai-mask': 'CHG-####' } as unknown as FormField;
+    expect(widgetFor(long, DEFAULT_INLINE_MAX)).toBe('textarea');
+  });
+});
+
+describe('resolveFieldMask — what the field-format hints resolve to', () => {
+  test('each semantic token resolves its own default pattern, and only when opted into', () => {
+    expect(resolveFieldMask({ type: 'string', 'x-kai-format': 'tel' }).format).toBe('###-###-####');
+    expect(resolveFieldMask({ type: 'string', 'x-kai-format': 'credit-card' }).format).toBe('#### #### #### ####');
+    // A field with no hint is untouched: no format, no semantic, no hint text.
+    expect(resolveFieldMask({ type: 'string' })).toEqual({ warnings: [] });
+  });
+
+  test('an explicit aligned guide wins over the derived one and becomes the hint text', () => {
+    const r = resolveFieldMask({
+      type: 'string',
+      'x-kai-format': 'custom',
+      'x-kai-mask': '##/##/####',
+      'x-kai-mask-guide': 'mm/dd/yyyy',
+    });
+    expect(r.guide).toBe('mm/dd/yyyy');
+    expect(r.hint).toContain('mm/dd/yyyy');
+    expect(r.warnings).toEqual([]);
+  });
+
+  test('x-kai-mask is ignored — loudly — unless the format is `custom`', () => {
+    const r = resolveFieldMask({ type: 'string', 'x-kai-format': 'tel', 'x-kai-mask': 'CHG-####' }, 'phone');
+    expect(r.format).toBe('###-###-####');
+    expect(r.warnings.join(' ')).toContain('x-kai-mask');
   });
 });
 

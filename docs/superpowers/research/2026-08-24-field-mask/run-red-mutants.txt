@@ -1,0 +1,213 @@
+
+Running 8 tests using 1 worker
+
+  ✘  1 [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:39:1 › MUTANT 1 (expected red): scenario 1 green assertions with the masker detached (30.0s)
+  ✘  2 [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:49:1 › MUTANT 2 (expected red): scenario 2 "value unchanged at capacity" with the masker detached (30.0s)
+  ✘  3 [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:61:1 › MUTANT 3 (expected red): scenario 3 §5.7 against the NAIVE normalizer (one line deleted) (1.1s)
+  ✘  4 [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:83:1 › MUTANT 4 (expected red): scenario 4 "caret after the auto-inserted literal" with the masker detached (1.2s)
+  ✘  5 [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:94:1 › MUTANT 5 (expected red): scenario 5 "deferred, not applied" with the composition ended early (30.0s)
+  ✘  6 [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:108:1 › MUTANT 6 (expected red): scenario 6 "the text is restored exactly" with the masker detached (1.3s)
+  ✘  7 [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:126:1 › MUTANT 7 (expected red): scenario 7 canonical assertion against the FORMATTED field (1.2s)
+  ✘  8 [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:138:1 › MUTANT 8 (expected red): scenario 8 story assertion against a bare unmasked input (30.0s)
+
+
+  1) [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:39:1 › MUTANT 1 (expected red): scenario 1 green assertions with the masker detached 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: expect(locator).toHaveValue(expected) failed
+
+    Locator:  locator('#m1')
+    Expected: "CHG-4821"
+    Received: "chg4821"
+
+    Call log:
+      - Expect "toHaveValue" with timeout 30000ms
+      - waiting for locator('#m1')
+        61 × locator resolved to <input id="m1"/>
+           - unexpected value "chg4821"
+
+
+      44 |   await page.locator('#m1').pressSequentially('chg4821');
+      45 |   // the SHIPPED assertion:
+    > 46 |   await expect(page.locator('#m1')).toHaveValue('CHG-4821');
+         |                                     ^
+      47 | });
+      48 |
+      49 | test('MUTANT 2 (expected red): scenario 2 "value unchanged at capacity" with the masker detached', async ({ page }) => {
+        at /Users/home/Projects/kitn-ai/kitn-chat/.superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:46:37
+
+    Error Context: test-results/mutants-MUTANT-1-expected--6231d-ns-with-the-masker-detached-chromium/error-context.md
+
+  2) [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:49:1 › MUTANT 2 (expected red): scenario 2 "value unchanged at capacity" with the masker detached 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: expect(locator).toHaveValue(expected) failed
+
+    Locator:  locator('#m2')
+    Expected: "CHG-4821"
+    Received: "CHG-48219"
+
+    Call log:
+      - Expect "toHaveValue" with timeout 30000ms
+      - waiting for locator('#m2')
+        61 × locator resolved to <input id="m2"/>
+           - unexpected value "CHG-48219"
+
+
+      56 |   await page.locator('#m2').pressSequentially('9');
+      57 |   // the SHIPPED assertion:
+    > 58 |   await expect(page.locator('#m2')).toHaveValue('CHG-4821');
+         |                                     ^
+      59 | });
+      60 |
+      61 | test('MUTANT 3 (expected red): scenario 3 §5.7 against the NAIVE normalizer (one line deleted)', async ({ page }) => {
+        at /Users/home/Projects/kitn-ai/kitn-chat/.superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:58:37
+
+    Error Context: test-results/mutants-MUTANT-2-expected--21de5-ty-with-the-masker-detached-chromium/error-context.md
+
+  3) [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:61:1 › MUTANT 3 (expected red): scenario 3 §5.7 against the NAIVE normalizer (one line deleted) 
+
+    Error: no character lost to the leading literal
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "V-123"
+    Received: "V-V12"
+
+      78 |   });
+      79 |   // the SHIPPED assertion:
+    > 80 |   expect(planted, 'no character lost to the leading literal').toBe('V-123');
+         |                                                               ^
+      81 | });
+      82 |
+      83 | test('MUTANT 4 (expected red): scenario 4 "caret after the auto-inserted literal" with the masker detached', async ({ page }) => {
+        at /Users/home/Projects/kitn-ai/kitn-chat/.superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:80:63
+
+    Error Context: test-results/mutants-MUTANT-3-expected--1f64f-ormalizer-one-line-deleted--chromium/error-context.md
+
+  4) [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:83:1 › MUTANT 4 (expected red): scenario 4 "caret after the auto-inserted literal" with the masker detached 
+
+    Error: caret sits after the auto-inserted literal
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 4
+    Received: 3
+
+      89 |   const caret = await page.locator('#m4').evaluate((el: HTMLInputElement) => el.selectionStart);
+      90 |   // the SHIPPED assertion:
+    > 91 |   expect(caret, 'caret sits after the auto-inserted literal').toBe(4);
+         |                                                               ^
+      92 | });
+      93 |
+      94 | test('MUTANT 5 (expected red): scenario 5 "deferred, not applied" with the composition ended early', async ({ page, context }) => {
+        at /Users/home/Projects/kitn-ai/kitn-chat/.superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:91:63
+
+    Error Context: test-results/mutants-MUTANT-4-expected--e7895-al-with-the-masker-detached-chromium/error-context.md
+
+  5) [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:94:1 › MUTANT 5 (expected red): scenario 5 "deferred, not applied" with the composition ended early 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: deferred, not applied
+
+    expect(locator).toHaveValue(expected) failed
+
+    Locator:  locator('#m5')
+    Expected: "にほ"
+    Received: "ABCD"
+
+    Call log:
+      - deferred, not applied with timeout 30000ms
+      - waiting for locator('#m5')
+        61 × locator resolved to <input id="m5"/>
+           - unexpected value "ABCD"
+
+
+      103 |   await page.evaluate(() => (window as any).__probes.m5.mask.setValue('ABCD'));
+      104 |   // the SHIPPED assertion:
+    > 105 |   await expect(page.locator('#m5'), 'deferred, not applied').toHaveValue('にほ');
+          |                                                              ^
+      106 | });
+      107 |
+      108 | test('MUTANT 6 (expected red): scenario 6 "the text is restored exactly" with the masker detached', async ({ page }) => {
+        at /Users/home/Projects/kitn-ai/kitn-chat/.superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:105:62
+
+    Error Context: test-results/mutants-MUTANT-5-expected--a9db8-the-composition-ended-early-chromium/error-context.md
+
+  6) [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:108:1 › MUTANT 6 (expected red): scenario 6 "the text is restored exactly" with the masker detached 
+
+    Error: the text is restored exactly
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "5551234567"
+    Received: "55512345"
+
+      121 |   await page.keyboard.press('ControlOrMeta+z');
+      122 |   // the SHIPPED assertion (modulo the literals the detached field never gets):
+    > 123 |   expect(await page.locator('#m6').inputValue(), 'the text is restored exactly').toBe('5551234567');
+          |                                                                                  ^
+      124 | });
+      125 |
+      126 | test('MUTANT 7 (expected red): scenario 7 canonical assertion against the FORMATTED field', async ({ page, context }) => {
+        at /Users/home/Projects/kitn-ai/kitn-chat/.superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:123:82
+
+    Error Context: test-results/mutants-MUTANT-6-expected--f3be1-ly-with-the-masker-detached-chromium/error-context.md
+
+  7) [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:126:1 › MUTANT 7 (expected red): scenario 7 canonical assertion against the FORMATTED field 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "5551234567"
+    Received: "555-123-4567"
+
+      133 |   await page.keyboard.press('ControlOrMeta+c');
+      134 |   // the SHIPPED canonical assertion, run against the 'formatted' field:
+    > 135 |   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('5551234567');
+          |                                                                     ^
+      136 | });
+      137 |
+      138 | test('MUTANT 8 (expected red): scenario 8 story assertion against a bare unmasked input', async ({ page }) => {
+        at /Users/home/Projects/kitn-ai/kitn-chat/.superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:135:69
+
+    Error Context: test-results/mutants-MUTANT-7-expected--d6bf8-against-the-FORMATTED-field-chromium/error-context.md
+
+  8) [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:138:1 › MUTANT 8 (expected red): scenario 8 story assertion against a bare unmasked input 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: expect(locator).toHaveValue(expected) failed
+
+    Locator:  locator('#m8')
+    Expected: "12/25/2026"
+    Received: "12252026"
+
+    Call log:
+      - Expect "toHaveValue" with timeout 30000ms
+      - waiting for locator('#m8')
+        61 × locator resolved to <input id="m8"/>
+           - unexpected value "12252026"
+
+
+      146 |   await page.locator('#m8').pressSequentially('12252026');
+      147 |   // the SHIPPED assertion:
+    > 148 |   await expect(page.locator('#m8')).toHaveValue('12/25/2026');
+          |                                     ^
+      149 | });
+      150 |
+        at /Users/home/Projects/kitn-ai/kitn-chat/.superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:148:37
+
+    Error Context: test-results/mutants-MUTANT-8-expected--f309b-ainst-a-bare-unmasked-input-chromium/error-context.md
+
+  8 failed
+    [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:39:1 › MUTANT 1 (expected red): scenario 1 green assertions with the masker detached 
+    [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:49:1 › MUTANT 2 (expected red): scenario 2 "value unchanged at capacity" with the masker detached 
+    [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:61:1 › MUTANT 3 (expected red): scenario 3 §5.7 against the NAIVE normalizer (one line deleted) 
+    [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:83:1 › MUTANT 4 (expected red): scenario 4 "caret after the auto-inserted literal" with the masker detached 
+    [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:94:1 › MUTANT 5 (expected red): scenario 5 "deferred, not applied" with the composition ended early 
+    [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:108:1 › MUTANT 6 (expected red): scenario 6 "the text is restored exactly" with the masker detached 
+    [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:126:1 › MUTANT 7 (expected red): scenario 7 canonical assertion against the FORMATTED field 
+    [chromium] › .superpowers/sdd/2026-08-24-form-field-formats/t6-evidence/mutants.spec.ts:138:1 › MUTANT 8 (expected red): scenario 8 story assertion against a bare unmasked input 

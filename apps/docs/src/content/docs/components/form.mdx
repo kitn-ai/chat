@@ -60,6 +60,7 @@ Assign the form definition in JavaScript — it's an object, not an HTML attribu
 
 - **Schema → widgets** deterministically: `string` → text; `string + enum` → radio/select; `integer + x-kai-widget: 'rating'` → stars; `boolean` → switch; `array` → repeater/checkbox group; nested `object` → fieldset. See the **Every widget** example for the full mapping.
 - **`x-kai-*` hints** in the schema control field order (`x-kai-order`), submit label (`x-kai-submitLabel`), secondary buttons (`x-kai-actions`), placeholder (`x-kai-placeholder`), and dismissibility (`x-kai-dismissible`).
+- **Field formats** — `x-kai-format`, `x-kai-mask`, and `x-kai-mask-guide` mask a string field as the user types and decide its canonical submitted value. See [Field formats & masks](/guides/field-formats/).
 - **Events use the Card contract** — `kai-form` fires no events of its own; it emits a single bubbling `kai-card` CustomEvent. Relevant kinds: `submit` (`detail.data` is the validated object), `action`, `ready`, `dismiss`, and `error`.
 - **`resolution`** — set `el.resolution = { kind: 'submit', data: { … } }` to swap the form for a read-only `<dl>` summary.
 

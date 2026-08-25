@@ -1,0 +1,42 @@
+[
+  {
+    "type": "debug",
+    "text": "[vite] connecting...",
+    "url": "http://localhost:5182/@vite/client"
+  },
+  {
+    "type": "info",
+    "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+    "url": "http://localhost:5182/node_modules/.vite/deps/react-dom_client.js?v=efddd29e"
+  },
+  {
+    "type": "warning",
+    "text": "An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing.",
+    "url": "http://localhost:5182/@fs/Users/home/Projects/kitn-ai/kitn-chat/packages/ui/dist/elements/remote.js"
+  },
+  {
+    "type": "warning",
+    "text": "An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing.",
+    "url": "http://localhost:5182/@fs/Users/home/Projects/kitn-ai/kitn-chat/packages/ui/dist/elements/remote.js"
+  },
+  {
+    "type": "warning",
+    "text": "Failed to execute 'postMessage' on 'DOMWindow': The target origin provided ('http://localhost:5183') does not match the recipient window's origin ('http://localhost:5182').",
+    "url": "http://localhost:5182/@fs/Users/home/Projects/kitn-ai/kitn-chat/packages/ui/dist/elements/remote.js"
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connected.",
+    "url": "http://localhost:5182/@vite/client"
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connecting...",
+    "url": "http://localhost:5183/@vite/client"
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connected.",
+    "url": "http://localhost:5183/@vite/client"
+  }
+]
