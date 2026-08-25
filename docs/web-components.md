@@ -1460,6 +1460,546 @@ No events.
 
 ---
 
+### `<kai-thread>` / `Thread`
+
+<!-- spec:kai-thread -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `messages` | — | `undefined | { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: undefined | "command" | "file-change" | "search" | "fetch" | "mcp" | "image" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: "action"; action: string; payload?: unknown; at?: undefined | string } | { kind: "submit"; data: unknown; at?: undefined | string } | { kind: "dismissed"; at?: undefined | string } | { kind: "expired"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: "source"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | "like" | "dislike" }[]` | — | The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). |
+| `loading` | `loading` | `undefined | false | true` | `false` | Show a typing indicator on the pending assistant turn. Set it while awaiting the assistant's reply. |
+| `proseSize` | `prose-size` | `undefined | "xs" | "sm" | "base" | "lg"` | `'sm'` | Body/prose font scale for rendered markdown (`'xs' | 'sm' | 'base' | 'lg'`). Defaults to `'sm'`. |
+| `codeTheme` | `code-theme` | `undefined | string` | `'github-dark-dimmed'` | Shiki theme name for syntax-highlighted code blocks (e.g. `'github-dark-dimmed'`). |
+| `codeHighlight` | `code-highlight` | `undefined | false | true` | `true` | Enable Shiki syntax highlighting in code blocks. Turn off to render plain `<pre>` blocks (lighter, no highlighter load). Default true. |
+| `actionsReveal` | `actions-reveal` | `undefined | "always" | "hover"` | `'always'` | Whether each message's action bar is always visible (`'always'`, default) or only revealed on hover of that message row (`'hover'`). |
+| `scrollButton` | `scroll-button` | `undefined | false | true` | `true` | Show the scroll-to-bottom button inside the scroll area. Default true. |
+| `class` | `class` | `undefined | string` | — | Extra classes applied to the thread's inner root. |
+| `cardTypes` | — | `undefined | Record<string, string>` | — | Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. |
+| `cardSchemas` | — | `undefined | Record<string, object>` | — | JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-message-action` | `{ messageId: string; action: string; state?: undefined | "on" | "off" }` | A message's action button was clicked. `action` is the built-in name (`copy` / `like` / `dislike` / `regenerate` / `edit`) or a custom id. `state` is present only for the toggleable feedback votes: `'on'` when a like/dislike is set, `'off'` when re-tapped to clear. |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-thread').scrollToBottom(…)`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `scrollToBottom` | `(behavior?: ScrollBehavior): void` | Scroll the message list to the bottom (default `'smooth'`). |
+
+#### Slots
+
+Project your own markup with `slot="name"` on a light-DOM child.
+
+| Slot | Mode | Description |
+|------|------|-------------|
+| `empty` | replace | Custom zero-state rendered in the message area while the thread is empty; replaces the built-in default. |
+
+#### Composed from
+
+`Components/Thread`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-thread -->
+
+The message list on its own: renders a `messages` array (roles, ordered `parts`, actions, feedback) with streaming, markdown, code highlighting and a scroll-to-bottom button, no prompt input attached. Custom generative-UI cards plug in through the `cardTypes` / `cardSchemas` properties; an unregistered card type falls through to the shared fallback card rather than rendering blank. Same reactivity contract as `<kai-chat>`: a new `messages` array reference notifies, and a new object for each changed message is what makes the edit visible.
+
+---
+
+### `<kai-artifact>` / `Artifact`
+
+<!-- spec:kai-artifact -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `src` | `src` | `undefined | string` | — | URL the preview iframe frames. Consumer-controlled. |
+| `files` | — | `undefined | { path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | "html" | "pdf" | "image" | "other"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | "added" | "modified" | "deleted" | "renamed" | "untracked" }[]` | `[]` | Files for the Code tab tree + each file's preview `url`. Omit for a preview-only artifact (the Code tab then has nothing to show; pair it with `no-tabs` to hide the toggle). Set as a JS property (array). |
+| `tab` | `tab` | `undefined | "preview" | "code"` | — | Controlled active tab: `preview` or `code`. When set, the artifact follows it (re-asserted on change). Leave unset for an uncontrolled tab (see `defaultTab`). |
+| `defaultTab` | `default-tab` | `undefined | "preview" | "code"` | — | Uncontrolled INITIAL tab (used only when `tab` is unset). Default `preview`. Seeds the starting tab; the user can then switch freely without the consumer re-asserting a controlled `tab`. |
+| `activeFile` | `active-file` | `undefined | string` | — | Selected file path. Syncs the tree highlight, Code source, and preview. |
+| `sandbox` | `sandbox` | `undefined | string` | `'allow-scripts allow-forms'` | iframe `sandbox` override. Secure default `allow-scripts allow-forms` (NOT `allow-same-origin`). |
+| `iframeTitle` | `iframe-title` | `undefined | string` | — | Accessible title for the preview iframe. |
+| `maximized` | `maximized` | `undefined | false | true` | `false` | Reflects the artifact's own maximized view-state (usually driven by the protocol). |
+| `expandable` | `expandable` | `undefined | false | true` | `false` | Show the expand-to-fill button (OPT-IN). |
+| `openInTab` | `open-in-tab` | `undefined | false | true` | `false` | Show the open-in-new-tab button (OPT-IN). |
+| `noNav` | `no-nav` | `undefined | false | true` | `false` | Hide back/forward. |
+| `noReload` | `no-reload` | `undefined | false | true` | `false` | Hide reload. |
+| `noHome` | `no-home` | `undefined | false | true` | `false` | Hide home. |
+| `noPathField` | `no-path-field` | `undefined | false | true` | `false` | Hide the address field. |
+| `noTabs` | `no-tabs` | `undefined | false | true` | `false` | Hide the Preview|Code toggle. |
+| `standalone` | `standalone` | `undefined | false | true` | `false` | Standalone chrome: rounded corners + border (else square, borderless in-panel). |
+| `readonlyPath` | `readonly-path` | `undefined | false | true` | `false` | Show the address but make it read-only (visible, nav-tracking, non-editable). |
+| `displayUrl` | `display-url` | `undefined | string` | — | Friendly address shown in the path field instead of the real current url (read-only, non-navigable). Use when the framed url is not consumer-facing (e.g. a `data:` blob) so a clean address shows instead of leaking it. Scalar string: set as the `display-url` attribute or the `displayUrl` property. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-file-select` | `{ path: string }` | Fired when a file is selected. `detail.path`. |
+| `kai-maximize-change` | `{ maximized: false | true }` | Artifact's own maximize button toggled (consumer-observable; non-bubbling). |
+| `kai-maximize-intent` | `{ requested: false | true }` | The maximize PROTOCOL intent, raised as a raw bubbling + composed CustomEvent (not through `dispatch`) so an enclosing `<kai-resizable>` can catch it and maximize the containing panel. Declared here so it is typed and reaches the generated API. Listen for it to drive maximize from your own chrome, or re-emit it to trigger one. |
+| `kai-navigate` | `{ url: string }` | Fired when the preview navigates. `detail.url` = the new location. |
+| `kai-tab-change` | `{ tab: "preview" | "code" }` | Fired when the Preview|Code tab changes. `detail.tab`. |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-artifact').back()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `back` | `(): void` | Go back in the artifact's own history stack (no-op when there's no prior entry). |
+| `forward` | `(): void` | Go forward in the history stack (no-op when there's no forward entry). |
+| `reload` | `(): void` | Force-reload the current preview url (also re-renders an inline PDF). |
+| `home` | `(): void` | Navigate to the `src` home url (no-op when there's no `src`). |
+| `navigate` | `(url: string): void` | Push + load a url in the preview, the path-field submit path (fires kai-navigate). |
+| `selectFile` | `(path: string): void` | Select a file by path: highlights the tree, shows its source, navigates the preview (fires kai-file-select + kai-navigate). Named selectFile to avoid the `activeFile` prop. |
+| `openExternal` | `(): void` | Open the current url in a new browser tab (no-op when there's no concrete url). Named openExternal, NOT openInTab, which is a prop (toolbar button visibility). |
+| `maximize` | `(): void` | Enter the maximized view-state (fires kai-maximize-change{maximized:true}). Named maximize, NOT maximized, which is a prop. |
+| `restore` | `(): void` | Exit the maximized view-state (fires kai-maximize-change{maximized:false}). |
+
+#### Composed from
+
+`Components/Artifact`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-artifact -->
+
+A sandboxed preview panel for generated apps and pages: an iframe with browser chrome (back/forward, reload, an address field) and an optional Preview|Code toggle backed by a `files` tree. The iframe defaults to `sandbox="allow-scripts allow-forms"` with no `allow-same-origin`. Emits `kai-navigate`, `kai-tab-change` and `kai-file-select`; each `no-*` attribute strips a piece of chrome, and `display-url` shows a friendly address when the real one is a `data:` blob worth hiding.
+
+---
+
+### `<kai-audio-visualizer>` / `AudioVisualizer`
+
+<!-- spec:kai-audio-visualizer -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `variant` | `variant` | `undefined | string` | `'bar'` | Look to render: `bar` (default), `grid`, `radial`, `wave`, `aurora`, `custom`. `aura` is accepted as a LiveKit-markup alias for `aurora`. Attribute: `variant`. |
+| `state` | `state` | `undefined | string` | `'idle'` | `idle` (default), `connecting`, `listening`, `thinking`, `speaking`, `disconnected` (connection down: the dead, flat look). LiveKit's room-lifecycle state names are accepted as aliases. Attribute: `state`. |
+| `size` | `size` | `undefined | string` | `'md'` | `icon` | `sm` | `md` (default) | `lg` | `xl`. Attribute: `size`. |
+| `barCount` | `bar-count` | `undefined | number` | — | Bars to draw. Bar and radial only. Attribute: `bar-count`. |
+| `count` | `count` | `undefined | number` | — | Grid only: rows and columns of the (always square) grid. Attribute: `count`. |
+| `radius` | `radius` | `undefined | number` | — | Radial only: ring distance from center, in px. Attribute: `radius`. |
+| `spread` | `spread` | `undefined | number` | — | Grid only: ring distance for the connecting animation, in cells. Attribute: `spread`. |
+| `interval` | `interval` | `undefined | number` | — | Grid only: ms between scripted frames. Attribute: `interval`. |
+| `color` | `color` | `undefined | string` | — | CSS color for the geometry, overriding the inherited `currentColor`. Attribute: `color`. |
+| `complexity` | `complexity` | `undefined | number` | — | Shader variants only: pattern density, 0..1. Attribute: `complexity`. |
+| `label` | `label` | `undefined | string` | — | Setting this makes the element an announced image (`role="img"`) instead of decorative (`aria-hidden`). Attribute: `label`. |
+| `stream` | — | `undefined | MediaStream` | — | Live microphone or WebRTC audio to analyze. JS property only. NOTE: amplitude renders only while state is "speaking" unless listening-amplitude is set; every other state plays its scripted animation and ignores the audio. |
+| `audioElement` | — | `undefined | HTMLMediaElement` | — | An `<audio>` or `<video>` element to tap for its audio. JS property only. NOTE: amplitude renders only while state is "speaking" unless listening-amplitude is set; every other state plays its scripted animation and ignores the audio. |
+| `bands` | — | `undefined | number[]` | — | Pre-computed levels, 0..1. Set this and no AudioContext is ever built, which is what keeps headless/SSR rendering and browser-speech-synthesis playback (which exposes no audio node) free of Web Audio entirely. JS property only. A new array reference is required for each update; mutating the existing array in place will not re-render. NOTE: amplitude renders only while state is "speaking" unless listening-amplitude is set; every other state plays its scripted animation and ignores the audio. |
+| `listeningAmplitude` | `listening-amplitude` | `undefined | false | true` | — | Render live amplitude during the listening state as well, using the same presentation as speaking. Off by default, which keeps LiveKit parity: amplitude from stream, audio-element or bands renders only while state is "speaking". Set it to show a real mic-level picture while the user is the one talking. Boolean. Attribute: `listening-amplitude` (a bare attribute means true; reflected, so the property reads back what the attribute set). |
+| `shader` | — | `undefined | { fragment: string; uniforms?: undefined | Record<string, { type: "1f" | "1i" | "1fv" | "2f" | "3f" | "3fv" | "4f" | "4fv" | "Matrix2fv" | "Matrix3fv" | "Matrix4fv"; value: number | number[] }> }` | — | Custom fragment shader for `variant="custom"`. JS property only. |
+| `animateWhenNotVisible` | `animate-when-not-visible` | `undefined | false | true` | — | Shader variants only: keep animating while scrolled off screen. Off by default, which stops drawing and releases the WebGL context until the element comes back (browsers ration contexts to roughly 16 a page). Does not override `prefers-reduced-motion`. Attribute: `animate-when-not-visible`. |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-audio-visualizer::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(bar)` | A single bar in the `bar` variant, or a single spoke in the `radial` variant. Also carries `data-kai-index` and `data-kai-highlighted` ("true"/"false") for use inside the shadow root; to style the lit state from OUTSIDE, combine with the `highlighted` part below rather than an attribute selector. <br>`kai-audio-visualizer::part(bar) { border-radius: 2px }
+kai-audio-visualizer::part(bar highlighted) { background: var(--brand) }` |
+| `::part(cell)` | A single dot in the `grid` variant. Also carries `data-kai-index` and `data-kai-highlighted` ("true"/"false") for use inside the shadow root; to style the lit state from OUTSIDE, combine with the `highlighted` part below rather than an attribute selector. <br>`kai-audio-visualizer::part(cell) { border-radius: 9999px }
+kai-audio-visualizer::part(cell highlighted) { background: var(--brand) }` |
+| `::part(highlighted)` | A second part TOKEN present on a `bar` or `cell` exactly when the sequencer or live audio has it lit, not a standalone styleable element. Combine it in the same `::part()` argument: `::part(bar highlighted)` or `::part(cell highlighted)`. This is the external equivalent of the internal `data-kai-highlighted="true"` attribute, which a `::part()` selector cannot reach (an attribute selector cannot follow a pseudo-element). <br>`kai-audio-visualizer::part(bar highlighted) { background: var(--brand) }
+kai-audio-visualizer::part(cell highlighted) { background: var(--brand) }` |
+| `::part(canvas)` | The WebGL canvas backing the `wave` and `aurora` variants. Restyle its size or radius, or layer a mask/filter, from outside. <br>`kai-audio-visualizer::part(canvas) { border-radius: 0.75rem }` |
+
+#### Composed from
+
+`Components/AudioVisualizer`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-audio-visualizer -->
+
+Voice-mode visualizer with `bar`, `grid`, `radial`, `wave`, `aurora` and shader looks, driven by a lifecycle `state` (`idle`, `connecting`, `listening`, `thinking`, `speaking`, `disconnected`); LiveKit state names are accepted as aliases. Feed it live audio (`stream` or `audioElement`) or precomputed `bands`, which builds no AudioContext at all, so it renders headless and during browser speech synthesis. Amplitude renders only while `speaking` unless `listening-amplitude` is set; every other state plays its scripted animation.
+
+---
+
+### `<kai-voice-output>` / `VoiceOutput`
+
+<!-- spec:kai-voice-output -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `text` | `text` | `undefined | string` | `''` | The utterance to read aloud. |
+| `autoplay` | `autoplay` | `undefined | false | true` | `false` | Speak automatically when `text` is set/changed. |
+| `synthesize` | — | `undefined | (text: string) => Promise<Blob>` | — | TTS model seam the host supplies: given text, returns an audio `Blob` to play. This is a **function-valued property** (`el.synthesize = async text => blob`); when set, the native `speechSynthesis` path is bypassed. Mirrors `<kai-voice-input>`'s `transcribe`. A value-returning callback can't be modelled as a fire-and-forget event, hence a property. |
+| `disabled` | `disabled` | `undefined | false | true` | `false` | Disable the button (non-interactive). |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-speaking-change` | `{ speaking: false | true }` | Playback started or stopped. Drive your own UI in sync. `speaking: true` fires when audio actually starts (utterance.onstart natively; audio playback beginning on the `synthesize` path), not when speak() is called; earlier releases fired it optimistically inside speak() itself. Fires on real transitions only (manual click and programmatic speak()/stop()), never on mount. |
+| `kai-synthesized` | `{ blob: Blob }` | The model path (`synthesize`) resolved audio: the raw `Blob` before playback. |
+| `kai-voice-error` | `{ source: "synthesis"; error: string; message: string }` | A voice session failed, so no failure is ever silent. `detail.source` names the failing side (`recognition` on `<kai-voice-input>`, `synthesis` on `<kai-voice-output>`), `detail.error` carries the platform error code, the thrown exception's name, or `no-result` when recognition ended with no error and no text (the user said nothing), and `detail.message` is human-readable. Deliberate cancellation does not fire. |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-voice-output').speak()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `speak` | `(): void` | Speak the current `text` (native, or via `synthesize` if set). |
+| `pause` | `(): void` | Pause playback (resumable). |
+| `resume` | `(): void` | Resume paused playback. |
+| `stop` | `(): void` | Stop playback and reset. |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-voice-output::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(button)` | The speaker/play button. Restyle radius, size, padding, or colors from outside; it is a ghost icon button by default. <br>`kai-voice-output::part(button) { border-radius: 9999px; color: var(--color-primary) }` |
+
+#### Composed from
+
+`Components/VoiceOutput`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-voice-output -->
+
+A speaker button that reads `text` aloud. Native `speechSynthesis` by default; set the function-valued `synthesize` property to route through your own TTS model instead. `kai-speaking-change` fires when audio actually starts and stops, and a failed synthesis emits `kai-voice-error`, never a silent no-op. The output sibling of `<kai-voice-input>`.
+
+---
+
+### `<kai-cards>` / `Cards`
+
+<!-- spec:kai-cards -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `cards` | — | `undefined | { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: "action"; action: string; payload?: unknown; at?: undefined | string } | { kind: "submit"; data: unknown; at?: undefined | string } | { kind: "dismissed"; at?: undefined | string } | { kind: "expired"; reason?: undefined | string; at?: undefined | string } }[]` | — | The stream of card envelopes to render. Set as a JS PROPERTY: `el.cards = [...]`. |
+| `types` | — | `undefined | Record<string, string>` | — | Optional type→tag overrides/additions (merged over the built-ins). Property: `el.types`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. |
+| `schemas` | — | `undefined | Record<string, object>` | — | JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `types`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.schemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name, matching `mergeCardTags`, where your entry is spread over ours. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. See `CardSchemaMap` in components/card-renderer.tsx. |
+| `policy` | — | `undefined | { onSubmit?: undefined | (cardId: string, data: unknown) => void; onAction?: undefined | (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: undefined | (text: string, opts: { mode: "compose" | "send"; context?: unknown; }) => void; onOpen?: undefined | (url: string, target: "tab" | "artifact") => void; onState?: undefined | (cardId: string, patch: unknown) => void; onDismiss?: undefined | (cardId: string) => void; onReopen?: undefined | (cardId: string) => void; onError?: undefined | (cardId: string, message: string) => void; maxSendPromptMode?: undefined | "compose" | "send" }` | — | Optional CardPolicy handling child events. Property: `el.policy`. |
+| `validateCards` | `validate-cards` | `undefined | false | true` | `true` | Validate each envelope's `data` against the schema for its type before rendering it, using a built-in's own schema or yours from `schemas`. Default `true`; set `validate-cards="false"` (or `el.validateCards = false`) to opt out. A hard failure (wrong type, a missing required field) renders a diagnostic naming the field instead of the card; a soft failure (bounds) renders the card unchanged. Both emit a contract `error` event. On in production too: a model emitting a bad shape is a production failure mode, so stripping the check there would hide it from exactly the person who needs to see it. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-card-resolved` | `{ cardId: string; resolution: { kind: "action"; action: string; payload?: unknown; at?: undefined | string } | { kind: "submit"; data: unknown; at?: undefined | string } | { kind: "dismissed"; at?: undefined | string } | { kind: "expired"; reason?: undefined | string; at?: undefined | string } }` | A child card transitioned to a resolved/deferred state (an action was chosen, a form/tasks submission landed, or it was dismissed). Re-emitted off the host as a non-bubbling convenience event so a consumer can observe resolution centrally without diffing the cards array. `detail` = `{ cardId, resolution }`. (A `reopen` un-resolves a card and has no `CardResolution`, so it does NOT fire this; observe reopen via the underlying bubbling `kai-card` event.) |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-cards').resolve(…)`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `resolve` | `(cardId: string, resolution: CardResolution): void` | Programmatically resolve a child card by id: set that envelope's `resolution` so the child re-renders into its read-only/resolved view. The imperative twin of the consumer mutating the cards array. No-op for an unknown id. |
+| `dismiss` | `(cardId: string): void` | Collapse a card to its re-openable stub from the host side. Convenience for `resolve(cardId, { kind: 'dismissed' })`. |
+| `getCard` | `(cardId: string): HTMLElement \| null` | Return the live child element node for a card id (or null) so consumers can call that card's own methods (focus/expand/…) without a shadow-DOM query. |
+
+#### Composed from
+
+`Components/CardFallback`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-cards -->
+
+The list dispatcher for generative-UI card envelopes: set `cards` as a JS property and it renders one child `kai-*` card element per envelope by type, validating each envelope's `data` against its schema first. An unknown type renders the shared fallback plus a contract `error` instead of a blank. Register your own card types with the `types` and `schemas` properties, and route the children's bubbling `kai-card` events through an optional `policy`.
+
+---
+
+### `<kai-confirm>` / `Confirm`
+
+<!-- spec:kai-confirm -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `data` | — | `undefined | { heading?: undefined | string; body?: undefined | string; tone?: undefined | "default" | "warning" | "danger"; actions: { id: string; label: string; style?: undefined | "primary" | "default" | "destructive"; payload?: unknown; default?: undefined | false | true }[]; dismissible?: undefined | false | true }` | — | The confirm definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { body, tone, actions:[…] }`. Import `ConfirmCardData` from `@kitn.ai/ui` for the full shape. |
+| `cardId` | `card-id` | `undefined | string` | — | Stable card id correlating every emitted CardEvent. Attribute: `card-id`. |
+| `heading` | `heading` | `undefined | string` | — | Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. |
+| `autofocus` | `autofocus` | `undefined | false | true` | `false` | Focus the default action on mount (off by default, so nothing steals focus). Attribute: `autofocus`. |
+| `resolution` | — | `undefined | Record<string, unknown>` | — | Set when the user resolved this card; renders the read-only view. Property: `el.resolution = { kind:'action', action:'…' }`. |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-confirm').focus(…)`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `focus` | `(options?: FocusOptions): void` | Focus the default action button (or the first action if none is default). The same target `autofocus` focuses on mount, but on demand. |
+| `confirm` | `(actionId?: string): void` | Activate an action by id: emits the `action` verb on kai-card and resolves the card (single-shot). With no id, invokes the default action. |
+| `dismiss` | `(): void` | Trigger the dismiss path: emits `dismiss` on kai-card and optimistically collapses the card to its re-openable stub. |
+| `reopen` | `(): void` | Re-open a dismissed card from its stub: emits `reopen` on kai-card. |
+
+#### Composed from
+
+`Components/ConfirmCard`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-confirm -->
+
+A named-intent approval card: title, body and a small set of action buttons, defined by the `data` property. Activating an action emits the Card contract's `action` verb up a bubbling `kai-card` CustomEvent and resolves the card, so the same approval cannot double-fire. Works bare or inside a card host.
+
+---
+
+### `<kai-choice>` / `Choice`
+
+<!-- spec:kai-choice -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `data` | — | `undefined | { prompt?: undefined | string; options: { id: string; label: string; description?: undefined | string; media?: undefined | { image?: undefined | string; imageAlt?: undefined | string; icon?: undefined | string }; meta?: undefined | string; recommended?: undefined | false | true; disabled?: undefined | false | true; payload?: unknown }[]; allowOther?: undefined | false | true | { label?: undefined | string; placeholder?: undefined | string }; submitLabel?: undefined | string; dismissible?: undefined | false | true }` | — | The choice definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { prompt, options:[…], allowOther?, submitLabel? }`. Import `ChoiceCardData` from `@kitn.ai/ui` for the full shape. |
+| `cardId` | `card-id` | `undefined | string` | — | Stable card id correlating every emitted CardEvent. Attribute: `card-id`. |
+| `heading` | `heading` | `undefined | string` | — | Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. |
+| `resolution` | — | `undefined | Record<string, unknown>` | — | Set when the user resolved this card; renders the read-only view. Property: `el.resolution = { kind:'action', action:'…' }`. |
+| `value` | `value` | `undefined | string` | — | Controlled selection: the selected option id. When set, the consumer owns the current pick (RadioGroup `value`). Attribute: `value`. |
+| `defaultValue` | `default-value` | `undefined | string` | — | Option id to pre-select on mount (uncontrolled seed). Attribute: `default-value`. |
+| `disabled` | `disabled` | `undefined | false | true` | — | Disable the whole radiogroup + Submit (e.g. while the agent is busy). Attribute: `disabled`. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-value-change` | `{ value: string }` | The selection changed BEFORE submit (a row click or the `select()` method). Distinct from the terminal `action` verb on the `kai-card` contract event. |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-choice').focus(…)`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `focus` | `(options?: FocusOptions): void` | Focus the radiogroup roving tab stop (or the Other input when selected). |
+| `select` | `(optionId: string): void` | Select an option by id locally: no emit, fires kai-value-change (same as a row click). Lets a consumer pre-highlight or drive selection externally. |
+| `send` | `(): void` | Submit the current selection: emits the `action` verb on kai-card and resolves the card (single-shot). Named `send`, not `submit`, per the shared vocabulary. |
+| `dismiss` | `(): void` | Trigger the dismiss path: emits `dismiss` on kai-card and optimistically collapses the card to its re-openable stub. |
+| `reopen` | `(): void` | Re-open a dismissed card from its stub: emits `reopen` on kai-card. |
+
+#### Composed from
+
+`Components/ChoiceCard`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-choice -->
+
+A pick-one-of-N card: a prompt plus a radiogroup of rich option rows, set via the `data` property. Clicking a row selects it (firing `kai-value-change`); the Submit button emits the terminal `action` verb on the bubbling `kai-card` event and resolves the card. An optional `allowOther` row reveals a free-text escape.
+
+---
+
+### `<kai-form>` / `Form`
+
+<!-- spec:kai-form -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `data` | — | `undefined | { type: "object"; title?: undefined | string; description?: undefined | string; required?: undefined | string[]; properties: Record<string, { type: "string" | "number" | "integer" | "boolean" | "array" | "object"; title?: undefined | string; description?: undefined | string; default?: unknown; enum?: undefined | unknown[]; format?: undefined | "email" | "uri" | "url" | "date" | "date-time" | "time"; minimum?: undefined | number; maximum?: undefined | number; minLength?: undefined | number; maxLength?: undefined | number; pattern?: undefined | string; minItems?: undefined | number; maxItems?: undefined | number; items?: undefined | Record<string, unknown> | { enum: unknown[] }; properties?: undefined | Record<string, Record<string, unknown>>; required?: undefined | string[]; readOnly?: undefined | false | true; "x-kai-widget"?: undefined | "textarea" | "slider" | "rating" | "radio" | "select" | "checkbox" | "password" | "switch"; "x-kai-placeholder"?: undefined | string; "x-kai-step"?: undefined | number; "x-kai-format"?: undefined | "tel" | "ssn" | "credit-card" | "custom"; "x-kai-mask"?: undefined | string; "x-kai-mask-guide"?: undefined | string }>; "x-kai-order"?: undefined | string[]; "x-kai-inlineMax"?: undefined | number; "x-kai-submitLabel"?: undefined | string; "x-kai-dismissible"?: undefined | false | true; "x-kai-actions"?: undefined | { id: string; label: string; variant?: undefined | "default" | "ghost" | "outline" }[] }` | — | The form definition: a JSON Schema (`type:'object'`) + `x-kai-*` UI hints (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object', properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for the full shape. It IS self-referential (`FormField.properties` is another `FormField` map), and the generated `element-types.d.ts` inlines every named type, so the shipped declaration bottoms out in a `Record<string, unknown>` placeholder one level down rather than carrying the recursion. That is why `FormDefinition` is a `type` alias: an interface gets no implicit index signature, so it would not be assignable to that placeholder. |
+| `cardId` | `card-id` | `undefined | string` | — | Stable card id correlating every emitted CardEvent. Attribute: `card-id`. |
+| `heading` | `heading` | `undefined | string` | — | Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. |
+| `resolution` | — | `undefined | Record<string, unknown>` | — | Set when the user resolved this card; renders the read-only view. Property: `el.resolution = { kind:'submit', data:{…} }`. |
+| `values` | — | `undefined | Record<string, unknown>` | — | Controlled field values (JS property). When set, it wins over local edits. |
+| `defaultValues` | — | `undefined | Record<string, unknown>` | — | Initial values overlaying the schema defaults (uncontrolled seed; JS property). |
+| `disabled` | `disabled` | `undefined | false | true` | `false` | Disable all fields + submit. Attribute: `disabled`. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-values-change` | `{ values: Record<string, unknown>; valid: false | true }` | The form's values changed on input. Carries the current coerced values + validity. |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-form').focus(…)`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `focus` | `(options?: FocusOptions): void` | Focus the first control, or the first INVALID control after a failed validation. |
+| `send` | `(): void` | Validate + submit programmatically: focus the first invalid field on failure, else emit the `submit` CardEvent and resolve. Named `send`, not `submit`. |
+| `validate` | `(): void` | Run client-side validation now and return `{ valid, errors? }` WITHOUT submitting. |
+| `reset` | `(): void` | Re-seed the form from each field's `default` and clear errors. |
+| `dismiss` | `(): void` | Trigger the dismiss path (emit `dismiss` + collapse to the re-openable stub). |
+| `reopen` | `(): void` | Re-open a dismissed card from its stub (emit `reopen`). |
+
+#### Composed from
+
+`Components/Form`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-form -->
+
+Renders a JSON-Schema form definition (the `data` property: `type:'object'` plus `x-kai-*` UI hints) into themed, accessible widgets, validates client-side, and emits the coerced, validated values up the Card contract as a bubbling `kai-card` event of `{ kind:'submit' }`. `kai-values-change` is the live change signal, distinct from the terminal submit. Works bare, without a card host.
+
+---
+
+### `<kai-tasks>` / `Tasks`
+
+<!-- spec:kai-tasks -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `data` | — | `undefined | { mode?: undefined | "select" | "progress"; heading?: undefined | string; tasks: { id: string; label: string; description?: undefined | string; checked?: undefined | false | true; disabled?: undefined | false | true }[]; selectAll?: undefined | false | true; confirmLabel?: undefined | string; allowEmpty?: undefined | false | true; min?: undefined | number; max?: undefined | number; dismissible?: undefined | false | true }` | — | The tasks definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { tasks:[…], selectAll, confirmLabel, … }`. Import `TasksCardData` from `@kitn.ai/ui` for the full shape. |
+| `cardId` | `card-id` | `undefined | string` | — | Stable card id correlating every emitted CardEvent. Attribute: `card-id`. |
+| `heading` | `heading` | `undefined | string` | — | Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. |
+| `resolution` | — | `undefined | Record<string, unknown>` | — | Set when the user resolved this card; renders the read-only view. Property: `el.resolution = { kind:'submit', data:{ selected:[…] } }`. |
+| `value` | — | `undefined | string[]` | — | Controlled selection (task ids; JS property). When set, it wins over local state. |
+| `defaultValue` | — | `undefined | string[]` | — | Uncontrolled initial selection (task ids; JS property), overlaying per-task `checked`. |
+| `disabled` | `disabled` | `undefined | false | true` | `false` | Freeze the whole list + Confirm. Attribute: `disabled`. |
+| `readonly` | `readonly` | `undefined | false | true` | `false` | Display-only: rows can't be toggled and show the default cursor (no pointer, hover, or focus affordances). Keeps the look as-is. Attribute: `readonly`. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-value-change` | `{ value: string[] }` | The selection changed on a toggle. Carries the selected ids in input order. |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-tasks').select(…)`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `select` | `(taskIds?: string[]): void` | Set the checked task ids (local-only, no emit), respecting disabled/max. With no arg, select all toggleable rows. |
+| `toggle` | `(taskId: string, checked?: boolean): void` | Toggle one task by id, honoring the max gate (no `checked` = flip). |
+| `send` | `(): void` | Confirm the current selection: emits the `submit` CardEvent + resolves (only when the min/max gate passes). Named `send`, not `submit`. |
+| `focus` | `(options?: FocusOptions): void` | Focus the task group (select-all checkbox if shown, else the first row). |
+| `dismiss` | `(): void` | Trigger the dismiss path (emit `dismiss` + collapse to the re-openable stub). |
+| `reopen` | `(): void` | Re-open a dismissed card from its stub (emit `reopen`). |
+
+#### Composed from
+
+`Components/TasksCard`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-tasks -->
+
+A selectable task/plan list card: checkbox rows, an optional select-all, and a confirm button that emits the Card contract's `submit` verb with the checked ids in input order. `mode:'progress'` swaps to the onboarding-checklist look, where checking a row is itself the action and the live `kai-value-change` is the signal (no confirm button).
+
+---
+
+### `<kai-remote>` / `Remote`
+
+<!-- spec:kai-remote -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `src` | `src` | `undefined | string` | — | The remote card URL. Attribute: `src`. |
+| `providerOrigin` | `provider-origin` | `undefined | string` | — | Exact provider origin (https: or http://localhost for dev). Attribute: `provider-origin`. |
+| `envelope` | — | `undefined | Record<string, unknown>` | — | The card envelope to render. JS property only. |
+| `policy` | — | `undefined | Record<string, unknown>` | — | Optional routing policy. JS property only. |
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-remote -->
+
+Mounts a third-party card in a sandboxed cross-origin iframe and re-emits every CardEvent as a bubbling `kai-card` CustomEvent. `provider-origin` must be one exact origin (`https:`, or localhost for dev); wildcards, comma lists and any other `http:` origin are rejected before anything mounts.
+
+---
+
+### `<kai-coachmark>` / `Coachmark`
+
+<!-- spec:kai-coachmark -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `open` | `open` | `undefined | false | true` | — | Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages). Set `el.open = true`, or `<kai-coachmark open>`; listen for `kai-open-change`. |
+| `defaultOpen` | `default-open` | `undefined | false | true` | — | Initial open state on mount (uncontrolled seed). |
+| `headline` | `headline` | `undefined | string` | — | The bold title. Named `headline` because `title` collides with the global `HTMLElement.title` attribute (it throws at registration). |
+| `badge` | `badge` | `undefined | string` | — | A small badge pill beside the headline (e.g. "New"). |
+| `placement` | `placement` | `undefined | string` | — | Floating placement relative to the anchor (default `bottom`). |
+| `tone` | `tone` | `undefined | "primary" | "info" | "success" | "warning" | "error"` | — | Color tone: `primary` (default, theme accent), `info` (blue), `success` (green), `warning` (amber), or `error` (red), reusing the kit's tool hues. |
+| `arrow` | `arrow` | `undefined | false | true` | `true` | Render the arrow that points at the anchor (default `true`). Set `arrow="false"` for a plain bubble with no pointer. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-dismiss` | — | The × dismiss button was pressed. The consumer records that this hint was seen so it won't show again. |
+| `kai-open-change` | `{ open: false | true }` | The coachmark opened or closed (a method, the ×, or a driven `open`). |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-coachmark').show()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+
+#### Slots
+
+Project your own markup with `slot="name"` on a light-DOM child.
+
+| Slot | Mode | Description |
+|------|------|-------------|
+| _(default)_ | inject | The ANCHOR the coachmark points at: the element it attaches to and positions against. The bubble body is the `content` slot. |
+| `content` | replace | The bubble body text shown under the headline. |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-coachmark::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(bubble)` | The hint bubble panel. Restyle its background, radius, or padding from outside; the default is bg-primary. <br>`kai-coachmark::part(bubble) { border-radius: 1rem }` |
+| `::part(arrow)` | The arrow pointing at the anchor. Inherits the bubble color; recolor it alongside the bubble. <br>`kai-coachmark::part(arrow) { background: var(--color-accent) }` |
+| `::part(badge)` | The small badge pill beside the headline (e.g. "New"). <br>`kai-coachmark::part(badge) { text-transform: none }` |
+| `::part(title)` | The bold headline text. <br>`kai-coachmark::part(title) { font-size: 0.9375rem }` |
+| `::part(dismiss)` | The dismiss button. Recolor or reposition it from outside. <br>`kai-coachmark::part(dismiss) { color: var(--color-primary-foreground) }` |
+
+#### Composed from
+
+`Components/Coachmark`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-coachmark -->
+
+An anchored onboarding hint: wrap a trigger in the default slot and it points a tone-colored bubble at it, with a `badge` pill, a bold `headline`, the `content` slot body and a dismiss button. Record `kai-dismiss` (localStorage, your backend) so the hint shows once. Standard disclosure surface: settable + reflected `open`, `kai-open-change`, and `show()` / `hide()` / `toggle()`.
+
+---
+
 ### Composition primitives & interactive elements
 
 The polished building blocks you compose your own chrome from — themed, accessible, and Shadow-DOM-isolated. Each exposes its styleable `::part`s below (also discoverable via the `kai` MCP `component_reference`).
@@ -2066,6 +2606,1036 @@ Themed by the global design tokens (override any `--color-*`).
 <!-- /spec:kai-input -->
 
 Single-line text field with a label, hint and error, plus opt-in format masks: `format` (`#` digit · `@` letter/digit · `*` obscurable, everything else a positional literal), `guide`, `semantic` (`tel` · `ssn` · `credit-card` · `custom`), `case-mode` and `copy-policy`. `value` is always the canonical form (digits for the digit types, the formatted text for `custom`); the on-screen text rides along as `formattedValue` on the event details. A date mask shapes typing only, it is not date validation.
+
+---
+
+### `<kai-card>` / `Card`
+
+<!-- spec:kai-card -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `appearance` | `appearance` | `undefined | "outlined" | "filled" | "plain" | "accent"` | `'outlined'` | Surface treatment: `outlined` (default) | `filled` | `plain` | `accent`. Attribute: `appearance`. |
+| `orientation` | `orientation` | `undefined | "vertical" | "horizontal" | "responsive"` | `'vertical'` | `vertical` (default, media on top) | `horizontal` (media at the start) | `responsive` (horizontal when the card's container is wide enough, else vertical, via a container query on the card's own width). Attribute: `orientation`. |
+| `collapse` | `collapse` | `undefined | string` | `'28rem'` | The card width below which a `responsive` card collapses to vertical and the footer actions stack. A CSS length; default `28rem`. Attribute: `collapse`. |
+| `dense` | `dense` | `undefined | false | true` | `false` | Tighter spacing for dense lists. Attribute: `dense`. |
+| `dismissible` | `dismissible` | `undefined | false | true` | `false` | Show a close (×) that hides the card and emits `kai-dismiss`. Attribute: `dismissible`. Off by default. |
+| `href` | `href` | `undefined | string` | — | Render the whole card as a link. Attribute: `href`. Wins over `clickable`. |
+| `target` | `target` | `undefined | string` | — | `target` for the `href` anchor. Attribute: `target`. |
+| `rel` | `rel` | `undefined | string` | — | `rel` for the `href` anchor. Attribute: `rel`. |
+| `clickable` | `clickable` | `undefined | false | true` | `false` | Make the whole card a button (`role="button"`, Enter/Space, hover affordance) that emits `kai-card-click`. Attribute: `clickable`. Ignored when `href` is set. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-card-click` | — | A `clickable`/`href` card was activated (click, or Enter/Space). |
+| `kai-dismiss` | — | The card was dismissed via its × (it also hides itself). |
+
+#### Slots
+
+Project your own markup with `slot="name"` on a light-DOM child.
+
+| Slot | Mode | Description |
+|------|------|-------------|
+| _(default)_ | inject | The card body, below the header/media regions. |
+| `media` | inject | Full-bleed media (image/video/illustration) at the top (vertical) or start (horizontal). Clipped to the card corners. |
+| `header` | inject | Header content, e.g. a title. Rendered above the body. |
+| `header-actions` | inject | An actions cluster pinned to the end of the header row. |
+| `footer` | inject | Footer content rendered below the body. |
+| `footer-actions` | inject | Action buttons pinned to the end of the footer. Do NOT combine with a clickable/href card (nested interactive). |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-card::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(card)` | The card root (a div, or an a when href is set). Restyle its radius, border, or background; set --kai-card-spacing for padding/gaps (the dense prop sets the compact default). <br>`kai-card::part(card) { border-radius: 1rem; --kai-card-spacing: 1.5rem }` |
+| `::part(media)` | The full-bleed media region. Cap or crop it from outside (e.g. a fixed height with object-fit). <br>`kai-card::part(media) { max-height: 12rem }` |
+| `::part(header)` | The header row (header content + header-actions). Add a divider or adjust its alignment. <br>`kai-card::part(header) { border-bottom: 1px solid var(--color-border) }` |
+| `::part(body)` | The default-slot body region. <br>`kai-card::part(body) { font-size: 0.9375rem }` |
+| `::part(footer)` | The footer row (footer content + footer-actions). <br>`kai-card::part(footer) { border-top: 1px solid var(--color-border) }` |
+| `::part(dismiss)` | The dismiss (×) button shown when dismissible. Recolor or reposition it from outside. <br>`kai-card::part(dismiss) { color: var(--color-muted-foreground) }` |
+
+#### Composed from
+
+`UI/Card`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-card -->
+
+The presentational card: one element whose flexibility comes from structural slots (`media`, `header`, `header-actions`, the default body, `footer`, `footer-actions`), `appearance` and `orientation` variants, and a single `--kai-card-spacing` knob. `orientation="responsive"` flips between horizontal and vertical on the card's own container width. `href` makes the whole card a link, `clickable` makes it a button emitting `kai-card-click`, and `dismissible` adds a close button that hides the card and emits `kai-dismiss`.
+
+---
+
+### `<kai-dialog>` / `Dialog`
+
+<!-- spec:kai-dialog -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `open` | `open` | `undefined | false | true` | — | Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages on Escape/backdrop). Set `el.open = true`, or `<kai-dialog open>`; listen for `kai-open-change`. |
+| `defaultOpen` | `default-open` | `undefined | false | true` | — | Initial open state on mount (uncontrolled seed). |
+| `label` | `label` | `undefined | string` | `DEFAULT_LABEL` | Accessible name for the modal, used when no `header` slot is projected: `<kai-dialog label="Delete workspace">`. A projected `header` WINS over this (it becomes `aria-labelledby`), because ARIA resolves `aria-labelledby` ahead of `aria-label` and the visible heading is the name both a sighted and a screen-reader user can be talked through. Defaults to `Dialog` so a modal is never nameless. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-open-change` | `{ open: false | true }` | The dialog opened or closed (Escape, backdrop click, a driven `open`, or a method). |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-dialog').show()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+| `focus` | `(options?: FocusOptions): void` | Move focus to the dialog panel (no-op while closed). |
+
+#### Slots
+
+Project your own markup with `slot="name"` on a light-DOM child.
+
+| Slot | Mode | Description |
+|------|------|-------------|
+| _(default)_ | inject | The dialog body, between the `header` and `footer` slots. |
+| `header` | inject | Optional title region at the top of the panel. |
+| `footer` | inject | Optional actions region at the bottom of the panel. |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-dialog::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(backdrop)` | The full-area scrim behind the panel. Restyle its color/blur. <br>`kai-dialog::part(backdrop) { background: rgb(0 0 0 / 0.6) }` |
+| `::part(panel)` | The centered modal panel. Restyle width, radius, padding. <br>`kai-dialog::part(panel) { max-width: 32rem }` |
+| `::part(body)` | The scrolling content region (the default slot). <br>`kai-dialog::part(body) { padding: 1.25rem }` |
+| `::part(header)` | Optional title region at the top of the panel. |
+| `::part(footer)` | Optional actions region at the bottom of the panel. |
+
+#### Composed from
+
+`UI/Dialog`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-dialog -->
+
+A modal dialog with `header` and `footer` slots, Escape and backdrop close, and the standard disclosure surface: settable + reflected `open`, `kai-open-change`, and `show()` / `hide()` / `toggle()`. A projected `header` becomes the accessible name; otherwise `label` does, and a generic fallback keeps the modal from ever being nameless.
+
+---
+
+### `<kai-popover>` / `Popover`
+
+<!-- spec:kai-popover -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `placement` | `placement` | `undefined | "top" | "right" | "bottom" | "left" | "bottom-end" | "bottom-start" | "left-end" | "left-start" | "right-end" | "right-start" | "top-end" | "top-start"` | `'bottom-start'` | Floating placement relative to the trigger (floating-ui placement). |
+| `gutter` | `gutter` | `undefined | number` | `6` | Gap in px between the trigger and the panel. |
+| `open` | `open` | `undefined | false | true` | — | Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute, the element still self-manages on click). Set `el.open = true`, or `<kai-popover open>`; listen for `kai-open-change`. |
+| `defaultOpen` | `default-open` | `undefined | false | true` | — | Initial open state on mount (uncontrolled seed). |
+| `disabled` | `disabled` | `undefined | false | true` | — | Turn the popover off while keeping the trigger mounted (clicks and `show()` no longer open it). |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-open-change` | `{ open: false | true }` | The popover opened or closed (click, Escape, outside-click, or a method). |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-popover').show()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+
+#### Slots
+
+Project your own markup with `slot="name"` on a light-DOM child.
+
+| Slot | Mode | Description |
+|------|------|-------------|
+| _(default)_ | inject | The popover panel body. The control that opens it is the `trigger` slot. |
+| `trigger` | replace | The control that opens the popover (a button, an avatar, …). The panel anchors to it. |
+
+#### Composed from
+
+`UI/Popover`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-popover -->
+
+A button-and-popover primitive: a trigger that toggles a floating panel of arbitrary content. The panel is a `role="dialog"` region, not a menu, so it can hold model rows, toggle switches, nested groups, any markup: the building block for header menus and other "button + popover card" affordances. Standard disclosure surface: settable + reflected `open`, `kai-open-change`, and `show()` / `hide()` / `toggle()`.
+
+Popover, dropdown and menu are three corners of one deliberate triangle, not three takes on one widget. `<kai-popover>` is the WAI-ARIA non-modal dialog pattern: reach for it when the panel is content. `<kai-dropdown>` and `<kai-menu>` are both facades over the same menu machinery (`role="menu"`, roving focus across menu items with disabled ones skipped, typeahead, Home/End, submenus) and differ only in authoring model: `kai-dropdown` when you compose the menu items in markup, `kai-menu` when the items are data (`items[]`).
+
+---
+
+### `<kai-dropdown>` / `Dropdown`
+
+<!-- spec:kai-dropdown -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `triggerIcon` | `trigger-icon` | `undefined | string` | — | Built-in trigger: leading icon (a named icon like `"plus"`, an image URL/data-URI, or text). A slotted `slot="trigger"` overrides it. |
+| `triggerLabel` | `trigger-label` | `undefined | string` | — | Built-in trigger: a text label. This is the trigger's VISIBLE text, so it is also its accessible name, and `label` does not override it: an accessible name that does not contain the visible text is unreachable by speech input (WCAG 2.5.3, Label in Name). Same rule `kai-menu` follows. |
+| `triggerIconTrailing` | `trigger-icon-trailing` | `undefined | string` | — | Built-in trigger: a trailing icon (e.g. `"chevron-down"` for a select look). |
+| `label` | `label` | `undefined | string` | — | Accessible name for a trigger with no visible label. Ignored when `triggerLabel` is set, which is already the visible name. It DOES name a slotted `slot="trigger"`, which is VISUAL content with the name supplied separately: the same two-slot distinction `kai-menu` documents. |
+| `full` | `full` | `undefined | false | true` | `false` | Stretch the trigger to the full width of its container (a block row). Attribute: `full`. |
+| `open` | `open` | `undefined | false | true` | — | Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute, the menu still self-manages on click/keyboard). Set `el.open = true`, or `<kai-dropdown open>`; listen for `kai-open-change`. |
+| `defaultOpen` | `default-open` | `undefined | false | true` | — | Initial open state on mount (uncontrolled seed). |
+| `disabled` | `disabled` | `undefined | false | true` | — | Disable the trigger: click/keyboard and `show()` no longer open the menu. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-open-change` | `{ open: false | true }` | The menu opened or closed (click, keyboard, Escape, outside-click, or a method). |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-dropdown').show()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+
+#### Slots
+
+Project your own markup with `slot="name"` on a light-DOM child.
+
+| Slot | Mode | Description |
+|------|------|-------------|
+| _(default)_ | inject | The menu body: your own rows. Give each `role="menuitem"`. The control that opens it is the `trigger` slot. |
+| `trigger` | replace | Visual content of the trigger button (an icon, text, an `<svg>`). Replaces the built-in trigger* content; name it with `label`. |
+
+#### Composed from
+
+`UI/Dropdown`, `UI/DropdownTrigger`, `UI/DropdownContent`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-dropdown -->
+
+A trigger plus a floating menu surface you fill yourself: slot arbitrary markup into the panel. The sibling of `<kai-menu>`, split by who owns the menu body: both are facades over the same underlying Dropdown, but `kai-menu` renders a JSON `items` tree for you while `kai-dropdown` is slot-composed, the shape you need when the rows are your own components rather than data. Use the built-in trigger via `trigger-icon` / `trigger-label`, or replace it entirely with `slot="trigger"`.
+
+---
+
+### `<kai-tabs>` / `Tabs`
+
+<!-- spec:kai-tabs -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `items` | — | `undefined | { id: string; label?: undefined | string; icon?: undefined | string; disabled?: undefined | false | true }[]` | — | Tabs to render. Set as a JS property, not an HTML attribute. |
+| `value` | `value` | `undefined | string` | — | Controlled selected id. Set as a JS property (or the `value` attribute); drive it from your app in response to `kai-tab-change`. Omit for uncontrolled. |
+| `defaultValue` | `default-value` | `undefined | string` | — | Initial selected id when uncontrolled (use the `default-value` attribute in plain HTML). |
+| `variant` | `variant` | `undefined | "segmented" | "underline"` | `'segmented'` | `segmented` (default, a pill group) or `underline` (an underlined row). |
+| `block` | `block` | `undefined | false | true` | — | Stretch the strip to full width, each tab sharing the space equally. |
+| `disabled` | `disabled` | `undefined | false | true` | — | Disable the whole strip. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-tab-change` | `{ value: string }` | A tab was selected (click, Enter/Space, or arrow-key move). `value` is the item's id. |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-tabs').select(…)`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `select` | `(id: string): void` | Select a tab by id (fires `kai-tab-change`). Ignores unknown/disabled ids. |
+| `focus` | `(): void` | Focus the active tab (or the first focusable tab). |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-tabs::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(tablist)` | The tab strip container (role="tablist"). Restyle its gap, padding, background, or radius from outside; the `variant` prop sets the segmented/underline defaults. <br>`kai-tabs::part(tablist) { gap: 0.5rem; background: var(--color-card) }` |
+| `::part(tab)` | A single tab button. Restyle from outside; the active tab carries a `[data-active]` attribute, so target `::part(tab)[data-active]` for the selected look. <br>`kai-tabs::part(tab)[data-active] { color: var(--color-primary); font-weight: 600 }` |
+
+#### Composed from
+
+`UI/Tabs`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-tabs -->
+
+An accessible tab strip, selection only: set `items` as a JS property, listen for `kai-tab-change`, and render what each tab shows yourself (this is not a content router). `variant` picks the segmented pill group or an underlined row; `block` stretches the strip to full width with the tabs sharing the space equally.
+
+---
+
+### `<kai-segmented>` / `Segmented`
+
+<!-- spec:kai-segmented -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `options` | — | `{ value: string; label: string; icon?: undefined | string }[]` | `[]` | The selectable segments, left to right. Set as a JS property (array). |
+| `value` | `value` | `undefined | string` | — | Controlled selected `value`. Settable and reflected to the `value` attribute. `el.value = 'preview'` drives it; choosing a segment updates it and fires `kai-change`. Read `el.value` for live state. |
+| `size` | `size` | `undefined | "sm" | "md"` | `'md'` | Control density: `sm` or `md`. Defaults to `md`. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-change` | `{ value: string }` | A segment was chosen. |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-segmented::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(track)` | The segmented track (the pill container holding the segments). Restyle its background, radius, or padding. <br>`kai-segmented::part(track) { border-radius: 9999px }` |
+| `::part(segment)` | Each segment button. Restyle padding, font weight, or the selected look. <br>`kai-segmented::part(segment) { font-weight: 600 }` |
+
+#### Composed from
+
+`UI/Segmented`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-segmented -->
+
+A single-select pill track (a segmented / toggle group). Set `options` as a JS property; `value` is settable and reflected to the `value` attribute, and choosing a segment updates it and fires `kai-change`. Driving `el.value` programmatically does not re-fire the event, since the host already knows.
+
+---
+
+### `<kai-status>` / `Status`
+
+<!-- spec:kai-status -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `status` | `status` | `undefined | "new" | "online" | "busy" | "away" | "offline"` | `'new'` | Presence/notification state → color. `new` (default) maps to the blue hue. |
+| `pulse` | `pulse` | `undefined | false | true` | `false` | Animated ping ring (off by default; respects prefers-reduced-motion). |
+| `label` | `label` | `undefined | string` | — | Accessible name. Without it the dot is decorative. |
+| `size` | `size` | `undefined | "sm" | "md"` | `'sm'` | `sm` (default) or `md`. |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-status::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(dot)` | The status dot. Recolor or resize it from outside; the `status` prop sets the default hue. <br>`kai-status::part(dot) { background: var(--color-tool-green) }` |
+
+#### Composed from
+
+`UI/Status`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-status -->
+
+A small presence / notification dot: `status` picks the color, `pulse` adds a ping ring that respects `prefers-reduced-motion`, and `label` gives it an accessible name (without one the dot is decorative). Recolor via `::part(dot)`.
+
+---
+
+### `<kai-kbd>` / `Kbd`
+
+<!-- spec:kai-kbd -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `keys` | `keys` | `undefined | string` | — | Shortcut spec: tokens joined by `+` (e.g. `Mod+Shift+K`). Omit it to show default-slot content instead. Display only; the element does not bind keys. |
+| `platform` | `platform` | `undefined | "auto" | "mac" | "other"` | `'auto'` | `mac` uses ⌘/⌥, `other` uses Ctrl. `auto` (default) sniffs the OS. |
+| `size` | `size` | `undefined | "sm" | "md"` | `'md'` | Cap size: `sm` or `md`. Defaults to `md`. |
+
+#### Slots
+
+Project your own markup with `slot="name"` on a light-DOM child.
+
+| Slot | Mode | Description |
+|------|------|-------------|
+| _(default)_ | inject | Literal key text, when you are not using the `keys` prop to render key caps. |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-kbd::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(key)` | Each key cap. Restyle its surface, border, radius, or font. <br>`kai-kbd::part(key) { border-radius: 0.375rem }` |
+| `::part(separator)` | The gap between key caps. Inject a literal joiner (e.g. a plus sign) from outside. <br>`kai-kbd::part(separator)::after { content: "+" }` |
+
+#### Composed from
+
+`UI/Kbd`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-kbd -->
+
+A keyboard-shortcut display: feed `keys` tokens joined by `+` (`Mod+Shift+K`) and it renders one inset key cap per token, mapped to platform glyphs. `Mod` renders as the command key on mac and Ctrl elsewhere; `platform="auto"` (the default) sniffs the OS. Display only, it binds no keys.
+
+---
+
+### `<kai-editable-label>` / `EditableLabel`
+
+<!-- spec:kai-editable-label -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `value` | `value` | `undefined | string` | — | The label text. Settable and reflected to the `value` attribute. Read `el.value` for live state. |
+| `editing` | `editing` | `undefined | false | true` | `false` | Controlled edit state. `el.editing = true` opens the field; reflected to the `editing` attribute. |
+| `placeholder` | `placeholder` | `undefined | string` | — | Placeholder shown while editing / when the value is empty. |
+| `disabled` | `disabled` | `undefined | false | true` | `false` | Disable entering edit mode. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-cancel` | — | Edit was cancelled (Esc); the text is restored. |
+| `kai-rename` | `{ value: string }` | Committed a changed value (Enter / blur). |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-editable-label').edit()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `edit` | `(): void` | Switch the label into its editing field, which autofocuses and selects the current text. Same entry point as a user double-click, and a no-op while `disabled`. Commit with `commit()` or by blurring, abandon with `cancel()` or Escape. |
+| `commit` | `(): void` | Close the field and keep what was typed, exactly as blurring it does. `kai-rename` fires only when the text actually changed, so committing an untouched field is silent. A no-op while the field is closed. |
+| `cancel` | `(): void` | Abandon the edit, exactly as Escape does: the original text is restored, the field closes and `kai-cancel` fires. `kai-rename` never fires, even if the field was edited. Also works when `editing` was set programmatically and the field has not rendered yet. |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-editable-label::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(text)` | The read-mode label text. Restyle its typography; it swaps to the input on edit. <br>`kai-editable-label::part(text) { font-weight: 600 }` |
+| `::part(input)` | The edit-mode input (the composed kai-input field). <br>`kai-editable-label::part(input) { font: inherit }` |
+
+#### Composed from
+
+`UI/EditableLabel`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-editable-label -->
+
+Inline rename, built on `kai-input`: shows `value` as text, and a double-click (or `edit()`, or the `editing` prop) swaps in an autofocused field. Enter or blur commits and fires `kai-rename`, only when the value actually changed; Esc restores the text and fires `kai-cancel`.
+
+---
+
+### `<kai-progress-bar>` / `ProgressBar`
+
+<!-- spec:kai-progress-bar -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `value` | `value` | `undefined | number` | — | Current progress value (0..max). Attribute: `value`. |
+| `max` | `max` | `undefined | number` | — | The value `value` runs to (default 100). Attribute: `max`. |
+| `label` | `label` | `undefined | string` | — | Optional caption above the track. Attribute: `label`. |
+| `tone` | `tone` | `undefined | string` | `'primary'` | Fill color: `primary` (default), `success`, `warning`, `error`, `info`. Attribute: `tone`. |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-progress-bar::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(track)` | The progress track (the background bar). Restyle its height, radius, or background from outside. <br>`kai-progress-bar::part(track) { height: 0.5rem }` |
+| `::part(fill)` | The filled portion; its width follows value/max. Recolor it from outside. <br>`kai-progress-bar::part(fill) { background: var(--color-tool-green) }` |
+
+#### Composed from
+
+`UI/ProgressBar`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-progress-bar -->
+
+A thin determinate progress bar: a rounded track whose fill width is `value / max`, clamped. `tone` picks a semantic fill hue and `label` adds a caption above the track. Scalar attributes only.
+
+---
+
+### `<kai-agent-card>` / `AgentCard`
+
+<!-- spec:kai-agent-card -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `name` | `name` | `undefined | string` | — | The agent's name, the primary label. Attribute: `name`. |
+| `active` | `active` | `undefined | false | true` | — | Selected / focused state: highlighted border + surface. Attribute: `active`. |
+| `needsAttention` | `needs-attention` | `undefined | false | true` | — | Raise a prominent "Needs you" pill plus a glowing amber edge. This is the attention-routing signal that pulls focus to this agent. Attribute: `needs-attention`. |
+| `status` | — | `undefined | { tone: "working" | "idle" | "done" | "error" | "blocked"; label?: undefined | string; pulse?: undefined | false | true }` | — | Run status. A JS PROPERTY (object), not an attribute. Shape: `{ tone, label?, pulse? }`, where `tone` is one of `working` | `idle` | `done` | `error` | `blocked` (maps to the kit's tool hues), `label` is an optional short string beside the dot, and `pulse` animates the dot. Set it with `el.status = { tone: 'working', label: 'Working', pulse: true }`. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-activate` | — | The card was activated by a click, or by Enter / Space while focused. Promote this agent back to focus. |
+| `kai-menu` | — | The trailing "..." kebab was clicked. The consumer opens its own menu; the card only surfaces the affordance (the click does not also activate the card). |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-agent-card::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(status)` | The leading tone-colored status dot. <br>`kai-agent-card::part(status) { width: 0.625rem; height: 0.625rem }` |
+| `::part(menu)` | The trailing overflow ("...") menu button. <br>`kai-agent-card::part(menu) { opacity: 1 }` |
+
+#### Composed from
+
+`UI/AgentCard`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-agent-card -->
+
+The compact glanceable card for one agent in a multi-agent workspace: the agent name, a tone-colored status dot (`status` is a JS-property object, `{ tone, label?, pulse? }`), a needs-attention treatment, an `active` state and a trailing overflow button. `kai-activate` says promote this agent back to focus; `kai-menu` asks you to open your own per-agent menu (the card only surfaces the affordance).
+
+---
+
+### Layout & shell elements
+
+Chat-agnostic arrangement: the navigation, panes, docks and settings rows you compose an app shell from. Data goes in as JS properties, intents come back out as `kai-*` events on the element; the shell never owns your routing or your state.
+
+### `<kai-nav>` / `Nav`
+
+<!-- spec:kai-nav -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `items` | — | `undefined | { id: string; label?: undefined | string; icon?: undefined | string; badge?: undefined | string; trailing?: undefined | string; disabled?: undefined | false | true; children?: undefined | Record<string, unknown>[]; status?: undefined | { tone: "primary" | "info" | "success" | "warning" | "error" | "neutral"; label?: undefined | string; pulse?: undefined | false | true }; meta?: undefined | string; action?: undefined | { icon: string; label: string }; closable?: undefined | false | true }[]` | — | The nav items. Set as a JS property (array, not an attribute). Each item may carry `children` (a collapsible group), a `status` dot, and trailing `meta` text. |
+| `value` | `value` | `undefined | string` | — | Active item id (controlled). |
+| `defaultValue` | `default-value` | `undefined | string` | — | Initial active id when uncontrolled. |
+| `defaultCollapsed` | — | `undefined | string[]` | — | Ids of group items collapsed on first render (groups default to expanded). Set as a JS property (array). |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-nav-item-action` | `{ value: string; action?: undefined | { icon: string; label: string } }` | A row's trailing `action` button was activated (not a select). `value` is the item id; `action` echoes the item's `{ icon, label }`. |
+| `kai-nav-item-close` | `{ value: string }` | A `closable` row's trailing close button was activated (not a select). `value` is the item id. |
+| `kai-nav-select` | `{ id: string }` | A nav item was activated. |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-nav').select(…)`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `select` | `(id: string): void` | Activate an item by id (fires kai-nav-select). |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-nav::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(nav)` | The nav list container. Restyle its gap or padding from outside. <br>`kai-nav::part(nav) { gap: 0.25rem }` |
+| `::part(item)` | A nav item button (leaf or group parent). The active leaf carries aria-current="page" and a group parent carries aria-expanded; target `::part(item)[aria-current]` for the selected look or `::part(item)[aria-expanded]` for a group row. <br>`kai-nav::part(item)[aria-current] { background: var(--color-accent) }` |
+| `::part(group)` | The nested child list rendered under an expanded group item. Add a left guide line or tune its indent from outside. <br>`kai-nav::part(group) { border-left: 1px solid var(--color-border); margin-left: 1.1rem }` |
+| `::part(chevron)` | The disclosure chevron on a group row (rotates when expanded). Recolor or resize it from outside. <br>`kai-nav::part(chevron) { opacity: 1; color: var(--color-primary) }` |
+| `::part(status)` | The per-item status cluster (a colored dot in the tone hue + an optional label). Shown only when an item carries a `status`; the `pulse` flag animates the dot. Restyle from outside. <br>`kai-nav::part(status) { gap: 0.5rem }` |
+| `::part(meta)` | The right-aligned muted trailing text on a row (e.g. a relative time). Shown only when an item carries `meta`; restyle from outside. <br>`kai-nav::part(meta) { color: var(--color-foreground); font-variant-numeric: tabular-nums }` |
+| `::part(item-action)` | The trailing per-item action / close button, a sibling of the item button. Shown only when an item carries `action` or `closable`; reveal it on hover or pin it visible from outside. <br>`kai-nav::part(item-action) { opacity: 1 }` |
+
+#### Composed from
+
+`UI/Nav`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-nav -->
+
+A vertical navigation list driven by a JSON `items` tree set as a JS property: id, label, an optional leading icon, a trailing `badge`, a `status` dot, trailing `meta` text, and `children` for collapsible groups. Selecting a leaf fires `kai-nav-select`; group rows toggle expand/collapse instead. Items may also carry a trailing `action` button or `closable: true`, which fire `kai-nav-item-action` / `kai-nav-item-close` rather than a select.
+
+---
+
+### `<kai-screen>` / `Screen`
+
+<!-- spec:kai-screen -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `open` | `open` | `undefined | false | true` | — | Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages). Set `el.open = true`, or `<kai-screen open>`; listen for `kai-open-change`. |
+| `defaultOpen` | `default-open` | `undefined | false | true` | — | Initial open state on mount (uncontrolled seed). |
+| `headline` | `headline` | `undefined | string` | — | Header title text. A projected `title` slot overrides it. (Named `headline` because `title` collides with the global `HTMLElement.title` attribute.) |
+| `back` | `back` | `undefined | false | true` | — | Show the back button (default true). |
+| `noInert` | `no-inert` | `undefined | false | true` | — | Opt out of marking sibling elements inert/aria-hidden while open (for unusual layouts). |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-back` | — | Back navigation intent: the back button or Escape. The consumer flips their own routing in response (the screen knows nothing about the trigger). |
+| `kai-open-change` | `{ open: false | true }` | The screen opened or closed (a method, `Escape` close, or driven `open`). |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-screen').show()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+| `focus` | `(options?: FocusOptions): void` | Move focus to the screen surface (no-op while closed). |
+
+#### Slots
+
+Project your own markup with `slot="name"` on a light-DOM child.
+
+| Slot | Mode | Description |
+|------|------|-------------|
+| _(default)_ | inject | The screen body, below the title bar. |
+| `title` | replace | Rich header title; overrides the `headline` prop. |
+| `actions` | inject | Header trailing cluster (e.g. an avatar or overflow menu). |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-screen::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(header)` | The back-header bar (back button + title + actions). Restyle its height, padding, or border from outside. <br>`kai-screen::part(header) { height: 3.25rem; padding-inline: 1rem }` |
+| `::part(back)` | The back button. Restyle or hide it from outside; `back="false"` removes it entirely. <br>`kai-screen::part(back) { border-radius: 9999px }` |
+| `::part(body)` | The full-bleed surface that fills the mount point and scrolls its content. Tune padding or background from outside. <br>`kai-screen::part(body) { background: var(--color-card) }` |
+| `::part(title)` | Rich header title; overrides the `headline` prop. |
+
+#### Composed from
+
+`Components/Screen`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-screen -->
+
+A full-bleed overlay destination: the push/drill-in surface that takes over its mount point under a back header. Your routing owns the swap (flip `open` from your own trigger and from its `kai-back`); the screen owns being the takeover: sibling elements go inert while open (opt out with `no-inert`), focus moves in on open and restores on close, and Escape fires `kai-back`.
+
+---
+
+### `<kai-pane>` / `Pane`
+
+<!-- spec:kai-pane -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `headline` | `headline` | `undefined | string` | `''` | The pane title (the agent / window name). Named `headline` because `title` collides with the global `HTMLElement.title` attribute (it throws at registration). Attribute: `headline`. |
+| `subtitle` | `subtitle` | `undefined | string` | — | A role / label shown under the title (e.g. "Reviewer", "claude-sonnet"). Attribute: `subtitle`. |
+| `maximized` | `maximized` | `undefined | false | true` | `false` | Show the restore glyph instead of maximize, and signal the maximized view-state. Drive it yourself in response to `kai-maximize`. Attribute: `maximized`. |
+| `focused` | `focused` | `undefined | false | true` | `false` | Highlight the frame with a ring/border to mark the ACTIVE pane. Attribute: `focused`. |
+| `showSplit` | `show-split` | `undefined | false | true` | `false` | Show a split-pane window control that fires `kai-split`. Off by default. Attribute: `show-split`. |
+| `showDock` | `show-dock` | `undefined | false | true` | `false` | Show a dock-to-side window control that fires `kai-dock`. Off by default. Attribute: `show-dock`. |
+| `status` | — | `undefined | { tone: "working" | "idle" | "done" | "error" | "blocked"; label?: undefined | string; pulse?: undefined | false | true }` | — | A tone-colored status dot (+ optional label) in the header. An object `{ tone, label?, pulse? }` set as a JS PROPERTY (not an attribute). |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-close` | — | The close (×) control was clicked. |
+| `kai-dock` | — | The dock control was clicked (only present when `show-dock`). |
+| `kai-maximize` | `{ maximized: false | true }` | The maximize/restore control was clicked. `detail.maximized` is the intended NEXT state. Drive the `maximized` prop yourself from it. |
+| `kai-split` | — | The split control was clicked (only present when `show-split`). |
+
+#### Slots
+
+Project your own markup with `slot="name"` on a light-DOM child.
+
+| Slot | Mode | Description |
+|------|------|-------------|
+| _(default)_ | inject | The pane body, below the header row. |
+| `leading` | inject | A glyph or avatar at the start of the pane header. |
+| `actions` | inject | Extra header controls, before the built-in window controls. |
+| `footer` | inject | A pinned row below the body (e.g. a composer). |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-pane::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(header)` | The pane header bar (leading + title/status + actions + window controls). <br>`kai-pane::part(header) { padding-inline: 0.75rem }` |
+| `::part(body)` | The scrolling body region (the default slot). <br>`kai-pane::part(body) { padding: 1rem }` |
+| `::part(controls)` | The window-control cluster (maximize/close, and split/dock when enabled). <br>`kai-pane::part(controls) { gap: 0.25rem }` |
+| `::part(footer)` | A pinned row below the body (e.g. a composer). |
+
+#### Composed from
+
+`UI/Pane`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-pane -->
+
+A framed panel for a multi-agent workspace: a header with title and subtitle, a status dot (`status` is a JS-property object), extra `actions` and window controls, over a scrolling body and an optional pinned `footer` (a composer, say). The controls emit intents (`kai-maximize`, `kai-close`, `kai-split`, `kai-dock`); you drive the `maximized` and `focused` attributes yourself in response.
+
+---
+
+### `<kai-pane-group>` / `PaneGroup`
+
+<!-- spec:kai-pane-group -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `tabs` | — | `undefined | { id: string; name: string; status?: undefined | { tone: "working" | "idle" | "done" | "error" | "blocked"; label?: undefined | string; pulse?: undefined | false | true }; needsAttention?: undefined | false | true; number?: undefined | number }[]` | — | The tabs to render. An array of `{ id, name, status?, needsAttention?, number? }` set as a JS PROPERTY (not an HTML attribute). |
+| `active` | `active` | `undefined | string` | — | The active tab id (controlled, and reflected to the `active` ATTRIBUTE so `::part`/`[active]` selectors and the per-tab named slot follow it). Set it as the `active` attribute or drive it from `kai-tab-change`; omit for uncontrolled (the first tab). |
+| `focused` | `focused` | `undefined | false | true` | `false` | Highlight the frame as the ACTIVE group in a multi-group layout. Attribute: `focused`. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-tab-change` | `{ id: string }` | A tab was selected (click, Enter/Space, or arrow-key move). `detail.id` is the tab's id. |
+| `kai-tab-close` | `{ id: string }` | A tab's close (×) was clicked. Drop the tab from `tabs` yourself. |
+| `kai-tab-menu` | `{ id: string }` | A tab's "…" overflow was clicked. Open your own menu from `detail.id`. |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-pane-group').select(…)`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `select` | `(id: string): void` | Select a tab by id (fires `kai-tab-change`). Ignores unknown ids. |
+| `focus` | `(): void` | Focus the active tab in the strip. |
+
+#### Slots
+
+Project your own markup with `slot="name"` on a light-DOM child.
+
+| Slot | Mode | Description |
+|------|------|-------------|
+| _(default)_ | inject | Content shown for every tab. Use it INSTEAD of the per-tab `slot="<tab id>"` seams when you swap the content yourself. |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-pane-group::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(tabs)` | The tab strip (role="tablist"). Restyle its background, height, padding, or gap from outside. <br>`kai-pane-group::part(tabs) { background: var(--color-card); gap: 0.25rem }` |
+| `::part(tab)` | A single tab button. The active tab carries `[aria-selected="true"]`; target `::part(tab)[aria-selected="true"]` for the selected look. <br>`kai-pane-group::part(tab)[aria-selected="true"] { background: var(--color-accent) }` |
+| `::part(body)` | The active tab's content region (the named/default slot host). <br>`kai-pane-group::part(body) { padding: 0.75rem }` |
+| `::part(menu)` | The per-tab "…" overflow button. Reveal it on hover or pin it visible from outside. <br>`kai-pane-group::part(menu) { opacity: 1 }` |
+| `::part(close)` | The per-tab close ("×") button. Recolor, resize, or hide it from outside. <br>`kai-pane-group::part(close) { color: var(--color-muted-foreground) }` |
+
+#### Composed from
+
+`UI/PaneGroup`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-pane-group -->
+
+An editor group: a tab strip of numbered status-badge tabs over the active tab's content. Set `tabs` as a JS property and slot one named region per tab id; the group shows the active one. `kai-tab-change` / `kai-tab-close` / `kai-tab-menu` hand the tab UX decisions to you while the group owns the strip itself.
+
+---
+
+### `<kai-resizable>` / `Resizable`
+
+<!-- spec:kai-resizable -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `orientation` | `orientation` | `undefined | "horizontal" | "vertical"` | `'horizontal'` | Layout axis: `horizontal` (row, default) or `vertical` (column). |
+| `maximizedIndex` | — | `undefined | number | null` | `null` | Which item index is maximized (null = none). Declarative source of truth. |
+| `handle` | `handle` | `undefined | "line" | "grip" | "none"` | `'line'` | Divider affordance drawn inside each draggable handle's 8px grab zone: - `line` (default): a 1px hairline, transparent at rest, tinting on hover/drag. - `grip`: a dotted grip handle. - `none`: no visible divider, just the invisible hit-area. The full grab zone and keyboard/ARIA behavior are identical for all three. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-change` | `{ sizes: number[] }` | Fired on drag-end / keyboard resize / visibility change. `detail.sizes` = panel sizes in percent. |
+| `kai-maximize-change` | `{ maximized: false | true; index: number | null }` | Observe layout maximize state. |
+| `kai-maximize-state` | `{ maximized: false | true }` | Authoritative maximize state, dispatched as a raw composed CustomEvent (not through `dispatch`) onto the affected `<kai-resizable-item>` and, on restore, onto the group host. A nested element (e.g. `<kai-artifact>`) listens for it to reconcile its own toggle. |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-resizable').maximize(…)`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `maximize` | `(index: number): void` | Imperatively maximize the item at `index` (thin wrapper over `maximizedIndex`). |
+| `restore` | `(): void` | Imperatively restore from the maximized layout. |
+
+#### Slots
+
+Project your own markup with `slot="name"` on a light-DOM child.
+
+| Slot | Mode | Description |
+|------|------|-------------|
+| _(default)_ | inject | The `<kai-resizable-item>` panels, in order. Dividers are inserted between them. |
+
+#### Composed from
+
+`UI/ResizableHandle`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-resizable -->
+
+A drag-resizable panel group: lays out its `<kai-resizable-item>` children along `orientation` with draggable handles between them, and emits `kai-change` with the new sizes. A zero-config maximize protocol lets any descendant ask its panel to fill the group: the request bubbles up as `kai-maximize-change` and the group notifies affected panels back down with `kai-maximize-state`. Double-click a handle to reset to the configured sizes.
+
+---
+
+### `<kai-resizable-item>` / `ResizableItem`
+
+<!-- spec:kai-resizable-item -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `size` | `size` | `undefined | string` | — | Initial main-axis size: `"280px"` (fixed) or `"25%"`/`25` (percent). Omitted → flexible. |
+| `min` | `min` | `undefined | string` | — | Minimum size during resize (px or %). |
+| `max` | `max` | `undefined | string` | — | Maximum size during resize (px or %). |
+| `locked` | `locked` | `undefined | false | true` | `false` | Fix this panel's size; adjacent dividers become non-draggable. |
+| `hidden` | `hidden` | `undefined | false | true` | `false` | Hide this panel; its divider is dropped and the rest reflow. |
+| `collapsed` | `collapsed` | `undefined | false | true` | `false` | Collapse this panel. Same layout effect as `hidden` (divider dropped, the rest reflow), but it WORKS as a bare boolean from framework JSX. A plain `<kai-resizable-item collapsed>` in React/Solid/Vue/Svelte collapses the panel at the first render; `hidden` does not, because a JSX boolean sets neither the `hidden` attribute nor the IDL property on a custom element, so the parent never sees it. The facade reflects `collapsed` to a `collapsed` attribute the parent reads. Prefer this over `hidden` for declarative collapse. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-change` | `unknown` |  |
+| `kai-maximize-change` | `unknown` |  |
+| `kai-maximize-state` | `unknown` |  |
+
+#### Slots
+
+Project your own markup with `slot="name"` on a light-DOM child.
+
+| Slot | Mode | Description |
+|------|------|-------------|
+| _(default)_ | inject | This panel's content. |
+
+#### Composed from
+
+`UI/ResizableHandle`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-resizable-item -->
+
+One panel inside `<kai-resizable>`: `size` (the starting share), `min` / `max` bounds, and `locked`, `hidden` and `collapsed` states. Config props are mirrored to attributes the parent group reads, so setting them as properties from a framework works the same as authoring attributes in HTML.
+
+---
+
+### `<kai-dock>` / `Dock`
+
+<!-- spec:kai-dock -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `open` | `open` | `undefined | false | true` | — | Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages on the launcher and Escape). Set `el.open = true`, or `<kai-dock open>`; listen for `kai-open-change`. |
+| `defaultOpen` | `default-open` | `undefined | false | true` | — | Initial open state on mount (uncontrolled seed). |
+| `position` | `position` | `undefined | "bottom-end" | "bottom-start" | "top-end" | "top-start"` | `'bottom-end'` | Which corner the dock sits in. Logical, so `-end` follows the writing direction and an RTL page docks on the left. Attribute: `position`. |
+| `label` | `label` | `undefined | string` | `'Chat'` | The widget's NAME. Derives the panel's accessible name and both launcher names (`Open ${label}` / `Close ${label}`). Defaults to `Chat`. |
+| `openLabel` | `open-label` | `undefined | string` | — | i18n override for the launcher's name while closed (default `Open ${label}`). |
+| `closeLabel` | `close-label` | `undefined | string` | — | i18n override for the launcher's name while open (default `Close ${label}`). |
+| `unread` | `unread` | `undefined | false | true` | — | Show the unread dot. YOURS: it renders only while closed, and the dock never writes it back. Clear it in your `kai-open-change` handler. |
+| `disabled` | `disabled` | `undefined | false | true` | — | Disable the launcher; `show()` and `toggle()` are gated on it. |
+| `focusOnOpen` | `focus-on-open` | `undefined | "content" | "panel" | "none"` | `'content'` | Where focus lands on open: `content` (default, the first element you slotted), `panel`, or `none`. Attribute: `focus-on-open`. |
+
+#### Events
+
+| Event | `detail` | Description |
+|-------|-----------|-------------|
+| `kai-open-change` | `{ open: false | true }` | The dock opened or closed (the launcher, Escape, a driven `open`, or a method). |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-dock').show()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+| `focus` | `(options?: FocusOptions): void` | Move focus to the panel while open, or to the launcher while closed. |
+
+#### Slots
+
+Project your own markup with `slot="name"` on a light-DOM child.
+
+| Slot | Mode | Description |
+|------|------|-------------|
+| _(default)_ | inject | The panel body, the same region as `slot="panel"`. |
+| `panel` | replace | The panel body. ANY element: a `<kai-chat>`, a form, your own component. The dock never reads or types it, and the default slot is the same region. |
+| `launcher` | inject | Content inside the built-in button while CLOSED; defaults to a chat glyph. Text works as well as an icon: the button keeps its height and grows sideways into a pill, so a label like "Support" is not clipped. The BUTTON is never slotted away, because it owns aria-expanded, aria-controls, the toggle wiring and the focus return. |
+| `launcher-open` | inject | Content inside the button while OPEN; defaults to a ✕. Fill only `launcher` and that glyph stays while open rather than morphing into a built-in that clashes with it. |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-dock::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(launcher)` | The launcher button pinned to the corner: a disc by default, a pill once you slot a text label. Restyle its surface or shadow; --kai-dock-launcher-size sets its height and its minimum width. <br>`kai-dock::part(launcher) { background: var(--color-info) }` |
+| `::part(badge)` | The unread dot on the launcher, rendered only while closed and only when `unread` is set. Restyle its color or size. <br>`kai-dock::part(badge) { background: var(--color-success) }` |
+| `::part(panel)` | The panel body. ANY element: a `<kai-chat>`, a form, your own component. The dock never reads or types it, and the default slot is the same region. |
+
+#### Composed from
+
+`UI/Dock`, `UI/DockCloseGlyph`, `UI/DockLauncherGlyph`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-dock -->
+
+The corner launcher: a floating button pinned to a viewport corner, with a panel above it holding whatever you slot in (`slot="panel"`). This is the chat-bubble-in-the-bottom-right affordance; `position` is logical, so `-end` follows the writing direction. `label` names the widget and derives the launcher's accessible names, and `unread` shows a dot the dock never clears itself: clear it in your `kai-open-change` handler. Not to be confused with `<kai-prompt-dock>`, which frames a prompt input and floats nothing.
+
+---
+
+### `<kai-prompt-dock>` / `PromptDock`
+
+<!-- spec:kai-prompt-dock -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `frame` | `frame` | `undefined | "inset" | "edge" | "none"` | `'inset'` | How the tray frames the input, the SPATIAL inset axis: `inset` (default, the classic recessed frame on every side) | `edge` (top/bottom inset only; the input sits flush left/right so the lips span the full width) | `none` (no inset; the lips attach directly as a plain stack). Attribute: `frame`. |
+| `appearance` | `appearance` | `undefined | "soft" | "outlined" | "filled" | "plain"` | `'soft'` | How the tray surface looks, the VISUAL axis orthogonal to `frame`: `soft` (default, sunken surface + border + radius) | `outlined` (transparent + border + radius) | `filled` (sunken, no border, + radius) | `plain` (bare). Attribute: `appearance`. |
+
+#### Slots
+
+Project your own markup with `slot="name"` on a light-DOM child.
+
+| Slot | Mode | Description |
+|------|------|-------------|
+| _(default)_ | inject | The input the dock wraps, typically a `<kai-prompt-input>`. The `top`/`bottom` slots are the lips around it. |
+| `top` | inject | The top lip: a notice or banner above the input. Rendered only when filled. |
+| `bottom` | inject | The bottom lip: a mode or controls row below the input. Rendered only when filled. |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-prompt-dock::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(tray)` | The recessed tray that frames the input. The `appearance`/`frame` props set the defaults; the --kai-prompt-dock-* tokens fine-tune surface/border/radius/inset. <br>`kai-prompt-dock::part(tray) { --kai-prompt-dock-radius: 1rem }` |
+| `::part(top)` | The top lip: a notice or banner above the input. Rendered only when filled. |
+| `::part(bottom)` | The bottom lip: a mode or controls row below the input. Rendered only when filled. |
+
+#### Composed from
+
+`UI/PromptDock`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-prompt-dock -->
+
+A recessed tray that frames a prompt input, with optional lip regions above (`slot="top"`) and below (`slot="bottom"`) the raised input card; a lip renders only when its slot is filled. It sits in the page flow and launches nothing (the floating corner launcher is `<kai-dock>`). Two orthogonal variant attributes: `frame` sets the spatial inset, `appearance` sets the surface.
+
+---
+
+### `<kai-setting-item>` / `SettingItem`
+
+<!-- spec:kai-setting-item -->
+#### Properties
+
+| Property | Attribute | Type | Default | Notes |
+|----------|-----------|------|---------|-------|
+| `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
+| `label` | `label` | `undefined | string` | `''` | Row label (primary text). Attribute: `label`. |
+| `description` | `description` | `undefined | string` | — | Optional secondary description under the label. Attribute: `description`. |
+
+#### Slots
+
+Project your own markup with `slot="name"` on a light-DOM child.
+
+| Slot | Mode | Description |
+|------|------|-------------|
+| `control` | inject | The row control (a switch, segmented, select, etc.), right-aligned. Omit it for a label-only row. |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-setting-item::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(label)` | The label + description block on the left of the row. Restyle its typography or spacing. <br>`kai-setting-item::part(label) { gap: 0.125rem }` |
+| `::part(control)` | The row control (a switch, segmented, select, etc.), right-aligned. Omit it for a label-only row. |
+
+#### Composed from
+
+`UI/SettingItem`
+
+#### Theming
+
+Themed by the global design tokens (override any `--color-*`).
+<!-- /spec:kai-setting-item -->
+
+One row inside `<kai-settings-group>`: a label/description block on the left and an optional right-aligned control slotted into `slot="control"` (a `<kai-switch>`, a segmented control, a select). Omit the control for a plain label row.
 
 ---
 

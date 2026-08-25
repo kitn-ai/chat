@@ -1,0 +1,160 @@
+---
+title: App Shell
+description: The chat-agnostic shell family - kai-nav, kai-pane, kai-pane-group, kai-screen, kai-prompt-dock and kai-setting-item - and how they compose into a workspace.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<p class="kai-lede">Six elements for the frame around the chat: a navigation rail, framed panes, tabbed pane groups, a drill-in screen, a tray for the prompt input, and settings rows. Each is chat-agnostic. Data goes in as JS properties, intents come back out as `kai-*` events on the element, and your app keeps the routing and the state.</p>
+
+The shell family follows one division of labor throughout: the element owns the look and the interaction mechanics (focus, keyboard, ARIA, animation), you own every decision. A pane's maximize button does not maximize anything; it fires `kai-maximize` and you flip the attribute. A tab's close button fires `kai-tab-close` and you drop the tab from the array. Nothing in this family stores your app's state for you.
+
+## `<kai-nav>`: the navigation list
+
+A vertical navigation list driven by a JSON `items` tree. Items carry an id and label, plus optional leading `icon`, trailing `badge`, a `status` dot, `meta` text, and `children` for collapsible groups.
+
+```html
+<kai-nav default-value="home"></kai-nav>
+
+<script type="module">
+  import '@kitn.ai/ui/elements';
+
+  const nav = document.querySelector('kai-nav');
+  // Arrays and objects are JS properties, never HTML attributes.
+  nav.items = [
+    { id: 'home', label: 'New task', icon: 'plus' },
+    { id: 'acme', label: 'Acme', icon: 'folder', children: [
+      { id: 't1', label: 'Refactor auth',
+        status: { tone: 'info', label: 'Working', pulse: true }, meta: '2m' },
+      { id: 't2', label: 'Landing page',
+        status: { tone: 'success', label: 'Done' }, meta: '1d', closable: true },
+    ] },
+  ];
+  // Events don't bubble: listen on the element itself.
+  nav.addEventListener('kai-nav-select', (e) => route(e.detail.id));
+  nav.addEventListener('kai-nav-item-close', (e) => archive(e.detail.value));
+</script>
+```
+
+Selecting a leaf fires `kai-nav-select`; clicking a group row toggles its disclosure instead. Rows with an `action` (`{ icon, label }`) or `closable: true` render a trailing button that fires `kai-nav-item-action` or `kai-nav-item-close`, never a select. Control the active row with `value`, or seed it once with `default-value`.
+
+To update an item, hand `nav.items` a new array **and** a new object for the changed item. The new array reference is what notifies the element; the new item object is what makes the change visible, because rows are keyed by reference. Mutating in place, or swapping an item inside the same array, renders nothing.
+
+## `<kai-pane>` and `<kai-pane-group>`: framed panels
+
+`<kai-pane>` is a framed panel: a header with a title (`headline`, because `title` is a global HTML attribute), a `subtitle`, a status dot, extra `actions`, and window controls, over a scrolling body and an optional pinned `footer`. It suits a multi-agent workspace where each agent gets a window.
+
+```html
+<kai-pane headline="Atlas" subtitle="Reviewer" show-split>
+  <kai-thread id="atlas-thread"></kai-thread>
+  <kai-prompt-input slot="footer"></kai-prompt-input>
+</kai-pane>
+
+<script type="module">
+  import '@kitn.ai/ui/elements';
+
+  const pane = document.querySelector('kai-pane');
+  pane.status = { tone: 'working', label: 'Running', pulse: true }; // object: JS property
+  pane.addEventListener('kai-maximize', (e) => {
+    pane.toggleAttribute('maximized', e.detail.maximized); // you own the state
+  });
+  pane.addEventListener('kai-close', () => removePane());
+</script>
+```
+
+`<kai-pane-group>` stacks panes behind a tab strip: one editor group, numbered status-badge tabs, the active tab's content showing. Set `tabs` as a JS property. Each tab's content is a light-DOM child whose `slot` is that tab's id (`slot="atlas"` in markup, or set `el.slot` from code); the group shows the active one.
+
+```html
+<kai-pane-group active="atlas"></kai-pane-group>
+
+<script type="module">
+  import '@kitn.ai/ui/elements';
+
+  const group = document.querySelector('kai-pane-group');
+  group.tabs = [
+    { id: 'atlas', name: 'Atlas', status: { tone: 'working', label: 'Running', pulse: true } },
+    { id: 'otto', name: 'Otto', status: { tone: 'blocked', label: 'Needs input' }, needsAttention: true },
+  ];
+  for (const t of group.tabs) {
+    const pane = document.createElement('kai-pane');
+    pane.slot = t.id; // one named slot per tab id
+    pane.setAttribute('headline', t.name);
+    group.append(pane);
+  }
+  group.addEventListener('kai-tab-change', (e) => group.setAttribute('active', e.detail.id));
+  group.addEventListener('kai-tab-close', (e) => {
+    group.tabs = group.tabs.filter((t) => t.id !== e.detail.id); // new array
+  });
+</script>
+```
+
+For draggable dividers between groups, wrap them in [`<kai-resizable>`](/components/resizable/), which is the shell family's sizing layer.
+
+## `<kai-screen>`: the drill-in surface
+
+A full-bleed overlay destination under a back header: the push navigation pattern. Your routing owns the swap; the screen owns being the takeover. While open it marks sibling elements inert (opt out with `no-inert`), moves focus in, restores focus on close, and honors `prefers-reduced-motion` in its enter and exit transitions.
+
+```html
+<kai-screen headline="Design">
+  <button slot="actions"><kai-avatar></kai-avatar></button>
+  <div>…your surface…</div>
+</kai-screen>
+
+<script type="module">
+  const screen = document.querySelector('kai-screen');
+  document.querySelector('#open-design')
+    .addEventListener('click', () => { screen.open = true; });
+  screen.addEventListener('kai-back', () => { screen.open = false; }); // back button or Escape
+</script>
+```
+
+`open` is settable and reflected, with `kai-open-change`, `show()` / `hide()` / `toggle()`, and a `default-open` seed: the same disclosure surface as `<kai-dialog>` and `<kai-dock>`.
+
+## `<kai-prompt-dock>`: the tray under the input
+
+A recessed tray that frames a prompt input, with optional lip regions above and below the raised input card. It sits in the page flow and launches nothing; the floating corner launcher is `<kai-dock>`, a different element for a different job.
+
+```html
+<kai-prompt-dock frame="edge" appearance="soft">
+  <div slot="top">Working in the docs branch</div>
+  <kai-prompt-input placeholder="Message the assistant…"></kai-prompt-input>
+  <div slot="bottom">Model picker, context meter, whatever the row needs</div>
+</kai-prompt-dock>
+```
+
+A lip renders only when its slot is filled, so an empty dock shows just the input. `frame` sets the spatial inset (`inset`, `edge`, `none`) and `appearance` the surface (`soft`, `outlined`, `filled`, `plain`); the two are orthogonal.
+
+## `<kai-setting-item>`: settings rows
+
+One row inside a `<kai-settings-group>`: a label and optional description on the left, a control slotted on the right.
+
+```html
+<kai-settings-group heading="Appearance">
+  <kai-setting-item label="Reduce motion" description="Minimize animations.">
+    <kai-switch slot="control"></kai-switch>
+  </kai-setting-item>
+</kai-settings-group>
+```
+
+Omit the control for a plain label row. The control keeps its own events: listen for the `<kai-switch>`'s change on the switch, not on the row.
+
+## Putting it together
+
+A workspace shell is these elements composed, not configured:
+
+```html
+<kai-resizable orientation="horizontal" style="display:block;height:100vh">
+  <kai-resizable-item size="240px" min="180px">
+    <kai-nav></kai-nav>
+  </kai-resizable-item>
+  <kai-resizable-item>
+    <kai-pane-group active="atlas">
+      <!-- one light-DOM child per tab, slotted by tab id -->
+    </kai-pane-group>
+  </kai-resizable-item>
+</kai-resizable>
+```
+
+<Aside type="tip">
+Every element here works standalone, from any framework, with the same contract: scalar props as attributes, arrays and objects as JS properties, non-bubbling `kai-*` events listened for on the element. The full property, event, slot and part tables live in the [element reference](https://github.com/kitn-ai/ui/blob/main/docs/web-components.md).
+</Aside>
