@@ -328,6 +328,12 @@ export interface MessageBodyProps {
    *  the kit checks its own seven built-ins and leaves your own card type
    *  unvalidated. A schema here WINS over a built-in of the same name. */
   cardSchemas?: CardSchemaMap;
+  /** The custom-element host node to emit card events off when no `CardProvider`
+   *  is above this body, forwarded to `CardRenderer` as `hostElement`. The
+   *  `<kai-chat>`/`<kai-message>`/`<kai-thread>` facades pass their own element,
+   *  so a `card` part's events leave as the bubbling `kai-card` CustomEvent
+   *  instead of being silently discarded (F-26). */
+  cardHostElement?: HTMLElement;
   /** Whether this is a user message (right-aligned bubble) vs an assistant
    *  message (full-width transparent). */
   isUser: boolean;
@@ -633,7 +639,7 @@ function MessageBody(props: MessageBodyProps) {
                       {(p) => <Tool toolPart={p().tool} class="mb-2 w-full" />}
                     </Match>
                     <Match when={partAs(part(), 'card')}>
-                      {(p) => <CardRenderer envelope={p().envelope} types={props.cardTypes} schemas={props.cardSchemas} />}
+                      {(p) => <CardRenderer envelope={p().envelope} types={props.cardTypes} schemas={props.cardSchemas} hostElement={props.cardHostElement} />}
                     </Match>
                     {/* No `source` match here on purpose: source parts never
                         reach a 'single' group — they are collapsed into a

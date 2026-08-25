@@ -5,8 +5,9 @@
 // Invalid data → two-tier validation, mirroring the remote transport; see below.
 import { createEffect, createMemo, untrack, Show, type JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
-import type { CardEnvelope } from '../primitives/card-contract';
+import type { CardContext, CardEnvelope, CardHost } from '../primitives/card-contract';
 import { useCardHost } from '../primitives/card-host';
+import { emitCardEvent } from '../primitives/card-routing';
 import { BUILTIN_CARD_COMPONENTS, mergeCardComponents, type CardComponentMap } from '../primitives/card-registry';
 import type { JsonSchema } from '../primitives/card-validate';
 import { cardValidationMessage, validateCardData, type CardValidationReport } from '../primitives/card-validate-cards';
@@ -63,6 +64,35 @@ export interface CardRendererProps {
    * supplied through `schemas` — is never validated either way.
    */
   validateCards?: boolean;
+  /**
+   * The custom-element host node to emit off when no `CardProvider` is above this
+   * renderer: events leave as the bubbling, composed `kai-card` CustomEvent
+   * (`emitCardEvent`), so `listenForCardEvents(element)` — or a plain
+   * `addEventListener('kai-card', …)` on the element — receives them.
+   *
+   * This is what makes cards INSIDE `<kai-chat>`/`<kai-message>`/`<kai-thread>`
+   * interactive (F-26): those facades pass their own host element down here, and
+   * with neither this nor a `CardProvider` every emit — ready/action/submit/
+   * dismiss/reopen and the contract `error` — used to be silently discarded.
+   * An ambient `CardProvider` still wins when present.
+   */
+  hostElement?: HTMLElement;
+}
+
+/**
+ * The effective CardHost: an ambient `CardProvider` when present, otherwise a
+ * bubbling-`kai-card` host over `hostElement`, otherwise none (a truly bare card).
+ *
+ * The fallback's `context()` mirrors the remote transport's `defaultContext()`
+ * (`remote/provider-runtime.ts`): the contract return is non-optional, but no
+ * native card reads it today — the element facades own theme/locale through
+ * `ChatConfig`, not through card context.
+ */
+function resolveHost(ctxHost: CardHost | undefined, hostElement: HTMLElement | undefined): CardHost | undefined {
+  if (ctxHost) return ctxHost;
+  if (!hostElement) return undefined;
+  const context = (): CardContext => ({ theme: { mode: 'light' }, locale: 'en' });
+  return { context, emit: (event) => emitCardEvent(hostElement, event) };
 }
 
 /**
@@ -84,7 +114,8 @@ export function hasConsumerSchema(schemas: CardSchemaMap | undefined, type: stri
 }
 
 export function CardRenderer(props: CardRendererProps): JSX.Element {
-  const host = useCardHost();
+  const ctxHost = useCardHost();
+  const host = createMemo(() => resolveHost(ctxHost, props.hostElement));
   const map = createMemo(() => mergeCardComponents(props.types));
   const entry = createMemo(() => map()[props.envelope.type]);
 
@@ -139,18 +170,18 @@ export function CardRenderer(props: CardRendererProps): JSX.Element {
     const message = cardValidationMessage(r);
     if (message === lastEmitted) return;
     lastEmitted = message;
-    host?.emit({ kind: 'error', cardId: props.envelope.id, message });
+    host()?.emit({ kind: 'error', cardId: props.envelope.id, message });
   });
 
   return (
-    <Show when={entry()} fallback={<UnknownCard envelope={props.envelope} />}>
+    <Show when={entry()} fallback={<UnknownCard envelope={props.envelope} hostElement={props.hostElement} />}>
       {(comp) => (
         <Show
           when={report()?.tier === 'hard'}
           // SOFT and valid both take this branch: the card renders exactly as it
           // does today. The soft failure is reported through the effect above and
           // changes nothing on screen, which is the whole point of the tiering.
-          fallback={<Dynamic component={comp()} envelope={props.envelope} host={host} />}
+          fallback={<Dynamic component={comp()} envelope={props.envelope} host={host()} />}
         >
           {/* HARD: there is nothing to draw, so name the field instead. */}
           <CardFallback type={props.envelope.type} cardId={props.envelope.id} reason={report()!.summary} />
@@ -161,10 +192,10 @@ export function CardRenderer(props: CardRendererProps): JSX.Element {
 }
 
 /** Renders the fallback and emits exactly one `error` (untracked, on first render). */
-function UnknownCard(props: { envelope: CardEnvelope }): JSX.Element {
-  const host = useCardHost();
+function UnknownCard(props: { envelope: CardEnvelope; hostElement?: HTMLElement }): JSX.Element {
+  const ctxHost = useCardHost();
   untrack(() =>
-    host?.emit({
+    resolveHost(ctxHost, props.hostElement)?.emit({
       kind: 'error',
       cardId: props.envelope.id,
       message: `Unsupported card type: ${props.envelope.type}`,
