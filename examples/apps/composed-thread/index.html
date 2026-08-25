@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>kai composed chat</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <!-- The thread is composed by hand from standalone kai-* elements.
+         There is deliberately no <kai-chat> anywhere in this app. -->
+    <div class="app">
+      <aside class="rail">
+        <div class="rail-head">
+          <span class="rail-title">Conversations</span>
+          <button id="new-chat" class="ghost-btn" type="button">New</button>
+        </div>
+        <!-- kai-conversation-item rows are created in src/main.ts -->
+        <nav id="conversations" class="rail-list" aria-label="Conversations"></nav>
+      </aside>
+
+      <main class="pane">
+        <header class="pane-head">
+          <h1 id="pane-title">New chat</h1>
+          <span class="badge">mock responder — no provider contacted</span>
+        </header>
+
+        <kai-thread id="thread" class="thread" prose-size="sm">
+          <div slot="empty" class="empty">
+            <strong>Compose a message</strong>
+            <p>Attach a file with the paperclip and send it — it renders on your message.</p>
+          </div>
+        </kai-thread>
+
+        <!-- Shown once an assistant turn settles. -->
+        <kai-feedback-bar
+          id="feedback"
+          class="feedback"
+          hidden
+          bar-title="Was this reply helpful?"
+          collect-detail
+          detail-title="What went wrong?"
+          detail-placeholder="Optional details…"
+          submit-label="Send feedback"
+          thanks-message="Thanks — logged locally."
+        ></kai-feedback-bar>
+
+        <div class="composer-bar">
+          <!-- Staged (not yet sent) attachments. kai-composer has no attachment
+               support of its own, so the tray + the picker below are ours. -->
+          <kai-attachments
+            id="staged"
+            class="staged"
+            variant="inline"
+            removable
+            hover-card
+            show-media-type
+            hidden
+          ></kai-attachments>
+
+          <div class="composer-row">
+            <button id="attach" class="icon-btn" type="button" title="Attach a file" aria-label="Attach a file">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+            </button>
+            <input id="file-input" type="file" multiple hidden />
+            <kai-composer
+              id="composer"
+              class="composer"
+              placeholder="Ask anything…  (Enter to send)"
+            ></kai-composer>
+            <button id="send" class="send-btn" type="button">Send</button>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Placed explicitly rather than letting toast() auto-mount one. -->
+    <kai-toast-region id="toasts" position="bottom-right" appearance="card"></kai-toast-region>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

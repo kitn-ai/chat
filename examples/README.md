@@ -84,6 +84,7 @@ builds and typechecks every app the day it lands.
 | `apps/workspace/` | 3 | A multi-conversation chat workspace: `kai-conversations` rail beside `kai-chat`, thread switching, delete with undo, search, and localStorage persistence that survives a reload mid-conversation. React + Vite on the `@kitn.ai/ui/react` wrappers. Same mock/OpenRouter seam; front-door-built by a clean-room agent (provenance in its README). |
 | `apps/builder/` | 4 | An AI page builder: chat left, live preview right. Each reply carries a whole self-contained HTML page as a `kai_artifact` tool call, which becomes a `kai-artifact` preview, a compact custom card in the thread, and a `kai-checkpoint` version you can restore. Device widths, maximize, Preview/Code. React + Vite. Same mock/OpenRouter seam; front-door-built by a clean-room agent (provenance in its README). |
 | `apps/ops-console/` | 5 | An internal ops console: the assistant *proposes* consequential actions as interactive cards — approvals, a strategy picker, a parameters form, a live checklist — and nothing happens until the operator clicks. Beside the thread, a live run board served from a **second origin** and framed through `<kai-remote>`, whose rollback button arrives in the chat as a proposal. React + Vite, **two** dev servers. Same mock/OpenRouter seam; front-door-built by a clean-room agent (provenance in its README). |
+| `apps/composed-thread/` | 6 | A chat client whose conversation UI is composed **by hand from standalone elements** — no `<kai-chat>` anywhere: `kai-thread`, `kai-composer`, `kai-attachments`, `kai-conversation-item`, `kai-toast-region`, `kai-feedback-bar`, wired by a host module. Streaming via `createAssistantStream` + `readOpenAIStream` over the in-browser mock responder (a scripted `search_docs` tool call included), file attach round-trip onto the sent message. Vanilla TS + Vite, no server at all; front-door-built by a clean-room agent (provenance in its README). |
 
 ```bash
 pnpm build:ui                                        # once
@@ -92,6 +93,7 @@ pnpm --filter @kitn.ai/ui-app-voice-assistant dev    # http://localhost:5179
 pnpm --filter @kitn.ai/ui-app-workspace dev          # http://localhost:5180
 pnpm --filter @kitn.ai/ui-app-builder dev            # http://localhost:5181
 pnpm --filter @kitn.ai/ui-app-ops-console dev        # http://localhost:5182 + board on 5183
+pnpm --filter @kitn.ai/ui-app-composed-thread dev    # http://localhost:5184
 ```
 
 Each app's own `README.md` has the rest — how the turn works, what it needs to
