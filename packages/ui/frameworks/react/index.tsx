@@ -1232,6 +1232,26 @@ export const Pane = /*#__PURE__*/ createWebComponent<PaneProps>(
   () => import('@kitn.ai/ui/elements/pane'),
 );
 
+export interface PaneGridProps extends WebComponentProps {
+  /** Minimum width of every pane, in px, before columns drop / the grid scrolls. Defaults to `280`. Attribute: `min-pane-width`. */
+  minPaneWidth?: number;
+  /** Minimum height of every pane, in px, before the grid scrolls vertically. Defaults to `200`. Attribute: `min-pane-height`. */
+  minPaneHeight?: number;
+  /** Column cap when the container is wide (default `3`). Attribute: `max-columns`. */
+  maxColumns?: number;
+  /** Gap between panes, any CSS length. Defaults to the kit gap (`var(--kai-pane-grid-gap, 0.5rem)`). Attribute: `gap`. */
+  gap?: string;
+  /** When set to a valid child index, render ONLY that pane full-bleed: a simple maximize hook the consumer drives (pair it with `<kai-pane>`'s `kai-maximize` event). Clear it (or point out of range) for the full tiled grid. Attribute: `maximized-index`. */
+  maximizedIndex?: number | null;
+}
+
+export const PaneGrid = /*#__PURE__*/ createWebComponent<PaneGridProps>(
+  'kai-pane-grid',
+  ["theme","minPaneWidth","minPaneHeight","maxColumns","gap","maximizedIndex"],
+  {  },
+  () => import('@kitn.ai/ui/elements/pane-grid'),
+);
+
 export interface PaneGroupProps extends WebComponentProps {
   /** The tabs to render. An array of `{ id, name, status?, needsAttention?, number? }` set as a JS PROPERTY (not an HTML attribute). */
   tabs?: { id: string; name: string; status?: { tone: "working" | "idle" | "done" | "error" | "blocked"; label?: string; pulse?: boolean }; needsAttention?: boolean; number?: number }[];

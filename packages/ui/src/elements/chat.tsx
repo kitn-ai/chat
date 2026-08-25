@@ -14,7 +14,7 @@ import type { ModelOption } from '../types';
 
 type Props = Omit<ChatThreadProps,
   'class' | 'onValueChange' | 'onSubmit' | 'onAttachmentsChange' | 'onSuggestionClick' | 'onModelChange'
-  | 'onMessageAction' | 'onWebSearch' | 'onVoice' | 'controllerRef' | 'cardTypes' | 'cardSchemas' | 'messages'
+  | 'onMessageAction' | 'onWebSearch' | 'onVoice' | 'controllerRef' | 'cardTypes' | 'cardSchemas' | 'cardHostElement' | 'messages'
   | 'accept' | 'onAttachmentsRejected'> & Record<string, unknown> & {
     /** Which attachment media types the user may stage, in HTML `accept` syntax:
      *  `<kai-chat accept="image/*,application/pdf">`. A plain string, so unlike
@@ -170,6 +170,9 @@ defineWebComponent<Props, Events>('kai-chat', {
     actionsReveal={props.actionsReveal as 'always' | 'hover'}
     cardTypes={cardComponentsFromTags(props.cardTypes as Record<string, string> | undefined, (props as { theme?: string }).theme)}
     cardSchemas={props.cardSchemas as Record<string, object> | undefined}
+    /* F-26: card parts emit off THIS element as the bubbling `kai-card` event,
+       so `listenForCardEvents(el)` / addEventListener('kai-card') work. */
+    cardHostElement={element}
     onValueChange={(value) => dispatch('kai-value-change', { value })}
     onSubmit={(detail) => dispatch('kai-submit', detail)}
     accept={props.accept as string | undefined}

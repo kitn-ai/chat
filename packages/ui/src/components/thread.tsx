@@ -34,6 +34,11 @@ export interface ThreadProps {
    *  the kit checks its own seven built-ins and leaves your own card type
    *  unvalidated. A schema here WINS over a built-in of the same name. */
   cardSchemas?: CardSchemaMap;
+  /** The custom-element host node to emit card events off when no `CardProvider`
+   *  is present, forwarded through `MessageBody` to `CardRenderer` (F-26). The
+   *  element facades pass their own host element so card events leave as the
+   *  bubbling `kai-card` CustomEvent. */
+  cardHostElement?: HTMLElement;
   /** Show a typing indicator on the pending assistant turn — use while awaiting
    *  the assistant's reply. */
   loading?: boolean;
@@ -146,6 +151,7 @@ export function Thread(props: ThreadProps) {
                         parts={m().parts}
                         cardTypes={props.cardTypes}
                         cardSchemas={props.cardSchemas}
+                        cardHostElement={props.cardHostElement}
                         isUser={m().role === 'user'}
                         markdown={m().role === 'assistant'}
                         actions={m().actions}

@@ -104,6 +104,9 @@
   "kai-pane": [
     "status"
   ],
+  "kai-pane-grid": [
+    "maximizedIndex"
+  ],
   "kai-pane-group": [
     "tabs"
   ],

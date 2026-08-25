@@ -285,6 +285,8 @@ defineWebComponent<Props, Events>('kai-message', {
       parts={msg().parts}
       cardTypes={cardComponentsFromTags(props.cardTypes, (props as { theme?: string }).theme)}
       cardSchemas={props.cardSchemas}
+      /* F-26: card parts emit off THIS element as the bubbling `kai-card` event. */
+      cardHostElement={element}
       isUser={isUser()}
       markdown={useMarkdown()}
       actions={mergedActions()}
