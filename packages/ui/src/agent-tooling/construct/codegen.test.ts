@@ -111,37 +111,42 @@ describe('generateProject (widget + mock core)', () => {
     }
   });
 
-  it('insets the composer to match the kit\'s own chat-surface padding', () => {
-    // T5 demo defect: PromptInput sat flush against the Dock panel's own
-    // frame — dock.tsx's [part="panel"] is deliberately unpadded (it hands
-    // all interior spacing to its content), and PromptInput's own `p-2` is
-    // internal chrome (box border -> textarea), not an outer inset. The
-    // kit's own chat surface (ChatThread, chat-thread.tsx) wraps its built-in
-    // composer in a `px-4 pb-4` (1rem horizontal, 1rem below) div — mirror
-    // that with inline styles, since the interior must stay Tailwind-free.
-    const app = file(generateProject(construct()), 'src/App.tsx');
-    expect(app).toMatch(/<div style=\{\{ padding: '0 1rem 1rem' \}\}>\s*<PromptInput/);
-  });
-
-  it('right-aligns the send button by default (no idiom exists on PromptInputActions, so inline style is the kit-level default)', () => {
-    const app = file(generateProject(construct()), 'src/App.tsx');
-    expect(app).toContain("<PromptInputActions style={{ 'justify-content': 'flex-end' }}>");
-  });
-
-  it('composes the kit\'s own Thread — not a hand-rolled message list', () => {
-    // T5 demo defect: a hand-rolled <For>/<Message>/<MessageContent> list had
-    // no padding, no gap between messages, and both roles left-aligned. The
-    // kit ships a complete, consumable thread-layer composable (Thread, from
-    // src/components/thread.tsx, on @kitn.ai/ui/solid) that already owns
-    // scroll, per-role alignment/gap/padding and markdown — use it instead of
-    // reassembling it from primitives.
+  it('composes the kit\'s MOST-INTEGRATED chat surface — ChatThread, the same composition <kai-chat> renders', () => {
+    // T5 demo defect history: a hand-rolled <For>/<Message>/<MessageContent>
+    // list had no padding, no gap, both roles left-aligned (round 3); Thread +
+    // a hand-composed PromptInput/Button sat flush against the Dock panel and
+    // clipped a focus ring (round 4 patched the symptom with inline padding).
+    // Owner-ruled root cause: emitApp was re-deriving layout the kit already
+    // owns. ChatThread (chat-thread.tsx) — the same composition
+    // src/elements/chat.tsx renders behind <kai-chat> — owns the message
+    // list AND the composer (padding, focus ring, send button) as one unit,
+    // so there is nothing left here to restate.
     const app = file(generateProject(construct()), 'src/App.tsx');
     expect(app).toContain("from '@kitn.ai/ui/solid'");
-    expect(app).toMatch(/\bThread\b/);
-    expect(app).toContain('<Thread messages={chat.messages()}');
-    // The old hand-rolled shape must be gone, not just supplemented.
+    expect(app).toContain('<ChatThread messages={chat.messages()}');
+    expect(app).toContain('onSubmit={submit}');
+    // Every hand-composed primitive from earlier rounds must be GONE, not
+    // supplemented: no bare Thread, no hand-rolled message loop, no manually
+    // composed PromptInput/composer chrome.
     expect(app).not.toMatch(/<For each=\{chat\.messages\(\)\}/);
     expect(app).not.toContain('<MessageContent');
+    expect(app).not.toContain('<Thread ');
+    expect(app).not.toContain('<PromptInput');
+    expect(app).not.toContain('<Button');
+  });
+
+  it('ratchet: App.tsx carries (near) zero hand-authored inline styles now that ChatThread owns layout', () => {
+    // Every prior round's fix for a layout defect (composer padding,
+    // send-button alignment, the accent CSS var) was ANOTHER inline style —
+    // treating the symptom, not the cause. This is the ratchet the owner
+    // asked for: count `style={{` occurrences in the shadow-tree content
+    // (App.tsx) and fail if it creeps back up. It's currently zero because
+    // ChatThread + Dock need no per-instance layout styling from us at all;
+    // if a future change needs one, it should be a deliberate, reviewed
+    // increase to this bound, not a silent regression back to hand-styling.
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    const inlineStyleCount = (app.match(/style=\{\{/g) ?? []).length;
+    expect(inlineStyleCount).toBe(0);
   });
 
   it('index.html carries a demo host-page hint for the widget layout, outside the element', () => {
@@ -158,35 +163,33 @@ describe('generateProject (widget + mock core)', () => {
     expect(hintIndex).toBeLessThan(elementIndex);
   });
 
-  it('routes the theme accent onto the launcher and the send button — never onto message bubbles', () => {
-    // Owner ruling: "accent brands CONTROLS, never content." The launcher
-    // (dock.tsx's own CSS) and the send button (Button's `variant="default"`,
-    // bg-primary / text-primary-foreground under the hood) both already read
-    // var(--color-primary)/-foreground with no work needed here — never
-    // hardcode the hex anywhere. Message bubbles get NONE of it: an earlier
-    // round routed the accent onto the user bubble via a
-    // `[data-role="user"] [part="bubble content"]` override; the owner
-    // reversed that, so bubbles stay on the kit's neutral theme surfaces.
+  it('routes the theme accent onto the HOST only — App.tsx (message content) carries no accent/primary token at all', () => {
+    // Owner ruling: "accent brands CONTROLS, never content." element.tsx sets
+    // --kai-color-primary once, on the host; the launcher (dock.tsx's own
+    // CSS) and the composer's send button (rendered inside ChatThread's
+    // DefaultPromptInput, using the kit's own Button `variant="default"`)
+    // pick it up for free via ordinary custom-property inheritance — no
+    // per-control code needed in App.tsx at all.
     const files = generateProject(construct({ theme: { accent: '#e91e63', mode: 'system' } }));
     const element = file(files, 'src/element.tsx');
     const app = file(files, 'src/App.tsx');
     // Exactly one hardcoded accent hex in the whole project: the
-    // JSON.stringify'd custom-property value in element.tsx. Everything
-    // downstream (the launcher, the send button) reads var(--color-primary)
-    // — never the literal color.
+    // JSON.stringify'd custom-property value in element.tsx.
     const hexOccurrences = (element + app).match(/#e91e63/g) ?? [];
     expect(hexOccurrences).toHaveLength(1);
     expect(element).toContain("ctx.element.style.setProperty('--kai-color-primary', \"#e91e63\")");
-    expect(app).toContain('<Button variant="default"');
-    // The bubble-accent hook from the earlier round must be gone, not just
-    // unused: App.tsx (the shadow-tree content, where message bubbles
-    // render) never mentions var(--color-primary) at all. (A doc comment
-    // may still name the old hook historically — checking the actual
-    // selector/property text, not the bare word "bubble", keeps this
-    // assertion honest about that.)
+    // App.tsx (the shadow-tree content ChatThread renders messages into)
+    // authors NO styling at all any more — not a hex, not a CSS custom
+    // property, not a Tailwind primary/accent utility class. If a future
+    // regression routes the accent onto message content again, it will
+    // necessarily show up as new text here, since today there is none.
+    expect(app).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(app).not.toContain('--color-primary');
+    expect(app).not.toContain('--kai-color-primary');
+    expect(app).not.toMatch(/\btext-primary\b/);
+    expect(app).not.toMatch(/\bbg-primary\b/);
     expect(app).not.toContain('[data-role="user"]');
     expect(app).not.toContain('[part="bubble content"]');
-    expect(app).not.toContain('var(--color-primary)');
   });
 });
 

@@ -343,74 +343,24 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
 // determinism test keeps holding.
 
 function emitApp(c: Construct): string {
-  return `import { createSignal } from 'solid-js';
-import {
-  Button,
-  Dock,
-  PromptInput,
-  PromptInputActions,
-  PromptInputTextarea,
-  Thread,
-  createKaiChat,
-} from '@kitn.ai/ui/solid';
+  return `import { ChatThread, Dock, createKaiChat } from '@kitn.ai/ui/solid';
+import type { AttachmentData } from '@kitn.ai/ui/solid';
 ${emitProviderImports(c)}
 
 ${emitProviderSetup(c)}
 
-// The kit's own Thread composable owns the whole message list: scroll
-// container, per-role bubble alignment/gap/padding, markdown, and the
-// scroll-to-bottom button. Hand-rolling that list here is exactly the class
-// of bug this seam exists to avoid (T5 demo: bare Message rows with no
-// padding, no gap, both roles left-aligned).
-//
-// Accent brands CONTROLS, never content: the launcher, the send button, the
-// streaming indicator and focus rings already pick up the accent via the
-// kit's own CSS (dock.tsx, button.tsx, …) — via the primary-color token set
-// on the host in element.tsx — with no work needed here. Message bubbles are
-// deliberately left on the kit's neutral theme surfaces — an earlier version
-// of this file routed the accent onto the user bubble via a bubble-scoped
-// styling hook; the owner ruled that out.
-function Panel() {
-  return (
-    <div style={{ height: '100%', display: 'flex', 'flex-direction': 'column' }}>
-      <div style={{ flex: '1 1 auto', 'min-height': '0' }}>
-        <Thread messages={chat.messages()} loading={chat.loading()} />
-      </div>
-      {/* The composer's own inset, matching the kit's own chat surface
-          (ChatThread's composer wrapper is \`class="shrink-0 px-4 pb-4"\` —
-          1rem horizontal, 1rem below — around the built-in PromptInput; see
-          chat-thread.tsx). PromptInput's own \`p-2\` is its INTERNAL chrome
-          between the box border and the textarea — a different padding, for
-          a different edge — so this wrapper is still needed even with that
-          in place; without it the composer sits flush against the panel's
-          own frame (T5 demo). */}
-      <div style={{ padding: '0 1rem 1rem' }}>
-        <PromptInput
-          value={inputValue()}
-          onValueChange={setInputValue}
-          isLoading={chat.loading()}
-          onSubmit={submit}
-        >
-          <PromptInputTextarea placeholder="Ask anything" />
-          {/* PromptInputActions has no justify/align prop (checked
-              prompt-input.tsx — it's a bare flex row, default-justified
-              start) and the kit's own scaffold convention for a right-aligned
-              toolbar reaches for the same inline style, so this is the
-              idiomatic seam, not a hand-styled workaround. */}
-          <PromptInputActions style={{ 'justify-content': 'flex-end' }}>
-            <Button variant="default" size="sm" disabled={!inputValue().trim() || chat.loading()} onClick={submit}>
-              Send
-            </Button>
-          </PromptInputActions>
-        </PromptInput>
-      </div>
-    </div>
-  );
-}
-
+// ChatThread is the kit's own MOST-INTEGRATED chat surface — the same
+// composition <kai-chat>'s facade renders (src/elements/chat.tsx). It owns
+// the message list, the composer (padding, focus ring, the send button) and
+// their layout AS ONE UNIT, so nothing here re-derives spacing, alignment or
+// focus styling by hand: every prior version of this file that hand-composed
+// Thread + PromptInput + Button was restating layout the kit already owns,
+// and every visual defect the owner hit (flush composer, a clipped focus
+// ring) traced back to that restatement. Composing ChatThread directly
+// leaves NOTHING here to restate it with.
 export function App() {
   return (
-${emitLayoutOpen(c)}      <Panel />
+${emitLayoutOpen(c)}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} />
 ${emitLayoutClose(c)}  );
 }
 `;
@@ -423,23 +373,21 @@ import { readOpenAIStream } from '@kitn.ai/ui/wire';`;
 }
 
 function emitProviderSetup(c: Construct): string {
-  // PromptInput is uncontrolled by default and its onSubmit fires with no
-  // payload, so the value has to be read from the same signal that controls
-  // the textarea rather than off the submit callback.
+  // ChatThread owns its own composer draft (uncontrolled — no `value` prop
+  // passed below) and clears it after submit itself; `onSubmit` hands back
+  // the value directly, so there's no PromptInput-specific signal-reading
+  // workaround to carry here any more.
   return `// Provider seam: mock — keyless, streams locally, announces itself once.
 // Swap for provider.mode "endpoint" in the construct and re-run kai dev; the
 // generated fetch keeps this exact shape (the seam is the point).
 const respond = createMockResponder();
-const [inputValue, setInputValue] = createSignal('');
 const chat = createKaiChat();
 
-async function submit() {
-  const value = inputValue().trim();
-  if (!value || chat.loading()) return;
-  setInputValue('');
-  chat.append({ id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: value }] });
+async function submit(detail: { value: string; attachments: AttachmentData[] }) {
+  if (!detail.value.trim() || chat.loading()) return;
+  chat.append({ id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: detail.value }] });
   const stream = chat.streamAssistant();
-  await readOpenAIStream(respond(value), stream);
+  await readOpenAIStream(respond(detail.value), stream);
   stream.done();
 }`;
 }
