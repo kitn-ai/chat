@@ -1,0 +1,17 @@
+{
+  "name": "rung6-app",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "@kitn.ai/ui": "file:./kitn.ai-ui-0.26.0.tgz"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  }
+}

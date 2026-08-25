@@ -1,0 +1,24 @@
+PASS element registered: kai-thread
+PASS element registered: kai-message
+PASS element registered: kai-conversation-item
+PASS element registered: kai-composer
+PASS element registered: kai-attachments
+PASS element registered: kai-toast-region
+PASS element registered: kai-feedback-bar
+PASS element in DOM: kai-thread — 1 instance(s)
+PASS element in DOM: kai-conversation-item — 1 instance(s)
+PASS element in DOM: kai-composer — 1 instance(s)
+PASS element in DOM: kai-attachments — 1 instance(s)
+PASS element in DOM: kai-toast-region — 1 instance(s)
+PASS element in DOM: kai-feedback-bar — 1 instance(s)
+PASS no <kai-chat> anywhere
+PASS assistant reply streamed (text grew across samples) — samples 0…209
+PASS mock reply text rendered
+PASS file staged in kai-attachments — staged filename: smoke-fixture.txt
+PASS sent user message carries a file part — {"filename":"smoke-fixture.txt","media":"text/plain","url":"blob:"}
+PASS attachment filename rendered in the thread — searched thread shadow text
+PASS staging tray cleared after send
+PASS mock tool call rendered and resolved — {"type":"tool","name":"search_docs","state":"output-available"}
+PASS zero page errors / console errors
+
+22/22 checks passed
