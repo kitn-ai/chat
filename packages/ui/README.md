@@ -80,11 +80,13 @@ The URLs above track the **latest** release — handy for trying things out. **F
 
 > **Pin `0.25.0` or newer.** Every version from `0.14.1` through `0.24.0` is covered by a [critical security advisory](https://github.com/kitn-ai/ui/security/advisories) and is deprecated on npm. `npm install` warns you about a deprecated version; **a CDN fetch does not**, so an old pinned URL in a page keeps serving the vulnerable bundle silently.
 
-SolidJS and the kit's CSS are bundled in, and the lazy code-highlighting chunks load from the same CDN on demand. To override design tokens, also include `theme.css`:
+SolidJS and the kit's CSS are bundled in, and the lazy code-highlighting chunks load from the same CDN on demand. To override design tokens, also include `theme.tokens.css` — the browser-ready compiled build:
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@kitn.ai/ui/theme.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@kitn.ai/ui/dist/theme.tokens.css">
 ```
+
+Not `theme.css` here: that file is Tailwind v4 *source* (its tokens live in an `@theme` block a plain `<link>` discards whole), so it only works when Tailwind processes your CSS. See [Which theme file](#which-theme-file).
 
 ### Option B — SolidJS components
 
@@ -94,7 +96,7 @@ import {
   Message, MessageContent,
   PromptInput, PromptInputTextarea, PromptInputActions,
 } from '@kitn.ai/ui';
-import '@kitn.ai/ui/theme.css';
+import '@kitn.ai/ui/theme.css'; // Tailwind-source; non-Tailwind builds import theme.tokens.css instead — see "Which theme file"
 
 function App() {
   const [input, setInput] = createSignal('');
@@ -323,7 +325,14 @@ Visual appearance is driven by `--color-*` CSS custom properties in `theme.css`.
 }
 ```
 
-For SolidJS usage, import `@kitn.ai/ui/theme.css` once. For web components the kit's CSS is injected into each shadow root automatically; only `theme.css` (design tokens) is optional to include.
+For web components the kit's CSS is injected into each shadow root automatically; the token stylesheet is optional and only themes host-page chrome / rebrands.
+
+### Which theme file
+
+Two builds of the same tokens; the condition is whether **Tailwind processes the file**:
+
+- **`@kitn.ai/ui/theme.css`** — Tailwind v4 source (`@theme` block; needs `tailwindcss` as a peer). Import it only in an app whose build runs Tailwind over its CSS. Served raw to a browser, the `@theme` block is discarded whole and the tokens never apply.
+- **`@kitn.ai/ui/theme.tokens.css`** — the compiled plain-CSS build of the same tokens, no toolchain requirements. Use it in every non-Tailwind bundler app and for `<link>`/CDN pages.
 
 ## For AI agents / LLMs
 
@@ -335,6 +344,8 @@ The package ships [llmstxt.org](https://llmstxt.org)-style files so coding agent
 Both are auto-generated from `dist/custom-elements.json` during `npm run build` (so they never drift) and are published in the npm package — find them at `node_modules/@kitn.ai/ui/llms.txt` after install.
 
 > **#1 thing agents get wrong:** array/object data (`messages`, `models`, `context`, …) must be set as **JS properties**, not HTML attributes. Only scalars (`placeholder`, `loading`, `theme`) work as attributes.
+
+> **Attachments:** `AttachmentData.url` is what reaches the model — a `data:` URI or an https URL, **never `URL.createObjectURL`**. A `blob:` URL previews perfectly and resolves only inside the tab that minted it, so `toOpenAIMessages`/`toAnthropicMessages` refuse it rather than send an address the model cannot fetch. `<kai-prompt-input>`'s paperclip already stages files as `data:` URIs; convert with `FileReader.readAsDataURL` when you stage files yourself.
 
 ## Development
 

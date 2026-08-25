@@ -378,7 +378,7 @@
         "type": "undefined | { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]",
         "optional": true,
         "scalar": false,
-        "description": "The attachments to render. Omit (or pass an empty array) for the empty state, which shows `emptyText` if set and nothing otherwise. Set as a JS property (array).",
+        "description": "The attachments to render. Omit (or pass an empty array) for the empty state, which shows `emptyText` if set and nothing otherwise. Set as a JS property (array). Each item's `url` must be a `data:` URI or an https URL, never `URL.createObjectURL`: a `blob:` URL previews here but the wire encoders (`toOpenAIMessages`/`toAnthropicMessages`) refuse it.",
         "typeName": "AttachmentData[]",
         "typeShape": "{ id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]",
         "default": "[]",
@@ -2577,7 +2577,7 @@
       {
         "name": "kai-submit",
         "detail": "{ doc: ({ type: \"text\"; text: string } | { type: \"entity\"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]; text: string; entities: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }",
-        "description": "The user submitted the composer (Enter or programmatic submit).",
+        "description": "The user submitted the composer (Enter or programmatic submit). Note the detail carries no `attachments`; `<kai-composer>` is the bare editing surface: no send button, toolbar, or attachments. For a drop-in composer row with all three, reach for `<kai-prompt-input>`, which is built on this.",
         "displayDetail": "{ doc: ({ type: \"text\"; text: string } | { type: \"entity\"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]; text: string; entities: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }"
       },
       {
@@ -2874,7 +2874,7 @@
         "type": "undefined | string",
         "optional": true,
         "scalar": true,
-        "description": "The row's identity, handed to the container's selection contract. In the element this is the `conversation-id` attribute (host `id` is the fallback).",
+        "description": "The row's identity, handed to the container's selection contract. In the element this is the `conversation-id` attribute (host `id` is the fallback). Standalone caveat: outside `<kai-conversations>` the row is inert. It emits no event of its own (activation surfaces as `kai-conversation-select` on the container), and Enter/Space + roving tabindex are the container's, so a hand-composed rail must add its own click and key handling.",
         "displayType": "undefined | string"
       },
       {
@@ -6463,7 +6463,7 @@
         "type": "undefined | { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]",
         "optional": true,
         "scalar": false,
-        "description": "Attachments to seed the input with (so a consumer can pre-populate staged files without an upload). Set as a JS property; the element then manages its own attachment state from there (add via the paperclip, remove per chip).",
+        "description": "Attachments to seed the input with (so a consumer can pre-populate staged files without an upload). Set as a JS property; the element then manages its own attachment state from there (add via the paperclip, remove per chip). Each item's `url` must be a `data:` URI or an https URL, never `URL.createObjectURL`: a `blob:` URL previews perfectly and is meaningless outside this tab, so `toOpenAIMessages`/`toAnthropicMessages` refuse it. (The built-in paperclip already stages files as `data:` URIs.)",
         "typeName": "AttachmentData[]",
         "typeShape": "{ id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]",
         "typeImport": "AttachmentData",
@@ -6505,7 +6505,7 @@
       {
         "name": "kai-submit",
         "detail": "{ value: string; doc: ({ type: \"text\"; text: string } | { type: \"entity\"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]; entities: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[]; attachments: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[] }",
-        "description": "The user submitted the prompt (Enter or send button). `value` is the flattened text (back-compat); `doc` is the structured document and `entities` the inserted pills (skills/agents) for downstream expansion.",
+        "description": "The user submitted the prompt (Enter or send button). `value` is the flattened text (back-compat); `doc` is the structured document and `entities` the inserted pills (skills/agents) for downstream expansion. `<kai-prompt-input>` is the batteries-included composer row (send button, toolbar, attachment staging) built on `<kai-composer>`, the bare editor.",
         "displayDetail": "{ value: string; doc: ({ type: \"text\"; text: string } | { type: \"entity\"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]; entities: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[]; attachments: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[] }"
       },
       {
@@ -8931,7 +8931,7 @@
         "type": "undefined | { id: string; message: string; variant?: undefined | \"neutral\" | \"success\" | \"warning\" | \"error\" | \"info\"; appearance?: undefined | \"pill\" | \"card\"; inverse?: undefined | false | true; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | false | true; target?: undefined | HTMLElement }[]",
         "optional": true,
         "scalar": false,
-        "description": "The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. Omit for an empty region, which is the normal resting state and how the imperative `toast()` API starts.",
+        "description": "The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. Omit for an empty region, which is the normal resting state and how the imperative `toast()` API starts. Data-driven and imperative are EITHER/OR per app: `toast()` mounts its own region on `document.body` and never adopts one you placed in markup, so mixing the two gives you two overlapping regions.",
         "typeName": "ToastItem[]",
         "typeShape": "{ id: string; message: string; variant?: undefined | \"neutral\" | \"success\" | \"warning\" | \"error\" | \"info\"; appearance?: undefined | \"pill\" | \"card\"; inverse?: undefined | false | true; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | false | true; target?: undefined | HTMLElement }[]",
         "default": "[]",

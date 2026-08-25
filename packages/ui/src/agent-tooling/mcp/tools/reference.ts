@@ -27,6 +27,11 @@ import type { CemMember } from '../manifest';
 import { invariants } from '../../catalog/invariants';
 import { surfaceRecipes } from '../../catalog/surfaces';
 import type { TInvariant, TInvariantExample, TSurfaceRecipe } from '../../catalog/catalog-types';
+import { listCodeRecipes, getCodeRecipe } from '../../recipes';
+import type { CodeRecipe } from '../../recipes';
+import { readFileSync, existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { resolveManifestPath } from '../manifest';
 
 /**
  * component_reference — look up AI/UI (kai-*) web components, their props,
@@ -553,6 +558,82 @@ function renderInvariantAppendix(): string[] {
   return lines;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// The programmatic layer and the code recipes
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The topic names that all resolve to the programmatic-layer appendix. */
+const PROGRAMMATIC_ALIASES = ['programmatic', 'state', 'wire', 'state-wire'] as const;
+
+/**
+ * The `/state` + `/wire` appendix (rung-6 F-46): served from
+ * `dist/llms/programmatic.md`, which `build:api` DERIVES from the shipped
+ * `dist/state/*.d.ts` + `dist/wire/*.d.ts` (scripts/gen-llms-programmatic.mjs)
+ * and which also lands verbatim in llms-full.txt. Read, never restated: this
+ * tool restating one signature by hand is exactly the drift the generator
+ * exists to remove. The file sits beside the manifest in both contexts
+ * (bundled bin and source/vitest), so its resolution is the manifest's.
+ */
+/**
+ * The fence gen-llms-programmatic.mjs writes around the section inside
+ * llms-full.txt. REGISTERED COPY of `PROGRAMMATIC_MARKERS` in that script —
+ * this TS module cannot import the generator .mjs. If either side moves, the
+ * slice below misses and the reference tests fail on the "Missing build
+ * artifact" branch, so the drift is loud.
+ */
+const PROGRAMMATIC_START = '<!-- kai:programmatic:start -->';
+const PROGRAMMATIC_END = '<!-- kai:programmatic:end -->';
+
+function renderProgrammaticAppendix(): string {
+  // Sliced out of the SHIPPED llms-full.txt rather than served from a file of
+  // its own: a standalone copy was ~50 KB of duplicate tarball weight
+  // (verify:pack priced it), and slicing keeps one derivation with zero extra
+  // shipped bytes.
+  const path = join(dirname(resolveManifestPath()), 'llms', 'llms-full.txt');
+  const missing = (what: string) =>
+    `Missing build artifact: ${what}\n\n` +
+    'The programmatic-layer reference is generated from the shipped dist/*.d.ts by the ' +
+    'build (a marker-fenced section of dist/llms/llms-full.txt). Run `nx build ui` (or ' +
+    '`npm run build:api` in packages/ui) and ask again. It is deliberately not restated ' +
+    'here: a hand-typed copy would drift from the declarations your editor shows.';
+  if (!existsSync(path)) return missing(path);
+  const full = readFileSync(path, 'utf-8');
+  const start = full.indexOf(PROGRAMMATIC_START);
+  const end = full.indexOf(PROGRAMMATIC_END);
+  if (start === -1 || end === -1 || end <= start) {
+    return missing(`the ${PROGRAMMATIC_START} section inside ${path}`);
+  }
+  return full.slice(start + PROGRAMMATIC_START.length, end).trim();
+}
+
+/**
+ * One code recipe as files a builder pastes. The catalog half (ingredients,
+ * wiring edges, invariants — each executed by surfaces.test.ts) is the surface
+ * recipe of the same id; this is the body a data record cannot carry, and
+ * `verify:scaffold` compiles every `lang: 'ts'` file of it.
+ */
+function renderCodeRecipe(r: CodeRecipe): string {
+  const lines: string[] = [
+    `## Recipe: ${r.title} (\`${r.id}\`)`,
+    '',
+    r.intent,
+    '',
+    `**Elements composed:** ${r.ingredients.map((t) => `\`<${t}>\``).join(', ')}`,
+    '',
+    '**Read these before pasting:**',
+    ...r.notes.map((n) => `- ${n}`),
+  ];
+  for (const f of r.files) {
+    lines.push('', `### \`${f.path}\``, '', '```' + f.lang, f.code.trimEnd(), '```');
+  }
+  lines.push(
+    '',
+    'The wiring topology, invariants and composition claims behind this recipe are the ' +
+      `surface recipe of the same id — call component_reference with { name: "recipes" }.`,
+  );
+  return lines.join('\n');
+}
+
 /**
  * The payload out of `CustomEvent<T>`, or `undefined` when there is no payload.
  *
@@ -799,7 +880,10 @@ export const reference: Tool = {
   description:
     'Look up AI/UI (kai-*) web components: their tags, props, events, imperative methods, and usage examples. ' +
     'For a card-backed element it also returns the card\'s JSON Schema and a ready-to-send ' +
-    'tool definition generated from it — pass `provider` to get that provider\'s envelope.',
+    'tool definition generated from it — pass `provider` to get that provider\'s envelope. ' +
+    'Also serves the programmatic layer (name: "programmatic" — the @kitn.ai/ui/state + ' +
+    '@kitn.ai/ui/wire streaming/mock/encode API) and complete code recipes ' +
+    '(e.g. name: "composed-thread" — a hand-composed thread with no <kai-chat>).',
   inputSchema: z.object({
     name: z
       .string()
@@ -809,7 +893,10 @@ export const reference: Tool = {
           'index of every element with a one-line summary, then ask again for the one you want. ' +
           'Pass "invariants" for the full diagnosis and wrong/right examples behind every ' +
           'invariant id an element lookup shows. Pass "recipes" for the full wiring notes ' +
-          'behind every surface recipe an element lookup names.',
+          'behind every surface recipe an element lookup names. Pass "programmatic" (or ' +
+          '"state" / "wire") for the @kitn.ai/ui/state + @kitn.ai/ui/wire API — streaming ' +
+          'folds, the mock responder, the SSE readers/encoders. Pass a code-recipe id ' +
+          '(e.g. "composed-thread") for a complete pasteable composition.',
       ),
     provider: z
       .enum(PROVIDERS)
@@ -865,11 +952,22 @@ export const reference: Tool = {
         `\n\nCall component_reference with { name: "invariants" } for the full diagnosis and ` +
         'wrong/right examples behind every invariant id shown on an element lookup.' +
         `\n\nCall component_reference with { name: "recipes" } for the full wiring notes behind ` +
-        'every surface recipe an element lookup names.';
+        'every surface recipe an element lookup names.' +
+        `\n\nCall component_reference with { name: "programmatic" } for the @kitn.ai/ui/state + ` +
+        '@kitn.ai/ui/wire API — createAssistantStream, the part folds, createMockResponder ' +
+        '(and its scripted tool calls), the SSE readers and the provider encoders. That layer ' +
+        'is what a host wires when it composes elements by hand instead of using <kai-chat>.' +
+        `\n\nComplete pasteable compositions (code recipes): ${listCodeRecipes()
+          .map((r) => `{ name: "${r.id}" } — ${r.title}`)
+          .join('; ')}.`;
     } else if (name === 'invariants') {
       text = renderInvariantAppendix().join('\n');
     } else if (name === 'recipes') {
       text = renderRecipeAppendix().join('\n');
+    } else if ((PROGRAMMATIC_ALIASES as readonly string[]).includes(name)) {
+      text = renderProgrammaticAppendix();
+    } else if (getCodeRecipe(name)) {
+      text = renderCodeRecipe(getCodeRecipe(name)!);
     } else {
       text = formatReference(name, provider);
     }

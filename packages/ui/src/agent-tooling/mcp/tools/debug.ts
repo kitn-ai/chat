@@ -450,6 +450,123 @@ const RULES: Rule[] = [
       'A malformed definition (not two candidates, missing/duplicate ids) fires `kai-error` ' +
       'instead. The event is non-bubbling — listen on the element, not on `document`.',
   },
+  {
+    // Rule 13 — kai-composer is the bare editor; attachments + send live on kai-prompt-input
+    // Source: src/elements/composer.tsx (element doc), src/elements/prompt-input.tsx,
+    // apps/docs components/composer.mdx (the taxonomy sentence). Rung-6 F-43.
+    id: 'composer-attachments',
+    test: (t) => {
+      // Attachment / send-button / toolbar questions asked ABOUT the composer.
+      if (!/kai-composer|composer\b/i.test(t)) return false;
+      return /attach|paperclip|file.?upload|upload|send.?button|toolbar|staging|staged/i.test(t);
+    },
+    title: '`<kai-composer>` is the bare editor — attachments and the send button live on `<kai-prompt-input>`',
+    cause:
+      '`<kai-composer>` is deliberately the bare editing surface: rich text, entity pills, ' +
+      'triggers, Enter-to-submit — and nothing else. No send button, no toolbar, no attachment ' +
+      'surface; its `kai-submit` detail is `{ doc, text, entities }` with no `attachments` field. ' +
+      'Nothing is missing — the batteries-included wrapper is a different element.',
+    fix:
+      'Reach for `<kai-prompt-input>`, which is built on the composer and adds the send button, ' +
+      'the toolbar, and attachments: a paperclip that stages files as chips, a ' +
+      '`kai-attachments-change` event, and `attachments` on its `kai-submit` detail.\n\n' +
+      '```html\n' +
+      '<kai-prompt-input placeholder="Send a message..."></kai-prompt-input>\n' +
+      '```\n\n' +
+      '```js\n' +
+      "document.querySelector('kai-prompt-input').addEventListener('kai-submit', (e) => {\n" +
+      '  const { value, attachments } = e.detail; // attachments staged via the paperclip\n' +
+      '});\n' +
+      '```\n\n' +
+      'Keep `<kai-composer>` only when you are composing the input row yourself — then the ' +
+      'picker, staging tray and send control are yours to build, and every staged file’s ' +
+      '`url` must be a `data:` URI, never `URL.createObjectURL` (see the attachment-blob-url rule).',
+  },
+  {
+    // Rule 14 — blob: attachment URLs: the wire refuses them; use a data: URI
+    // Source: src/components/attachment-types.ts (AttachmentData.url doc),
+    // src/elements/default-input.tsx (readAsDataUrl), src/wire/files.ts (the refusal),
+    // apps/docs patterns/attachments-flow.mdx. Rung-6 F-44; the defect PR #186 shipped.
+    id: 'attachment-blob-url',
+    test: (t) => {
+      // The literal defect in a snippet, with attachment/file-staging context.
+      if (/createObjectURL/.test(t) && /attachment|type:\s*'file'|filename|kai|@kitn/i.test(t)) return true;
+      // A wire refusal or preview-works-send-fails symptom naming blob: URLs.
+      if (/blob:/.test(t) && /attachment|toOpenAIMessages|toAnthropicMessages|wire|kai|@kitn/i.test(t)) return true;
+      return false;
+    },
+    title: 'Never `URL.createObjectURL` in `AttachmentData.url` — read the file as a `data:` URI',
+    cause:
+      'An object URL resolves only inside the browser tab that minted it, so `url: ' +
+      'URL.createObjectURL(file)` renders a flawless local preview and is meaningless to any ' +
+      'provider. `toOpenAIMessages` / `toAnthropicMessages` REFUSE a `blob:` URL rather than ' +
+      'send an address the model cannot fetch — before they refused it, an attachment-only ' +
+      'turn reached the model as nothing at all. A mock-only app hides the defect ' +
+      '(`createMockResponder` never encodes the thread back); it surfaces the moment you point ' +
+      'at a real provider.',
+    fix:
+      'Read every staged file as a `data:` URI and put THAT in `url` — it previews identically ' +
+      'and is the one form both provider wires actually take:\n\n' +
+      '```js\n' +
+      'const readAsDataUrl = (file) =>\n' +
+      '  new Promise((resolve, reject) => {\n' +
+      '    const reader = new FileReader();\n' +
+      '    reader.onload = () => resolve(String(reader.result));\n' +
+      '    reader.onerror = () => reject(reader.error);\n' +
+      '    reader.readAsDataURL(file);\n' +
+      '  });\n\n' +
+      "const url = await readAsDataUrl(file); // data: URI — never URL.createObjectURL\n" +
+      "return { id, type: 'file', filename: file.name, mediaType: file.type, url };\n" +
+      '```\n\n' +
+      '`<kai-prompt-input>`’s built-in paperclip already does this for you; the conversion ' +
+      'is only yours when you stage files yourself. With `data:` URIs there is also nothing ' +
+      'to revoke — no object-URL lifecycle to manage.',
+  },
+  {
+    // Rule 15 — mock tool calls: MockTurn.toolCalls scripts them; the HOST resolves them
+    // Source: src/state/mock.ts (MockTurn/MockToolCall), src/wire/chunk.ts (ModelTurn.toolCalls),
+    // src/state/stream.ts (upsertTool). Rung-6 F-46/F-47/F-52.
+    id: 'mock-tool-calls',
+    test: (t) => {
+      const toolContext = /tool.?call|toolCalls|input-available/i.test(t);
+      // The mock responder asked about tool calls…
+      if (/createMockResponder|mock responder|MockTurn/i.test(t) && toolContext) return true;
+      // …or a tool part parked in input-available with kai/mock context.
+      if (toolContext && /\bmock\b/i.test(t) && /kai|@kitn|stream|responder/i.test(t)) return true;
+      return false;
+    },
+    title: 'Scripting mock tool calls — `MockTurn.toolCalls`; the HOST resolves the announced call',
+    cause:
+      'Two separate facts. (1) The default mock replies are text-only, so out of the box ' +
+      '`createMockResponder()` never announces a tool call — scripting one takes a `MockTurn` ' +
+      'reply. (2) A tool call — mock or real provider — is only ever ANNOUNCED by the stream: ' +
+      'the part parks at `state: \'input-available\'` and stays there. The kit parses and ' +
+      'renders the call; EXECUTING it and answering is the host’s job.',
+    fix:
+      'Script the call with a `MockTurn` reply (`{ text?, toolCalls? }`); the mock frames it ' +
+      'announce-then-arguments with `finish_reason: \'tool_calls\'`, exactly as a real ' +
+      'OpenAI-wire turn, so it flows through `readOpenAIStream` unchanged:\n\n' +
+      '```js\n' +
+      "import { createMockResponder } from '@kitn.ai/ui/state';\n\n" +
+      'const mock = createMockResponder({\n' +
+      '  replies: [\n' +
+      "    'Plain text turn.',\n" +
+      "    { text: 'Checking…', toolCalls: [{ name: 'get_weather', arguments: { city: 'Oslo' } }] },\n" +
+      '  ],\n' +
+      '});\n' +
+      '```\n\n' +
+      'Then resolve each announced call yourself after the read settles — walk the returned ' +
+      '`ModelTurn.toolCalls` and patch the part to `output-available`:\n\n' +
+      '```js\n' +
+      'const result = await readOpenAIStream(response, stream);\n' +
+      'for (const call of result.toolCalls) {\n' +
+      '  const output = await runTool(call.name, call.input); // your side of the seam\n' +
+      "  stream.upsertTool(call.id, { state: 'output-available', output });\n" +
+      '}\n' +
+      '```\n\n' +
+      'Skip any call with `providerExecuted: true` — the provider already ran it and its ' +
+      'result arrived in-stream.',
+  },
 ];
 
 function buildText(matched: Rule[]): string {
@@ -458,10 +575,15 @@ function buildText(matched: Rule[]): string {
       'No known failure pattern matched. Suggested next steps:\n\n' +
       '1. Use the `component_reference` tool to look up the real API for the element ' +
       '(prop names, event names, attribute vs. property distinction).\n' +
-      '2. Check the **Streaming recipe** in `llms-full.txt` ' +
-      '(`node_modules/@kitn.ai/ui/llms-full.txt` or https://ui.kitn.ai/llms-full.txt) ' +
-      'for correct streaming wiring.\n' +
-      '3. Paste `https://ui.kitn.ai/llms.txt` into your prompt for a compact orientation.'
+      '2. If the problem is in host code rather than an element — streaming, ' +
+      '`createAssistantStream`, `createMockResponder`, the SSE readers, the encoders — ' +
+      'call `component_reference` with `{ name: "programmatic" }` for the full ' +
+      '`@kitn.ai/ui/state` + `@kitn.ai/ui/wire` API, and `{ name: "composed-thread" }` ' +
+      'for a complete hand-composed surface to compare wiring against.\n' +
+      '3. Check the **Streaming recipe** and the **Programmatic layer** sections in ' +
+      '`llms-full.txt` (`node_modules/@kitn.ai/ui/llms-full.txt` or ' +
+      'https://ui.kitn.ai/llms-full.txt) for correct streaming wiring.\n' +
+      '4. Paste `https://ui.kitn.ai/llms.txt` into your prompt for a compact orientation.'
     );
   }
 

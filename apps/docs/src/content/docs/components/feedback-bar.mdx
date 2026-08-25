@@ -24,6 +24,8 @@ import NeedAHand from '../../../components/NeedAHand.astro';
 
 <Aside type="tip" title="When to use">
 Place `<kai-feedback-bar>` at the end of an assistant response, a completed task, or an article. Add `collect-detail` when you want an optional reason on a thumbs-down vote — the element handles the multi-step flow itself, so you only listen for `kai-feedback-detail`.
+
+Placement and lifecycle are your call: the bar is designed thread-level (its events carry no message id), and when it appears — say, revealed after a settled turn and hidden again on submit — is app behavior, not something the element decides.
 </Aside>
 
 ## Usage

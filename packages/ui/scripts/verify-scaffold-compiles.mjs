@@ -304,6 +304,18 @@ let PRESET_COMPONENTS = {};
  */
 let INTEGRATIONS = [];
 /**
+ * THE CODE-RECIPE CELLS — `listCodeRecipes()` from the registry.
+ *
+ * A code recipe is a complete host module `component_reference` serves as
+ * files (the first is `composed-thread`, rung-6 F-49: the hand-composed
+ * thread no `components` list can express because it has no kai-chat). Its
+ * code lives in string literals with exactly the scaffolder's failure mode —
+ * it can be wrong forever and nothing reddens — so every `lang: 'ts'` file
+ * joins the front-end tsc matrix here, under the same stock consumer project
+ * as the `html` framework cells.
+ */
+let CODE_RECIPES = [];
+/**
  * TS-visible frameworks. `html` is one of them now.
  *
  * It used to be excluded because SCAF-19 kept its logic inline in index.html as
@@ -1654,18 +1666,28 @@ async function loadCatalogAxes(esbuild) {
         '  back to a hand-written list: that is the exact defect that let `openai` and\n' +
         '  `anthropic` compile zero times while this gate reported success.',
     );
+  if (typeof mod.listCodeRecipes !== 'function')
+    fail(
+      'the registry no longer exports `listCodeRecipes`.\n' +
+        '  The code-recipe cells below derive from it rather than from a hand-written list.\n' +
+        '  Refusing to skip: a recipe served by component_reference and compiled by nothing\n' +
+        '  is exactly the string-literal blind spot this gate exists to close.',
+    );
   INTEGRATIONS = mod.listIntegrations().map((i) => i.id);
   SURFACES = mod.listSurfaceProbes();
   PRESETS = mod.listArchetypes().map((a) => a.id);
   PRESET_COMPONENTS = Object.fromEntries(mod.listArchetypes().map((a) => [a.id, a.components]));
+  CODE_RECIPES = mod.listCodeRecipes();
   // Anti-vacuity. An empty axis makes every matrix below a zero-cell green run.
   if (INTEGRATIONS.length === 0) fail('the registry lists no integrations — every matrix here would be empty.');
   if (SURFACES.length === 0) fail('the registry derives no surface probes — every matrix here would be empty.');
   if (PRESETS.length === 0) fail('the registry lists no archetypes — `assertPresetsAreData` would check nothing.');
+  if (CODE_RECIPES.length === 0) fail('the registry lists no code recipes — the recipe cells below would be a zero-cell green run.');
   assertSurfacesAreDistinct();
   console.log(
     `  · catalog axes from the registry: ${INTEGRATIONS.length} integrations × ${SURFACES.length} surfaces ` +
-      `(${SURFACES.map((s) => s.id).join(', ')})`,
+      `(${SURFACES.map((s) => s.id).join(', ')}) + ${CODE_RECIPES.length} code recipe(s) ` +
+      `(${CODE_RECIPES.map((r) => r.id).join(', ')})`,
   );
 }
 
@@ -1852,9 +1874,48 @@ async function main() {
   }
   if (skipped.length) fail(`no compilable code block found in: ${skipped.join(', ')}`);
 
+  // ── The code-recipe cells, from the registry ──────────────────────────────
+  // Every `lang: 'ts'` file of every registered code recipe joins the matrix,
+  // compiled under the same stock consumer project as the `html` cells (a
+  // recipe is a vanilla-TS host module by construction). Cells derive from
+  // `listCodeRecipes()`, so registering a recipe moves the printed count by
+  // itself — the same contract as the integration and surface axes.
+  let recipeFiles = 0;
+  for (const r of CODE_RECIPES) {
+    const tsFiles = r.files.filter((f) => f.lang === 'ts');
+    if (tsFiles.length === 0)
+      fail(`code recipe '${r.id}' has no TypeScript file — a recipe of prose compiles nothing and proves nothing.`);
+    // The two honesty pins for `composed-thread`, the findings that created it:
+    // F-44 (the object-URL attachment defect must not grow back into the code a
+    // harness is handed) and F-49 (the whole premise is a thread WITHOUT
+    // kai-chat, so the markup must not quietly reintroduce it).
+    for (const f of r.files) {
+      if (f.code.includes('URL.createObjectURL'))
+        fail(
+          `code recipe '${r.id}' (${f.path}) mints an object URL. AttachmentData.url must be a ` +
+            'data: URI — toOpenAIMessages/toAnthropicMessages refuse blob: URLs (F-44 / PR #186).',
+        );
+    }
+    if (r.id === 'composed-thread') {
+      for (const f of r.files.filter((x) => x.lang === 'html')) {
+        if (f.code.includes('<kai-chat'))
+          fail(`code recipe 'composed-thread' (${f.path}) places <kai-chat> — its premise is the hand-composed thread.`);
+      }
+    }
+    for (const f of tsFiles) {
+      const stem = f.path.replace(/\.ts$/, '').replace(/[^A-Za-z0-9_-]+/g, '_');
+      const label = `recipe__${r.id}__${stem}`;
+      if (FILTER && !label.includes(FILTER)) continue;
+      writeFileSync(join(PROJECTS[PROJECT.html].dir, `${label}.ts`), f.code);
+      cases.push({ label, project: PROJECT.html });
+      recipeFiles++;
+    }
+  }
+  console.log(`  · compiling ${recipeFiles} code-recipe file(s) from ${CODE_RECIPES.length} registered recipe(s)`);
+
   // One tsc pass per project. Their diagnostics are merged: every file name is
   // the case label, so the report reads the same as it did with one project.
-  const usedProjects = [...new Set(cases.map((c) => PROJECT[c.framework]))];
+  const usedProjects = [...new Set(cases.map((c) => c.project ?? PROJECT[c.framework]))];
   console.log(
     `  · running tsc --strict --noUnusedLocals --noUnusedParameters (${usedProjects.length} project(s): ${usedProjects.join(', ')})`,
   );

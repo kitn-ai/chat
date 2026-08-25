@@ -239,6 +239,71 @@ export const surfaceRecipes: TSurfaceRecipe[] = [
     ],
     corpus: ['packages/ui/README.md'],
   },
+  {
+    // The hand-composed thread (rung-6 F-49): kai-chat deliberately absent —
+    // kai-thread renders the transcript, kai-composer takes input, and the
+    // HOST is every line of wiring between them. This record is the catalog
+    // half; the full compiling host module is the `composed-thread` CODE
+    // recipe (../recipes/composed-thread.ts, served by component_reference
+    // { name: "composed-thread" } and compiled by verify:scaffold), which is
+    // also this record's corpus. Ingredients with no wiring edge below are
+    // still real members of the composition: kai-conversation-item is
+    // presentational standalone (activation lives in <kai-conversations>'s
+    // controller, so the rail rows get a host click listener, not an event
+    // edge), and kai-feedback-bar's events terminate in the host rather than
+    // setting another element's property.
+    id: 'composed-thread',
+    intent:
+      'A full chat surface composed by hand from standalone elements — no <kai-chat>. ' +
+      'The host module owns the store, streams through createAssistantStream + the wire ' +
+      'reader, stages attachments as data: URIs, and drives the toast region as data.',
+    archetypes: ['full-screen'],
+    targets: ['bundler'],
+    ingredients: [
+      'kai-thread',
+      'kai-composer',
+      'kai-attachments',
+      'kai-toast-region',
+      'kai-conversation-item',
+      'kai-feedback-bar',
+    ],
+    backend: { endpoint: 'consumer-owned', reader: 'readOpenAIStream' },
+    wiring: [
+      {
+        from: 'kai-composer',
+        event: 'kai-submit',
+        to: 'kai-thread',
+        property: 'messages',
+        note: 'detail is {doc, text, entities} — read detail.text (NOT detail.value, which is kai-chat/kai-prompt-input\'s shape). The host appends the user turn plus any staged file parts and assigns a NEW array; the reply then streams onto the same property via createAssistantStream',
+      },
+      {
+        from: 'kai-attachments',
+        event: 'kai-remove',
+        to: 'kai-attachments',
+        property: 'items',
+        note: 'detail is {id}; the tray never mutates its own list — the host filters and reassigns items, and a data: URI needs no revocation on removal (attachment-blob-url is the rule this recipe corrects: F-44)',
+      },
+      {
+        from: 'kai-toast-region',
+        event: 'kai-dismiss',
+        to: 'kai-toast-region',
+        property: 'toasts',
+        note: 'detail is {id}; the region is driven as DATA because this app places its own — the imperative toast() auto-mounts a second region and never adopts a markup-placed one, so the two APIs are either/or',
+      },
+    ],
+    invariants: [
+      'reactivity-two-halves',
+      'props-not-attributes',
+      'events-non-bubbling',
+      'host-coordinates',
+      'kit-parses-consumer-fetches',
+      'untrusted-model-output',
+    ],
+    corpus: [
+      'packages/ui/src/agent-tooling/recipes/composed-thread.ts',
+      'packages/ui/src/agent-tooling/catalog/surfaces.test.ts',
+    ],
+  },
 ];
 
 /**

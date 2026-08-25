@@ -54,7 +54,10 @@ interface Props extends Record<string, unknown> {
 
 /** Events fired by `<kai-composer>`. */
 interface Events {
-  /** The user submitted the composer (Enter or programmatic submit). */
+  /** The user submitted the composer (Enter or programmatic submit). Note the
+   *  detail carries no `attachments`; `<kai-composer>` is the bare editing
+   *  surface: no send button, toolbar, or attachments. For a drop-in composer
+   *  row with all three, reach for `<kai-prompt-input>`, which is built on this. */
   'kai-submit': { doc: ComposerDoc; text: string; entities: EntityRef[] };
   /** The content changed (fires on every input event). */
   'kai-value-change': { doc: ComposerDoc; text: string; entities: EntityRef[] };
@@ -75,6 +78,14 @@ interface Events {
   'kai-blur': { originalEvent: FocusEvent };
 }
 
+/**
+ * `<kai-composer>` — the bare editing surface: rich text, entity pills,
+ * trigger menus, Enter-to-submit, and nothing else. No send button, no
+ * toolbar, no attachments — that division is deliberate. For a drop-in chat
+ * composer with a send button, toolbar, and attachment staging, reach for
+ * `<kai-prompt-input>`, which is built on this element. Keep `<kai-composer>`
+ * when you are composing the input row yourself and want to own those pieces.
+ */
 defineWebComponent<Props, Events>('kai-composer', {
   value: undefined,
   placeholder: undefined,

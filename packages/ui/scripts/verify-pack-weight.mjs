@@ -84,8 +84,26 @@ const ALLOWED_LARGE_FILES = new Map([
  * + dist), and the workspace BLOCK emission inside dist/mcp.es.js +
  * src/agent-tooling (which ships by design). No tests, stories, probe scripts
  * or scripts/ entries are in the tarball (checked explicitly).
+ *
+ * 13.0 → 13.5 MiB (2026-08-25, the rung-6 fix waves): tripped at 13.23 MiB,
+ * audited against the pack listing after removing the one piece of dead
+ * weight it caught — dist/llms/programmatic.md (~50 KB), a standalone copy of
+ * the programmatic-layer section already inside llms-full.txt; the MCP topic
+ * now slices the shipped llms-full.txt instead. What remains is the shipped
+ * fix itself, twice over: (1) wave 1's element doc comments (taxonomy, the
+ * data-URI attachment rule, standalone-item and toast caveats) fanned out
+ * through every generated artifact they exist to reach — custom-elements.json,
+ * element-meta.json, elements.d.ts, the React wrappers, llms-full's element
+ * tables, dist/mcp.es.js; (2) wave 2's F-46 fix — the programmatic-layer
+ * section in llms-full.txt (~50 KB × the two copies `files` deliberately
+ * ships), derived verbatim from the dist/state + dist/wire declarations, plus
+ * the composed-thread code recipe in src/agent-tooling + dist/mcp.es.js.
+ * Trimming the embedded declarations was considered and declined: the largest
+ * blocks (AssistantStream, the encoder docs, MockTurn) are exactly the
+ * measured hard core rung 6 filed as its one S1, and the whole section gone
+ * would still not have fit under 13.0.
  */
-const MAX_UNPACKED_BYTES = 13.0 * 1024 * 1024;
+const MAX_UNPACKED_BYTES = 13.5 * 1024 * 1024;
 
 const kib = (n) => `${(n / 1024).toFixed(1)} KiB`;
 const mib = (n) => `${(n / 1024 / 1024).toFixed(2)} MiB`;
