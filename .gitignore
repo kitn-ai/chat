@@ -35,3 +35,6 @@ packages/ui/.tmp-emitted-scaffold/
 # NX local cache
 .nx/cache
 .nx/workspace-data
+
+# kai dev workdirs
+.kai/

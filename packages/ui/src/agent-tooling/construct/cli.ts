@@ -73,6 +73,20 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       io.log(`ejected <${construct.name}> to ${resolve(outDir)} — npm install && npm run dev. The source is yours.`);
       return 0;
     }
+    case 'dev': {
+      // NB: guard the -1 case — `i !== uiFlag + 1` with uiFlag === -1 would drop index 0.
+      const uiFlag = rest.indexOf('--ui');
+      const uiSpec = uiFlag >= 0 ? rest[uiFlag + 1] : undefined;
+      const positional = uiFlag >= 0 ? rest.filter((_, i) => i !== uiFlag && i !== uiFlag + 1) : rest;
+      const path = positional[0];
+      if (!path) {
+        io.error(USAGE);
+        return 2;
+      }
+      const { dev } = await import('./dev');
+      await dev(path, { io, uiSpec });
+      return 0; // unreachable; dev() never resolves
+    }
     default:
       io.error(USAGE);
       return 2;
