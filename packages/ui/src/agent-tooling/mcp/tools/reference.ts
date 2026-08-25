@@ -574,18 +574,36 @@ const PROGRAMMATIC_ALIASES = ['programmatic', 'state', 'wire', 'state-wire'] as 
  * exists to remove. The file sits beside the manifest in both contexts
  * (bundled bin and source/vitest), so its resolution is the manifest's.
  */
+/**
+ * The fence gen-llms-programmatic.mjs writes around the section inside
+ * llms-full.txt. REGISTERED COPY of `PROGRAMMATIC_MARKERS` in that script —
+ * this TS module cannot import the generator .mjs. If either side moves, the
+ * slice below misses and the reference tests fail on the "Missing build
+ * artifact" branch, so the drift is loud.
+ */
+const PROGRAMMATIC_START = '<!-- kai:programmatic:start -->';
+const PROGRAMMATIC_END = '<!-- kai:programmatic:end -->';
+
 function renderProgrammaticAppendix(): string {
-  const path = join(dirname(resolveManifestPath()), 'llms', 'programmatic.md');
-  if (!existsSync(path)) {
-    return (
-      `Missing build artifact: ${path}\n\n` +
-      'The programmatic-layer reference is generated from the shipped dist/*.d.ts by the ' +
-      'build. Run `nx build ui` (or `npm run build:api` in packages/ui) and ask again. ' +
-      'It is deliberately not restated here: a hand-typed copy would drift from the ' +
-      'declarations your editor shows.'
-    );
+  // Sliced out of the SHIPPED llms-full.txt rather than served from a file of
+  // its own: a standalone copy was ~50 KB of duplicate tarball weight
+  // (verify:pack priced it), and slicing keeps one derivation with zero extra
+  // shipped bytes.
+  const path = join(dirname(resolveManifestPath()), 'llms', 'llms-full.txt');
+  const missing = (what: string) =>
+    `Missing build artifact: ${what}\n\n` +
+    'The programmatic-layer reference is generated from the shipped dist/*.d.ts by the ' +
+    'build (a marker-fenced section of dist/llms/llms-full.txt). Run `nx build ui` (or ' +
+    '`npm run build:api` in packages/ui) and ask again. It is deliberately not restated ' +
+    'here: a hand-typed copy would drift from the declarations your editor shows.';
+  if (!existsSync(path)) return missing(path);
+  const full = readFileSync(path, 'utf-8');
+  const start = full.indexOf(PROGRAMMATIC_START);
+  const end = full.indexOf(PROGRAMMATIC_END);
+  if (start === -1 || end === -1 || end <= start) {
+    return missing(`the ${PROGRAMMATIC_START} section inside ${path}`);
   }
-  return readFileSync(path, 'utf-8');
+  return full.slice(start + PROGRAMMATIC_START.length, end).trim();
 }
 
 /**

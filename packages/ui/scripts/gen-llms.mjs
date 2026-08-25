@@ -12,7 +12,7 @@
 //   - dist/llms/llms.txt    (copy, shipped in the npm package)
 //   - dist/llms/llms-full.txt
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 // The `/state` + `/wire` section, derived from the shipped dist/*.d.ts (F-46).
@@ -519,9 +519,12 @@ export function generate(elementsInput) {
   writeFileSync(resolve(root, 'llms-full.txt'), llmsFull);
   writeFileSync(resolve(root, 'dist/llms/llms.txt'), llmsTxt);
   writeFileSync(resolve(root, 'dist/llms/llms-full.txt'), llmsFull);
-  // The same section alone, for the MCP's component_reference
-  // { name: "programmatic" } topic — one derivation, two doors.
-  writeFileSync(resolve(root, 'dist/llms/programmatic.md'), programmatic.markdown + '\n');
+  // NO standalone programmatic.md: the MCP's { name: "programmatic" } topic
+  // slices the marker-fenced section back out of dist/llms/llms-full.txt, so
+  // a separate copy would be ~50 KB of duplicate tarball weight (verify:pack
+  // is the guard that priced it). Remove a stale copy from earlier builds so
+  // it cannot keep shipping — dist/ is packed wholesale.
+  rmSync(resolve(root, 'dist/llms/programmatic.md'), { force: true });
 
   console.log(
     `✓ llms.txt + llms-full.txt written (${count} elements, ${programmatic.exportCount} state/wire exports)`,
