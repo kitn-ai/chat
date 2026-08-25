@@ -1,0 +1,7 @@
+{
+  "$schema": "https://ui.kitn.ai/schemas/construct/v1.json",
+  "name": "demo-widget",
+  "layout": "widget",
+  "provider": { "mode": "mock" },
+  "theme": { "accent": "#e91e63", "mode": "system" }
+}

@@ -16,7 +16,13 @@ function fatal(err) {
 process.on('unhandledRejection', fatal);
 process.on('uncaughtException', fatal);
 
-// Resolve against this file's own URL so the import works regardless of the cwd
-// or how the bin was invoked (npx, global install, symlink).
-const entry = fileURLToPath(new URL('../dist/mcp.es.js', import.meta.url));
+// Subcommand dispatch. `npx @kitn.ai/ui <cmd>`: `mcp` (or nothing) starts the
+// MCP server — the historical behavior, unchanged. dev/compile/eject/validate
+// load the construct CLI. Both are dist ESM emits resolved against this file's
+// own URL, so the bin works however it was invoked (npx, global, symlink).
+const [, , command] = process.argv;
+const CONSTRUCT_COMMANDS = ['dev', 'compile', 'eject', 'validate'];
+const entry = CONSTRUCT_COMMANDS.includes(command)
+  ? fileURLToPath(new URL('../dist/construct-cli.es.js', import.meta.url))
+  : fileURLToPath(new URL('../dist/mcp.es.js', import.meta.url));
 import(entry).catch(fatal);
