@@ -100,4 +100,4 @@ import {
 
 Native components and `kai-*` elements ship in the same package and coexist. Compose primitives where you want control, drop a `<kai-chat>` shell where you want defaults.
 
-When you use a `kai-*` element inside Solid, bind arrays/objects with `prop:` (`prop:messages={messages()}`) so Solid sets a DOM property instead of stringifying, and listen with `on:` (`on:kai-submit`).
+When you use a `kai-*` element inside Solid, set arrays/objects as JS **properties**, never attributes — grab the node with `ref` and assign (`el.messages = messages()`), re-assigning from an effect when the data changes — and listen with `el.addEventListener('kai-submit', …)` on the element itself: the events don't bubble, and Solid v2 has no `on:` event namespace.

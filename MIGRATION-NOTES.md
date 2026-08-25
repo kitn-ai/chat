@@ -323,3 +323,133 @@ Exit gates, all run at the phase boundary:
    (consumer-facing; decided with #1).
 6. `latest()` uses are the sanctioned staged-read escape; if upstream changes its
    semantics before stable, grep V2-PORT + latest.
+
+
+# PHASE 3 — gate fixes, Storybook, hygiene, docs split (2026-08-25)
+
+Exit gates at this boundary, all run foreground on the final tree, all GREEN:
+unit (330 files / 4530 tests, no unhandled-error block), emitted (35/35),
+`NX_DAEMON=false nx typecheck ui --skip-nx-cache`, verify:scaffold (705/705
+front-end cells incl. the composed-thread recipe + 110/110 routes, all six
+self-tests firing), verify:consumer, lint:silent-drops, lint:cdn-pins.
+
+## 1. verify:scaffold consumer-solid resolution (was the merge blocker) — FIXED
+
+The gate compiled emitted CONSUMER solid code against the workspace `solid-js`,
+now v2 — no `Index` export, no `solid-js/jsx-runtime`, so all 26+ solid cells
+died. Fixed GATE-SIDE; the scaffolder templates deliberately stay 1.x-targeting.
+**FLIP CONDITION: templates move to v2 when the kit ships on v2 and the
+ecosystem's default Solid is v2 — then drop the alias + the paths block.**
+
+Three coordinated pieces (all in `scripts/lib/consumer-tsc-projects.mjs`, with
+a pointer comment at the solid bullet in `verify-scaffold-compiles.mjs`):
+
+- devDependency **`solid-js-consumer-1x`: `npm:solid-js@^1.9.0`** in
+  packages/ui — the pinned consumer-side Solid 1.x.
+- The temp consumer tree symlinks that alias AS `node_modules/solid-js`
+  (special-cased out of the symlink loop), which covers every import the
+  SCAFFOLD writes, including the `solid-js/jsx-runtime` lookup from
+  `jsxImportSource: 'solid-js'`.
+- The solid tsc project adds a `paths` override pinning `solid-js` AND
+  `@solidjs/web` to the alias's `types/index.d.ts` (ABSOLUTE paths — `sandbox()`
+  reuses the options object one directory deeper). Needed because the KIT'S OWN
+  shipped d.ts resolves through the symlink's realpath (packages/ui/
+  node_modules → v2), and a v2-typed component is not a valid JSX component
+  under v1's namespace: every `<Message>` in every solid cell was TS2786. The
+  shipped d.ts imports only `Component`/`Accessor` (solid-js) and `JSX`
+  (@solidjs/web) — all present in v1. No declare-module stubs anywhere; the
+  host-typings-are-real rule holds.
+
+**Alias-name trap, learned the expensive way:** the alias was first named
+`solid-js-v1`, and that EXACT name is a magic specifier `storybook-solidjs-vite`
+ships in its published d.ts (`import { Component } from 'solid-js-v1'` /
+`'solid-js-v2'` — its OWN devDep aliases, unresolvable in a consumer tree, so
+its `SolidComponent` silently types as `any`). Our alias made it resolve, its
+story types became REAL v1 types, and the whole typecheck chain went red on
+every `satisfies Meta` under v2. Renamed to `solid-js-consumer-1x`. Corollary
+worth keeping: SB's story typing is currently any-vacuous by construction;
+`storybook-solidjs-vite/next` + a `solid-js-v2` alias would make it real v2
+typing one day — a deliberate follow-up, not this branch.
+
+## 2. Storybook — WORKS under v2 (better than the phase-2 note feared)
+
+- `vite-plugin-solid` bumped `^2.11.0` → **`3.0.0-next.27`** (exact pin; the
+  3.x line is a bridge package depending on `@solidjs/vite-plugin`). The
+  installed `storybook-solidjs-vite` 10.1.1 already peers on solid ^1.8||^2 +
+  `@solidjs/web ^2.0.0-0`, ships `entry-preview/solid-2`, and only injects
+  `vite-plugin-solid` when no `solid` plugin is present — so the bump is the
+  whole integration.
+- `storybook build` completes clean. `storybook dev` + Playwright smoke: Solid
+  component stories (Components/Elements/Message ×3) and kai-* element stories
+  (Labs/Chat Slots ×2) all render with ZERO console/page errors.
+- **Real defect found via Storybook, bigger than Storybook — the dual-runtime
+  `_$owner` crash.** v2's `@solidjs/element` walks the DOM for a `_$owner`
+  stamped by ANY ancestor renderer (context inheritance across custom
+  elements). Storybook's own @solidjs/web stamps it; the kit's BUNDLED
+  (property-mangled) runtime then adopts the foreign owner and dies in
+  createRoot's owner-linking ("Cannot set properties of undefined (setting
+  'ct')") inside connectedCallback — the element's shadow never renders. The
+  standalone dist bundle in Chromium is perfect (probed: kai-button + kai-chat
+  mount + render, zero errors); the crash needs a SECOND v2 runtime in the
+  page, which is exactly any Solid-v2 host app around the compiled elements
+  bundle (and the builder compile-to-WC story). Fixed via
+  **`patches/@solidjs__element@2.0.0-rc.2.patch`** (pnpm patchedDependencies,
+  root package.json — same mechanism as lucide-solid): adopting the looked-up
+  owner falls back to an ownerless root when adoption throws BEFORE the root
+  body runs (a `rootBodyStarted` flag keeps real component errors loud).
+  UPSTREAM-REPORTABLE: cross-instance `_$owner` adoption cannot work between
+  runtime copies; the elements repo (solidjs/solid-element or solid's element
+  package) should guard lookupContext. Re-verified red → green in the same
+  Storybook probes after a `--skip-nx-cache` rebuild (note: the storybook DEV
+  SERVER caches dist by module graph — restart it after rebuilding dist or the
+  old bundle keeps serving; that cost one false "patch didn't work").
+- Two labs stories carried a phase-2 miss: `ref={(e) => onSettled(() =>
+  onCleanup(...))}` — refs are unowned in v2, so that's
+  SETTLED_CLEANUP_UNOWNED at flush. Reshaped to push the teardown into the
+  component-scope `settledDisposers` (chat-slots.stories ×2).
+
+## 3. Strict-read dev-warning sweep — CLEAN, plus one real fix
+
+- Full unit run captured completely: **zero `STRICT_READ_UNTRACKED` warnings**
+  (grep over the whole log; the wording comes from @solidjs/signals dev.js).
+  Phase 2's "not exhaustively silenced" turned out to be already-exhausted.
+- What the sweep DID find: 8 uncaught `REACTIVE_WRITE_IN_OWNED_SCOPE`
+  exceptions (async, tests still passed — the "Errors" block, not failures),
+  all from `message.tsx` `liftRoleOffHost`: `removeAttribute('role')` re-enters
+  component-register's attributeChangedCallback SYNCHRONOUSLY, which assigns
+  the signal-backed prop — and the removal sat OUTSIDE the existing
+  `runWithOwner(null, …)`. Moved inside; red → green confirmed on
+  tests/elements/message-element.test.tsx, and the full-suite Errors block is
+  gone. Remaining stderr noise is pre-existing jsdom canvas/getContext +
+  a typescript.js.map read — not v2, not new.
+
+## 4. Docs idiom split — what ships from THIS tree vs the published 1.x package
+
+Fixed (ships from this branch's tree):
+- `prompt-input.stories.tsx` SOLID_SNIPPET: `on:kai-*` JSX (gone in v2) +
+  onSettled prop-set → single ref-callback teaching (props + addEventListener).
+- `src/stories/getting-started/WorkingWithPrimitives.mdx`: the `prop:`/`on:`
+  sentence → ref + property assignment + addEventListener.
+- `src/stories/getting-started/BuildingInLabs.mdx`: lab sample onMount →
+  ref-callback; the two rule bullets reworded (no `on:` in v2).
+- `src/primitives/create-kai-chat.ts` doc comment on `bind`: `on:kai-submit` →
+  addEventListener (this comment ships in the built d.ts).
+
+Deliberately NOT touched (describes the PUBLISHED 1.x package; flips with the
+templates when the kit ships v2):
+- `apps/docs/**` — including `guides/frameworks/solid.mdx`'s `prop:`/`on:`
+  section and its comparison table.
+- The scaffolder templates + `scaffold.ts`'s emitted `createKaiChat` one-liner
+  comment (`on:kai-submit`) — emitted CONSUMER code, 1.x by decision #1.
+  (`on:kai-submit` matches in svelte templates/tests are Svelte's own `on:`
+  directive, not Solid — leave forever.)
+
+## Files this phase touched
+
+packages/ui/package.json (devDeps: solid-js-consumer-1x, vite-plugin-solid
+pin) · package.json + pnpm-lock.yaml + patches/ (the @solidjs/element patch;
+root files, flagged to the supervisor) · scripts/lib/consumer-tsc-projects.mjs ·
+scripts/verify-scaffold-compiles.mjs (comment) · src/elements/message.tsx ·
+src/elements/chat-slots.stories.tsx · src/elements/prompt-input.stories.tsx ·
+src/stories/getting-started/{WorkingWithPrimitives,BuildingInLabs}.mdx ·
+src/primitives/create-kai-chat.ts · this file.

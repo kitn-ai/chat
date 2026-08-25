@@ -98,6 +98,14 @@
 //   · solid   — needs `jsx: preserve` + `jsxImportSource: solid-js`; under
 //               react-jsx every Solid component would be checked against React's
 //               JSX namespace and the whole file would error spuriously.
+//               SOLID VERSION: the solid cells compile against the CONSUMER's
+//               Solid — 1.x, via the `solid-js-consumer-1x` devDependency alias — not the
+//               workspace's solid-js, which is v2 (the kit is authored on it).
+//               The emitted templates deliberately stay 1.x-targeting until the
+//               kit ships on v2 and the ecosystem's default Solid is v2; at that
+//               flip, migrate the templates and drop the alias. The wiring +
+//               full rationale live at the solid project in
+//               scripts/lib/consumer-tsc-projects.mjs.
 // Each project gets its own copy of the anti-theatre self-test, so a green
 // angular/solid run is as trustworthy as the default one.
 //

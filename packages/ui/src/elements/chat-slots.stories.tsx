@@ -93,7 +93,10 @@ function InjectDemo() {
       <kai-conversations slot="sidebar" ref={(e) => (convEl = e as ConversationsEl)} style={{ display: 'block', height: '100%' }} />
       {/* A custom composer action (a themed kai-button) works in light + dark. */}
       <kai-button slot="composer-actions" variant="subtle" icon="sparkles"
-        ref={(e) => onSettled(() => onCleanup(attachKaiActions(e)))}>Improve prompt</kai-button>
+        // V2-PORT: refs are unowned in v2, so an onSettled here can neither call
+        // onCleanup nor return a cleanup (SETTLED_CLEANUP_UNOWNED throws at
+        // flush). Push the teardown into the component-scope disposers instead.
+        ref={(e) => onSettled(() => { settledDisposers.push(attachKaiActions(e)); })}>Improve prompt</kai-button>
       <footer slot="footer" style="font:12px/1.4 system-ui;color:var(--color-muted-foreground);text-align:center;padding:4px">
         Acme may make mistakes. <a href="#" style="color:var(--color-foreground)">Verify important info</a>.
       </footer>
@@ -153,7 +156,8 @@ function EmptyDemo() {
       >
         <span slot="media"><LifeBuoy size={28} /></span>
         <kai-button variant="default"
-          ref={(e) => onSettled(() => onCleanup(attachKaiActions(e)))}>Talk to a person</kai-button>
+          // V2-PORT: unowned ref — see the Inject story's kai-button note.
+          ref={(e) => onSettled(() => { settledDisposers2.push(attachKaiActions(e)); })}>Talk to a person</kai-button>
       </kai-empty>
     </kai-chat>
   );

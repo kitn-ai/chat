@@ -1,0 +1,46 @@
+diff --git a/dist/index.js b/dist/index.js
+index 5939800fe2475e21314c4c35e64b9a1fa3858642..548b163e7347a77b572c0d57950b9e2694f69e34 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -33,8 +33,13 @@ function withSolid(ComponentType) {
+     return (rawProps, options) => {
+         const { element } = options;
+         const owner = lookupContext(element);
++        // PATCH (kitn-ai/ui): set once the root BODY runs — distinguishes an
++        // owner-adoption failure (throws before the body) from a real component
++        // error (throws inside it), so only the former falls back below.
++        let rootBodyStarted = false;
+         function createComponent() {
+             return createRoot((dispose) => {
++                rootBodyStarted = true;
+                 const props = createProps(rawProps);
+                 element.addPropertyChangedCallback((key, val) => (props[key] = val));
+                 element.addReleaseCallback(() => {
+@@ -47,7 +52,26 @@ function withSolid(ComponentType) {
+                 return insert(element.renderRoot, comp);
+             });
+         }
+-        return owner ? runWithOwner(owner, createComponent) : createComponent();
++        // PATCH (kitn-ai/ui): `_$owner` may have been stamped on an ancestor node
++        // by a DIFFERENT copy of the Solid runtime (the host app's own solid-js,
++        // while this copy is bundled into the element library — property-mangled
++        // even). Adopting a foreign owner crashes createRoot's owner linking
++        // ("Cannot set properties of undefined") inside connectedCallback and the
++        // element never renders. Context cannot meaningfully cross runtime copies
++        // anyway, so fall back to an ownerless root instead of dying. The throw
++        // happens before any side effect (first statement of createRoot), so the
++        // retry is clean.
++        if (owner) {
++            try {
++                return runWithOwner(owner, createComponent);
++            }
++            catch (e) {
++                if (rootBodyStarted)
++                    throw e; // a real component error — never mask it
++                return createComponent();
++            }
++        }
++        return createComponent();
+     };
+ }
+ function customElement(tag, props, ComponentType) {

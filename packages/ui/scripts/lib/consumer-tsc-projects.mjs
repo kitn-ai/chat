@@ -164,7 +164,36 @@ function projectSpecs(tmp) {
         isolatedModules: true,
       },
     },
-    solid: { dir: join(tmp, 'solid'), options: { jsx: 'preserve', jsxImportSource: 'solid-js' } },
+    solid: {
+      dir: join(tmp, 'solid'),
+      // THE CONSUMER'S SOLID IS 1.x; THE WORKSPACE'S IS v2. The temp
+      // node_modules already maps `solid-js` to the `solid-js-consumer-1x` alias (see the
+      // symlink note in createConsumerTsc), which covers every import the
+      // SCAFFOLD writes — including the `solid-js/jsx-runtime` lookup that
+      // `jsxImportSource: 'solid-js'` triggers. But the KIT'S OWN shipped d.ts
+      // resolves through the symlink's realpath (packages/ui/node_modules), so
+      // its `Component`/`Accessor` from 'solid-js' and `JSX` from '@solidjs/web'
+      // would type against v2 — and a v2-typed component is not a valid JSX
+      // component under v1's namespace, so every `<Message>` in every solid cell
+      // dies on TS2786. `paths` is tried before any node_modules walk, for every
+      // non-relative import in the compilation INCLUDING ones inside d.ts, so
+      // both specifiers are pinned to the v1 types here. That is what a real
+      // 1.x consumer's editor effectively sees once the kit ships templates and
+      // types for the consumer's Solid; FLIP CONDITION: when the scaffolder
+      // templates move to v2 (kit ships on v2, ecosystem default is v2), drop
+      // this paths block together with the alias symlink.
+      options: {
+        jsx: 'preserve',
+        jsxImportSource: 'solid-js',
+        // ABSOLUTE paths, because `sandbox()` re-uses this exact options object
+        // one directory deeper — a relative '../node_modules' would silently
+        // stop resolving there and every kit type would fall back to v2.
+        paths: {
+          'solid-js': [join(tmp, 'node_modules/solid-js/types/index.d.ts')],
+          '@solidjs/web': [join(tmp, 'node_modules/solid-js/types/index.d.ts')],
+        },
+      },
+    },
 
     /**
      * The three ROUTE projects. Block (2) runs on a server, and which server
@@ -300,13 +329,26 @@ export function createConsumerTsc({ keep = false, fail }) {
   // `solid-js` is what the solid scaffold's own JSX is checked against, and
   // `@angular/core` is what the angular one's decorator + signals resolve to —
   // both are as load-bearing here as react's types are for the JSX family.
+  //
+  // `solid-js` is SPECIAL-CASED below, not in this list: the workspace copy is
+  // Solid v2 (the kit is authored on it), but the emitted solid scaffold targets
+  // the CONSUMER's Solid, which is 1.x — v2 has no `Index` export and no
+  // `solid-js/jsx-runtime`, so resolving the scaffold against the workspace copy
+  // checks a fiction. The temp tree therefore installs the `solid-js-consumer-1x`
+  // devDependency alias (npm:solid-js@^1.9.0) AS `solid-js`. The kit's own
+  // shipped d.ts still resolves ITS `solid-js` imports to v2 through the
+  // symlink's realpath (packages/ui/node_modules), which mirrors the real
+  // topology exactly: the consumer's app on 1.x, the kit's nested dep on v2.
+  // FLIP CONDITION: when the scaffolder templates move to v2 (they move when
+  // the kit ships on v2 AND the ecosystem's default `npm create` Solid is v2),
+  // drop the alias and put plain 'solid-js' back in the list.
   for (const scope of ['@angular', '@sveltejs', '@tanstack', '@cloudflare', '@langchain', '@mastra']) {
     mkdirSync(join(nm, scope), { recursive: true });
   }
   for (const pkg of [
     // ── front end (block 1) ──
     'react', 'react-dom', 'vue', 'svelte', '@types/react', '@types/react-dom',
-    'solid-js', '@angular/core',
+    '@angular/core',
     // ── backend routes (block 2) ──
     // The HOSTS. These decide the shape a route has to have, and getting one wrong
     // is the defect class block (2) keeps shipping, so they are the real packages
@@ -331,6 +373,13 @@ export function createConsumerTsc({ keep = false, fail }) {
     }
     symlinkSync(src, join(nm, pkg), 'dir');
   }
+  // The consumer's Solid — 1.x via the `solid-js-consumer-1x` alias, per the note above.
+  const solidV1 = pkgDir('solid-js-consumer-1x');
+  if (!solidV1) {
+    cleanup();
+    fail("'solid-js-consumer-1x' (npm:solid-js@^1.9.0) is not installed. Run `pnpm install` at the repo root.");
+  }
+  symlinkSync(solidV1, join(nm, 'solid-js'), 'dir');
   // @angular/core's own typings reference rxjs. skipLibCheck means a miss is not
   // fatal, so this one is best-effort rather than a hard requirement.
   const rxjs = pkgDir('rxjs');

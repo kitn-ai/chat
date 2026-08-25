@@ -165,12 +165,17 @@ interface Props extends Record<string, unknown> {
 function liftRoleOffHost(element: HTMLElement): void {
   const attr = element.getAttribute('role');
   if (attr === null) return;
-  element.removeAttribute('role');
   // V2-PORT: the prop assignment lands on component-register's signal-backed
   // setter, and this runs from the facade BODY — an owned scope where v2's dev
   // guard rejects writes. The write is the whole point here, so run it with no
-  // owner (same value, same tick, guard satisfied).
+  // owner (same value, same tick, guard satisfied). removeAttribute is inside
+  // the unowned scope too: it re-enters component-register's
+  // attributeChangedCallback SYNCHRONOUSLY, which assigns the same signal-backed
+  // prop — with it outside, every observed role-attribute change threw
+  // REACTIVE_WRITE_IN_OWNED_SCOPE as an uncaught async error (8 of them in the
+  // unit run) while the tests themselves still passed.
   runWithOwner(null, () => {
+    element.removeAttribute('role');
     (element as unknown as { role?: string }).role = attr;
   });
 }

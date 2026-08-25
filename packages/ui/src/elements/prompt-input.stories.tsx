@@ -103,27 +103,21 @@ const HTML_SNIPPET = `<!-- Works in any framework or plain HTML -->
 </script>`;
 
 const SOLID_SNIPPET = `import '@kitn.ai/ui/elements'; // registers the custom elements
-import { onSettled } from 'solid-js';
 
 function Composer() {
-  let el: HTMLElement & {
-    value?: string;
-    placeholder?: string;
-    disabled?: boolean;
-    loading?: boolean;
-    suggestions?: string[];
-  };
-  onSettled(() => {
-    el.placeholder = 'Ask anything...';
-    el.suggestions = ['Summarize this thread', 'Draft a reply'];
-  });
+  // Set JS properties and listen for the element's CustomEvents in the ref
+  // callback — the events don't bubble, so the listener goes on the element
+  // itself. (Solid v2 has no \`on:\` event namespace.)
   return (
     <kai-prompt-input
-      ref={el}
+      ref={(el) => {
+        el.placeholder = 'Ask anything...';
+        el.suggestions = ['Summarize this thread', 'Draft a reply'];
+        el.addEventListener('kai-submit', (e) => console.log('send:', e.detail.value));
+        el.addEventListener('kai-value-change', (e) => console.log('typing:', e.detail.value));
+        el.addEventListener('kai-suggestion-click', (e) => console.log('picked:', e.detail.value));
+      }}
       style={{ display: 'block', width: '100%' }}
-      on:kai-submit={(e) => console.log('send:', e.detail.value)}
-      on:kai-value-change={(e) => console.log('typing:', e.detail.value)}
-      on:kai-suggestion-click={(e) => console.log('picked:', e.detail.value)}
     />
   );
 }`;

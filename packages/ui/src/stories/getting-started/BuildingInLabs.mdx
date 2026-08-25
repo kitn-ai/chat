@@ -16,15 +16,14 @@ export default meta;
 
 export const Demo = {
   render: () => {
-    let el: HTMLElement | undefined;
-    onMount(() => {
-      if (!el) return;
-      (el as any).items = [/* … */];                         // array/object data = JS property
-      el.addEventListener('kai-select', (e) =>               // kai-* events are non-bubbling
-        console.log((e as CustomEvent).detail));
-    });
     return (
-      <kai-prompt-input ref={(e) => (el = e as HTMLElement)}>
+      <kai-prompt-input
+        ref={(el) => {
+          (el as any).items = [/* … */];                     // array/object data = JS property
+          el.addEventListener('kai-select', (e) =>           // kai-* events are non-bubbling
+            console.log((e as CustomEvent).detail));
+        }}
+      >
         <kai-menu slot="toolbar-start" trigger-icon="plus" />
       </kai-prompt-input>
     );
@@ -34,8 +33,8 @@ export const Demo = {
 
 The shadow boundary forces three rules, the same ones consumers hit:
 
-- **Array/object data is a property**, set in `onMount`, not an attribute. Reassign a new reference to re-render; don't mutate in place.
-- **Events are non-bubbling `kai-*` CustomEvents**: `addEventListener` on the element itself; Solid's `onClick`/`on:` don't cross the shadow root.
+- **Array/object data is a property**, set in the `ref` callback, not an attribute. Reassign a new reference to re-render; don't mutate in place.
+- **Events are non-bubbling `kai-*` CustomEvents**: `addEventListener` on the element itself; Solid's delegated `onClick` doesn't cross the shadow root (and Solid v2 has no `on:` namespace).
 - **Slots take light-DOM children**: `<x slot="toolbar-start">` projects into the named region.
 
 See `src/elements/composer-showcase.stories.tsx` or `labs-message-thread.stories.tsx` for fuller examples.

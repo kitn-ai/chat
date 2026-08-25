@@ -35,7 +35,8 @@
       "vitest": "4.1.2"
     },
     "patchedDependencies": {
-      "lucide-solid@0.400.0": "patches/lucide-solid@0.400.0.patch"
+      "lucide-solid@0.400.0": "patches/lucide-solid@0.400.0.patch",
+      "@solidjs/element@2.0.0-rc.2": "patches/@solidjs__element@2.0.0-rc.2.patch"
     }
   }
 }

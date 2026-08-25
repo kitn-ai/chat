@@ -29,7 +29,7 @@ export interface KaiChatStore {
   clearSuggestions: () => void;
   streamAssistant: (init?: Partial<ChatMessage>) => AssistantStream;
   handleSubmit: (event: CustomEvent<{ value: string; attachments: AttachmentData[] }>) => void;
-  /** Spread onto `<kai-chat {...chat.bind} />` (reactive getters). Wire submit via `on:kai-submit={chat.handleSubmit}`. */
+  /** Spread onto `<kai-chat {...chat.bind} />` (reactive getters). Wire submit with a listener on the element: `el.addEventListener('kai-submit', chat.handleSubmit)` (kai-* events don't bubble). */
   bind: { readonly messages: ChatMessage[]; readonly loading: boolean; readonly suggestions: string[] };
 }
 
