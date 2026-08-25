@@ -122,6 +122,16 @@ export default defineConfig({
 }
 
 function emitIndexHtml(c: Construct): string {
+  // A demo host page, not the emitted widget: purely so a first-time preview
+  // isn't a mystery blank tab with one small launcher in the corner. Outside
+  // the custom element entirely (a sibling in <body>), inline-styled, and
+  // worded so nobody mistakes it for the construct's own output. Keyed off
+  // `layout` so a future non-widget layout (Task 12) isn't told the widget is
+  // "in the corner" when it isn't one.
+  const hint =
+    c.layout === 'widget'
+      ? `\n    <p style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); margin: 0; color: #94a3b8; font: 14px system-ui, sans-serif; text-align: center; max-width: 28rem; padding: 0 1rem;">This blank page stands in for your site. The chat widget is in the bottom-right corner.</p>`
+      : '';
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -129,7 +139,7 @@ function emitIndexHtml(c: Construct): string {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${c.name} — construct preview</title>
   </head>
-  <body>
+  <body style="margin: 0;">${hint}
     <${c.name}></${c.name}>
     <script type="module" src="/src/element.tsx"></script>
   </body>
@@ -138,12 +148,35 @@ function emitIndexHtml(c: Construct): string {
 }
 
 function emitElement(c: Construct): string {
+  const accent = c.theme?.accent;
+  // The accent has to land on the HOST element, not anywhere inside this
+  // shadow root. The kit's --color-primary token is resolved ONCE, by a rule
+  // scoped to `:root, :host` (`@layer theme { :root, :host { --color-primary:
+  // var(--kai-color-primary, <fallback>) } }`) — so --kai-color-primary has to
+  // be set AT the host for that rule to see it; a descendant inside the
+  // shadow tree can set --kai-color-primary on itself all day and it will
+  // never flow back up into a value the :host rule already resolved. This is
+  // why the theme accent rendered nowhere in the T5 demo despite being
+  // "wired": the previous version set it on a div INSIDE App's own render.
+  //
+  // `ctx.element` (the facade's second argument) IS the host, so this sets it
+  // from the one place inside the shadow root that has a handle to it.
+  // `style.setProperty` is also the safe way to carry the accent, distinct
+  // from string-interpolating it into CSS text: a custom property's value is
+  // an opaque token substituted via var(), so it can never break out into a
+  // new declaration or rule the way raw CSS/JS text interpolation could.
+  const facade = accent
+    ? `(_props, ctx) => {
+  ctx.element.style.setProperty('--kai-color-primary', ${JSON.stringify(accent)});
+  return <App />;
+}`
+    : `() => <App />`;
   return `import { defineWebComponent } from '@kitn.ai/ui/define';
 import { App } from './App';
 
 // The one facade. Interior stays pure Solid (no nested element registrations);
 // the kit CSS is injected into the shadow root by defineWebComponent itself.
-defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' | 'auto' }, () => <App />);
+defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' | 'auto' }, ${facade});
 `;
 }
 
@@ -154,55 +187,39 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
 // determinism test keeps holding.
 
 function emitApp(c: Construct): string {
-  const accent = c.theme?.accent;
-  // JSON.stringify, not a raw-interpolated template literal: the schema places
-  // no charset constraint on `accent` ("any CSS color"), so a value containing
-  // a `'` would otherwise break out of the emitted string literal and inject
-  // arbitrary source into App.tsx. JSON.stringify both quotes AND escapes.
-  const rootStyle = [
-    `height: '100%'`, `display: 'flex'`, `'flex-direction': 'column'`,
-    ...(accent ? [`'--kai-color-primary': ${JSON.stringify(accent)}`] : []),
-  ].join(', ');
-  return `import { For, Show, createSignal } from 'solid-js';
+  return `import { createSignal } from 'solid-js';
 import {
-  ChatContainer,
-  ChatContainerContent,
-  ChatContainerScrollAnchor,
+  Button,
   Dock,
-  Message,
-  MessageContent,
   PromptInput,
   PromptInputActions,
   PromptInputTextarea,
-  ScrollButton,
+  Thread,
   createKaiChat,
 } from '@kitn.ai/ui/solid';
 ${emitProviderImports(c)}
 
 ${emitProviderSetup(c)}
 
-function Thread() {
+// The kit's own Thread composable owns the whole message list: scroll
+// container, per-role bubble alignment/gap/padding, markdown, and the
+// scroll-to-bottom button. Hand-rolling that list here is exactly the class
+// of bug this seam exists to avoid (T5 demo: bare Message rows with no
+// padding, no gap, both roles left-aligned).
+//
+// Thread's user bubble has no primary-color prop, so the accent brand color
+// is routed onto it through the \`part="bubble content"\` hook
+// Message/MessageContent already expose for out-of-tree styling — scoped to
+// the user role via Message's own \`data-role\` attribute. This is the
+// documented styling seam (see message.tsx), not a reach into an
+// implementation detail.
+function Panel() {
   return (
-    <div style={{ ${rootStyle} }}>
-      <ChatContainer style={{ flex: '1 1 auto', 'min-height': '0' }}>
-        <ChatContainerContent>
-          <For each={chat.messages()}>
-            {(message) => (
-              <Message role={message.role}>
-                <For each={message.parts}>
-                  {(part) => (
-                    <Show when={part.type === 'text' ? part : false}>
-                      {(text) => <MessageContent markdown={message.role === 'assistant'}>{text().text}</MessageContent>}
-                    </Show>
-                  )}
-                </For>
-              </Message>
-            )}
-          </For>
-          <ChatContainerScrollAnchor />
-        </ChatContainerContent>
-        <ScrollButton />
-      </ChatContainer>
+    <div style={{ height: '100%', display: 'flex', 'flex-direction': 'column' }}>
+      <style>{'[data-role="user"] [part="bubble content"] { background: var(--color-primary); color: var(--color-primary-foreground); }'}</style>
+      <div style={{ flex: '1 1 auto', 'min-height': '0' }}>
+        <Thread messages={chat.messages()} loading={chat.loading()} />
+      </div>
       <PromptInput
         value={inputValue()}
         onValueChange={setInputValue}
@@ -210,7 +227,11 @@ function Thread() {
         onSubmit={submit}
       >
         <PromptInputTextarea placeholder="Ask anything" />
-        <PromptInputActions />
+        <PromptInputActions>
+          <Button variant="default" size="sm" disabled={!inputValue().trim() || chat.loading()} onClick={submit}>
+            Send
+          </Button>
+        </PromptInputActions>
       </PromptInput>
     </div>
   );
@@ -218,7 +239,7 @@ function Thread() {
 
 export function App() {
   return (
-${emitLayoutOpen(c)}      <Thread />
+${emitLayoutOpen(c)}      <Panel />
 ${emitLayoutClose(c)}  );
 }
 `;
@@ -253,7 +274,12 @@ async function submit() {
 }
 
 function emitLayoutOpen(c: Construct): string {
-  // Widget: the kit's Dock (launcher + panel + focus contract). More layouts in Task 12.
+  // Widget: the kit's Dock (launcher + panel + focus contract). No theming
+  // wrapper needed here — the accent lands on the HOST element from
+  // element.tsx's facade (see emitElement), which reaches both the launcher
+  // (a DOM sibling of this panel content, outside Dock's own `children`) and
+  // everything below via normal custom-property inheritance from :host down
+  // through the whole shadow tree. More layouts in Task 12.
   return `    <Dock label="${c.name}">\n`;
 }
 
