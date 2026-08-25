@@ -1,0 +1,20 @@
+{
+  "name": "@kitn.ai/ui-app-composed-thread",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Rung 6 of the iteration ladder: a chat client whose conversation UI is composed by hand from standalone kai-* elements — no <kai-chat> anywhere. kai-thread + kai-composer + kai-attachments wired by a host module; mock responder with a scripted tool call; file attach round-trip. Plain Vite + TypeScript, no framework.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --pretty false"
+  },
+  "dependencies": {
+    "@kitn.ai/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
+  }
+}

@@ -16,6 +16,7 @@ packages:
   - 'examples/apps/workspace'
   - 'examples/apps/builder'
   - 'examples/apps/ops-console'
+  - 'examples/apps/composed-thread'
 # nextjs + tanstack-start stay standalone `file:` consumers (not workspace members).
 # demos/* are not workspace members. internal/* generally are not either — the
 # openrouter-spike is enumerated explicitly because it needs `workspace:*` linkage
