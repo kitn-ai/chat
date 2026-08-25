@@ -383,9 +383,13 @@ ${emitLayoutClose(c)}  );
 }
 
 function emitProviderImports(c: Construct): string {
-  // Grows in Task 7 (endpoint). Mock: state responder + the shared wire reader.
-  return `import { createMockResponder } from '@kitn.ai/ui/state';
+  if (c.provider.mode === 'mock') {
+    return `import { createMockResponder } from '@kitn.ai/ui/state';
 import { readOpenAIStream } from '@kitn.ai/ui/wire';`;
+  }
+  const read = c.provider.wire === 'openai' ? 'readOpenAIStream' : 'readAnthropicStream';
+  const encode = c.provider.wire === 'openai' ? 'toOpenAIMessages' : 'toAnthropicMessages';
+  return `import { ${read}, ${encode} } from '@kitn.ai/ui/wire';`;
 }
 
 function emitProviderSetup(c: Construct): string {
@@ -393,7 +397,8 @@ function emitProviderSetup(c: Construct): string {
   // passed below) and clears it after submit itself; `onSubmit` hands back
   // the value directly, so there's no PromptInput-specific signal-reading
   // workaround to carry here any more.
-  return `// Provider seam: mock — keyless, streams locally, announces itself once.
+  if (c.provider.mode === 'mock') {
+    return `// Provider seam: mock — keyless, streams locally, announces itself once.
 // Swap for provider.mode "endpoint" in the construct and re-run kai dev; the
 // generated fetch keeps this exact shape (the seam is the point).
 const respond = createMockResponder();
@@ -404,6 +409,33 @@ async function submit(detail: { value: string; attachments: AttachmentData[] }) 
   chat.append({ id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: detail.value }] });
   const stream = chat.streamAssistant();
   await readOpenAIStream(respond(detail.value), stream);
+  stream.done();
+}`;
+  }
+
+  const { url, wire } = c.provider;
+  const read = wire === 'openai' ? 'readOpenAIStream' : 'readAnthropicStream';
+  const encode = wire === 'openai' ? 'toOpenAIMessages' : 'toAnthropicMessages';
+  // provider.url is an UNCONSTRAINED z.string() (schema.ts) — JSON.stringify
+  // it at the interpolation site exactly like the accent in emitElement, so a
+  // hostile url (a quote, a template literal, a `);`) can't break out of the
+  // fetch() call into new JS.
+  return `// Provider seam: YOUR endpoint at ${commentSafe(url)} (${wire} wire). The kit
+// PARSES, this component FETCHES — no key, no provider SDK, no client in
+// here. Your route holds the key and re-frames to the provider; the kai MCP
+// scaffold tool emits one for your framework.
+const chat = createKaiChat();
+
+async function submit(detail: { value: string; attachments: AttachmentData[] }) {
+  if (!detail.value.trim() || chat.loading()) return;
+  chat.append({ id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: detail.value }] });
+  const stream = chat.streamAssistant();
+  const response = await fetch(${JSON.stringify(url)}, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ messages: ${encode}(chat.messages()) }),
+  });
+  await ${read}(response, stream);
   stream.done();
 }`;
 }

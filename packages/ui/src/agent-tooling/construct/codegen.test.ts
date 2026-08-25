@@ -275,6 +275,51 @@ describe('accent contrast (paired --kai-color-primary-foreground)', () => {
   });
 });
 
+describe('endpoint provider', () => {
+  const endpoint = (wire: 'openai' | 'anthropic', url = '/api/chat') =>
+    construct({ provider: { mode: 'endpoint', url, wire } });
+
+  it('openai wire: fetch to the declared URL, readOpenAIStream + toOpenAIMessages', () => {
+    const app = file(generateProject(endpoint('openai')), 'src/App.tsx');
+    // JSON.stringify(url) at the interpolation site (see the security test
+    // below) — double-quoted, not the brief's hand-typed single-quote form.
+    expect(app).toContain(`fetch(${JSON.stringify('/api/chat')}`);
+    expect(app).toContain('readOpenAIStream(');
+    expect(app).toContain('toOpenAIMessages(');
+    expect(app).not.toContain('createMockResponder');
+  });
+
+  it('anthropic wire: the anthropic reader/encoder pair', () => {
+    const app = file(generateProject(endpoint('anthropic')), 'src/App.tsx');
+    expect(app).toContain('readAnthropicStream(');
+    expect(app).toContain('toAnthropicMessages(');
+  });
+
+  it('no hand-rolled SSE and no key material, ever', () => {
+    for (const wire of ['openai', 'anthropic'] as const) {
+      const app = file(generateProject(endpoint(wire)), 'src/App.tsx');
+      expect(app).not.toMatch(/text\/event-stream|EventSource|api[_-]?key|Authorization/i);
+    }
+  });
+
+  it('mock stays mock: no fetch, no readOpenAIStream reader import name collision with the wire encoders', () => {
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    expect(app).toContain('createMockResponder');
+    expect(app).not.toContain('toOpenAIMessages(');
+    expect(app).not.toContain('toAnthropicMessages(');
+  });
+
+  it('url is JSON-stringified at the fetch call site — a quote/backtick/script payload cannot break out into new JS', () => {
+    // Mirrors the accent-escaping precedent in emitElement: provider.url is an
+    // UNCONSTRAINED z.string(), so it must be embedded the same safe way.
+    const hostile = `'; alert(1); const x='`;
+    const app = file(generateProject(endpoint('openai', hostile)), 'src/App.tsx');
+    expect(app).toContain(`fetch(${JSON.stringify(hostile)}`);
+    // The raw payload must never appear un-escaped as its own token boundary.
+    expect(app).not.toContain(`fetch('${hostile}'`);
+  });
+});
+
 describe('writeProject', () => {
   it('writes files and prunes stale ones tracked via .kai-manifest.json', () => {
     const dir = mkdtempSync(join(tmpdir(), 'kai-construct-'));
