@@ -376,6 +376,12 @@ describe('debug', () => {
       symptom: 'How do I mock a function with vitest?',
     });
     const text = (out.content as { type: string; text: string }[])[0].text;
-    expect(text).not.toMatch(/createMockResponder|MockTurn/);
+    // The intent is "the PATTERN did not fire", not "the words never appear":
+    // the no-match fallback legitimately names createMockResponder as a
+    // component_reference pointer (F-52), so assert the response IS the
+    // fallback and carries none of the pattern's own fix text.
+    expect(text).toMatch(/^No known failure pattern matched/);
+    expect(text).not.toContain('Scripting mock tool calls');
+    expect(text).not.toContain('announce-then-arguments');
   });
 });
