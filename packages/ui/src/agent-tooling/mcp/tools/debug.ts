@@ -458,10 +458,15 @@ function buildText(matched: Rule[]): string {
       'No known failure pattern matched. Suggested next steps:\n\n' +
       '1. Use the `component_reference` tool to look up the real API for the element ' +
       '(prop names, event names, attribute vs. property distinction).\n' +
-      '2. Check the **Streaming recipe** in `llms-full.txt` ' +
-      '(`node_modules/@kitn.ai/ui/llms-full.txt` or https://ui.kitn.ai/llms-full.txt) ' +
-      'for correct streaming wiring.\n' +
-      '3. Paste `https://ui.kitn.ai/llms.txt` into your prompt for a compact orientation.'
+      '2. If the problem is in host code rather than an element — streaming, ' +
+      '`createAssistantStream`, `createMockResponder`, the SSE readers, the encoders — ' +
+      'call `component_reference` with `{ name: "programmatic" }` for the full ' +
+      '`@kitn.ai/ui/state` + `@kitn.ai/ui/wire` API, and `{ name: "composed-thread" }` ' +
+      'for a complete hand-composed surface to compare wiring against.\n' +
+      '3. Check the **Streaming recipe** and the **Programmatic layer** sections in ' +
+      '`llms-full.txt` (`node_modules/@kitn.ai/ui/llms-full.txt` or ' +
+      'https://ui.kitn.ai/llms-full.txt) for correct streaming wiring.\n' +
+      '4. Paste `https://ui.kitn.ai/llms.txt` into your prompt for a compact orientation.'
     );
   }
 
