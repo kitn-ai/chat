@@ -155,9 +155,13 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
 
 function emitApp(c: Construct): string {
   const accent = c.theme?.accent;
+  // JSON.stringify, not a raw-interpolated template literal: the schema places
+  // no charset constraint on `accent` ("any CSS color"), so a value containing
+  // a `'` would otherwise break out of the emitted string literal and inject
+  // arbitrary source into App.tsx. JSON.stringify both quotes AND escapes.
   const rootStyle = [
     `height: '100%'`, `display: 'flex'`, `'flex-direction': 'column'`,
-    ...(accent ? [`'--kai-color-primary': '${accent}'`] : []),
+    ...(accent ? [`'--kai-color-primary': ${JSON.stringify(accent)}`] : []),
   ].join(', ');
   return `import { For, Show, createSignal } from 'solid-js';
 import {
@@ -173,7 +177,6 @@ import {
   ScrollButton,
   createKaiChat,
 } from '@kitn.ai/ui/solid';
-import type { MessagePart } from '@kitn.ai/ui/solid';
 ${emitProviderImports(c)}
 
 ${emitProviderSetup(c)}

