@@ -142,8 +142,26 @@ const ALLOWED_LARGE_FILES = new Map([
  * headroom past ~0.29 MiB would hide exactly that regression again. When the
  * next batch of elements trips this, raise it the same way -- attribute the
  * delta first, keep the headroom under 0.29 MiB.
+ *
+ * 13.5 -> 12.96 MiB, LOWERED (2026-08-26, the dist/elements/chunks dedupe):
+ * vite.config.elements.ts wrote its shared lazy chunks (the on-demand
+ * highlighter's shiki grammar/theme chunks, among others) to
+ * dist/elements/chunks/ under its own outDir, a different path from the
+ * dist/ root the other four lib builds share and already dedupe against
+ * each other on (Rollup names a chunk from a content hash, so identical
+ * chunks written to the same directory collapse to one file). That put a
+ * second, path-shifted copy of ~12 already-shipped chunks in the tarball --
+ * ~0.78 MiB -- which tripped this ceiling at 13.63 MiB. Fixed by pointing
+ * the elements build's outDir at dist (entryFileNames keeps entries at
+ * dist/elements/<name>.js; chunkFileNames drops the chunks/ prefix), so
+ * those chunks land on the same path the earlier builds already wrote and
+ * npm packs one copy. Measured 12.67 MiB after the dedupe. The margin rule
+ * this file has used since the 13.15 MiB entry above is unchanged: headroom
+ * stays at or under ~0.29 MiB so the same class of regression (a dropped
+ * dedupe, a chunk quietly forking back into two paths) trips this rule
+ * again instead of hiding in slack. 12.67 + 0.29 MiB of margin -> 12.96 MiB.
  */
-const MAX_UNPACKED_BYTES = 13.5 * 1024 * 1024;
+const MAX_UNPACKED_BYTES = 12.96 * 1024 * 1024;
 
 const kib = (n) => `${(n / 1024).toFixed(1)} KiB`;
 const mib = (n) => `${(n / 1024 / 1024).toFixed(2)} MiB`;
