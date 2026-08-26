@@ -55,10 +55,16 @@ export interface ReasoningProps {
   disabled?: boolean;
   /** Receive the open controller (open accessor + setOpen) once mounted. */
   controllerRef?: (api: ReasoningController) => void;
+  /** Keep auto-opening while streaming and auto-closing when it settles (the
+   *  pre-Task-19f `full` behavior). Default false: the panel starts per
+   *  `defaultOpen` and stays exactly where the user leaves it — streaming only
+   *  changes the trigger's label (shimmer), never the open state, matching the
+   *  "closed chip, expand on click" default (owner ruling, 2026-08-26). */
+  openOnStream?: boolean;
 }
 
 function Reasoning(props: ReasoningProps) {
-  const [local] = splitProps(props, ['children', 'class', 'open', 'defaultOpen', 'onOpenChange', 'isStreaming', 'disabled', 'controllerRef']);
+  const [local] = splitProps(props, ['children', 'class', 'open', 'defaultOpen', 'onOpenChange', 'isStreaming', 'disabled', 'controllerRef', 'openOnStream']);
   const [internalOpen, setInternalOpen] = createSignal(local.defaultOpen ?? false);
   const [wasAutoOpened, setWasAutoOpened] = createSignal(false);
 
@@ -78,6 +84,7 @@ function Reasoning(props: ReasoningProps) {
   };
 
   createEffect(() => {
+    if (!local.openOnStream) return;
     const streaming = local.isStreaming;
     if (streaming && !wasAutoOpened()) {
       if (!isControlled()) setInternalOpen(true);

@@ -155,6 +155,15 @@ export const ConstructSchema = z
          *  breaking every `capabilities: {...}` object literal in this file
          *  and its tests that doesn't mention it. */
         reasoning: z.enum(['full', 'compact', 'off']).optional(),
+        /** Seeds the reasoning disclosure open AND keeps it tracking the
+         *  stream (open while streaming, closes when it settles) — the
+         *  pre-Task-19f `full` behavior. Default false/absent: the panel
+         *  starts closed (just the "Thinking" shimmer chip) and only opens
+         *  on click — the current default (owner ruling, 2026-08-26).
+         *  Meaningless when `reasoning` is `'compact'` (no expandable
+         *  content exists) or `'off'` (nothing renders); rejected on both,
+         *  loudly, below. */
+        reasoningOpen: z.boolean().optional(),
       })
       .strict()
       .optional(),
@@ -251,6 +260,15 @@ export const ConstructSchema = z
         code: z.ZodIssueCode.custom,
         path: ['widget', 'launcherIcon'],
         message: 'launcherIcon must be an http(s)/mailto or relative URL — no javascript:/data: schemes',
+      });
+    }
+    const reasoning = construct.capabilities?.reasoning;
+    const reasoningOpen = construct.capabilities?.reasoningOpen;
+    if (reasoningOpen !== undefined && (reasoning === 'compact' || reasoning === 'off')) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['capabilities', 'reasoningOpen'],
+        message: '"reasoningOpen" only applies when reasoning is "full" or omitted — "compact"/"off" have no disclosure to open',
       });
     }
     const history = construct.capabilities?.history;

@@ -785,6 +785,12 @@
           "fn": false
         },
         {
+          "name": "reasoningOpen",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
           "name": "chatTitle",
           "scalar": true,
           "optional": true,

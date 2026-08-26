@@ -1442,6 +1442,14 @@
         "displayType": "undefined | \"full\" | \"compact\" | \"off\""
       },
       {
+        "name": "reasoningOpen",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Seeds the reasoning disclosure open AND keeps it tracking the stream (open while streaming, closes when it settles) — the pre-Task-19f `full` behavior. Default false/absent: the panel starts closed (just the \"Thinking\" shimmer chip) and only opens on click — the current default (owner ruling, 2026-08-26). Meaningless when `reasoning` is `'compact'` or `'off'`. Forwarded to every `MessageBody` as `reasoningDefaultOpen`.",
+        "displayType": "undefined | false | true"
+      },
+      {
         "name": "chatTitle",
         "type": "undefined | string",
         "optional": true,

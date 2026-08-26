@@ -20,6 +20,17 @@ vi.mock('../primitives/toast-store', () => {
 // jsdom doesn't implement Element.scrollTo; the auto-scroll container calls it.
 if (!Element.prototype.scrollTo) (Element.prototype as unknown as { scrollTo: () => void }).scrollTo = () => {};
 
+// jsdom has no ResizeObserver; ReasoningContent wires one when it mounts (same
+// stub as reasoning.test.tsx / message.test.tsx) — needed for the new
+// reasoningOpen forwarding tests below, which render a real reasoning part.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
+
 // jsdom has no clipboard; stub a writeText spy we can assert against.
 const writeText = vi.fn();
 Object.assign(navigator, { clipboard: { writeText } });
@@ -232,5 +243,28 @@ describe('ChatThread composer reset on submit', () => {
     fireEvent.keyDown(el, { key: 'Enter' });
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ value: 'locked' }));
     expect(el.textContent).toContain('locked'); // controlled — unchanged until the host clears it
+  });
+});
+
+// Task 19f (owner ruling 2026-08-26): `reasoningOpen` forwards to every
+// MessageBody as `reasoningDefaultOpen`, which seeds the Reasoning disclosure
+// open AND (via openOnStream) keeps it tracking the stream — reproducing the
+// pre-19f auto-open default losslessly for a consumer who opts back in.
+describe('ChatThread reasoningOpen forwarding (Task 19f)', () => {
+  const reasoningTrigger = (c: HTMLElement) =>
+    Array.from(c.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes('Reasoning')) as HTMLButtonElement;
+
+  const streamingMessages: ChatMessage[] = [
+    { id: 'a1', role: 'assistant', parts: [{ type: 'reasoning', text: 'Considering the options.' }] },
+  ];
+
+  it('default (reasoningOpen absent): a streaming reasoning disclosure starts closed', () => {
+    const { container } = render(() => <ChatThread messages={streamingMessages} loading={true} />);
+    expect(reasoningTrigger(container)).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('reasoningOpen={true} reaches MessageBody: a streaming reasoning disclosure starts open', () => {
+    const { container } = render(() => <ChatThread messages={streamingMessages} loading={true} reasoningOpen={true} />);
+    expect(reasoningTrigger(container)).toHaveAttribute('aria-expanded', 'true');
   });
 });

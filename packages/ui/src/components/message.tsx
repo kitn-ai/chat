@@ -369,6 +369,13 @@ export interface MessageBodyProps {
    *  HOW: this is a display-mode fact about the medium, not a per-message
    *  toggle, so it applies uniformly to every reasoning part in the body. */
   reasoningMode?: 'full' | 'compact' | 'off';
+  /** Seeds the reasoning disclosure open AND keeps it tracking the stream
+   *  (open while streaming, closes when it settles) — the pre-Task-19f `full`
+   *  behavior. Default false/absent: the panel starts closed (just the
+   *  "Thinking" shimmer chip) and only opens on click — the current default
+   *  (owner ruling, 2026-08-26). Meaningless when `reasoningMode` is
+   *  `'compact'`/`'off'` (no disclosure exists to open). */
+  reasoningDefaultOpen?: boolean;
   /** INJECT slot projected at the TOP of the body — above the reasoning / tools /
    *  content. A per-message header: a model-name label, a role + timestamp line.
    *  In the `<kai-message>` shadow this is `<slot name="before-body" />`. */
@@ -649,14 +656,21 @@ function MessageBody(props: MessageBodyProps) {
                     <Match when={carrierOnly()}>{null}</Match>
                     <Match when={shownReasoning()}>
                       {(p) => {
-                        // Default 'full' is the pre-existing behavior byte for
-                        // byte — every consumer that never sets reasoningMode
-                        // renders exactly the disclosure below, unchanged.
+                        // Default 'full' is the pre-existing DISPLAY MODE byte
+                        // for byte; the OPEN behavior changed under Task 19f —
+                        // it no longer auto-opens while streaming by default
+                        // (owner ruling 2026-08-26). `reasoningDefaultOpen`
+                        // reproduces the old always-auto-opens behavior when set.
                         const mode = () => props.reasoningMode ?? 'full';
                         return (
                           <Switch fallback={null}>
                             <Match when={mode() === 'full'}>
-                              <Reasoning class="mb-2 w-full" isStreaming={props.isStreaming}>
+                              <Reasoning
+                                class="mb-2 w-full"
+                                isStreaming={props.isStreaming}
+                                defaultOpen={props.reasoningDefaultOpen}
+                                openOnStream={props.reasoningDefaultOpen}
+                              >
                                 <ReasoningTrigger>{p().label ?? 'Reasoning'}</ReasoningTrigger>
                                 <ReasoningContent markdown>{p().text}</ReasoningContent>
                               </Reasoning>

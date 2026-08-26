@@ -99,7 +99,7 @@ defineWebComponent<Props, Events>('kai-chat', {
   models: undefined, currentModel: undefined, context: undefined, scrollButton: true,
   attach: true, webSearch: false, voice: false, triggers: undefined, kindIcons: undefined,
   actionsReveal: 'always', cardTypes: undefined, cardSchemas: undefined, accept: undefined,
-  reasoning: undefined,
+  reasoning: undefined, reasoningOpen: undefined,
 }, (props, { dispatch, flag, reflectFlag, element, expose }) => {
   // `messages` is an untyped boundary: a consumer can hand it anything at
   // runtime (a pre-0.20.0 `{ id, role, content }` array, in particular). Skip
@@ -167,6 +167,7 @@ defineWebComponent<Props, Events>('kai-chat', {
     currentModel={props.currentModel as string | undefined} context={props.context as ChatThreadContextUsage | undefined}
     scrollButton={props.scrollButton !== false} attach={flag('attach')} webSearch={flag('webSearch')} voice={flag('voice')}
     reasoning={props.reasoning as 'full' | 'compact' | 'off' | undefined}
+    reasoningOpen={flag('reasoningOpen')}
     triggers={props.triggers as TriggerDef[] | undefined}
     kindIcons={props.kindIcons as Record<string, string> | undefined}
     actionsReveal={props.actionsReveal as 'always' | 'hover'}

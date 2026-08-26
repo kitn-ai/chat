@@ -126,6 +126,13 @@ const CAPABILITY_VALUES = {
   // Task 10b added `reasoning` after this brief's sample was written — the
   // rule fires exactly as designed, so it gets a valuer too.
   reasoning: 'compact',
+  // Task 19f: schema.ts's superRefine rejects `reasoningOpen` whenever
+  // `reasoning` is 'compact'/'off' — meaningless, no disclosure to open. The
+  // "reasoning alone" solo cell above picked 'compact' for its own coverage,
+  // so the two valuers collide only in the all-capabilities cell (every key
+  // combined into one object). Handled below in fixtureFor, not by changing
+  // either valuer — each keeps its own solo-cell coverage.
+  reasoningOpen: true,
 };
 for (const key of capabilityKeys) {
   if (!(key in CAPABILITY_VALUES)) {
@@ -137,7 +144,17 @@ for (const key of capabilityKeys) {
 }
 
 function fixtureFor(layout, capKeys, index) {
-  const capabilities = Object.fromEntries(capKeys.map((k) => [k, CAPABILITY_VALUES[k]]));
+  // Drop `reasoningOpen` when it would collide with `reasoning`'s own valuer
+  // (compact/off) per schema.ts's superRefine coupling — only reachable when
+  // both keys land in the same cell (the all-capabilities combo), since the
+  // solo `reasoningOpen` cell never carries a `reasoning` key at all.
+  const effectiveKeys =
+    capKeys.includes('reasoning') &&
+    capKeys.includes('reasoningOpen') &&
+    (CAPABILITY_VALUES.reasoning === 'compact' || CAPABILITY_VALUES.reasoning === 'off')
+      ? capKeys.filter((k) => k !== 'reasoningOpen')
+      : capKeys;
+  const capabilities = Object.fromEntries(effectiveKeys.map((k) => [k, CAPABILITY_VALUES[k]]));
   return {
     name: `probe-${layout}-${index}`,
     layout,

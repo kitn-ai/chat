@@ -109,6 +109,25 @@ describe('validateConstruct', () => {
     if (!out.ok) expect(out.problems.some((p) => p.path === 'capabilities.reasoning')).toBe(true);
   });
 
+  it('reasoningOpen: accepted with reasoning full/omitted, rejected with compact/off', () => {
+    expect(validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+      capabilities: { reasoningOpen: true },
+    }).ok).toBe(true);
+    expect(validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+      capabilities: { reasoning: 'full', reasoningOpen: true },
+    }).ok).toBe(true);
+    expect(validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+      capabilities: { reasoning: 'compact', reasoningOpen: true },
+    }).ok).toBe(false);
+    expect(validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+      capabilities: { reasoning: 'off', reasoningOpen: true },
+    }).ok).toBe(false);
+  });
+
   it('cards: named entries with schema objects; bad tool names rejected', () => {
     const card = { name: 'refund_approval', schema: { type: 'object', properties: {} } };
     expect(validateConstruct({ ...minimal, cards: [card] }).ok).toBe(true);

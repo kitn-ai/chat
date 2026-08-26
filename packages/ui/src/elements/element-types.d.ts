@@ -386,6 +386,8 @@ export interface KaiChatElement extends HTMLElement {
   codeHighlight?: boolean;
   /** How `reasoning` parts render across the thread. `'full'` (default) is the current collapsible-disclosure behavior; `'compact'` shows only a shimmer loader while a reasoning part streams and nothing once it settles (no expandable detail); `'off'` renders reasoning parts not at all. Forwarded to every `MessageBody` as `reasoningMode`. */
   reasoning?: "full" | "compact" | "off";
+  /** Seeds the reasoning disclosure open AND keeps it tracking the stream (open while streaming, closes when it settles) — the pre-Task-19f `full` behavior. Default false/absent: the panel starts closed (just the "Thinking" shimmer chip) and only opens on click — the current default (owner ruling, 2026-08-26). Meaningless when `reasoning` is `'compact'` or `'off'`. Forwarded to every `MessageBody` as `reasoningDefaultOpen`. */
+  reasoningOpen?: boolean;
   /** Optional header title shown on the left of the header. */
   chatTitle?: string;
   /** Optional model list. When set (>1 model) a ModelSwitcher is shown in the header and a `kai-model-change` event fires on selection. */
@@ -2200,6 +2202,8 @@ export interface KaiChatElementProps {
   codeHighlight?: boolean;
   /** How `reasoning` parts render across the thread. `'full'` (default) is the current collapsible-disclosure behavior; `'compact'` shows only a shimmer loader while a reasoning part streams and nothing once it settles (no expandable detail); `'off'` renders reasoning parts not at all. Forwarded to every `MessageBody` as `reasoningMode`. */
   reasoning?: "full" | "compact" | "off";
+  /** Seeds the reasoning disclosure open AND keeps it tracking the stream (open while streaming, closes when it settles) — the pre-Task-19f `full` behavior. Default false/absent: the panel starts closed (just the "Thinking" shimmer chip) and only opens on click — the current default (owner ruling, 2026-08-26). Meaningless when `reasoning` is `'compact'` or `'off'`. Forwarded to every `MessageBody` as `reasoningDefaultOpen`. */
+  reasoningOpen?: boolean;
   /** Optional header title shown on the left of the header. */
   chatTitle?: string;
   /** Optional model list. When set (>1 model) a ModelSwitcher is shown in the header and a `kai-model-change` event fires on selection. */

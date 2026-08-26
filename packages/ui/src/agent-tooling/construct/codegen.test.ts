@@ -536,6 +536,19 @@ describe('capabilities.reasoning', () => {
     expect(omitted).not.toMatch(/\breasoning=/);
     expect(explicit).toEqual(omitted);
   });
+
+  it('reasoningOpen true emits reasoningOpen={true} on ChatThread', () => {
+    const app = file(
+      generateProject(construct({ capabilities: { reasoningOpen: true } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('reasoningOpen={true}');
+  });
+
+  it('reasoningOpen false/absent: no prop at all', () => {
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    expect(app).not.toContain('reasoningOpen');
+  });
 });
 
 describe('capabilities.attachments', () => {

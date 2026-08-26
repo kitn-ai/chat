@@ -556,7 +556,7 @@ ${emitHistorySetup(c)}
 //     an opt-in affordance like the paperclip or a starter chip.
 export function App() {
   return (
-${emitLayoutOpen(c)}${emitSlots(c.slots, '      ')}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitHeaderProp(c)}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitCardTypesProp(c)} />
+${emitLayoutOpen(c)}${emitSlots(c.slots, '      ')}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitHeaderProp(c)}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitReasoningOpenProp(c)}${emitCardTypesProp(c)} />
 ${emitLayoutClose(c)}  );
 }
 `;
@@ -693,6 +693,13 @@ function emitReasoningProp(c: Construct): string {
   const reasoning = c.capabilities?.reasoning;
   if (!reasoning || reasoning === 'full') return '';
   return ` reasoning="${reasoning}"`;
+}
+
+/** capabilities.reasoningOpen -> ChatThread's own `reasoningOpen` prop. Only
+ *  `true` costs a byte (off-by-default, matching every capability here);
+ *  false/absent matches the kit's own new default (closed chip). */
+function emitReasoningOpenProp(c: Construct): string {
+  return c.capabilities?.reasoningOpen === true ? ' reasoningOpen={true}' : '';
 }
 
 /** capabilities.history -> whether the App module needs `createEffect`

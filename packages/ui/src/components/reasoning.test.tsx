@@ -205,6 +205,62 @@ function renderFocusable() {
   return { ...result, setOpen };
 }
 
+// Task 19f (owner ruling 2026-08-26): the streaming auto-open/auto-close
+// effect is now gated behind `openOnStream`, default false — the panel starts
+// per `defaultOpen` and streaming only changes the trigger's label (shimmer),
+// never the open state. `openOnStream=true` reproduces the pre-19f `full`
+// behavior losslessly.
+describe('openOnStream gates the streaming auto-open effect (Task 19f)', () => {
+  it('default (openOnStream absent): isStreaming=true does NOT auto-open', () => {
+    const { container } = render(() => (
+      <Reasoning isStreaming={true}>
+        <ReasoningTrigger>Thinking</ReasoningTrigger>
+        <ReasoningContent>Weighing the options.</ReasoningContent>
+      </Reasoning>
+    ));
+    expect(trigger(container)).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('openOnStream=true, defaultOpen unset: isStreaming=true auto-opens (pre-19f behavior reproduced)', () => {
+    const [streaming, setStreaming] = createSignal(false);
+    const { container } = render(() => (
+      <Reasoning isStreaming={streaming()} openOnStream={true}>
+        <ReasoningTrigger>Thinking</ReasoningTrigger>
+        <ReasoningContent>Weighing the options.</ReasoningContent>
+      </Reasoning>
+    ));
+    expect(trigger(container)).toHaveAttribute('aria-expanded', 'false');
+    setStreaming(true);
+    expect(trigger(container)).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('openOnStream=true: auto-closes when streaming ends (unchanged from before)', () => {
+    const [streaming, setStreaming] = createSignal(true);
+    const { container } = render(() => (
+      <Reasoning isStreaming={streaming()} openOnStream={true}>
+        <ReasoningTrigger>Thinking</ReasoningTrigger>
+        <ReasoningContent>Weighing the options.</ReasoningContent>
+      </Reasoning>
+    ));
+    expect(trigger(container)).toHaveAttribute('aria-expanded', 'true');
+    setStreaming(false);
+    expect(trigger(container)).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('defaultOpen=true, openOnStream absent: starts open, streaming never closes it', () => {
+    const [streaming, setStreaming] = createSignal(true);
+    const { container } = render(() => (
+      <Reasoning isStreaming={streaming()} defaultOpen={true}>
+        <ReasoningTrigger>Thinking</ReasoningTrigger>
+        <ReasoningContent>Weighing the options.</ReasoningContent>
+      </Reasoning>
+    ));
+    expect(trigger(container)).toHaveAttribute('aria-expanded', 'true');
+    setStreaming(false);
+    expect(trigger(container)).toHaveAttribute('aria-expanded', 'true');
+  });
+});
+
 describe('Reasoning collapsed content leaves the tab order', () => {
   // NOTE ON WHAT THESE PROVE: jsdom parses `inert` as an attribute but does NOT
   // enforce it — nothing inside an inert subtree actually becomes unfocusable

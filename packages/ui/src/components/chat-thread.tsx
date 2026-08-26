@@ -84,6 +84,13 @@ export interface ChatThreadProps {
    *  expandable detail); `'off'` renders reasoning parts not at all. Forwarded
    *  to every `MessageBody` as `reasoningMode`. */
   reasoning?: 'full' | 'compact' | 'off';
+  /** Seeds the reasoning disclosure open AND keeps it tracking the stream
+   *  (open while streaming, closes when it settles) — the pre-Task-19f `full`
+   *  behavior. Default false/absent: the panel starts closed (just the
+   *  "Thinking" shimmer chip) and only opens on click — the current default
+   *  (owner ruling, 2026-08-26). Meaningless when `reasoning` is `'compact'`
+   *  or `'off'`. Forwarded to every `MessageBody` as `reasoningDefaultOpen`. */
+  reasoningOpen?: boolean;
   /** Optional header title shown on the left of the header. */
   chatTitle?: string;
   /** Optional model list. When set (>1 model) a ModelSwitcher is shown in the
@@ -376,10 +383,14 @@ export function ChatThread(props: ChatThreadProps) {
                             parts={m().parts}
                             /* F-21: streaming-ness = the thread's ONE existing
                                loading signal + being the last message and an
-                               assistant turn. No second streaming source; the
-                               reasoning disclosure auto-opens on it. */
+                               assistant turn. No second streaming source. The
+                               reasoning disclosure no longer auto-opens on it
+                               by default (Task 19f, owner ruling 2026-08-26) —
+                               only the trigger's shimmer reflects streaming
+                               unless `reasoningOpen` opts back in. */
                             isStreaming={props.loading === true && m().role === 'assistant' && i() === props.messages.length - 1}
                             reasoningMode={props.reasoning}
+                            reasoningDefaultOpen={props.reasoningOpen}
                             cardTypes={props.cardTypes}
                             cardSchemas={props.cardSchemas}
                             cardHostElement={props.cardHostElement}
