@@ -14,6 +14,7 @@ import {
 } from 'solid-js';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
+import { Radio } from '../ui/radio';
 import { HoverCard } from '../ui/hover-card';
 import { Card } from './card';
 import { DismissedStub } from './dismissed-stub';
@@ -21,7 +22,7 @@ import type { CardEnvelope, CardEvent, CardHost, CardResolution } from '../primi
 import { useCardResolution } from './use-card-resolution';
 import { emitCardEvent } from '../primitives/card-routing';
 import { useCardHost } from '../primitives/card-host';
-import { Check, X } from 'lucide-solid';
+import { Check } from 'lucide-solid';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types (choice.schema.json) — AUTHORED IN ../primitives/card-data-types.ts.
@@ -430,6 +431,10 @@ export function ChoiceCard(props: ChoiceCardProps): JSX.Element {
   const groupLabel = (): string => local.heading ?? local.data?.prompt ?? 'Choose an option';
   const promptId = `kai-choice-prompt-${uid}`;
   const otherInputId = `kai-choice-other-${uid}`;
+  // The shared `name` is what makes the rows ONE native control: mutual exclusion,
+  // form participation and "2 of 4" from a screen reader all come from it. Scoped to
+  // this card's uid so two ChoiceCards on a page never de-select each other.
+  const radioName = `kai-choice-${uid}`;
 
   return (
     <Show when={valid()} fallback={<Card heading={local.heading} errorMessage={errorMessage()} />}>
@@ -443,14 +448,18 @@ export function ChoiceCard(props: ChoiceCardProps): JSX.Element {
           when={!res.isDeferred()}
           fallback={<DismissedStub type={CHOICE_CARD_TYPE} title={local.heading} onReopen={onReopen} />}
         >
-        <Card heading={local.heading}>
+        {/* `prompt` is the card's supporting sentence — the same role `form`'s
+            `description` plays — so it goes through the shell's `description`
+            slot rather than being re-implemented in the body. That is what gives
+            it the muted colour: at full `text-foreground` it was the same colour
+            as the heading above it, which flattened the hierarchy. `descriptionId`
+            keeps the radiogroup's `aria-describedby` pointing at it. */}
+        <Card
+          heading={local.heading}
+          description={local.data?.prompt}
+          descriptionId={promptId}
+        >
           <div class={cn('flex flex-col gap-3', local.class)}>
-            <Show when={local.data?.prompt}>
-              <p id={promptId} class="text-sm text-foreground">
-                {local.data?.prompt}
-              </p>
-            </Show>
-
             <Show
               when={!res.isResolved()}
               fallback={<ResolvedChoice choice={resolvedChoice()!} optimistic={res.isOptimistic()} />}
@@ -462,7 +471,7 @@ export function ChoiceCard(props: ChoiceCardProps): JSX.Element {
                 aria-describedby={local.data?.prompt ? promptId : undefined}
                 aria-disabled={isDisabled() ? 'true' : undefined}
                 class={cn(
-                  'divide-y divide-border overflow-hidden rounded-lg border border-input',
+                  'divide-y divide-border overflow-hidden rounded-lg border border-border',
                   isDisabled() && 'cursor-not-allowed opacity-60',
                 )}
                 onKeyDown={onGroupKeyDown}
@@ -477,8 +486,10 @@ export function ChoiceCard(props: ChoiceCardProps): JSX.Element {
                     return (
                       <ListRow
                         opt={opt}
+                        name={radioName}
                         checked={checked()}
                         tabStop={tabStop()}
+                        groupDisabled={isDisabled()}
                         descId={descId}
                         hasDesc={hasDesc()}
                         onPick={() => {
@@ -518,14 +529,23 @@ export function ChoiceCard(props: ChoiceCardProps): JSX.Element {
 
               <div class="flex w-full flex-wrap items-center justify-between gap-2">
                 <Show when={local.data?.dismissible === true}>
+                  {/* The contract `dismiss` verb — a footer ACTION (it emits
+                      `{kind:'dismiss'}` and collapses the card to a re-openable
+                      stub), not the chrome close in `Card`'s own `dismissible`
+                      prop, which the contract cards deliberately never set.
+                      Labelled rather than a bare ghost ✕: every other control in
+                      this row says what it does, and an unlabelled 28px glyph
+                      300px from the primary button reads as stray chrome. Same
+                      shape in all four cards — `form` already looked like this.
+                      `aria-label` is kept (redundant with the text) so the
+                      element tests that select on it keep working. */}
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon-sm"
                     aria-label="Dismiss"
                     onClick={onDismiss}
                   >
-                    <X size={16} aria-hidden="true" />
+                    Dismiss
                   </Button>
                 </Show>
                 <Button type="button" class="ml-auto" disabled={!canSubmit()} onClick={submit}>
@@ -542,14 +562,19 @@ export function ChoiceCard(props: ChoiceCardProps): JSX.Element {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Internal list-row presentation: a `role="radio"` with the kit's
-// selectable-list styling.
+// Internal list-row presentation: a `<label>` row wrapping a REAL
+// `<input type="radio">` (the `Radio` primitive), with the kit's selectable-list
+// styling.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface RowProps {
   opt: ChoiceOption;
+  /** The shared form-control name every radio in this card's group carries. */
+  name: string;
   checked: boolean;
   tabStop: boolean;
+  /** The whole group is frozen (`disabled` prop), not just this row. */
+  groupDisabled: boolean;
   descId: string;
   hasDesc: boolean;
   onPick: () => void;
@@ -558,7 +583,7 @@ interface RowProps {
 
 function RecommendedPill(): JSX.Element {
   return (
-    <span class="inline-flex items-center rounded-full bg-[var(--color-primary)] px-1.5 py-0.5 text-[0.625rem] font-medium uppercase leading-none tracking-wide text-[var(--color-primary-foreground,white)]">
+    <span class="inline-flex items-center rounded-full bg-[var(--color-primary)] px-1.5 py-0.5 text-micro font-medium uppercase leading-none tracking-wide text-[var(--color-primary-foreground,white)]">
       Recommended
     </span>
   );
@@ -587,25 +612,76 @@ function IconBadge(props: { name: string }): JSX.Element {
   );
 }
 
+/**
+ * One row of the radiogroup.
+ *
+ * The control is a REAL `<input type="radio">` (the `Radio` primitive over
+ * `.kai-radio`), not the `aria-hidden` ring-shaped `<span>` this row used to draw.
+ * That is what buys form participation — a `name`, a `value`, and a real entry in a
+ * native `FormData` — which a `<div role="radio">` can never have, and it removes the
+ * fourth hand-rolled radio from the kit.
+ *
+ * WHY `role="radio"` IS ON THE INPUT AND NOT ON THE ROW. `choice-card.tsx`'s own
+ * keyboard handler and `response-compare.tsx` both drive `[role="radio"]`, an
+ * ATTRIBUTE selector that a native radio's implicit role does not match, so the role
+ * has to be written somewhere. Putting it on the `<label>` wrapper (which the plan
+ * suggested) would nest a radio inside a radio and announce the row twice; putting it
+ * on the input states the role the input already has. `aria-checked` / `aria-disabled`
+ * are likewise redundant with `checked` / `disabled` and kept in lockstep with them —
+ * they are the state the element tests read, and a redundant ARIA attribute that never
+ * disagrees with the DOM is harmless where a second radio in the a11y tree is not.
+ *
+ * The row's `<label>` is what makes a click anywhere on it select the option, which is
+ * the browser's own behaviour rather than the `onClick` re-implementation it replaces.
+ * The `onClick` is kept as well: it is the path the existing tests fire, and both paths
+ * land on the same idempotent `select()`.
+ */
 function ListRow(props: RowProps): JSX.Element {
+  // The row is inert when the option itself is disabled OR the whole group is frozen.
+  // The group case has to reach the native `disabled` attribute: an enabled input
+  // would visibly check itself on click while `select()` refuses the state change, and
+  // the DOM would then be lying about the selection.
+  const inert = (): boolean => props.opt.disabled === true || props.groupDisabled;
+  const pick = (): void => {
+    if (inert()) return;
+    props.onPick();
+  };
   return (
-    <div
-      role="radio"
-      aria-checked={props.checked}
-      aria-disabled={props.opt.disabled ? 'true' : undefined}
-      aria-describedby={props.hasDesc ? props.descId : undefined}
-      data-option-id={props.opt.id}
-      tabindex={props.opt.disabled ? -1 : props.tabStop ? 0 : -1}
-      onClick={() => !props.opt.disabled && props.onPick()}
-      onFocus={props.onFocus}
+    <label
+      onClick={pick}
       class={cn(
-        'flex items-center gap-3 px-3 py-2.5 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+        'flex items-center gap-3 px-3 py-2.5 text-sm transition-colors',
+        // The focus ring stays on the ROW and stays inset — the same 2px inset ring the
+        // focusable `div` painted. Focus now lands on the input inside it, so the
+        // selector moves from `focus-visible:` to `has-[:focus-visible]:`; the input's
+        // own outline is suppressed below so there is one ring, not two. That is the
+        // pattern src/elements/styles.css sanctions at its `:focus-visible` rule.
+        'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-ring',
         props.opt.disabled
           ? 'cursor-not-allowed opacity-60 text-foreground'
           : 'cursor-pointer hover:bg-muted/50',
         props.checked ? 'bg-accent font-medium text-accent-foreground' : 'text-foreground',
       )}
     >
+      {/* FIRST in the row, ahead of any media. It used to sit AFTER the thumbnail/icon
+          badge, so a list where only some options carried media had a ragged control
+          column (measured 98px vs 50px in the `WithOther` story). The control column is
+          the one thing every row shares, so it leads. */}
+      <Radio
+        role="radio"
+        name={props.name}
+        value={props.opt.id}
+        checked={props.checked}
+        disabled={inert()}
+        aria-checked={props.checked}
+        aria-disabled={props.opt.disabled ? 'true' : undefined}
+        aria-describedby={props.hasDesc ? props.descId : undefined}
+        data-option-id={props.opt.id}
+        tabindex={props.opt.disabled ? -1 : props.tabStop ? 0 : -1}
+        class="focus-visible:outline-none"
+        onChange={pick}
+        onFocus={props.onFocus}
+      />
       <Show when={props.opt.media?.image}>
         <HoverCard
           openDelay={150}
@@ -623,17 +699,6 @@ function ListRow(props: RowProps): JSX.Element {
       <Show when={!props.opt.media?.image && props.opt.media?.icon}>
         <IconBadge name={props.opt.media!.icon!} />
       </Show>
-      <span
-        aria-hidden="true"
-        class={cn(
-          'flex h-[1.125rem] w-[1.125rem] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors',
-          props.checked ? 'border-[var(--color-primary)]' : 'border-input bg-background',
-        )}
-      >
-        <Show when={props.checked}>
-          <span class="h-2 w-2 rounded-full bg-[var(--color-primary)]" />
-        </Show>
-      </span>
       <span class="flex min-w-0 flex-col gap-0.5">
         <span class="flex items-center gap-2">
           <span class="truncate">{props.opt.label}</span>
@@ -652,7 +717,7 @@ function ListRow(props: RowProps): JSX.Element {
           {props.opt.meta}
         </span>
       </Show>
-    </div>
+    </label>
   );
 }
 
@@ -663,7 +728,7 @@ function ResolvedChoice(props: {
   const c = props.choice;
   return (
     <div
-      class="flex items-center gap-3 rounded-lg border border-input bg-accent px-3 py-2.5 text-sm font-medium text-accent-foreground"
+      class="flex items-center gap-3 rounded-lg border border-border bg-accent px-3 py-2.5 text-sm font-medium text-accent-foreground"
       role={props.optimistic ? 'status' : undefined}
     >
       <Check size={16} aria-hidden="true" />

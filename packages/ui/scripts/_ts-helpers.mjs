@@ -35,6 +35,135 @@ export const displayNameFromClass = (className) =>
  */
 export const propKey = (name) => (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : JSON.stringify(name));
 
+/**
+ * Does this rendered type bind LOOSER than the position it is about to be spliced
+ * into? If so the caller must parenthesise it.
+ *
+ * WHY THIS EXISTS. `renderType` builds a union by rendering each constituent on its
+ * own and joining with ` | `, and an array by appending `[]`. Both are correct only
+ * while every constituent binds tighter than the punctuation being added. A FUNCTION
+ * type does not: it is the loosest form in TypeScript's type grammar, so it swallows
+ * whatever follows it.
+ *
+ *   union   `boolean | (value: number) => string`   TS1385, the .d.ts does not parse
+ *   array   `() => void[]`                          parses, and means the WRONG thing
+ *
+ * The first shipped: `kai-slider`'s `valueLabel` is the kit's first function-in-union
+ * prop, and it put a syntax error into `src/elements/element-types.d.ts` AND into
+ * `dist/elements.d.ts`, which is what a TypeScript consumer of the published package
+ * resolves. The second has never shipped only because nothing renders an array of
+ * functions yet.
+ *
+ * THE TEST IS SYNTACTIC, NOT STRUCTURAL, ON PURPOSE. Asking the checker "does this
+ * type have call signatures?" mis-fires on a callable object type (`{ (): void; x: 1 }`),
+ * which is already brace-delimited and needs no parens, and it cannot see the shape of
+ * the string when this function falls through to `checker.typeToString`. What actually
+ * matters is what the emitted TEXT parses as, so that is what is measured: a `=>` at
+ * bracket depth zero, which is how both function types and constructor types
+ * (`new () => X`) are spelled, and nothing else is.
+ *
+ * Already-parenthesised input is left alone rather than double-wrapped: TypeScript's
+ * own `typeToString` parenthesises function types in unions, so a constituent that
+ * reached here through the fallback arrives as `(() => void)`, whose `=>` sits at
+ * depth 1.
+ *
+ * SCOPE. Function and constructor types are the only forms this renderer can emit
+ * that bind looser than `|` or `[]`. Intersections, `keyof`, `typeof` and indexed
+ * access all bind tighter and need nothing. Conditional types (`A extends B ? C : D`)
+ * would also need wrapping, but no path here produces one; if that ever changes this
+ * is the function to extend.
+ */
+export const bindsLoosely = (rendered) => {
+  let depth = 0;
+  let quote = null;
+  for (let i = 0; i < rendered.length; i += 1) {
+    const c = rendered[i];
+    if (quote) {
+      if (c === '\\') i += 1;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === '`') { quote = c; continue; }
+    // Checked BEFORE the bracket cases so the `>` of `=>` is never mistaken for a
+    // closing angle bracket, which would corrupt the depth for everything after it.
+    if (c === '=' && rendered[i + 1] === '>') {
+      if (depth === 0) return true;
+      i += 1;
+      continue;
+    }
+    if (c === '(' || c === '[' || c === '{' || c === '<') depth += 1;
+    else if (c === ')' || c === ']' || c === '}' || c === '>') depth -= 1;
+  }
+  return false;
+};
+
+
+/**
+ * Drop one redundant outer paren pair, if the whole string is wrapped in it.
+ *
+ * The companion to {@link bindsLoosely}, and needed for the same reason: whether a
+ * type needs parens is a property of the POSITION it sits in, and some consumers move
+ * it to a different position afterwards. `clean()` in gen-element-types.mjs strips the
+ * `undefined` arm from an optional prop before writing it into the `.d.ts`, so
+ * `undefined | ((audio: Blob) => Promise<string>)` becomes a lone
+ * `((audio: Blob) => Promise<string>)` — correct, but wearing parens it no longer
+ * needs. Without this the fix for the union bug would have churned every existing
+ * function-typed prop in two committed artifacts for no behavioural gain.
+ *
+ * Only unwraps when the OPENING paren matches the FINAL character, so `(a | b)[]` and
+ * `(() => void) | null` are both left alone.
+ */
+export const unwrapOuterParens = (rendered) => {
+  const t = rendered.trim();
+  if (!t.startsWith('(')) return t;
+  let depth = 0;
+  let quote = null;
+  for (let i = 0; i < t.length; i += 1) {
+    const c = t[i];
+    if (quote) {
+      if (c === '\\') i += 1;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === '`') { quote = c; continue; }
+    if (c === '=' && t[i + 1] === '>') { i += 1; continue; }
+    if (c === '(' || c === '[' || c === '{' || c === '<') depth += 1;
+    else if (c === ')' || c === ']' || c === '}' || c === '>') {
+      depth -= 1;
+      // The opener closed before the end, so the string is not one wrapped group.
+      if (depth === 0) return i === t.length - 1 ? t.slice(1, -1) : t;
+    }
+  }
+  return t;
+};
+
+/**
+ * Normalise a rendered type for EMISSION into a `.d.ts` / `.tsx` declaration.
+ *
+ * ONE OWNER, DELIBERATELY. This lived as two byte-identical copies, in
+ * gen-element-types.mjs and gen-element-react.mjs, and the duplication cost exactly
+ * what this repo says duplication costs: fixing the function-in-union bug in one copy
+ * left `frameworks/react/index.tsx` — a SHIPPED consumer entry point — still emitting
+ * `valueLabel?: boolean | (value: number) => string`, i.e. still TS1385. That second
+ * failure stayed invisible because `npm run typecheck` is `&&`-joined and the earlier
+ * step was already red.
+ *
+ * `optional` means the member is emitted as `name?: T`, so the `undefined` arm is
+ * redundant and is stripped. Stripping can leave a type wearing parens it no longer
+ * needs, hence the unwrap (see {@link unwrapOuterParens}).
+ */
+export const cleanEmittedType = (type, optional) => {
+  let t = type
+    .replace(/\bUint8Array<ArrayBufferLike>/g, 'Uint8Array')
+    .replace(/\bfalse \| true\b/g, 'boolean')
+    .replace(/\btrue \| false\b/g, 'boolean');
+  if (optional) {
+    t = t.replace(/undefined \| /g, '').replace(/ \| undefined/g, '');
+    t = unwrapOuterParens(t);
+  }
+  return t.trim();
+};
+
 export function createTsHelpers(program, checker, { importable = new Set() } = {}) {
   const isScalar = (t) => {
     if (t.isUnion?.()) return t.types.every(isScalar);
@@ -186,12 +315,21 @@ export function createTsHelpers(program, checker, { importable = new Set() } = {
   // sibling props is NOT mistaken for a cycle — only a true ancestor triggers it.
   function renderType(type, decl, seen = new Set()) {
     if (type.isUnion()) {
-      return [...new Set(orderedUnionTypes(type, decl).map((t) => renderType(t, decl, seen)))].join(' | ');
+      // De-dup on the BARE form, then wrap, so two identical function arms collapse
+      // into one rather than differing by punctuation.
+      return [...new Set(orderedUnionTypes(type, decl).map((t) => renderType(t, decl, seen)))]
+        .map((r) => (bindsLoosely(r) ? `(${r})` : r))
+        .join(' | ');
     }
     if (checker.isArrayType(type)) {
       const elem = checker.getTypeArguments(type)[0];
       const rendered = renderType(elem, decl, seen);
-      return elem.isUnion() ? `(${rendered})[]` : `${rendered}[]`;
+      // A union element was always wrapped. A FUNCTION element was not, and that one
+      // is the nastier of the two: `() => void` + `[]` is `() => void[]`, which parses
+      // perfectly as a function returning an array. tsc says nothing and the consumer
+      // gets the wrong type. Nothing in the kit renders an array of functions today,
+      // which is exactly why it went unnoticed.
+      return elem.isUnion() || bindsLoosely(rendered) ? `(${rendered})[]` : `${rendered}[]`;
     }
     const sym = type.aliasSymbol || type.getSymbol();
     const name = sym?.getName();

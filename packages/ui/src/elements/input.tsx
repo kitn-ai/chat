@@ -16,7 +16,7 @@ interface Props extends Record<string, unknown> {
    *  `password` · `number`. Single-line only. */
   type?: string;
   /** Controlled value, and always the CANONICAL one when a mask is active: digits
-   *  for `tel` / `ssn` / `credit-card`, the formatted text for `custom` (spec §4).
+   *  for `tel` / `ssn` / `credit-card`, the formatted text for `custom`.
    *  Settable and reflected to the `value` attribute. `el.value = '5551234567'`
    *  drives it (no event) and is re-fitted to the mask on the way in, so the field
    *  shows `555-123-4567`. Read `el.value` for live state; the formatted text rides
@@ -142,7 +142,7 @@ type SlotName = (typeof SLOT_NAMES)[number];
  * ```
  *
  * `el.value` is the CANONICAL value — digits for `tel` / `ssn` / `credit-card`, the
- * formatted text for `custom` (spec §4). The text on screen rides along as
+ * formatted text for `custom`. The text on screen rides along as
  * `formattedValue` on the `kai-input` / `kai-change` details. Refusals report on
  * `kai-input-rejected` and never touch validity.
  *
@@ -151,10 +151,10 @@ type SlotName = (typeof SLOT_NAMES)[number];
  * 1. **Not form-associated.** There is no `ElementInternals` and no
  *    `setFormValue()`, so a `<kai-input>` inside a `<form>` contributes nothing to
  *    `FormData` and takes no part in native validation, with or without a mask.
- *    That is a KNOWN GAP (spec §5.8, owner decision O-3: tier 2 ships first, form
- *    association lands with its own migration). Read the value off the element.
+ *    That is a KNOWN GAP: form association lands later, with its own migration.
+ *    Read the value off the element.
  * 2. **No `value-type` prop.** Canonical-form-per-semantic-type is the whole
- *    contract (owner decision O-5); a per-field raw-or-formatted switch would make
+ *    contract; a per-field raw-or-formatted switch would make
  *    the same field round-trip differently depending on who set it.
  *
  * ### The controlled-value rule, stated
@@ -425,8 +425,8 @@ defineWebComponent<Props, Events>('kai-input', {
     select: () => innerInput()?.select(),
     /** The canonical value: digits for `tel` / `ssn` / `credit-card`, the formatted text
      *  for `custom`, and the field text when no mask is on. Identical to reading
-     *  `el.value`; it carries the name spec §5.8 uses for the submitted form of a masked
-     *  field, so code written against that name finds it. The mask engine has a third,
+     *  `el.value`, under the name backends use for the submitted form of a masked
+     *  field. The mask engine has a third,
      *  narrower notion of raw (the fill characters with no literals at all) and that one
      *  is internal: it is not what any backend wants and it is not exposed here. */
     getRawValue: (): string => untrack(value),

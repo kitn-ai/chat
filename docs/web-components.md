@@ -3,14 +3,14 @@
 ## Overview
 
 <!-- spec:overview -->
-`@kitn.ai/ui` ships 84 framework-agnostic custom elements built on the SolidJS kit.
+`@kitn.ai/ui` ships 89 framework-agnostic custom elements built on the SolidJS kit.
 
 | Tag | Purpose |
 |-----|---------|
 | `<kai-chat>` | Full chat UI — message list plus prompt input |
 | `<kai-conversations>` | Sidebar conversation browser with group support |
 | `<kai-prompt-input>` | Standalone text-input area with send button |
-| + 81 composable primitives | See the full roster below |
+| + 86 composable primitives | See the full roster below |
 <!-- /spec:overview -->
 
 Each element renders into its own **Shadow DOM** so the host page's CSS cannot leak in, and the kit's Tailwind classes cannot leak out. SolidJS and all kit dependencies are bundled inside the element bundle — the host does not need SolidJS.
@@ -408,7 +408,7 @@ Compose these in light DOM instead of setting the JS property — the no-JS rout
 
 | Child element | Attributes | Text content | Notes |
 |---------------|------------|--------------|-------|
-| `<kai-conversation>` | `group-id`, `id` | yes | Parse a single light-DOM `<kai-conversation>` element into a `ConversationSummary`. Attribute mapping: - `id` → ConversationSummary.id - `group-id` → ConversationSummary.groupId (optional) - textContent → ConversationSummary.title Fields not expressible as HTML attributes are NOT fabricated (F-10): the optional `scope` and `lastMessageAt` stay absent, and the required `messageCount`/`updatedAt` get honest defaults — zero messages, and an empty `updatedAt` from which no trailing relative time is derived (the epoch it used to fabricate rendered a bogus "many days ago" on every declarative row). |
+| `<kai-conversation>` | `group-id`, `id` | yes | Parse a single light-DOM `<kai-conversation>` element into a `ConversationSummary`. Attribute mapping: - `id` → ConversationSummary.id - `group-id` → ConversationSummary.groupId (optional) - textContent → ConversationSummary.title Fields not expressible as HTML attributes are NOT fabricated: the optional `scope` and `lastMessageAt` stay absent, and the required `messageCount`/`updatedAt` get honest defaults — zero messages, and an empty `updatedAt` from which no trailing relative time is derived (the epoch it used to fabricate rendered a bogus "many days ago" on every declarative row). |
 
 #### Styleable parts
 
@@ -1135,7 +1135,7 @@ A drag-and-drop / click-to-pick file upload dropzone.
 | Property | Attribute | Type | Default | Notes |
 |----------|-----------|------|---------|-------|
 | `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
-| `transcribe` | — | `undefined | (audio: Blob) => Promise<string>` | — | Transcriber the host supplies: records audio, returns the text. This is a **function-valued property** (`el.transcribe = async blob => '...'`) because a value-returning callback can't be modelled as a fire-and-forget event. |
+| `transcribe` | — | `undefined | ((audio: Blob) => Promise<string>)` | — | Transcriber the host supplies: records audio, returns the text. This is a **function-valued property** (`el.transcribe = async blob => '...'`) because a value-returning callback can't be modelled as a fire-and-forget event. |
 | `disabled` | `disabled` | `undefined | false | true` | `false` | Disable the mic button (non-interactive). |
 | `recognitionLang` | `recognition-lang` | `undefined | string` | — | BCP-47 language tag for the native `SpeechRecognition` path (e.g. `en-US`). Attribute: `recognition-lang` (the plain `lang` attribute is reserved by `HTMLElement` and can't be a custom-element property). No effect when `transcribe` is set or the browser lacks SpeechRecognition. |
 | `interim` | `interim` | `undefined | false | true` | `false` | Emit live partial transcripts (`kai-transcript-interim`) during native recognition. Attribute: `interim`. No-op on the transcribe/fallback paths. |
@@ -1646,7 +1646,7 @@ Voice-mode visualizer with `bar`, `grid`, `radial`, `wave`, `aurora` and shader 
 | `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
 | `text` | `text` | `undefined | string` | `''` | The utterance to read aloud. |
 | `autoplay` | `autoplay` | `undefined | false | true` | `false` | Speak automatically when `text` is set/changed. |
-| `synthesize` | — | `undefined | (text: string) => Promise<Blob>` | — | TTS model seam the host supplies: given text, returns an audio `Blob` to play. This is a **function-valued property** (`el.synthesize = async text => blob`); when set, the native `speechSynthesis` path is bypassed. Mirrors `<kai-voice-input>`'s `transcribe`. A value-returning callback can't be modelled as a fire-and-forget event, hence a property. |
+| `synthesize` | — | `undefined | ((text: string) => Promise<Blob>)` | — | TTS model seam the host supplies: given text, returns an audio `Blob` to play. This is a **function-valued property** (`el.synthesize = async text => blob`); when set, the native `speechSynthesis` path is bypassed. Mirrors `<kai-voice-input>`'s `transcribe`. A value-returning callback can't be modelled as a fire-and-forget event, hence a property. |
 | `disabled` | `disabled` | `undefined | false | true` | `false` | Disable the button (non-interactive). |
 
 #### Events
@@ -1700,7 +1700,7 @@ A speaker button that reads `text` aloud. Native `speechSynthesis` by default; s
 | `cards` | — | `undefined | { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: "action"; action: string; payload?: unknown; at?: undefined | string } | { kind: "submit"; data: unknown; at?: undefined | string } | { kind: "dismissed"; at?: undefined | string } | { kind: "expired"; reason?: undefined | string; at?: undefined | string } }[]` | — | The stream of card envelopes to render. Set as a JS PROPERTY: `el.cards = [...]`. |
 | `types` | — | `undefined | Record<string, string>` | — | Optional type→tag overrides/additions (merged over the built-ins). Property: `el.types`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. |
 | `schemas` | — | `undefined | Record<string, object>` | — | JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `types`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.schemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name, matching `mergeCardTags`, where your entry is spread over ours. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. See `CardSchemaMap` in components/card-renderer.tsx. |
-| `policy` | — | `undefined | { onSubmit?: undefined | (cardId: string, data: unknown) => void; onAction?: undefined | (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: undefined | (text: string, opts: { mode: "compose" | "send"; context?: unknown; }) => void; onOpen?: undefined | (url: string, target: "tab" | "artifact") => void; onState?: undefined | (cardId: string, patch: unknown) => void; onDismiss?: undefined | (cardId: string) => void; onReopen?: undefined | (cardId: string) => void; onError?: undefined | (cardId: string, message: string) => void; maxSendPromptMode?: undefined | "compose" | "send" }` | — | Optional CardPolicy handling child events. Property: `el.policy`. |
+| `policy` | — | `undefined | { onSubmit?: undefined | ((cardId: string, data: unknown) => void); onAction?: undefined | ((cardId: string, action: string, payload?: unknown) => void); onSendPrompt?: undefined | ((text: string, opts: { mode: "compose" | "send"; context?: unknown; }) => void); onOpen?: undefined | ((url: string, target: "tab" | "artifact") => void); onState?: undefined | ((cardId: string, patch: unknown) => void); onDismiss?: undefined | ((cardId: string) => void); onReopen?: undefined | ((cardId: string) => void); onError?: undefined | ((cardId: string, message: string) => void); maxSendPromptMode?: undefined | "compose" | "send" }` | — | Optional CardPolicy handling child events. Property: `el.policy`. |
 | `validateCards` | `validate-cards` | `undefined | false | true` | `true` | Validate each envelope's `data` against the schema for its type before rendering it, using a built-in's own schema or yours from `schemas`. Default `true`; set `validate-cards="false"` (or `el.validateCards = false`) to opt out. A hard failure (wrong type, a missing required field) renders a diagnostic naming the field instead of the card; a soft failure (bounds) renders the card unchanged. Both emit a contract `error` event. On in production too: a model emitting a bad shape is a production failure mode, so stripping the check there would hide it from exactly the person who needs to see it. |
 
 #### Events
@@ -2540,7 +2540,7 @@ A grouped, filterable command / mention palette (the `@`-picker pattern).
 |----------|-----------|------|---------|-------|
 | `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
 | `type` | `type` | `undefined | string` | `'text'` | Native input type: `text` (default) · `email` · `url` · `search` · `tel` · `password` · `number`. Single-line only. |
-| `value` | `value` | `undefined | string` | — | Controlled value, and always the CANONICAL one when a mask is active: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom` (spec §4). Settable and reflected to the `value` attribute. `el.value = '5551234567'` drives it (no event) and is re-fitted to the mask on the way in, so the field shows `555-123-4567`. Read `el.value` for live state; the formatted text rides along on every `kai-input` / `kai-change` detail as `formattedValue`. |
+| `value` | `value` | `undefined | string` | — | Controlled value, and always the CANONICAL one when a mask is active: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom`. Settable and reflected to the `value` attribute. `el.value = '5551234567'` drives it (no event) and is re-fitted to the mask on the way in, so the field shows `555-123-4567`. Read `el.value` for live state; the formatted text rides along on every `kai-input` / `kai-change` detail as `formattedValue`. |
 | `placeholder` | `placeholder` | `undefined | string` | — | Placeholder shown when empty. |
 | `label` | `label` | `undefined | string` | — | Field label, linked to the input. |
 | `hint` | `hint` | `undefined | string` | — | Helper text below the control. |
@@ -2575,7 +2575,7 @@ Call these on the element instance: `document.querySelector('kai-input').focus(�
 |--------|-----------|-------------|
 | `focus` | `(options?: FocusOptions): void` | Focus the inner input (the host can't reach into the shadow root). |
 | `select` | `(): void` | Select the inner input's text. |
-| `getRawValue` | `(): string` | The canonical value: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom`, and the field text when no mask is on. Identical to reading `el.value`; it carries the name spec §5.8 uses for the submitted form of a masked field, so code written against that name finds it. The mask engine has a third, narrower notion of raw (the fill characters with no literals at all) and that one is internal: it is not what any backend wants and it is not exposed here. |
+| `getRawValue` | `(): string` | The canonical value: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom`, and the field text when no mask is on. Identical to reading `el.value`, under the name backends use for the submitted form of a masked field. The mask engine has a third, narrower notion of raw (the fill characters with no literals at all) and that one is internal: it is not what any backend wants and it is not exposed here. |
 | `getFormattedValue` | `(): string` | The text on screen, literals and guide included. The counterpart to `formattedValue` on the `kai-input` / `kai-change` details, for a consumer that needs it outside an event. |
 | `clear` | `(): void` | Empty the value and fire `kai-change` with `''`. On a masked field this resets the mask itself, not just the text on screen, so the next character starts over. |
 

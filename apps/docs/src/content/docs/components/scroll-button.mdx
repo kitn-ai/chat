@@ -14,7 +14,7 @@ import NeedAHand from '../../../components/NeedAHand.astro';
 
 <p class="kai-tag-sub">kai-scroll-button</p>
 
-<p class="kai-lede">A floating chevron button that watches a scrollable container and appears when the user scrolls up — click to snap back to the bottom. Drop it beside any chat thread, log pane, or activity feed.</p>
+<p class="kai-lede">A floating arrow button that watches a scrollable container and appears when the user scrolls up — click to snap back to the bottom. Drop it beside any chat thread, log pane, or activity feed.</p>
 
 <Facts items={['Shadow DOM', '1 event', '3 button variants', 'Auto-hides at bottom', 'Works via id or ancestor walk']} />
 
@@ -45,6 +45,61 @@ Point the button at its scroll container with the `for` attribute:
 - **`for`** — the `id` of the scrollable container (mirrors `<label for="...">`). Omit to walk up the composed tree to the nearest scrollable ancestor.
 - **Visibility** — hidden when the container is within 50 px of the bottom; animated (translate + scale + opacity) otherwise. Uses a passive `scroll` listener — no polling.
 - **`kai-scroll`** — fires (no detail) each time the button is clicked and `scrollToBottom()` completes. Use it to pause auto-scroll logic.
+
+### Positioning
+
+There is no `placement` prop, and the element carries no positioning CSS of its
+own. It draws a button; floating that button over the thread is three lines of
+your layout.
+
+1. Put `position: relative` on a box that does **not** scroll, wrapping the
+   scroll container. Not on the scroll container itself. An absolutely
+   positioned child of a scrolling element is placed against its padding box and
+   then scrolls away with the content, which looks right until you scroll.
+2. Give the button `position: absolute` and an offset from the bottom.
+3. Centre it, or anchor it to a corner.
+
+```html
+<!-- the WRAPPER is the positioning context, not the scroll container -->
+<div style="position:relative; height:400px">
+  <div id="my-feed" style="height:100%; overflow-y:auto"><!-- messages --></div>
+
+  <!-- centred over the content -->
+  <kai-scroll-button for="my-feed"
+    style="position:absolute; left:50%; bottom:12px; transform:translateX(-50%)">
+  </kai-scroll-button>
+
+  <!-- or anchored to the corner -->
+  <kai-scroll-button for="my-feed"
+    style="position:absolute; right:12px; bottom:12px">
+  </kai-scroll-button>
+</div>
+```
+
+On a wide thread, centre on the message column rather than the container. That
+is what `<kai-chat>` does internally: the wrapper gets the same max width as the
+messages and is centred with `left:50%` plus a `translateX(-50%)`, so the button
+tracks the column instead of drifting to the middle of the window.
+
+When a composer is docked at the bottom, raise the offset so the button clears
+it (`bottom:56px` suits a typical one) rather than letting the two overlap.
+
+### Labelling
+
+`label` sets the button's accessible name. It is announced whether or not it is
+visible, so the text a screen reader reads is always yours to translate. It
+defaults to `Scroll to bottom`.
+
+`show-label` also draws that text beside the icon. The visible text then *is*
+the accessible name, so nothing gets announced twice.
+
+```html
+<!-- icon only, announced in German -->
+<kai-scroll-button for="my-feed" label="Zum Ende springen"></kai-scroll-button>
+
+<!-- the name drawn beside the icon -->
+<kai-scroll-button for="my-feed" show-label label="Jump to latest"></kai-scroll-button>
+```
 
 ## Examples
 

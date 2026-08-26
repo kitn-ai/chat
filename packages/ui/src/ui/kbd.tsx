@@ -70,7 +70,7 @@ function glyph(token: string, mac: boolean): string {
 }
 
 const SIZE: Record<'sm' | 'md', string> = {
-  sm: 'h-5 min-w-5 px-1 text-[11px]',
+  sm: 'h-5 min-w-5 px-1 text-caption',
   md: 'h-6 min-w-6 px-1.5 text-xs',
 };
 

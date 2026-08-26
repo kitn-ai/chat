@@ -45,6 +45,11 @@
     "kai-scroll-button": "scroll-button",
     "kai-popover": "popover",
     "kai-switch": "switch",
+    "kai-checkbox": "checkbox",
+    "kai-checkbox-group": "checkbox-group",
+    "kai-radio-group": "radio-group",
+    "kai-slider": "slider",
+    "kai-select": "select",
     "kai-button": "button",
     "kai-avatar": "avatar",
     "kai-badge": "badge",
@@ -215,6 +220,21 @@
     ],
     "switch": [
       "kai-switch"
+    ],
+    "checkbox": [
+      "kai-checkbox"
+    ],
+    "checkbox-group": [
+      "kai-checkbox-group"
+    ],
+    "radio-group": [
+      "kai-radio-group"
+    ],
+    "slider": [
+      "kai-slider"
+    ],
+    "select": [
+      "kai-select"
     ],
     "button": [
       "kai-button"

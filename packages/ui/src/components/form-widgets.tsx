@@ -1,8 +1,15 @@
-import { type JSX, For, Show, createSignal } from 'solid-js';
+import { type JSX, For, Show, createMemo, createSignal } from 'solid-js';
 import { cn } from '../utils/cn';
 import { Textarea } from '../ui/textarea';
 import { Input, FIELD_BASE as inputBase } from '../ui/input';
-import { Star } from 'lucide-solid';
+import { Slider } from '../ui/slider';
+import { Select } from '../ui/select';
+import { Switch } from '../ui/switch';
+import { Checkbox } from '../ui/checkbox';
+import { RadioGroup } from '../ui/radio';
+import { CheckboxGroup } from '../ui/checkbox-group';
+import { Button } from '../ui/button';
+import { Star, X } from 'lucide-solid';
 import type { FieldMaskHint, FormField } from './form';
 
 /** The shared prop shape every leaf widget receives from FieldRow. */
@@ -11,7 +18,7 @@ export interface WidgetProps {
   value: unknown;
   field: FormField;
   /**
-   * The field's resolved format hints (spec §7.3), or an empty resolution.
+   * The field's resolved format hints, or an empty resolution.
    *
    * RESOLVED IN `FieldRow`, not here. The row already has to resolve them to render
    * the format hint text and put its id in `aria-describedby`, and resolving the same
@@ -25,8 +32,31 @@ export interface WidgetProps {
   invalid: boolean;
   describedBy?: string;
   label: string;
+  /**
+   * The id of the row's VISIBLE label element, for widgets whose control is a group
+   * rather than one labelable input.
+   *
+   * `FieldRow` used to suppress its `<label>` for those kinds and each widget named
+   * itself with `aria-label={props.label}`, which is a name only a screen reader can
+   * reach: "Severity", "Environments" and "Tags" were announced and invisible. The row
+   * now always renders the text and hands its id down here, so one string names the
+   * group and everybody can see it. Absent means the widget is on its own (a bare
+   * widget rendered outside `FieldRow`), so `aria-label` stays the fallback.
+   */
+  labelledBy?: string;
   onInput: (value: unknown) => void;
   onBlur: () => void;
+}
+
+/**
+ * How a GROUP widget names itself: the row's visible label when there is one,
+ * `aria-label` only as the fallback. Never both — two accessible names on one element
+ * is one too many, and `aria-labelledby` would win silently anyway.
+ */
+function groupNameProps(p: WidgetProps): { 'aria-labelledby'?: string; 'aria-label'?: string } {
+  return p.labelledBy !== undefined
+    ? { 'aria-labelledby': p.labelledBy }
+    : { 'aria-label': p.label };
 }
 
 function ariaProps(p: WidgetProps) {
@@ -118,94 +148,135 @@ export function TextareaWidget(props: WidgetProps): JSX.Element {
 
 export function NumberWidget(props: WidgetProps): JSX.Element {
   const step = () => props.field['x-kai-step'] ?? (props.field.type === 'integer' ? 1 : undefined);
+  // `Input`, not a raw `<input class={inputBase}>` (plan step 6). The two render the
+  // same box — `FIELD_BASE` is the former `inputBase` — so nothing is visible. What the
+  // bypass lost was the focus-node-reuse fix documented at `ui/input.tsx:262-268`: with
+  // the class computed at the CALL SITE, `props.invalid` changing rebuilt the `<input>`
+  // node and took focus and caret with it, and `kai-form` derives `invalid` from the
+  // field's own value. `min`/`max`/`step` come from the schema and are forwarded
+  // untouched; no bound is invented here.
+  //
+  // No `format`/`guide`/`semantic`: masking is a text-field affordance and a
+  // `type="number"` field has no mask hints to resolve.
   return (
-    <input
+    <Input
       id={props.id}
       data-control
       type="number"
-      class={cn(inputBase, props.invalid && 'border-destructive dark:border-red-400/70')}
       value={props.value === undefined || props.value === null ? '' : String(props.value)}
       placeholder={props.placeholder}
+      invalid={props.invalid}
       disabled={props.disabled}
       min={props.field.minimum}
       max={props.field.maximum}
       step={step()}
       {...ariaProps(props)}
-      onInput={(e) => props.onInput(e.currentTarget.value)}
-      onBlur={props.onBlur}
+      onValueInput={(value) => props.onInput(value)}
+      onValueChange={() => props.onBlur()}
     />
   );
 }
 
 export function SliderWidget(props: WidgetProps): JSX.Element {
+  // The 0..100 fallback is the WIDGET's, not the primitive's (plan §4). This widget is
+  // reading a consumer-authored JSON-Schema field where `minimum`/`maximum` are
+  // optional; `Slider` itself requires both, so no other caller inherits this guess.
   const min = () => props.field.minimum ?? 0;
   const max = () => props.field.maximum ?? 100;
   const step = () => props.field['x-kai-step'] ?? (props.field.type === 'integer' ? 1 : undefined);
   const current = () => (props.value === undefined || props.value === null ? min() : Number(props.value));
-  const fill = (): string => {
-    const lo = min();
-    const hi = max();
-    return hi > lo ? `${((current() - lo) / (hi - lo)) * 100}%` : '0%';
-  };
+  // The value bubble and the row that holds it BOTH live in the primitive now
+  // (`valueLabel`), so this widget no longer hand-builds either. Same markup, same
+  // classes, one owner, and the readout picked up an `aria-hidden` it did not have
+  // here: the slider already announces the number through `aria-valuetext` below.
   return (
-    <div class="flex items-center gap-3">
-      <input
-        id={props.id}
-        data-control
-        type="range"
-        class="kai-range"
-        style={{ '--kai-range-fill': fill() }}
-        value={current()}
-        min={min()}
-        max={max()}
-        step={step()}
-        disabled={props.disabled}
-        aria-valuetext={String(current())}
-        {...ariaProps(props)}
-        onInput={(e) => props.onInput(Number(e.currentTarget.value))}
-        onBlur={props.onBlur}
-      />
-      <span class="min-w-9 shrink-0 rounded-md bg-background px-2 py-1 text-center text-sm font-medium tabular-nums text-foreground shadow-sm">
-        {current()}
-      </span>
-    </div>
+    <Slider
+      id={props.id}
+      data-control
+      value={current()}
+      min={min()}
+      max={max()}
+      step={step()}
+      disabled={props.disabled}
+      valueLabel
+      aria-valuetext={String(current())}
+      {...ariaProps(props)}
+      onInput={(e) => props.onInput(Number(e.currentTarget.value))}
+      onBlur={props.onBlur}
+    />
   );
 }
 
 export function RatingWidget(props: WidgetProps): JSX.Element {
   const max = () => props.field.maximum ?? 5;
+  const min = () => props.field.minimum ?? 1;
   const current = () => Number(props.value ?? 0);
   const stars = () => Array.from({ length: max() }, (_, i) => i + 1);
+  /**
+   * Roving tabindex. Exactly one `role="radio"` is in the tab order — the selected
+   * star, or the first one while nothing is selected. The GROUP is deliberately not
+   * a tab stop: it used to be (`tabindex={0}` with every radio at `-1`), and the
+   * consequence was that arrow keys changed the value while focus never left the
+   * group, so the focus ring sat on the whole row and a screen reader announced the
+   * radiogroup instead of "3 stars, selected". Roving tabindex is the pattern the
+   * ARIA radiogroup spec asks for and it makes both symptoms go away at once.
+   */
+  const activeStar = () => (current() >= min() && current() <= max() ? current() : min());
+  const refs = new Map<number, HTMLButtonElement>();
+  /** Set the value AND move DOM focus to the star that now owns it. */
+  const select = (n: number): void => {
+    const next = Math.min(max(), Math.max(min(), n));
+    props.onInput(next);
+    refs.get(next)?.focus();
+  };
   const onKey = (e: KeyboardEvent): void => {
+    if (props.disabled) return;
     if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
       e.preventDefault();
-      props.onInput(Math.min(max(), current() + 1));
+      select(current() + 1);
     } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
       e.preventDefault();
-      props.onInput(Math.max(props.field.minimum ?? 1, current() - 1));
+      select(current() - 1);
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      select(min());
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      select(max());
     }
   };
   return (
+    // `groupNameProps`: the row renders a visible "Rating" label whose `for` had
+    // nothing to point at (there is no single labelable control here, only stars).
+    // Pointing the group at that same visible text makes ONE string name the control.
     <div
       role="radiogroup"
-      aria-label={props.label}
-      data-control
-      tabindex={0}
-      class="flex items-center gap-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      {...groupNameProps(props)}
+      class="flex items-center gap-1 rounded-md"
       {...ariaProps(props)}
-      onKeyDown={onKey}
     >
       <For each={stars()}>
         {(n) => (
           <button
             type="button"
             role="radio"
+            // `data-control` rides the roving tab stop, so `form.focusField()` —
+            // which focuses the single `[data-control]` inside the field — lands on
+            // the same star Tab would reach. It used to sit on the group, which is no
+            // longer focusable. No `id={props.id}`: the row's `<label for>` had
+            // nothing to point at before either, and pointing it at a star would make
+            // clicking the field label set the rating to 1. The group is named by the
+            // row's visible label (see `groupNameProps` above), which is what names it.
+            data-control={activeStar() === n ? '' : undefined}
             aria-checked={current() === n}
             aria-label={`${n} ${n === 1 ? 'star' : 'stars'}`}
-            tabindex={-1}
+            tabindex={activeStar() === n ? 0 : -1}
             disabled={props.disabled}
-            class="rounded p-0.5 text-muted-foreground hover:text-foreground"
-            onClick={() => props.onInput(n)}
+            ref={(el) => refs.set(n, el)}
+            class="rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onKeyDown={onKey}
+            onClick={() => select(n)}
+            onBlur={props.onBlur}
           >
             <Star
               size={20}
@@ -219,47 +290,48 @@ export function RatingWidget(props: WidgetProps): JSX.Element {
   );
 }
 
+/**
+ * The boolean field's switch IS `ui/switch.tsx` — it is not a lookalike.
+ *
+ * This used to hand-roll its own `<button role="switch">` at 44×24 while
+ * `<kai-switch>` shipped the same control at 36×20, so a consumer putting the two
+ * side by side saw two different switches; and its thumb used `bg-background`,
+ * re-introducing in the copy the dark-mode disappearing-thumb bug that
+ * `ui/switch.tsx:80` carries a comment about having fixed. Delegating removes both.
+ * The size convergence (44×24 → 36×20) is visible inside `kai-form` and intended.
+ *
+ * The four form-only hooks — `id`, `data-control` and the `aria-required` /
+ * `aria-invalid` / `aria-describedby` trio — are ordinary props now (plan decision
+ * D-7). They used to be stamped onto the button through `buttonRef` + a
+ * `createEffect`, which worked but meant this widget reached into the primitive's
+ * DOM to make `form.focusField()` land. `Switch` forwards anything it does not own
+ * to its inner button, exactly like `Checkbox` and `Radio` forward to their inputs,
+ * so all four ride the same path every other widget's hooks do.
+ */
 export function SwitchWidget(props: WidgetProps): JSX.Element {
   const on = () => props.value === true;
-  const toggle = (): void => {
-    if (props.disabled) return;
-    props.onInput(!on());
-    props.onBlur();
-  };
   return (
-    <button
+    <Switch
       id={props.id}
-      data-control
-      type="button"
-      role="switch"
-      aria-checked={on()}
-      aria-label={props.label}
+      data-control=""
+      checked={on()}
       disabled={props.disabled}
-      class={cn(
-        'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        on() ? 'bg-[var(--color-primary)]' : 'bg-muted',
-      )}
+      label={props.label}
       {...ariaProps(props)}
-      onClick={toggle}
-    >
-      <span
-        class={cn(
-          'inline-block h-5 w-5 transform rounded-full bg-background shadow transition-transform',
-          on() ? 'translate-x-5' : 'translate-x-0.5',
-        )}
-      />
-    </button>
+      onChange={(next) => {
+        props.onInput(next);
+        props.onBlur();
+      }}
+    />
   );
 }
 
 export function CheckboxWidget(props: WidgetProps): JSX.Element {
   return (
     <label class="-mx-1.5 inline-flex cursor-pointer items-center gap-2.5 rounded-md px-1.5 py-1.5 text-sm text-foreground transition-colors hover:bg-muted/60">
-      <input
+      <Checkbox
         id={props.id}
-        data-control
-        type="checkbox"
-        class="kai-checkbox"
+        data-control=""
         checked={props.value === true}
         disabled={props.disabled}
         {...ariaProps(props)}
@@ -274,70 +346,49 @@ export function CheckboxWidget(props: WidgetProps): JSX.Element {
 }
 
 export function RadioGroupWidget(props: WidgetProps): JSX.Element {
-  const options = () => (props.field.enum ?? []) as unknown[];
+  // The row chrome, the `radiogroup` wrapper and the shared `name` all live in the
+  // primitive now; this widget only turns a JSON-Schema `enum` into options.
+  const options = createMemo(() =>
+    ((props.field.enum ?? []) as unknown[]).map((opt) => ({ value: opt, label: String(opt) })),
+  );
   return (
-    <div
-      role="radiogroup"
-      aria-label={props.label}
-      data-control
-      class="divide-y divide-border overflow-hidden rounded-lg border border-input"
+    <RadioGroup<unknown>
+      data-control=""
+      {...groupNameProps(props)}
+      name={props.id}
+      options={options()}
+      value={props.value}
+      disabled={props.disabled}
       {...ariaProps(props)}
-    >
-      <For each={options()}>
-        {(opt) => (
-          <label
-            class={cn(
-              'flex cursor-pointer items-center gap-3 px-3 py-2.5 text-sm transition-colors',
-              props.value === opt
-                ? 'bg-accent font-medium text-accent-foreground'
-                : 'text-foreground hover:bg-muted/50',
-            )}
-          >
-            <input
-              type="radio"
-              name={props.id}
-              class="kai-radio"
-              value={String(opt)}
-              checked={props.value === opt}
-              disabled={props.disabled}
-              onChange={() => {
-                props.onInput(opt);
-                props.onBlur();
-              }}
-            />
-            <span>{String(opt)}</span>
-          </label>
-        )}
-      </For>
-    </div>
+      onChange={(value) => {
+        props.onInput(value);
+        props.onBlur();
+      }}
+    />
   );
 }
 
 export function SelectWidget(props: WidgetProps): JSX.Element {
-  const options = () => (props.field.enum ?? []) as unknown[];
+  // The primitive renders no placeholder row unless it is given one; the 'Select…'
+  // wording is this widget's, because a schema-driven field has nowhere else to get it.
+  const options = createMemo(() =>
+    ((props.field.enum ?? []) as unknown[]).map((opt) => ({ value: opt, label: String(opt) })),
+  );
   return (
-    <select
+    <Select<unknown>
       id={props.id}
       data-control
-      class={cn(inputBase, props.invalid && 'border-destructive dark:border-red-400/70')}
+      options={options()}
+      value={props.value}
+      placeholder={props.placeholder ?? 'Select…'}
+      invalid={props.invalid}
       disabled={props.disabled}
       {...ariaProps(props)}
       onChange={(e) => {
         props.onInput(e.currentTarget.value);
         props.onBlur();
       }}
-    >
-      <option value="" disabled selected={props.value === undefined || props.value === ''}>
-        {props.placeholder ?? 'Select…'}
-      </option>
-      <For each={options()}>
-        {(opt) => (
-          <option value={String(opt)} selected={props.value === opt}>
-            {String(opt)}
-          </option>
-        )}
-      </For>
-    </select>
+    />
   );
 }
 
@@ -347,73 +398,57 @@ function itemEnum(field: FormField): unknown[] {
   return [];
 }
 
-export function CheckboxGroupWidget(props: WidgetProps): JSX.Element {
+/**
+ * An array field whose items are an `enum`, as a list of checkboxes.
+ *
+ * The bordered/divided row chrome, the `role="group"` wrapper and the rows themselves
+ * live in `ui/checkbox-group.tsx` now — this widget only turns a JSON-Schema
+ * `items.enum` into options and owns the array in and out. It used to hand-roll the
+ * identical chrome beside `RadioGroup`, which already owned it.
+ *
+ * The emitted array holds the SCHEMA's values, not their string forms, so a numeric
+ * or boolean enum survives a round trip.
+ */
+export function CheckboxGroupWidget(props: WidgetProps & { class?: string }): JSX.Element {
   const selected = () => (Array.isArray(props.value) ? (props.value as unknown[]) : []);
-  const toggle = (opt: unknown): void => {
-    const set = selected();
-    const next = set.includes(opt) ? set.filter((v) => v !== opt) : [...set, opt];
-    props.onInput(next);
-    props.onBlur();
-  };
+  const options = createMemo(() => itemEnum(props.field).map((opt) => ({ value: opt, label: String(opt) })));
+  // `name={props.id}`: a shared name so a native form submits the whole selection under
+  // one key and `FormData.getAll()` reads it back. `kai-form` collects through its own
+  // store rather than a native submit, but the control participating correctly is free
+  // here and losing it would be a silent downgrade.
   return (
-    <div
-      role="group"
-      aria-label={props.label}
-      data-control
-      class="divide-y divide-border overflow-hidden rounded-lg border border-input"
+    <CheckboxGroup<unknown>
+      data-control=""
+      {...groupNameProps(props)}
+      name={props.id}
+      class={props.class}
+      options={options()}
+      value={selected()}
+      disabled={props.disabled}
       {...ariaProps(props)}
-    >
-      <For each={itemEnum(props.field)}>
-        {(opt) => (
-          <label
-            class={cn(
-              'flex cursor-pointer items-center gap-3 px-3 py-2.5 text-sm transition-colors',
-              selected().includes(opt)
-                ? 'bg-accent font-medium text-accent-foreground'
-                : 'text-foreground hover:bg-muted/50',
-            )}
-          >
-            <input
-              type="checkbox"
-              class="kai-checkbox"
-              checked={selected().includes(opt)}
-              disabled={props.disabled}
-              onChange={() => toggle(opt)}
-            />
-            <span>{String(opt)}</span>
-          </label>
-        )}
-      </For>
-    </div>
+      onChange={(next) => {
+        props.onInput(next);
+        props.onBlur();
+      }}
+    />
   );
 }
 
+/**
+ * The LONG version of `checkbox-group`: an array-of-enum field whose option list is
+ * over the row's `inlineMax`.
+ *
+ * This was a `<select multiple>` until decision D-3 was ruled. `<select multiple>` is a
+ * poor control on every platform — the multi-select affordance is invisible, discovering
+ * it means knowing to ctrl/cmd-click, and there is no touch story at all. It is the same
+ * control as `checkbox-group`, so it renders as one, with a scroll cap because the only
+ * thing that made a long list bearable in a chat card was the select's fixed-height box.
+ *
+ * The scroll cap is a presentation decision (how a long list fits), not a limit: every
+ * option is rendered, nothing is truncated or dropped.
+ */
 export function MultiSelectWidget(props: WidgetProps): JSX.Element {
-  const selected = () => (Array.isArray(props.value) ? (props.value as unknown[]) : []);
-  return (
-    <select
-      id={props.id}
-      data-control
-      multiple
-      aria-label={props.label}
-      class={cn(inputBase, 'min-h-[6rem]', props.invalid && 'border-destructive dark:border-red-400/70')}
-      disabled={props.disabled}
-      {...ariaProps(props)}
-      onChange={(e) => {
-        const vals = Array.from(e.currentTarget.selectedOptions).map((o) => o.value);
-        props.onInput(vals);
-        props.onBlur();
-      }}
-    >
-      <For each={itemEnum(props.field)}>
-        {(opt) => (
-          <option value={String(opt)} selected={selected().includes(opt)}>
-            {String(opt)}
-          </option>
-        )}
-      </For>
-    </select>
-  );
+  return <CheckboxGroupWidget {...props} class="max-h-60 overflow-y-auto" />;
 }
 
 export function TagListWidget(props: WidgetProps): JSX.Element {
@@ -422,6 +457,8 @@ export function TagListWidget(props: WidgetProps): JSX.Element {
   const add = (): void => {
     const v = draft().trim();
     if (!v) return;
+    // No cap on how many tags may be added. How many is too many lands in a policy
+    // document, which makes it the consuming application's call (CLAUDE.md, plan §4).
     props.onInput([...tags(), v]);
     setDraft('');
     props.onBlur();
@@ -431,36 +468,47 @@ export function TagListWidget(props: WidgetProps): JSX.Element {
     props.onBlur();
   };
   return (
-    <div class="flex flex-col gap-2" role="group" aria-label={props.label}>
+    <div class="flex flex-col gap-2" role="group" {...groupNameProps(props)}>
       <div class="flex flex-wrap gap-1.5">
         <For each={tags()}>
           {(tag, i) => (
             <span class="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-foreground">
               {tag}
-              <button
+              {/* `Button`, not a bare `<button>`, and a lucide `X` rather than the
+                  literal "✕" character it used to render. A bare glyph is what a screen
+                  reader falls back to when nothing else names the control; the icon is
+                  `aria-hidden` and the `aria-label` is the only name, so every remove
+                  control announces which tag it removes. */}
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon-sm"
+                class="size-4 rounded-full p-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
                 aria-label={`Remove ${tag}`}
                 disabled={props.disabled}
-                class="text-muted-foreground hover:text-foreground"
                 onClick={() => remove(i())}
               >
-                ✕
-              </button>
+                <X size={12} aria-hidden="true" />
+              </Button>
             </span>
           )}
         </For>
       </div>
       <div class="flex items-center gap-2">
-        <input
+        {/* `Input` rather than a raw `<input class={inputBase}>` (plan step 6). Same box,
+            same classes; what the bypass lost was the focus-node-reuse fix at
+            `ui/input.tsx:262-268` and the masking `Input` owns. The draft field is not a
+            form control of its own — it holds text on its way to becoming a tag — so it
+            carries the row's `id` and `data-control` and nothing else. */}
+        <Input
           id={props.id}
           data-control
           type="text"
-          class={cn(inputBase)}
           value={draft()}
           placeholder={props.placeholder ?? 'Add…'}
           disabled={props.disabled}
           {...ariaProps(props)}
-          onInput={(e) => setDraft(e.currentTarget.value)}
+          onValueInput={(value) => setDraft(value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
@@ -468,14 +516,9 @@ export function TagListWidget(props: WidgetProps): JSX.Element {
             }
           }}
         />
-        <button
-          type="button"
-          class="rounded-md border border-input px-3 py-2 text-sm text-foreground hover:bg-muted disabled:opacity-50"
-          disabled={props.disabled}
-          onClick={add}
-        >
+        <Button type="button" variant="outline" size="md" disabled={props.disabled} onClick={add}>
           Add
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -4,15 +4,10 @@
 
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { cleanEmittedType as clean } from './_ts-helpers.mjs';
 
-const clean = (type, optional) => {
-  let t = type
-    .replace(/\bUint8Array<ArrayBufferLike>/g, 'Uint8Array')
-    .replace(/\bfalse \| true\b/g, 'boolean')
-    .replace(/\btrue \| false\b/g, 'boolean');
-  if (optional) t = t.replace(/undefined \| /g, '').replace(/ \| undefined/g, '');
-  return t.trim();
-};
+// `clean` now has ONE owner, in _ts-helpers.mjs. This file used to carry a
+// byte-identical copy, which is why the function-in-union fix had to be made twice.
 
 // IMPORTS values are relative to src/elements; rebase to frameworks/react/.
 const reactImportPath = (srcElementsRel) =>

@@ -33,7 +33,7 @@ export function relativeTimeShort(iso?: string, now: number = Date.now()): strin
 
 /**
  * The slotted-item shape rendered by `<kai-conversation-item>` — the composed
- * row of the consumer-owned loop (spec 2026-08-20 § 2a). Distinct from the
+ * row of the consumer-owned loop. Distinct from the
  * data-mode `ConversationItem` above, which batteries mode keeps rendering
  * unchanged: this one takes REGIONS, not a `ConversationSummary`.
  *
@@ -46,14 +46,14 @@ export function relativeTimeShort(iso?: string, now: number = Date.now()): strin
  * conversation-list.tsx — this row renders no handler and the
  * `data-kai-item-menu` marker on the menu region is what the container's
  * activation guard keys off so a click in the consumer's menu never also
- * selects the row); STANDALONE (F-45 tier 2), `onActivate` makes the row body
+ * selects the row); STANDALONE, `onActivate` makes the row body
  * its own tabbable button-role control — click / Enter / Space — with the menu
  * still outside the control as the body's sibling.
  *
  * ARIA contract for direct Solid use: the row renders `role="listitem"` holding
  * a `role="button"` body (`aria-current` marks the active row, the same dialect
  * as the batteries-mode row above) with the menu as the body's tabbable SIBLING
- * (ratified 2026-08-20; axe `nested-interactive` bans focusable descendants of
+ * (axe `nested-interactive` bans focusable descendants of
  * a control, and `aria-required-children` outlaws non-option content anywhere
  * inside a listbox, which is why the vocabulary is not listbox/option). Render
  * your loop's rows inside a `role="list"` ancestor; element mode has no such
@@ -83,7 +83,7 @@ export interface SlottedConversationItemProps {
    *  Solid consumers rendering the component directly leave it off and the row
    *  itself is the group. */
   hostSemantics?: boolean;
-  /** STANDALONE activation (F-45 tier 2): when set, the row body is itself the
+  /** STANDALONE activation: when set, the row body is itself the
    *  activation control — `tabindex="0"` on the `role="button"` body, and
    *  click / Enter / Space call this. The menu region never triggers it (it is
    *  the body's sibling, outside the control). Inside `<kai-conversations>`
@@ -98,7 +98,7 @@ export interface SlottedConversationItemProps {
 export function SlottedConversationItem(props: SlottedConversationItemProps) {
   const [local] = splitProps(props, ['conversationId', 'active', 'compact', 'leading', 'meta', 'menu', 'children', 'hostSemantics', 'onActivate', 'class']);
   return (
-    // The sibling restructure (ratified 2026-08-20): axe nested-interactive
+    // The sibling restructure: axe nested-interactive
     // bans focusable descendants of an activation control, so the control role
     // sits on the row BODY and the consumer's menu is its tabbable SIBLING
     // (the nav.tsx TrailingActions precedent). The vocabulary is
@@ -124,7 +124,7 @@ export function SlottedConversationItem(props: SlottedConversationItemProps) {
         role="button"
         data-kai-item-body
         aria-current={local.active ? 'true' : 'false'}
-        // Standalone activation only (F-45 tier 2): with `onActivate` unset —
+        // Standalone activation only: with `onActivate` unset —
         // the inside-a-container case — no tabindex and no handlers render, so
         // the container's delegated activation stays the single path.
         tabindex={local.onActivate ? 0 : undefined}

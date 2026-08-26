@@ -320,7 +320,7 @@ function anchorStyle(position: ToastPosition, r: TargetRect): Record<string, str
   }
 }
 
-/** The overlay layer both region roots sit on (F-20). One token, one default:
+/** The overlay layer both region roots sit on. One token, one default:
  *  your app chrome must stay below the toast layer; set `--kai-toast-z`
  *  (default 100) on the host to move the layer. */
 const TOAST_Z = 'var(--kai-toast-z, 100)';

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { createSignal, Show, type JSX } from 'solid-js';
-import { PaneGroup, type PaneTab } from './pane-group';
+import { createEffect, createSignal, Show, type JSX } from 'solid-js';
+import { PaneGroup, type PaneGroupProps, type PaneTab } from './pane-group';
 import { componentDescription } from '../stories/docs/element-controls';
 
 // --- Story helpers -------------------------------------------------------
@@ -44,6 +44,9 @@ const meta = {
   tags: ['autodocs'],
   parameters: {
     layout: 'padded',
+    // Panel scope. `parameters.docs.controls` below filters the autodocs table
+    // only, so the panel needs its own list or it shows every inferred row.
+    controls: { include: ['active', 'focused', 'class'] },
     docs: {
       controls: { exclude: ['children', 'tabs', 'onTabChange', 'onTabClose', 'onTabMenu'] },
       description: componentDescription([
@@ -63,6 +66,11 @@ const meta = {
     children: { control: false, description: 'The active pane body (you swap it on onTabChange).' },
     class: { control: 'text', description: 'Extra classes for the outer frame.' },
   },
+  args: {
+    active: 'atlas',
+    focused: false,
+    class: '',
+  },
 } satisfies Meta<typeof PaneGroup>;
 
 export default meta;
@@ -72,6 +80,46 @@ const IMPORT = `import { PaneGroup, type PaneTab } from '@kitn.ai/ui/solid';`;
 const src = (code: string) => ({
   parameters: { docs: { source: { code: `${IMPORT}\n\n${code}`, language: 'tsx' } } },
 });
+
+/** The three tabs with `active`, `focused` and `class` on the controls. Type an
+ *  id (`atlas`, `ivy`, `cleo`) into `active` to select a tab from the panel, or
+ *  click the strip: both paths drive the same state. */
+export const Playground: Story = {
+  // Story-level `render` does not infer its parameter here, so name the props type.
+  render: (args: Partial<PaneGroupProps>) => {
+    // Storybook's Solid renderer runs this body ONCE and `args` is a store, so
+    // reading `args.active` straight into the controlled prop would snapshot the
+    // first value and the control would look dead. Seed a signal, sync in an
+    // effect, and let clicks write to the same signal.
+    const [active, setActive] = createSignal(args.active ?? TABS[0].id);
+    createEffect(() => setActive(args.active ?? TABS[0].id));
+    return (
+      <div class="h-80 max-w-lg">
+        <PaneGroup
+          tabs={TABS}
+          active={active()}
+          focused={args.focused}
+          class={args.class}
+          onTabChange={(id) => { setActive(id); args.onTabChange?.(id); }}
+          onTabClose={(id) => args.onTabClose?.(id)}
+          onTabMenu={(id) => args.onTabMenu?.(id)}
+        >
+          {BODIES[active()]}
+        </PaneGroup>
+      </div>
+    );
+  },
+  ...src(`<PaneGroup
+  tabs={tabs}
+  active={active()}
+  focused={false}
+  onTabChange={setActive}
+  onTabClose={(id) => closeTab(id)}
+  onTabMenu={(id) => openMenu(id)}
+>
+  {bodies[active()]}
+</PaneGroup>`),
+};
 
 /** A group with three tabs in varied states. Click a tab (or arrow-key across the
  *  strip) to swap the body; the "…" / "×" fire their callbacks. */

@@ -1,28 +1,36 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { createSignal } from 'solid-js';
 import { Monitor, Sun, Moon } from 'lucide-solid';
-import { SettingsGroup, SettingItem } from './settings-group';
+import { SettingsGroup, SettingItem, type SettingsGroupProps } from './settings-group';
 import { Segmented } from './segmented';
 import { Switch } from './switch';
+import { Select } from './select';
 import { componentDescription } from '../stories/docs/element-controls';
 
 // The building blocks in isolation — no modal/page host. A `SettingsGroup` is a
 // titled, bordered card that stacks `SettingItem` rows with hairline dividers;
 // each row pairs a label/description with an optional control (`Switch`,
-// `Segmented`, a select, or nothing). The composed settings SCREEN that assembles
+// `Segmented`, `Select`, or nothing). The composed settings SCREEN that assembles
 // these into a two-pane modal/page lives in `Labs/Settings`.
 
-/** A styled native `<select>` — a token-styled control standing in for a future
- *  kai-menu trigger, plenty for the primitive demo. */
+/** The kit's `Select`. This used to be a hand-styled native `<select>` with a note
+ *  saying a real build would swap in a menu trigger; the kit owns a select now, so the
+ *  row shows the real control instead of a stand-in. `containerClass` narrows it,
+ *  because a settings row's control is not full width. */
 function LanguageSelect() {
   return (
-    <select aria-label="Language" class="rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-      <option>Auto Detect</option>
-      <option>English</option>
-      <option>Español</option>
-      <option>Deutsch</option>
-      <option>日本語</option>
-    </select>
+    <Select
+      aria-label="Language"
+      value="auto"
+      containerClass="w-44"
+      options={[
+        { value: 'auto', label: 'Auto Detect' },
+        { value: 'en', label: 'English' },
+        { value: 'es', label: 'Español' },
+        { value: 'de', label: 'Deutsch' },
+        { value: 'ja', label: '日本語' },
+      ]}
+    />
   );
 }
 
@@ -32,13 +40,29 @@ const meta = {
   tags: ['autodocs'],
   parameters: {
     layout: 'padded',
+    // Panel scope (`parameters.controls`, not `parameters.docs.controls` — the
+    // latter filters only the autodocs table). `children` is the row stack, which
+    // the story supplies; a control for it would be inert.
+    controls: { include: ['heading', 'description', 'class'] },
     docs: {
-      controls: { exclude: ['use:eventListener'] },
+      controls: { exclude: ['use:eventListener', 'children'] },
       description: componentDescription([
-        'The uniform settings building blocks: `SettingsGroup` (a titled, bordered card) stacks `SettingItem` rows with hairline dividers, and each row pairs a label/description with an optional control (`Switch`, `Segmented`, a select, or none).',
+        'The uniform settings building blocks: `SettingsGroup` (a titled, bordered card) stacks `SettingItem` rows with hairline dividers, and each row pairs a label/description with an optional control (`Switch`, `Segmented`, `Select`, or none).',
         'These are the primitives. The composed settings SCREEN — the two-pane category rail + groups assembled into a modal or full page — lives in `Labs/Settings`.',
+        'The controls drive the group chrome (`heading`, `description`, `class`). The rows are `SettingItem`s you compose as children; the Playground fixes one representative set so the chrome is what changes.',
       ]),
     },
+  },
+  argTypes: {
+    heading: { control: 'text', description: 'Small section heading shown above the card.' },
+    description: { control: 'text', description: 'Optional muted description under the heading. Clear it to drop the line.' },
+    children: { control: false, description: 'The stacked `SettingItem` rows.' },
+    class: { control: 'text', description: 'Extra classes for the section wrapper.' },
+  },
+  args: {
+    heading: 'General',
+    description: 'How the app looks and behaves for you.',
+    class: '',
   },
 } satisfies Meta<typeof SettingsGroup>;
 
@@ -47,7 +71,7 @@ type Story = StoryObj<typeof meta>;
 
 const DEFAULT_SNIPPET = `import { createSignal } from 'solid-js';
 import { Monitor, Sun, Moon } from 'lucide-solid';
-import { SettingsGroup, SettingItem, Segmented, Switch } from '@kitn.ai/ui/solid';
+import { SettingsGroup, SettingItem, Segmented, Select, Switch } from '@kitn.ai/ui/solid';
 
 function Example() {
   const [appearance, setAppearance] = createSignal('system');
@@ -76,16 +100,21 @@ function Example() {
           />
         }
       />
-      {/* control: select */}
+      {/* control: Select */}
       <SettingItem
         label="Language"
         description="The interface language."
         control={
-          <select aria-label="Language" class="rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground">
-            <option>Auto Detect</option>
-            <option>English</option>
-            <option>Español</option>
-          </select>
+          <Select
+            aria-label="Language"
+            value="auto"
+            containerClass="w-44"
+            options={[
+              { value: 'auto', label: 'Auto Detect' },
+              { value: 'en', label: 'English' },
+              { value: 'es', label: 'Español' },
+            ]}
+          />
         }
       />
       {/* no control — a plain label/description row */}
@@ -127,9 +156,37 @@ function Example() {
 }`;
 
 /**
+ * The group chrome on the controls: edit `heading`, `description` or `class` and
+ * the card follows. The rows are held constant so the chrome is what you see move.
+ */
+export const Playground: Story = {
+  // Story-level `render` does not infer its parameter here, so name the props type.
+  render: (args: Partial<SettingsGroupProps>) => (
+    <div class="max-w-2xl p-6">
+      <SettingsGroup heading={args.heading ?? 'General'} description={args.description} class={args.class}>
+        <SettingItem
+          label="Reduce motion"
+          description="Minimize non-essential animations and transitions."
+          control={<Switch defaultChecked={false} label="Reduce motion" />}
+        />
+        <SettingItem
+          label="Language"
+          description="The interface language."
+          control={<LanguageSelect />}
+        />
+        <SettingItem label="Version" description="You're on the latest build." />
+      </SettingsGroup>
+    </div>
+  ),
+  parameters: {
+    docs: { source: { language: 'tsx', code: DEFAULT_SNIPPET } },
+  },
+};
+
+/**
  * One `SettingsGroup` (heading + description) stacking `SettingItem` rows, each
  * with a different control so the API is clear: a `Switch`, a `Segmented` (wired
- * to a local signal), a `<select>`, and a plain label/description row (no control).
+ * to a local signal), a `Select`, and a plain label/description row (no control).
  */
 export const Default: Story = {
   render: () => {

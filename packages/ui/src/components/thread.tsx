@@ -35,7 +35,7 @@ export interface ThreadProps {
    *  unvalidated. A schema here WINS over a built-in of the same name. */
   cardSchemas?: CardSchemaMap;
   /** The custom-element host node to emit card events off when no `CardProvider`
-   *  is present, forwarded through `MessageBody` to `CardRenderer` (F-26). The
+   *  is present, forwarded through `MessageBody` to `CardRenderer`. The
    *  element facades pass their own host element so card events leave as the
    *  bubbling `kai-card` CustomEvent. */
   cardHostElement?: HTMLElement;
@@ -215,7 +215,10 @@ export function Thread(props: ThreadProps) {
           </ChatContainerContent>
           <Show when={showScrollButton()}>
             <div class="absolute bottom-4 left-1/2 flex w-full max-w-3xl -translate-x-1/2 justify-center px-5">
-              <ScrollButton class="shadow-sm" />
+              {/* The button now owns its elevation (kai-elevation); a `shadow-sm`
+                  here would set box-shadow a second time and the winner would
+                  be stylesheet order, not this call site. */}
+              <ScrollButton />
             </div>
           </Show>
         </ChatContainer>

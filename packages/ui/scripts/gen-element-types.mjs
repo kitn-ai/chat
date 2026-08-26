@@ -4,6 +4,7 @@
 // document.querySelector('kai-message') + prop autocomplete.
 
 import { writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { cleanEmittedType as clean } from './_ts-helpers.mjs';
 import { resolve } from 'node:path';
 
 // Self-contained inline type declarations for the runtime-adjacent exports of the
@@ -246,14 +247,7 @@ export declare const toast: {
 /** Configure the imperative \`toast()\` singleton — call once at app start. */
 export declare function configureToasts(config: ToastConfig): void;`;
 
-const clean = (type, optional) => {
-  let t = type
-    .replace(/\bUint8Array<ArrayBufferLike>/g, 'Uint8Array')
-    .replace(/\bfalse \| true\b/g, 'boolean')
-    .replace(/\btrue \| false\b/g, 'boolean');
-  if (optional) t = t.replace(/undefined \| /g, '').replace(/ \| undefined/g, '');
-  return t.trim();
-};
+// `clean` now has ONE owner, in _ts-helpers.mjs (imported above as `clean`).
 
 export function writeTypes(root, elements, _toAttr, IMPORTS, { domMembers = new Set() } = {}) {
   // which exported kit types are actually referenced → import only those

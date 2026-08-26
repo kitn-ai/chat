@@ -71,7 +71,7 @@ export interface CardRendererProps {
    * `addEventListener('kai-card', …)` on the element — receives them.
    *
    * This is what makes cards INSIDE `<kai-chat>`/`<kai-message>`/`<kai-thread>`
-   * interactive (F-26): those facades pass their own host element down here, and
+   * interactive: those facades pass their own host element down here, and
    * with neither this nor a `CardProvider` every emit — ready/action/submit/
    * dismiss/reopen and the contract `error` — used to be silently discarded.
    * An ambient `CardProvider` still wins when present.

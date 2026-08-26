@@ -75,7 +75,7 @@ interface Events {
  * (480px). Read once at upgrade. Parts: `header` · `start` · `main` · `end` ·
  * `footer` (the asides also match `::part(aside)`).
  *
- * **BREAKING (the 0.24 re-cast, spec 2026-08-20):** this element was a chat
+ * **BREAKING (0.24):** this element was a chat
  * preset; it is now a layout shell, and everything chat-shaped is gone from its
  * surface. Where each removed prop went:
  *

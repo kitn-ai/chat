@@ -20,6 +20,10 @@ export interface CardProps extends JSX.HTMLAttributes<HTMLDivElement> {
   /** Stable id for the heading (so composing cards can `aria-labelledby` it).
    *  Auto-generated when omitted. */
   headingId?: string;
+  /** Stable id for the description (so composing cards can `aria-describedby` it
+   *  — e.g. `kai-choice`'s radiogroup points at its prompt). Auto-generated when
+   *  omitted, mirroring `headingId`. */
+  descriptionId?: string;
   /** Render a dismiss (×) button that hides the card and calls `onDismiss`.
    *  Opt-in, OFF by default — the contract cards never set it, so they are
    *  unaffected. */
@@ -67,6 +71,7 @@ export function Card(props: CardProps): JSX.Element {
     'errorMessage',
     'dense',
     'headingId',
+    'descriptionId',
     'dismissible',
     'onDismiss',
     'href',
@@ -80,6 +85,7 @@ export function Card(props: CardProps): JSX.Element {
 
   const autoId = createUniqueId();
   const headingId = () => local.headingId ?? `kai-card-heading-${autoId}`;
+  const descriptionId = () => local.descriptionId ?? `kai-card-description-${autoId}`;
   const hasError = () => local.errorMessage !== undefined && local.errorMessage !== '';
   const hasHeader = () => Boolean(local.heading) || Boolean(local.description);
 
@@ -123,13 +129,15 @@ export function Card(props: CardProps): JSX.Element {
           <Show when={local.heading}>
             <h3
               id={headingId()}
-              class="text-[1.0625rem] font-semibold leading-snug tracking-tight text-foreground"
+              class="text-title font-semibold tracking-tight text-foreground"
             >
               {local.heading}
             </h3>
           </Show>
           <Show when={local.description}>
-            <p class="text-[0.8125rem] leading-relaxed text-muted-foreground">{local.description}</p>
+            <p id={descriptionId()} class="text-body text-muted-foreground">
+              {local.description}
+            </p>
           </Show>
         </div>
       </Show>

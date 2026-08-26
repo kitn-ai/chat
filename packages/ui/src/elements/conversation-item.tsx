@@ -19,8 +19,7 @@ interface Props extends Record<string, unknown> {
 }
 
 interface Events {
-  /** STANDALONE activation only (F-45 tier 2, owner-ruled 2026-08-25): the row
-   *  was activated (click, Enter or Space on its body) while the item is NOT a
+  /** STANDALONE activation only: the row was activated (click, Enter or Space on its body) while the item is NOT a
    *  direct child of `<kai-conversations>`. `id` is the row's identity: the
    *  `conversation-id` attribute, else the host `id`. Inside a container this
    *  never fires: activation surfaces once, as `kai-conversation-select` on the
@@ -38,14 +37,14 @@ interface Events {
  * contract over them — selection state flowing container to item, roving
  * tabindex, arrow-key traversal, and the accessible list/row relationship
  * (list rows with button bodies and `aria-current` marking the active one;
- * ratified 2026-08-20 — axe's nested-interactive and aria-required-children
+ * axe's nested-interactive and aria-required-children
  * rules are why this is not listbox/option). Activation (click, Enter, Space)
  * surfaces as `kai-conversation-select` on the container, and the item itself
  * fires nothing — no double event.
  *
  * STANDALONE (anywhere else — a hand-composed rail, or wrapped in another
  * element even inside a container, since the container manages only direct
- * children): the row activates ITSELF (F-45 tier 2, owner-ruled 2026-08-25).
+ * children): the row activates ITSELF.
  * Its shadow body is a tabbable `role="button"`, and click / Enter / Space
  * fire `kai-select` on this element with `{ id }` — non-bubbling, like every
  * `kai-*` event, so listen on the item itself. What a standalone row does NOT
@@ -80,7 +79,7 @@ defineWebComponent<Props, Events>('kai-conversation-item', {
     observer.observe(element, { childList: true, attributes: true, subtree: true });
     onCleanup(() => observer.disconnect());
 
-    // The HOST is the row LISTITEM (sibling restructure, ratified 2026-08-20):
+    // The HOST is the row LISTITEM:
     // it wraps the activation body AND the consumer's tabbable menu, so it must
     // never be the activation control itself — axe nested-interactive bans
     // focusable descendants of a control. The button role, aria-current and the

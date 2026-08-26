@@ -61,7 +61,7 @@ interface Events {
  *   - `id`       → ConversationSummary.id
  *   - `group-id` → ConversationSummary.groupId (optional)
  *   - textContent → ConversationSummary.title
- *  Fields not expressible as HTML attributes are NOT fabricated (F-10): the
+ *  Fields not expressible as HTML attributes are NOT fabricated: the
  *  optional `scope` and `lastMessageAt` stay absent, and the required
  *  `messageCount`/`updatedAt` get honest defaults — zero messages, and an empty
  *  `updatedAt` from which no trailing relative time is derived (the epoch it
@@ -88,7 +88,7 @@ defineWebComponent<Props, Events>('kai-conversations', {
   // Read declarative <kai-conversation> children from light DOM.
   // Shadow DOM with no <slot> suppresses them visually — they're invisible data carriers.
   const [slottedConversations, setSlottedConversations] = createSignal<ConversationSummary[]>([]);
-  // Item mode (spec 2026-08-20 § 2a): light-DOM <kai-conversation-item> children
+  // Item mode: light-DOM <kai-conversation-item> children
   // mean the CONSUMER owns the loop — the container skips its data rendering and
   // runs the parent-item contract over the hosts instead.
   const [itemHosts, setItemHosts] = createSignal<HTMLElement[]>([]);

@@ -42,14 +42,14 @@ export function readConversationItemId(el: Element): string {
 }
 
 /** Whether a `<kai-conversation-item>` is STANDALONE — outside the management
- *  of a `<kai-conversations>` container — and therefore activates ITSELF
- *  (F-45 tier 2, owner-ruled 2026-08-25): the facade makes its row body a
+ *  of a `<kai-conversations>` container — and therefore activates ITSELF:
+ *  the facade makes its row body a
  *  tabbable button and fires `kai-select` on click / Enter / Space. Derived
  *  from the container's own membership rule, not from mere ancestry: item mode
  *  queries `:scope > kai-conversation-item` (direct children only), so an item
  *  wrapped in another element inside a container is standalone too — the
  *  container's controller never stamps or activates it. Inside a container
- *  (a direct child), the ratified parent-item contract is the ONLY activation
+ *  (a direct child), the parent-item contract is the ONLY activation
  *  path: the container dispatches `kai-conversation-select` and owns roving
  *  tabindex, and the item fires nothing of its own. */
 export function isStandaloneConversationItem(el: Element): boolean {
@@ -78,7 +78,7 @@ export interface ConversationItemsController {
 }
 
 /**
- * The parent-item contract of item mode (spec 2026-08-20 § 2a), as a pure-DOM
+ * The parent-item contract of item mode, as a pure-DOM
  * controller so it is host-agnostic: the `kai-conversations` facade wires it over
  * its slotted `kai-conversation-item` children, and the jsdom contract tests
  * drive it over plain nodes. Solid context cannot cross the element boundary
@@ -93,8 +93,8 @@ export interface ConversationItemsController {
  *   left alone);
  * - roving tabindex — exactly one body node `tabindex="0"` (the active
  *   item's, else the first's), the rest `-1`, re-derived on every `sync()`;
- *   menu content keeps its natural tab order (it is the body's SIBLING, per
- *   the ratified 2026-08-20 sibling restructure);
+ *   menu content keeps its natural tab order (it is the body's SIBLING, not a
+ *   descendant);
  * - activation (click / Enter / Space) calls `onSelect` with the item's id, and
  *   is SUPPRESSED when the composed path crosses the item's `menu` region
  *   (light-DOM `slot="menu"` content or the shadow `data-kai-item-menu`
@@ -111,7 +111,7 @@ export function createConversationItemsController(
   };
   /** The item's ACTIVATION node — the target of role/aria-current/tabindex/
    *  focus. For a `kai-conversation-item` host that is its shadow body (the
-   *  sibling restructure, ratified 2026-08-20: the host is the row listitem
+   *  sibling restructure: the host is the row listitem
    *  wrapping the body AND the consumer's tabbable menu, so the control
    *  semantics must sit below it). A bare node with no such body is its own
    *  control. */
@@ -220,8 +220,8 @@ export interface ConversationListProps {
   /** Receive the imperative controller once mounted. The `kai-conversations`
    *  facade uses it to focus / clear the internal search input. */
   controllerRef?: (controller: ConversationListController) => void;
-  /** Item mode (spec 2026-08-20 § 2a): the consumer's OWN rows, rendered inside
-   *  a list region in place of the data rows. When set, the built-in search
+  /** Item mode: your OWN rows, rendered inside a list region in place of the
+   *  data rows. When set, the built-in search
    *  filter, grouping and empty/no-match states do not apply — the consumer's
    *  loop owns them — while the chrome (header, search box, new-chat, footer)
    *  still renders and `onSearchChange` still reports queries. The
@@ -324,13 +324,13 @@ export function ConversationList(props: ConversationListProps) {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-muted-foreground"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input ref={searchInput} type="text" value={searchQuery()} onInput={(e) => setQuery(e.currentTarget.value)} placeholder="Search chats..."
               aria-label="Search chats"
-              class="bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full" />
+              class="bg-transparent text-compact text-foreground placeholder:text-muted-foreground rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full" />
           </div>
         </div>
       </Show>
       {/* Item mode: the consumer's own rows in a list region. The container's
           filter/grouping/empty states do not apply — the consumer's loop owns
-          them (spec § 2a batteries boundary). */}
+          them. */}
       <Show when={itemMode()}>
         <ScrollArea class="flex-1 px-2">
           <div
@@ -411,11 +411,11 @@ function GroupSection(props: { name: string; count: number; conversations: Conve
   const [open, setOpen] = createSignal(true);
   return (
     <Collapsible open={open()} onOpenChange={setOpen}>
-      <CollapsibleTrigger class="flex items-center gap-1.5 w-full px-1.5 py-1 rounded-md text-[13px] text-muted-foreground font-medium hover:bg-muted/30 transition-colors cursor-pointer mt-1.5">
+      <CollapsibleTrigger class="flex items-center gap-1.5 w-full px-1.5 py-1 rounded-md text-compact text-muted-foreground font-medium hover:bg-muted/30 transition-colors cursor-pointer mt-1.5">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
           class={cn('transition-transform', !open() && '-rotate-90')}><polyline points="6 9 12 15 18 9"/></svg>
         <span>{props.name}</span>
-        <Badge variant="count" class="ml-auto text-[11px]">{props.count}</Badge>
+        <Badge variant="count" class="ml-auto text-caption">{props.count}</Badge>
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div class="pl-2 mt-0.5 space-y-0.5">

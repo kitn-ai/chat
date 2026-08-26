@@ -36,6 +36,9 @@
     "triggers",
     "value"
   ],
+  "kai-checkbox-group": [
+    "options"
+  ],
   "kai-choice": [
     "data",
     "resolution"
@@ -117,6 +120,9 @@
     "triggers",
     "value"
   ],
+  "kai-radio-group": [
+    "options"
+  ],
   "kai-remote": [
     "envelope",
     "policy"
@@ -134,8 +140,14 @@
   "kai-segmented": [
     "options"
   ],
+  "kai-select": [
+    "options"
+  ],
   "kai-skills": [
     "skills"
+  ],
+  "kai-slider": [
+    "valueLabel"
   ],
   "kai-sources": [
     "sources"

@@ -333,7 +333,7 @@ export interface MessageBodyProps {
    *  is above this body, forwarded to `CardRenderer` as `hostElement`. The
    *  `<kai-chat>`/`<kai-message>`/`<kai-thread>` facades pass their own element,
    *  so a `card` part's events leave as the bubbling `kai-card` CustomEvent
-   *  instead of being silently discarded (F-26). */
+   *  instead of being silently discarded. */
   cardHostElement?: HTMLElement;
   /** Whether this is a user message (right-aligned bubble) vs an assistant
    *  message (full-width transparent). */
@@ -355,9 +355,9 @@ export interface MessageBodyProps {
   copied?: boolean;
   /** Whether this message is the one currently streaming. Forwarded to each
    *  reasoning part's `<Reasoning>` so the disclosure auto-opens while the
-   *  model is thinking and settles back once the stream ends (F-21: without it
-   *  the user watches a static collapsed "Reasoning" label for the whole
-   *  thinking window). The caller owns the definition of "streaming" — for
+   *  model is thinking and settles back once the stream ends. Without it the
+   *  user watches a static collapsed "Reasoning" label for the whole thinking
+   *  window. The caller owns the definition of "streaming" — for
    *  `ChatThread` that is `loading` + being the last assistant message. */
   isStreaming?: boolean;
   /** How a `reasoning` part renders. `'full'` (default) is the current

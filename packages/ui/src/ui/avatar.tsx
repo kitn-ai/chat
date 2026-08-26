@@ -8,7 +8,7 @@ export interface AvatarProps extends JSX.HTMLAttributes<HTMLDivElement> {
   size?: 'sm' | 'md' | 'lg';
 }
 
-const sizeClasses = { sm: 'h-6 w-6 text-[10px]', md: 'h-8 w-8 text-xs', lg: 'h-10 w-10 text-sm' };
+const sizeClasses = { sm: 'h-6 w-6 text-micro', md: 'h-8 w-8 text-xs', lg: 'h-10 w-10 text-sm' };
 
 export function Avatar(props: AvatarProps) {
   const [local, rest] = splitProps(props, ['src', 'alt', 'fallback', 'size', 'class']);

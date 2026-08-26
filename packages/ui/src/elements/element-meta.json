@@ -1183,14 +1183,14 @@
       },
       {
         "name": "policy",
-        "type": "undefined | { onSubmit?: undefined | (cardId: string, data: unknown) => void; onAction?: undefined | (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: undefined | (text: string, opts: { mode: \"compose\" | \"send\"; context?: unknown; }) => void; onOpen?: undefined | (url: string, target: \"tab\" | \"artifact\") => void; onState?: undefined | (cardId: string, patch: unknown) => void; onDismiss?: undefined | (cardId: string) => void; onReopen?: undefined | (cardId: string) => void; onError?: undefined | (cardId: string, message: string) => void; maxSendPromptMode?: undefined | \"compose\" | \"send\" }",
+        "type": "undefined | { onSubmit?: undefined | ((cardId: string, data: unknown) => void); onAction?: undefined | ((cardId: string, action: string, payload?: unknown) => void); onSendPrompt?: undefined | ((text: string, opts: { mode: \"compose\" | \"send\"; context?: unknown; }) => void); onOpen?: undefined | ((url: string, target: \"tab\" | \"artifact\") => void); onState?: undefined | ((cardId: string, patch: unknown) => void); onDismiss?: undefined | ((cardId: string) => void); onReopen?: undefined | ((cardId: string) => void); onError?: undefined | ((cardId: string, message: string) => void); maxSendPromptMode?: undefined | \"compose\" | \"send\" }",
         "optional": true,
         "scalar": false,
         "description": "Optional CardPolicy handling child events. Property: `el.policy`.",
         "typeName": "CardPolicy",
-        "typeShape": "{ onSubmit?: undefined | (cardId: string, data: unknown) => void; onAction?: undefined | (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: undefined | (text: string, opts: { mode: \"compose\" | \"send\"; context?: unknown; }) => void; onOpen?: undefined | (url: string, target: \"tab\" | \"artifact\") => void; onState?: undefined | (cardId: string, patch: unknown) => void; onDismiss?: undefined | (cardId: string) => void; onReopen?: undefined | (cardId: string) => void; onError?: undefined | (cardId: string, message: string) => void; maxSendPromptMode?: undefined | \"compose\" | \"send\" }",
+        "typeShape": "{ onSubmit?: undefined | ((cardId: string, data: unknown) => void); onAction?: undefined | ((cardId: string, action: string, payload?: unknown) => void); onSendPrompt?: undefined | ((text: string, opts: { mode: \"compose\" | \"send\"; context?: unknown; }) => void); onOpen?: undefined | ((url: string, target: \"tab\" | \"artifact\") => void); onState?: undefined | ((cardId: string, patch: unknown) => void); onDismiss?: undefined | ((cardId: string) => void); onReopen?: undefined | ((cardId: string) => void); onError?: undefined | ((cardId: string, message: string) => void); maxSendPromptMode?: undefined | \"compose\" | \"send\" }",
         "typeImport": "CardPolicy",
-        "displayType": "undefined | { onSubmit?: undefined | (cardId: string, data: unknown) => void; onAction?: undefined | (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: undefined | (text: string, opts: { mode: \"compose\" | \"send\"; context?: unknown; }) => void; onOpen?: undefined | (url: string, target: \"tab\" | \"artifact\") => void; onState?: undefined | (cardId: string, patch: unknown) => void; onDismiss?: undefined | (cardId: string) => void; onReopen?: undefined | (cardId: string) => void; onError?: undefined | (cardId: string, message: string) => void; maxSendPromptMode?: undefined | \"compose\" | \"send\" }"
+        "displayType": "undefined | { onSubmit?: undefined | ((cardId: string, data: unknown) => void); onAction?: undefined | ((cardId: string, action: string, payload?: unknown) => void); onSendPrompt?: undefined | ((text: string, opts: { mode: \"compose\" | \"send\"; context?: unknown; }) => void); onOpen?: undefined | ((url: string, target: \"tab\" | \"artifact\") => void); onState?: undefined | ((cardId: string, patch: unknown) => void); onDismiss?: undefined | ((cardId: string) => void); onReopen?: undefined | ((cardId: string) => void); onError?: undefined | ((cardId: string, message: string) => void); maxSendPromptMode?: undefined | \"compose\" | \"send\" }"
       },
       {
         "name": "validateCards",
@@ -1812,6 +1812,202 @@
         "doc": "Row below the composer (disclaimers, token meter)."
       }
     ]
+  },
+  {
+    "tag": "kai-checkbox",
+    "className": "KaiCheckboxElement",
+    "displayName": "Checkbox",
+    "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
+        "name": "checked",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Controlled checked state. Settable and reflected to the `checked` attribute. `el.checked = true` (or `<kai-checkbox checked>`) drives it; ticking the box updates it and fires `kai-change`. Read `el.checked` for live state.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "defaultChecked",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Initial checked state on mount (uncontrolled seed). Bare attribute (`<kai-checkbox default-checked>`) turns it on.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "indeterminate",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "The mixed state, for a parent box whose children are partly ticked. Visual plus an accessibility hint: the box still reports `checked === false`.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "disabled",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Disable interaction.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "required",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Set the native `required` attribute, and nothing more. Whether an unticked box is an error is the application's rule, not the kit's.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "label",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Accessible label. The visible text beside the box is the consumer's to render.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "name",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Form-control name (paired with `value`).",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "value",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Submitted value when checked (paired with `name`). Defaults to `'on'`.",
+        "displayType": "undefined | string"
+      }
+    ],
+    "events": [
+      {
+        "name": "kai-change",
+        "detail": "{ checked: false | true }",
+        "description": "The box was ticked or unticked.",
+        "displayDetail": "{ checked: false | true }"
+      }
+    ],
+    "methods": [
+      {
+        "name": "toggle",
+        "params": "",
+        "returns": "void",
+        "description": "Flip the box and fire `kai-change` (no-op while disabled)."
+      },
+      {
+        "name": "focus",
+        "params": "options?: FocusOptions",
+        "returns": "void",
+        "description": "Focus the inner input (the host element can't reach it)."
+      }
+    ],
+    "composedFrom": [
+      {
+        "name": "Checkbox",
+        "group": "UI",
+        "storyId": "solid-advanced-primitives-checkbox--docs"
+      }
+    ],
+    "tokens": []
+  },
+  {
+    "tag": "kai-checkbox-group",
+    "className": "KaiCheckboxGroupElement",
+    "displayName": "CheckboxGroup",
+    "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
+        "name": "options",
+        "type": "{ value: string; label: string; description?: undefined | string; disabled?: undefined | false | true }[]",
+        "optional": false,
+        "scalar": false,
+        "description": "The choices, top to bottom. Set as a JS PROPERTY (array), never an attribute. Rendered in full: the kit never truncates, re-orders or de-duplicates them.",
+        "typeName": "KaiCheckboxOption[]",
+        "typeShape": "{ value: string; label: string; description?: undefined | string; disabled?: undefined | false | true }[]",
+        "default": "[]",
+        "typeImport": "KaiCheckboxOption",
+        "displayType": "{ value: string; label: string; description?: undefined | string; disabled?: undefined | false | true }[]"
+      },
+      {
+        "name": "value",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "The FIRST selected value. Settable and reflected to the `value` attribute, so `:host([value])` and `el.value` see live state, and a seed can be written in markup. Writing it makes that the whole selection; to read or drive the rest, use `el.values`.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "name",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "The shared form-control name every box carries, so `FormData.getAll(name)` reads the whole selection back under one key. NO DEFAULT, unlike `<kai-radio-group>`. A radio set needs a shared `name` for the browser to make it exclusive and arrow-navigable, so one is generated when none is given; checkboxes are independent controls and behave correctly with no name at all. Generating one here would submit the selection under a random key, which is worse than submitting nothing. The element is NOT form-associated (no `ElementInternals`, no `setFormValue()`), the same known gap `<kai-input>` records: the boxes live in a shadow root, so a surrounding `<form>` collects nothing from them whether or not `name` is set. Read `el.values`. The name still lands on every inner input, so it is right the day form association arrives.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "disabled",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Disable every row. Individual rows carry their own `disabled`.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "label",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Accessible name for the group.",
+        "displayType": "undefined | string"
+      }
+    ],
+    "events": [
+      {
+        "name": "kai-change",
+        "detail": "{ value: string; values: string[] }",
+        "description": "A row was ticked or unticked. `values` is the whole selection after the change, which is what a multi-select control needs; `value` is the first of them (empty when nothing is selected). Both are always present, so neither shape silently loses the other. This is `<kai-select>`'s detail, deliberately.",
+        "displayDetail": "{ value: string; values: string[] }"
+      }
+    ],
+    "methods": [
+      {
+        "name": "focus",
+        "params": "options?: FocusOptions",
+        "returns": "void",
+        "description": "Focus the group's first box. Not \"the first ticked one\", which is `<kai-radio-group>`'s rule: a radio group is ONE tab stop that lands on the selection, while every checkbox here is its own tab stop, so the entry point is simply the top of the list."
+      }
+    ],
+    "composedFrom": [
+      {
+        "name": "CheckboxGroup",
+        "group": "UI",
+        "storyId": "solid-advanced-primitives-checkboxgroup--docs"
+      }
+    ],
+    "tokens": []
   },
   {
     "tag": "kai-checkpoint",
@@ -2923,7 +3119,7 @@
       {
         "name": "kai-select",
         "detail": "{ id: string }",
-        "description": "STANDALONE activation only (F-45 tier 2, owner-ruled 2026-08-25): the row was activated (click, Enter or Space on its body) while the item is NOT a direct child of `<kai-conversations>`. `id` is the row's identity: the `conversation-id` attribute, else the host `id`. Inside a container this never fires: activation surfaces once, as `kai-conversation-select` on the container.",
+        "description": "STANDALONE activation only: the row was activated (click, Enter or Space on its body) while the item is NOT a direct child of `<kai-conversations>`. `id` is the row's identity: the `conversation-id` attribute, else the host `id`. Inside a container this never fires: activation surfaces once, as `kai-conversation-select` on the container.",
         "displayDetail": "{ id: string }"
       }
     ],
@@ -3157,7 +3353,7 @@
           "id"
         ],
         "text": true,
-        "description": "Parse a single light-DOM `<kai-conversation>` element into a `ConversationSummary`. Attribute mapping: - `id` → ConversationSummary.id - `group-id` → ConversationSummary.groupId (optional) - textContent → ConversationSummary.title Fields not expressible as HTML attributes are NOT fabricated (F-10): the optional `scope` and `lastMessageAt` stay absent, and the required `messageCount`/`updatedAt` get honest defaults — zero messages, and an empty `updatedAt` from which no trailing relative time is derived (the epoch it used to fabricate rendered a bogus \"many days ago\" on every declarative row)."
+        "description": "Parse a single light-DOM `<kai-conversation>` element into a `ConversationSummary`. Attribute mapping: - `id` → ConversationSummary.id - `group-id` → ConversationSummary.groupId (optional) - textContent → ConversationSummary.title Fields not expressible as HTML attributes are NOT fabricated: the optional `scope` and `lastMessageAt` stay absent, and the required `messageCount`/`updatedAt` get honest defaults — zero messages, and an empty `updatedAt` from which no trailing relative time is derived (the epoch it used to fabricate rendered a bogus \"many days ago\" on every declarative row)."
       }
     ],
     "slots": [
@@ -4545,7 +4741,7 @@
         "type": "undefined | string",
         "optional": true,
         "scalar": true,
-        "description": "Controlled value, and always the CANONICAL one when a mask is active: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom` (spec §4). Settable and reflected to the `value` attribute. `el.value = '5551234567'` drives it (no event) and is re-fitted to the mask on the way in, so the field shows `555-123-4567`. Read `el.value` for live state; the formatted text rides along on every `kai-input` / `kai-change` detail as `formattedValue`.",
+        "description": "Controlled value, and always the CANONICAL one when a mask is active: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom`. Settable and reflected to the `value` attribute. `el.value = '5551234567'` drives it (no event) and is re-fitted to the mask on the way in, so the field shows `555-123-4567`. Read `el.value` for live state; the formatted text rides along on every `kai-input` / `kai-change` detail as `formattedValue`.",
         "displayType": "undefined | string"
       },
       {
@@ -4723,7 +4919,7 @@
         "name": "getRawValue",
         "params": "",
         "returns": "string",
-        "description": "The canonical value: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom`, and the field text when no mask is on. Identical to reading `el.value`; it carries the name spec §5.8 uses for the submitted form of a masked field, so code written against that name finds it. The mask engine has a third, narrower notion of raw (the fill characters with no literals at all) and that one is internal: it is not what any backend wants and it is not exposed here."
+        "description": "The canonical value: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom`, and the field text when no mask is on. Identical to reading `el.value`, under the name backends use for the submitted form of a masked field. The mask engine has a third, narrower notion of raw (the fill characters with no literals at all) and that one is internal: it is not what any backend wants and it is not exposed here."
       },
       {
         "name": "getFormattedValue",
@@ -6694,6 +6890,91 @@
     ]
   },
   {
+    "tag": "kai-radio-group",
+    "className": "KaiRadioGroupElement",
+    "displayName": "RadioGroup",
+    "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
+        "name": "options",
+        "type": "{ value: string; label: string; description?: undefined | string; disabled?: undefined | false | true }[]",
+        "optional": false,
+        "scalar": false,
+        "description": "The choices, top to bottom. Set as a JS PROPERTY (array), never an attribute.",
+        "typeName": "KaiRadioOption[]",
+        "typeShape": "{ value: string; label: string; description?: undefined | string; disabled?: undefined | false | true }[]",
+        "default": "[]",
+        "typeImport": "KaiRadioOption",
+        "displayType": "{ value: string; label: string; description?: undefined | string; disabled?: undefined | false | true }[]"
+      },
+      {
+        "name": "value",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Controlled selected `value`. Settable and reflected to the `value` attribute. `el.value = 'degraded'` drives it; choosing a row updates it and fires `kai-change`. Read `el.value` for live state.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "name",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Shared form-control name for every radio in the group. Defaults to a generated id, so the group is exclusive and keyboard-navigable even when nothing is submitted.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "disabled",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Disable every row. Individual rows carry their own `disabled`.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "label",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Accessible name for the group.",
+        "displayType": "undefined | string"
+      }
+    ],
+    "events": [
+      {
+        "name": "kai-change",
+        "detail": "{ value: string }",
+        "description": "A row was chosen.",
+        "displayDetail": "{ value: string }"
+      }
+    ],
+    "methods": [
+      {
+        "name": "focus",
+        "params": "options?: FocusOptions",
+        "returns": "void",
+        "description": "Focus the group's tab stop. That is the selected radio, or the first row when nothing is selected yet."
+      }
+    ],
+    "composedFrom": [
+      {
+        "name": "RadioGroup",
+        "group": "UI",
+        "storyId": "solid-advanced-primitives-radiogroup--docs"
+      }
+    ],
+    "tokens": []
+  },
+  {
     "tag": "kai-reasoning",
     "className": "KaiReasoningElement",
     "displayName": "Reasoning",
@@ -7479,6 +7760,22 @@
         "description": "Button size token. Defaults to `'icon'` (square).",
         "default": "'icon'",
         "displayType": "undefined | \"sm\" | \"md\" | \"lg\" | \"icon\" | \"icon-sm\""
+      },
+      {
+        "name": "label",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "The button's accessible name. It is announced whether or not the label is visible, so the text is always localisable. Defaults to `'Scroll to bottom'`.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "showLabel",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Also render `label` visibly beside the icon. Defaults to `false`, which is the icon-only button. When the text is visible it IS the accessible name, so nothing gets announced twice.",
+        "displayType": "undefined | false | true"
       }
     ],
     "events": [
@@ -7711,6 +8008,123 @@
         "recipe": "kai-segmented::part(segment) { font-weight: 600 }"
       }
     ]
+  },
+  {
+    "tag": "kai-select",
+    "className": "KaiSelectElement",
+    "displayName": "Select",
+    "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
+        "name": "options",
+        "type": "{ value: string; label?: undefined | string; disabled?: undefined | false | true }[]",
+        "optional": false,
+        "scalar": false,
+        "description": "The choices, in display order. Set as a JS PROPERTY (array), never an attribute. Rendered in full: the kit never truncates, re-orders or de-duplicates them.",
+        "typeName": "KaiSelectOption[]",
+        "typeShape": "{ value: string; label?: undefined | string; disabled?: undefined | false | true }[]",
+        "default": "[]",
+        "typeImport": "KaiSelectOption",
+        "displayType": "{ value: string; label?: undefined | string; disabled?: undefined | false | true }[]"
+      },
+      {
+        "name": "value",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Controlled selected value. Settable and reflected to the `value` attribute. `el.value = 'high'` drives it; choosing an option updates it and fires `kai-change`. Read `el.value` for live state; for a `multiple` select read `el.values` instead.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "placeholder",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Text for a leading, disabled, empty option: the \"nothing chosen yet\" row. Omitted means no such row at all; there is no default wording, because inventing one would put words in your UI.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "multiple",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Allow more than one selection. Turns the control into the platform's list box, so the kit's chevron is not drawn.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "invalid",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Force the invalid (destructive-border) state.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "disabled",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Disable interaction.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "required",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Set the native `required` attribute, and nothing more. Whether an empty select is an error is the application's rule, not the kit's.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "label",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Accessible label for the control.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "name",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Form-control name, for a native form submit.",
+        "displayType": "undefined | string"
+      }
+    ],
+    "events": [
+      {
+        "name": "kai-change",
+        "detail": "{ value: string; values: string[] }",
+        "description": "A choice was made. `value` is the first selected option (empty when nothing is selected); `values` is every selected option, which is what a `multiple` select needs. Both are always present, so neither shape silently loses the other.",
+        "displayDetail": "{ value: string; values: string[] }"
+      }
+    ],
+    "methods": [
+      {
+        "name": "focus",
+        "params": "options?: FocusOptions",
+        "returns": "void",
+        "description": "Focus the inner select (the host element can't reach it)."
+      }
+    ],
+    "composedFrom": [
+      {
+        "name": "Select",
+        "group": "UI",
+        "storyId": "solid-advanced-primitives-select--docs"
+      }
+    ],
+    "tokens": []
   },
   {
     "tag": "kai-separator",
@@ -7996,6 +8410,117 @@
         "description": "Parse a single light-DOM `<kai-skill>` element into a `Skill` descriptor. Attribute / content mapping: - `id` → Skill.id (falls back to `name` when absent) - `textContent` → Skill.name (the human-readable badge label) Example: `<kai-skill id=\"web-search\">Web Search</kai-skill>`"
       }
     ]
+  },
+  {
+    "tag": "kai-slider",
+    "className": "KaiSliderElement",
+    "displayName": "Slider",
+    "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
+        "name": "min",
+        "type": "undefined | number",
+        "optional": true,
+        "scalar": true,
+        "description": "Lowest selectable value. Required: a range with no bounds is a guess, and the guess belongs to whoever knows what the number means.",
+        "displayType": "undefined | number"
+      },
+      {
+        "name": "max",
+        "type": "undefined | number",
+        "optional": true,
+        "scalar": true,
+        "description": "Highest selectable value. Required, for the same reason as `min`.",
+        "displayType": "undefined | number"
+      },
+      {
+        "name": "step",
+        "type": "undefined | number | \"any\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Granularity. Omitted means the native default of 1; `any` means continuous.",
+        "displayType": "undefined | number | \"any\""
+      },
+      {
+        "name": "value",
+        "type": "undefined | number",
+        "optional": true,
+        "scalar": true,
+        "description": "Controlled value. Settable and reflected to the `value` attribute. `el.value = 40` drives it; dragging updates it and fires `kai-input` per step, `kai-change` on release. Read `el.value` for live state.",
+        "displayType": "undefined | number"
+      },
+      {
+        "name": "disabled",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Disable interaction.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "label",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Accessible label for the slider.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "name",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Form-control name, for a native form submit.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "valueLabel",
+        "type": "undefined | false | true | ((value: number) => string)",
+        "optional": true,
+        "scalar": false,
+        "description": "Show the current value beside the track. Off by default. Two ways in, because one of them is not a scalar. As a bare ATTRIBUTE (`<kai-slider value-label>`) it renders the raw number. As a JS PROPERTY it also accepts a formatter function (`el.valueLabel = (v) => v + '%'`), for a slider that is not counting bare numbers. A function cannot survive an attribute, so that half is property-only. The readout is hidden from assistive tech: the slider already reports the same number, and an exposed copy would be announced twice.",
+        "displayType": "undefined | false | true | ((value: number) => string)"
+      }
+    ],
+    "events": [
+      {
+        "name": "kai-change",
+        "detail": "{ value: number }",
+        "description": "The value was committed: pointer released, or a key press finished.",
+        "displayDetail": "{ value: number }"
+      },
+      {
+        "name": "kai-input",
+        "detail": "{ value: number }",
+        "description": "The thumb moved. Fires per step during a drag or a key press.",
+        "displayDetail": "{ value: number }"
+      }
+    ],
+    "methods": [
+      {
+        "name": "focus",
+        "params": "options?: FocusOptions",
+        "returns": "void",
+        "description": "Focus the inner range input (the host element can't reach it)."
+      }
+    ],
+    "composedFrom": [
+      {
+        "name": "Slider",
+        "group": "UI",
+        "storyId": "solid-advanced-primitives-slider--docs"
+      }
+    ],
+    "tokens": []
   },
   {
     "tag": "kai-source",
@@ -9275,11 +9800,11 @@
       },
       {
         "name": "transcribe",
-        "type": "undefined | (audio: Blob) => Promise<string>",
+        "type": "undefined | ((audio: Blob) => Promise<string>)",
         "optional": true,
         "scalar": false,
         "description": "Transcriber the host supplies: records audio, returns the text. This is a **function-valued property** (`el.transcribe = async blob => '...'`) because a value-returning callback can't be modelled as a fire-and-forget event.",
-        "displayType": "undefined | (audio: Blob) => Promise<string>"
+        "displayType": "undefined | ((audio: Blob) => Promise<string>)"
       },
       {
         "name": "disabled",
@@ -9398,11 +9923,11 @@
       },
       {
         "name": "synthesize",
-        "type": "undefined | (text: string) => Promise<Blob>",
+        "type": "undefined | ((text: string) => Promise<Blob>)",
         "optional": true,
         "scalar": false,
         "description": "TTS model seam the host supplies: given text, returns an audio `Blob` to play. This is a **function-valued property** (`el.synthesize = async text => blob`); when set, the native `speechSynthesis` path is bypassed. Mirrors `<kai-voice-input>`'s `transcribe`. A value-returning callback can't be modelled as a fire-and-forget event, hence a property.",
-        "displayType": "undefined | (text: string) => Promise<Blob>"
+        "displayType": "undefined | ((text: string) => Promise<Blob>)"
       },
       {
         "name": "disabled",
