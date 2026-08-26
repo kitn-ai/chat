@@ -189,32 +189,78 @@ ${entries}
 `;
 }
 
-/** The `import`s cards need in App.tsx: the registry itself, plus
- *  `cardFromToolCall` (turns a settled tool-call ToolPart into a renderable
- *  `card` MessagePart — see emitApplyCardTools) and, for an endpoint
- *  construct, the wire-matching tool projection for the fetch body. Empty
- *  when the construct declares no cards at all (format rule: undeclared ->
- *  no affordance, no import). */
+/** `, BUILTIN_CARD_COMPONENTS` spliced onto the `@kitn.ai/ui/solid` named-import
+ *  list at the top of App.tsx (below) when cards are declared — the built-in
+ *  `.form` renderer every declared card routes to. Empty otherwise. */
+function emitCardComponentImport(c: Construct): string {
+  return c.cards ? ', BUILTIN_CARD_COMPONENTS' : '';
+}
+
+/** The `import`s cards need in App.tsx: the registry itself, `BUILTIN_CARD_COMPONENTS`
+ *  (@kitn.ai/ui/solid re-exports it from the root entry) so every declared card can
+ *  route to the kit's own schema-driven form renderer, `cardFromToolCall` (turns a
+ *  settled tool-call ToolPart into a renderable `card` MessagePart — see
+ *  emitApplyCardTools) and, for an endpoint construct, the wire-matching tool
+ *  projection for the fetch body. Empty when the construct declares no cards at all
+ *  (format rule: undeclared -> no affordance, no import).
+ *
+ *  RULING (supervisor, this task): v1 renders EVERY declared card as the kit's own
+ *  `form` card (`BUILTIN_CARD_COMPONENTS.form`, components/form.tsx) — it walks a
+ *  JSON-Schema-shaped `data` into real input fields and honors `x-kai-format`/
+ *  `x-kai-mask`/`x-kai-mask-guide` hints itself (field-mask.ts); no engine work is
+ *  needed for masks specifically. This is deliberately NOT the same precedent as
+ *  examples/apps/ops-console/shared/cards.ts's `createCardRegistry` (which maps
+ *  several DISTINCT built-in kinds — confirm/form/choice/tasks — onto an app's own
+ *  tool names): a construct's `cards` field carries only a `schema`, no `kind`, so
+ *  there is no vocabulary yet to route on. Adding a `kind`/`type` field to pick
+ *  confirm/choice/tasks is explicitly deferred to vocabulary-on-evidence, not done
+ *  here — every construct card is a form until a later task adds that field. */
 function emitCardsImport(c: Construct): string {
   if (!c.cards) return '';
   const toolsImport =
     c.provider.mode === 'endpoint' ? (c.provider.wire === 'openai' ? ', toOpenAITools' : ', toAnthropicTools') : '';
   return `import { cards } from './cards';
-// Generative-UI cards: registering them is \`cardSchemas={cards}\` on ChatThread
-// below — ChatThread's own MessageBody already matches \`part.type === 'card'\`
-// in its part rendering and draws it with the kit's own \`CardRenderer\`
-// (components/card-renderer.tsx), so there is nothing to hand-compose here.
-// Turning a model's tool call into that renderable part is \`cardFromToolCall\`
-// (the inverse of \`cardTools\`), applied once per settled turn below.
-import { cardFromToolCall${toolsImport} } from '@kitn.ai/ui/schemas';`;
+// Generative-UI cards, v1: every declared card renders as the kit's own
+// schema-driven FORM (BUILTIN_CARD_COMPONENTS.form, components/form.tsx) — it
+// walks the card's JSON Schema into real input fields, honoring
+// x-kai-format/x-kai-mask/x-kai-mask-guide hints itself. ChatThread's own
+// MessageBody already matches \`part.type === 'card'\` in its part rendering and
+// draws it with the kit's own \`CardRenderer\` (components/card-renderer.tsx),
+// which picks the component from \`cardTypes\` (below) by envelope.type — so
+// there is nothing to hand-compose beyond that one map. Turning a model's tool
+// call into that renderable part is \`cardFromToolCall\` (the inverse of
+// \`cardTools\`), applied once per settled turn below; its data is then replaced
+// with the DECLARED card schema (not the model's call arguments) — the fields
+// on screen are the construct's own vocabulary, not whatever shape a model
+// happened to send.
+import { cardFromToolCall${toolsImport} } from '@kitn.ai/ui/schemas';
+
+// Every declared card name routes to the SAME form renderer — cardFromToolCall
+// makes envelope.type equal the card's own name (kai_refund_approval ->
+// 'refund_approval'), and CardRenderer resolves a type's component from this
+// map.
+//
+// Deliberately NOT also wiring ChatThread's \`cardSchemas\` prop to this
+// registry below. That prop validates envelope.data AGAINST the named schema,
+// and this card's data IS \`cards[name]\` itself (see emitApplyCardTools) — the
+// construct's declared field schema, not values shaped like it. Wiring it as
+// its own validator asks "does this FormDefinition itself have an \`amount\`
+// key" and a well-formed FormDefinition never does, so every card would
+// render the HARD validation-failure fallback instead of the form (caught
+// live: eject + kai dev showed exactly that "(root).amount: required"
+// failure before this comment existed). The construct's own schema.ts
+// already checks \`cards\` structurally at validate time; there is nothing
+// left for a second, self-referential check here to catch.
+const cardTypes = Object.fromEntries(Object.keys(cards).map((name) => [name, BUILTIN_CARD_COMPONENTS.form] as const));`;
 }
 
-/** `cardSchemas={cards}` on ChatThread — the only App.tsx-owned piece of
- *  drawing a card: registering what a VALID one looks like. What DRAWS one
- *  (`cardTypes`) and the host to emit card events off are already supplied by
- *  the ChatThread/kai-chat path (F-26); nothing else to thread through here. */
-function emitCardSchemasProp(c: Construct): string {
-  return c.cards ? ' cardSchemas={cards}' : '';
+/** `cardTypes={cardTypes}` on ChatThread — which component draws each
+ *  declared card name (see emitCardsImport for why `cardSchemas` is
+ *  deliberately NOT also registered). The host to emit card events off is
+ *  already supplied by the ChatThread/kai-chat path (F-26); nothing else to
+ *  thread through here. */
+function emitCardTypesProp(c: Construct): string {
+  return c.cards ? ' cardTypes={cardTypes}' : '';
 }
 
 /** Settle a turn's tool calls into cards, called once after the read
@@ -223,14 +269,24 @@ function emitCardSchemasProp(c: Construct): string {
  *  `chat.messages()` by the stream's own id — the same pattern the kit's own
  *  `cardFromToolCall` doc comment (schemas/from-tool-call.ts) shows for a
  *  tool loop. A `kai_`-prefixed call becomes a card; anything else is the
- *  construct's own tool and is left as a plain `tool` part. */
+ *  construct's own tool and is left as a plain `tool` part.
+ *
+ *  `cardFromToolCall` supplies the envelope's `type`/`id` (and the reuse — no
+ *  second `kai_` parser here); its `data` is then REPLACED with the card's own
+ *  DECLARED schema off the registry (`cards[card.type]`), not the model's call
+ *  arguments — the form renders the construct author's fields, matching the
+ *  supervisor ruling that every declared card is a schema-driven form in v1.
+ *  The `card.type in cards` guard only fires for a `kai_` call this construct
+ *  never declared (an off-vocabulary call slipping through); it is silently
+ *  dropped rather than rendered, matching cardFromToolCall's own "not every
+ *  kai_ call is renderable" boundary (see its module header). */
 function emitApplyCardTools(c: Construct): string {
   if (!c.cards) return '';
   return `
   for (const part of chat.messages().find((m) => m.id === stream.id)?.parts ?? []) {
     if (part.type !== 'tool' || part.tool.state !== 'input-available') continue;
     const card = cardFromToolCall(part.tool.type, part.tool.input, { id: part.tool.toolCallId ?? crypto.randomUUID() });
-    if (card) stream.addCard(card);
+    if (card && card.type in cards) stream.addCard({ ...card, data: cards[card.type as keyof typeof cards] });
   }`;
 }
 
@@ -424,7 +480,7 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
 // determinism test keeps holding.
 
 function emitApp(c: Construct): string {
-  return `${emitSolidJsImport(c)}import { ChatThread, Dock, createKaiChat } from '@kitn.ai/ui/solid';
+  return `${emitSolidJsImport(c)}import { ChatThread, Dock, createKaiChat${emitCardComponentImport(c)} } from '@kitn.ai/ui/solid';
 import type { AttachmentData${emitHistoryTypeImport(c)} } from '@kitn.ai/ui/solid';
 ${emitProviderImports(c)}
 ${emitCardsImport(c)}
@@ -484,7 +540,7 @@ ${emitHistorySetup(c)}
 //     an opt-in affordance like the paperclip or a starter chip.
 export function App() {
   return (
-${emitLayoutOpen(c)}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitCardSchemasProp(c)} />
+${emitLayoutOpen(c)}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitCardTypesProp(c)} />
 ${emitLayoutClose(c)}  );
 }
 `;

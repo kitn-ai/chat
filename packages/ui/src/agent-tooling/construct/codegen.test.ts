@@ -601,14 +601,64 @@ describe('cards', () => {
     expect(cardsFile).toMatch(/}\s*as const;/);
   });
 
-  it('App.tsx registers the cards on ChatThread via cardSchemas', () => {
+  it('App.tsx imports the registry and cardFromToolCall', () => {
     const app = file(
       generateProject(construct({ cards: [{ name: 'refund_approval', schema: { type: 'object' } }] })),
       'src/App.tsx',
     );
     expect(app).toContain("import { cards } from './cards';");
-    expect(app).toContain('cardSchemas={cards}');
     expect(app).toContain('cardFromToolCall');
+  });
+
+  it('does NOT register cardSchemas on ChatThread — a card\'s data is its own declared schema, not values shaped like it, so validating it against itself would always fail hard', () => {
+    // Live-caught regression: registering `cardSchemas={cards}` here made
+    // CardRenderer validate `cards[name]` (a JSON Schema / FormDefinition) AGAINST
+    // `cards[name]` as if it were VALUES — e.g. "(root).amount: required" on a
+    // FormDefinition that has no top-level `amount` key at all — which is a HARD
+    // failure in card-renderer.tsx and renders CardFallback instead of the form
+    // every single time. cardTypes (the renderer map) is unaffected and stays.
+    const app = file(
+      generateProject(construct({ cards: [{ name: 'refund_approval', schema: { type: 'object' } }] })),
+      'src/App.tsx',
+    );
+    expect(app).not.toContain('cardSchemas={cards}');
+    expect(app).not.toMatch(/\bcardSchemas=\{/);
+  });
+
+  it('every declared card name routes to the kit\'s own form renderer, not the fallback — cardTypes registered on ChatThread', () => {
+    // SUPERVISOR RULING: a construct card must render as a real schema-driven
+    // form (BUILTIN_CARD_COMPONENTS.form), never as CardFallback. cardSchemas
+    // alone is validation-only and does not select a renderer — CardRenderer
+    // picks the component from `types` (ChatThread's `cardTypes` prop), so
+    // that map has to be registered too, keyed by the same card names.
+    const app = file(
+      generateProject(
+        construct({
+          cards: [
+            { name: 'refund_approval', schema: { type: 'object', properties: { amount: { type: 'number' } } } },
+          ],
+        }),
+      ),
+      'src/App.tsx',
+    );
+    expect(app).toContain("BUILTIN_CARD_COMPONENTS");
+    expect(app).toMatch(/from '@kitn\.ai\/ui\/solid';[\s\S]*BUILTIN_CARD_COMPONENTS/);
+    expect(app).toContain('BUILTIN_CARD_COMPONENTS.form');
+    expect(app).toContain('cardTypes={cardTypes}');
+    // The map is DERIVED from the registry's own keys, not hand-listed, so a
+    // second card in the construct is covered without a codegen change.
+    expect(app).toMatch(/Object\.keys\(cards\)\.map\(\s*\(name\)\s*=>\s*\[name,\s*BUILTIN_CARD_COMPONENTS\.form\]/);
+  });
+
+  it('a card tool call renders with the DECLARED schema as its data, not the model\'s raw call arguments', () => {
+    // The construct author's fields are the vocabulary the form draws — not
+    // whatever shape a model's tool-call arguments happened to take.
+    const app = file(
+      generateProject(construct({ cards: [{ name: 'refund_approval', schema: { type: 'object' } }] })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('data: cards[card.type');
+    expect(app).not.toContain('stream.addCard(card)');
   });
 
   it('endpoint + openai wire: the fetch body carries tools: toOpenAITools(cards)', () => {
