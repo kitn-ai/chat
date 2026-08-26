@@ -1,0 +1,11 @@
+{
+  "$schema": "https://ui.kitn.ai/schemas/construct/v1.json",
+  "name": "acme-support",
+  "layout": "widget",
+  "provider": { "mode": "mock" },
+  "capabilities": {
+    "attachments": { "accept": ["image/*", "application/pdf"] },
+    "history": { "persistence": "local" },
+    "starters": ["Where's my order?", "Request a refund"]
+  }
+}
