@@ -15,22 +15,19 @@ The ENGINE (workstream 2 of the roadmap): a declarative construct format + codeg
 component composed from the kit. Owner-brainstormed + spec'd + being executed subagent-driven
 (superpowers:subagent-driven-development): fresh implementer per task → task review → fix loop → ledger.
 
-## State: branch `feat/construct-engine` (35 commits, NOT pushed, NOT merged — the working branch)
-Cut from `docs/construct-engine-spec` off main. Head at handoff: `cf9ff33a`.
+## State: branch `feat/construct-engine` (NOT pushed, NOT merged — the working branch)
+Cut from `docs/construct-engine-spec` off main. Head at handoff: `508ddb71`.
 
-**Done + reviewed clean (Tasks 1–12 + 10b):** schema/validate · `@kitn.ai/ui/define` public entry ·
+**Done + reviewed clean (Tasks 1–13 + 10b):** schema/validate · `@kitn.ai/ui/define` public entry ·
 codegen core · CLI (bin dispatcher, validate/eject) · `kai dev` (live preview, demo checkpoint) ·
 `kai compile` · endpoint provider (openai+anthropic wires) · capabilities starters/attachments/history ·
 reasoning capability (full|compact|off, needed a kit prop) · cards (render as real schema-driven FORMS
-with x-kai masks) · layouts widget/fullscreen/aside/split.
+with x-kai masks) · layouts widget/fullscreen/aside/split · slots escape hatch + `custom` layout
+(split now uses WorkspaceShell — a real draggable splitter; LT-1 done).
 
-**IN FLIGHT — verify FIRST on resume:** Task 13 (slots escape hatch + `custom` layout) was mid-edit
-when the session cleared — uncommitted changes in schema.ts/codegen.ts + tests (agent a05b3035).
-On resume: check if it committed (git log for a Task 13 commit); if uncommitted work sits in the tree,
-resume/finish that agent or re-dispatch Task 13 from `.superpowers/sdd/.../task-13-brief.md`. Task 13
-also carries an opportunistic fold-in (LT-1 below).
+**START HERE on resume: Task 14** (schema publication).
 
-**Remaining after 13:** 14 schema publication (build:api artifact + drift guard, `apps/docs/public/schemas/construct/v1.json`) ·
+**Remaining:** 14 schema publication (build:api artifact + drift guard, `apps/docs/public/schemas/construct/v1.json`) ·
 15 `verify:construct` CI gate (axes derived from the schema, fixtures compiled + consumer-bundled) ·
 16 the `construct` MCP tool (turn-by-turn authoring, beside scaffold/component_reference/theme/debug) ·
 17 end-to-end conversational fixture (an agent builds the owner's four-sentence widget) ·
