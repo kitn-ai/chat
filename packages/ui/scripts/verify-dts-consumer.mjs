@@ -104,6 +104,7 @@ const PROBE_TYPES = {
   './wire': 'OpenAIWireMessage',
   './provider': 'CardBridge',
   './diagnostics': 'KaiDevtoolsHook',
+  './define': 'WebComponentContext',
 };
 
 /** Entries whose declarations reach nothing through a RELATIVE specifier, so

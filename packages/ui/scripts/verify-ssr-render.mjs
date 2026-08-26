@@ -124,6 +124,25 @@ const targetFor = (node, conditions) => {
   return null;
 };
 
+/**
+ * Entries whose server twin genuinely exports no Solid COMPONENT — so "0
+ * PascalCase results" is the honest outcome, not a broken build. The twin
+ * still exists and still gets a self-test run through it (proving the
+ * harness itself is not silently broken over that build); only the "0
+ * results = failure" verdict is waived, and only for the reason given.
+ *
+ * `./define`: exports `defineWebComponent` (a lowercase registration
+ * function that no-ops without `customElements`, per its own guard — see
+ * define.tsx) and the `WebComponentContext` type. No Solid component to
+ * render. Its server twin (dist/define.server.js, vite.config.define.server.ts)
+ * exists solely so the entry is IMPORTABLE under `node` without hitting
+ * Solid's client-only `notSup` stub at module scope (verify-ssr-imports.mjs)
+ * — not so anything in it can be server-rendered.
+ */
+const NO_COMPONENTS = {
+  [`${NAME}/define`]: 'exports defineWebComponent (a registration function) and a type only — no Solid component to render',
+};
+
 const renderable = [];
 for (const [subpath, node] of Object.entries(pkg.exports ?? {})) {
   if (subpath.includes('*')) continue;
@@ -229,10 +248,16 @@ try {
     }
 
     if (results.length === 0) {
+      if (NO_COMPONENTS[specifier]) {
+        console.log(`    0 components (declared, not a failure): ${NO_COMPONENTS[specifier]}`);
+        continue;
+      }
       harnessFailures++;
       problems.push(
         `${specifier}: exports no PascalCase component function, so this entry asserts nothing.\n` +
-          '      Either the entry stopped exporting components or the build emitted an empty bundle.',
+          '      Either the entry stopped exporting components or the build emitted an empty bundle.\n' +
+          '      If this entry is genuinely component-free by design, add it to NO_COMPONENTS in\n' +
+          '      scripts/verify-ssr-render.mjs with the reason.',
       );
       continue;
     }
