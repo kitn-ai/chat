@@ -328,6 +328,111 @@ describe('header (Task 19c)', () => {
   });
 });
 
+describe('empty (Task 14 — welcome-screen)', () => {
+  it('threads empty={true} onto ChatThread and the Empty composition through a Portal onto the host element, tagged slot="empty"', () => {
+    const app = file(
+      generateProject(construct({ empty: { title: 'Hi, welcome' } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('empty={true}');
+    expect(app).toContain('<Portal mount={props.element}>');
+    expect(app).toContain('<Empty slot="empty">');
+    expect(app).toContain('<EmptyTitle>{"Hi, welcome"}</EmptyTitle>');
+    // App has to receive the host element to portal into — that's a real
+    // signature change, only when `empty` is declared.
+    expect(app).toContain('export function App(props: { element: HTMLElement })');
+    expect(app).toContain("import { Portal } from 'solid-js/web';");
+    expect(app).toContain('Empty, EmptyHeader, EmptyTitle } from \'@kitn.ai/ui/solid\';');
+  });
+
+  it('description present: EmptyDescription is imported and emitted; absent: neither is', () => {
+    const withDesc = file(
+      generateProject(construct({ empty: { title: 'Hi', description: 'We can help.' } })),
+      'src/App.tsx',
+    );
+    expect(withDesc).toContain('EmptyDescription');
+    expect(withDesc).toContain('<EmptyDescription>{"We can help."}</EmptyDescription>');
+    const noDesc = file(generateProject(construct({ empty: { title: 'Hi' } })), 'src/App.tsx');
+    expect(noDesc).not.toContain('EmptyDescription');
+  });
+
+  it('icon present: EmptyMedia is imported and emitted as an <img>; absent: neither is', () => {
+    const withIcon = file(
+      generateProject(construct({ empty: { title: 'Hi', icon: 'https://example.com/icon.png' } })),
+      'src/App.tsx',
+    );
+    expect(withIcon).toContain('EmptyMedia');
+    expect(withIcon).toContain('<img src={"https://example.com/icon.png"}');
+    const noIcon = file(generateProject(construct({ empty: { title: 'Hi' } })), 'src/App.tsx');
+    expect(noIcon).not.toContain('EmptyMedia');
+  });
+
+  it('no empty declared: no empty prop, no Portal usage/import, no Empty-composition import, App() keeps its original zero-arg signature', () => {
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    // The capability-gating doc comment above App() names "empty"/"Portal" in
+    // prose regardless (same discriminator as the reasoningOpen precedent
+    // above: a plain `.not.toContain` would false-fail on that comment) — the
+    // real signal is actual code usage: an import, a JSX tag, or a prop.
+    expect(app).not.toMatch(/\bempty=\{true\}/);
+    expect(app).not.toMatch(/import \{ Portal \}/);
+    expect(app).not.toMatch(/<Portal /);
+    expect(app).not.toMatch(/<Empty /);
+    expect(app).not.toMatch(/, Empty,/);
+    expect(app).toContain('export function App() {');
+  });
+
+  // The whole point of the welcome screen: greeting AND starter chips both
+  // render for an empty thread. ChatThread's own doc comment on `empty`
+  // states the REPLACE slot only stands in for the empty MESSAGE LIST — the
+  // composer and its suggestions still render below it — so wiring both
+  // fields must never make one crowd out the other in the emitted source.
+  it('empty + starters both declared: both the welcome greeting and the suggestions prop are wired, independently — chips survive', () => {
+    const app = file(
+      generateProject(
+        construct({
+          empty: { title: 'Hi, welcome', description: 'Ask us anything.' },
+          capabilities: { starters: ["Where's my order?", 'Request a refund'] },
+        }),
+      ),
+      'src/App.tsx',
+    );
+    expect(app).toContain('empty={true}');
+    expect(app).toContain('<EmptyTitle>{"Hi, welcome"}</EmptyTitle>');
+    expect(app).toContain('suggestions={["Where\'s my order?","Request a refund"]}');
+    // Both attributes land on the SAME <ChatThread ... /> tag — the empty
+    // Portal is not a substitute for the suggestions prop, and vice versa.
+    const chatThreadLine = app.split('\n').find((l) => l.includes('<ChatThread '));
+    expect(chatThreadLine).toBeDefined();
+    expect(chatThreadLine).toContain('empty={true}');
+    expect(chatThreadLine).toContain('suggestions={');
+  });
+
+  it('a hostile title/description cannot break out of their emitted string literals', () => {
+    const hostile = '"};alert(1);//';
+    const app = file(
+      generateProject(construct({ empty: { title: hostile, description: hostile } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain(JSON.stringify(hostile));
+    // Same discriminator as the launcherIcon/header.title/userId precedent
+    // (Tasks 19a/19c/19e): JSON.stringify's own closing delimiter always
+    // lands right after `//` in this payload, safe or not, so a plain
+    // `.not.toContain('alert(1);//"')` can't distinguish safe output from a
+    // real breakout. The real signal is whether the embedded quote right
+    // before `};alert(1)` is backslash-escaped.
+    expect(app).not.toMatch(/(?<!\\)"\};alert\(1\)/);
+  });
+
+  it('custom layout: empty is NOT wired (Thread has no empty slot) — declared loudly, matching CU-1\'s precedent for undeclared capabilities on custom', () => {
+    const app = file(
+      generateProject(construct({ layout: 'custom', slots: ['header'], empty: { title: 'x' } })),
+      'src/App.tsx',
+    );
+    expect(app).not.toContain('empty={true}');
+    expect(app).not.toContain('<Portal');
+  });
+});
+
 describe('userId (Task 19e)', () => {
   it('endpoint provider: threads x-kai-user-id header onto the chat fetch', () => {
     const app = file(
@@ -573,8 +678,8 @@ describe('capabilities.reasoning', () => {
 // emitCustomApp can't silently drop the loud-declaration this format commits
 // to for `custom` layout. The list below is a literal restatement of the
 // capabilities emitCustomApp deliberately leaves unwired (starters,
-// attachments, reasoning display-mode, reasoningOpen, header.title) — it
-// must be kept in sync BY HAND with that function's own comment (and with
+// attachments, reasoning display-mode, reasoningOpen, header.title, empty) —
+// it must be kept in sync BY HAND with that function's own comment (and with
 // the "not wired" tests above/below that each capability carries) whenever
 // the custom-layout exclusion list changes.
 describe('CU-1: custom layout exclusion disclosure', () => {
@@ -589,6 +694,7 @@ describe('CU-1: custom layout exclusion disclosure', () => {
       'reasoning display-mode',
       'reasoningOpen',
       'header.title',
+      'empty',
     ];
     for (const capability of excludedCapabilities) {
       expect(app).toContain(capability);

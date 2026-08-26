@@ -103,6 +103,28 @@ export const ConstructSchema = z
       })
       .strict()
       .optional(),
+    /** Greeting shown while the thread is empty (no messages yet) — the
+     *  proven "welcome screen" pattern (Intercom-class): title + optional
+     *  description + optional icon above, with `capabilities.starters`'
+     *  chips and the composer still rendering below (ChatThread's `empty`
+     *  REPLACE slot only stands in for the empty MESSAGE LIST — see
+     *  chat-thread.tsx's own doc comment on `empty` — so the chips are
+     *  never lost). Construct-wide like `header`, not a capability: it's a
+     *  fact about the empty state, not a toggleable affordance.
+     *  `title`/`description` are construct-authored/untrusted text, like
+     *  `header.title`/`theme.accent`/`provider.url` — JSON.stringify'd at
+     *  their one emit site, never a raw JSX attribute string. `icon` is a
+     *  URL reaching an `<img src>` sink in emitted code, exactly like
+     *  `widget.launcherIcon` — same `isSafeUrl` policy, same superRefine
+     *  shape, below. */
+    empty: z
+      .object({
+        title: z.string().min(1),
+        description: z.string().min(1).optional(),
+        icon: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional(),
     // Capability vocabulary, widened one field at a time by later tasks.
     capabilities: z
       .object({
@@ -271,6 +293,13 @@ export const ConstructSchema = z
         code: z.ZodIssueCode.custom,
         path: ['widget', 'launcherIcon'],
         message: 'launcherIcon must be an http(s)/mailto or relative URL — no javascript:/data: schemes',
+      });
+    }
+    if (construct.empty?.icon && !isSafeUrl(construct.empty.icon)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['empty', 'icon'],
+        message: 'icon must be an http(s)/mailto or relative URL — no javascript:/data: schemes',
       });
     }
     const reasoning = construct.capabilities?.reasoning;

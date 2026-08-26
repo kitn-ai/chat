@@ -20,6 +20,10 @@ describe('four-sentence conversational construction', () => {
     provider: { mode: 'mock' },
     userId: 'user_123',
     header: { title: 'Acme Support' },
+    empty: {
+      title: "Hi, we're Acme Support",
+      description: 'Ask us about orders, refunds, and more.',
+    },
     widget: {
       position: 'top-start',
       launcherIcon: 'https://example.com/logo.png',
@@ -42,10 +46,13 @@ describe('four-sentence conversational construction', () => {
     // capabilities first, then the owner asks for widget chrome, identity
     // and reasoning disclosure on top.
     const turns = [
-      { ...finalConstruct, userId: undefined, header: undefined, widget: undefined, capabilities: { attachments: finalConstruct.capabilities.attachments, reasoningOpen: undefined } },
-      { ...finalConstruct, userId: undefined, header: undefined, widget: undefined, capabilities: { attachments: finalConstruct.capabilities.attachments, history: finalConstruct.capabilities.history, reasoningOpen: undefined } },
-      { ...finalConstruct, userId: undefined, header: undefined, widget: undefined, capabilities: { ...finalConstruct.capabilities, reasoningOpen: undefined } },
-      { ...finalConstruct, header: undefined, widget: undefined, capabilities: { ...finalConstruct.capabilities, reasoningOpen: undefined } },
+      { ...finalConstruct, userId: undefined, header: undefined, empty: undefined, widget: undefined, capabilities: { attachments: finalConstruct.capabilities.attachments, reasoningOpen: undefined } },
+      { ...finalConstruct, userId: undefined, header: undefined, empty: undefined, widget: undefined, capabilities: { attachments: finalConstruct.capabilities.attachments, history: finalConstruct.capabilities.history, reasoningOpen: undefined } },
+      { ...finalConstruct, userId: undefined, header: undefined, empty: undefined, widget: undefined, capabilities: { ...finalConstruct.capabilities, reasoningOpen: undefined } },
+      { ...finalConstruct, header: undefined, empty: undefined, widget: undefined, capabilities: { ...finalConstruct.capabilities, reasoningOpen: undefined } },
+      // Turn 6: the owner asks for a welcome greeting on top of everything
+      // else — the natural extension point (FIX-1 precedent), landing
+      // alongside header/widget in the same closing turn.
       finalConstruct,
     ].map((c) => JSON.parse(JSON.stringify(c)));
     for (const construct of turns) {
@@ -98,6 +105,9 @@ describe('four-sentence conversational construction', () => {
       'defaultOpen={true}',
       JSON.stringify(finalConstruct.widget.launcherIcon),
       JSON.stringify(finalConstruct.header.title),
+      'empty={true}',
+      JSON.stringify(finalConstruct.empty.title),
+      JSON.stringify(finalConstruct.empty.description),
     ]) {
       expect(app).toContain(marker);
     }

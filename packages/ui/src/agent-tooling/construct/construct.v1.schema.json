@@ -99,6 +99,27 @@
       },
       "additionalProperties": false
     },
+    "empty": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "icon": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false
+    },
     "capabilities": {
       "type": "object",
       "properties": {

@@ -266,6 +266,80 @@ describe('header', () => {
   });
 });
 
+describe('empty (welcome-screen greeting, Task 14)', () => {
+  it('accepts a title-only block on any layout', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'fullscreen', provider: { mode: 'mock' },
+      empty: { title: 'Hi, welcome' },
+    });
+    expect(out.ok).toBe(true);
+  });
+
+  it('accepts title + description + an https icon', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+      empty: { title: 'Hi', description: 'Ask us anything.', icon: 'https://example.com/icon.png' },
+    });
+    expect(out.ok).toBe(true);
+  });
+
+  it('rejects an empty title (min length 1, same discipline as header.title/starters)', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+      empty: { title: '' },
+    });
+    expect(out.ok).toBe(false);
+  });
+
+  it('rejects an empty description', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+      empty: { title: 'Hi', description: '' },
+    });
+    expect(out.ok).toBe(false);
+  });
+
+  it('requires title (title is not optional)', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+      empty: { description: 'Ask us anything.' },
+    });
+    expect(out.ok).toBe(false);
+  });
+
+  it('rejects an unknown key on empty (vocabulary is closed)', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+      empty: { title: 'x', subtitle: 'y' },
+    });
+    expect(out.ok).toBe(false);
+  });
+
+  it('rejects a javascript: icon (same isSafeUrl policy as widget.launcherIcon)', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+      empty: { title: 'Hi', icon: 'javascript:alert(1)' },
+    });
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.problems.some((p) => p.path === 'empty.icon')).toBe(true);
+  });
+
+  it('accepts an https icon and a relative one (isSafeUrl resolves relative against a base)', () => {
+    expect(
+      validateConstruct({
+        name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+        empty: { title: 'Hi', icon: 'https://example.com/icon.png' },
+      }).ok,
+    ).toBe(true);
+    expect(
+      validateConstruct({
+        name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+        empty: { title: 'Hi', icon: '/icon.png' },
+      }).ok,
+    ).toBe(true);
+  });
+});
+
 describe('userId', () => {
   it('accepts a top-level userId independent of provider mode', () => {
     const out = validateConstruct({

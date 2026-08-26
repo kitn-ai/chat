@@ -494,12 +494,18 @@ function emitIndexHtml(c: Construct): string {
 function emitElement(c: Construct): string {
   const accent = c.theme?.accent;
   if (!accent) {
+    // `empty` (Task 14) needs the host element as a Portal target (see
+    // emitEmptyPortal's doc), so the facade has to receive `ctx` instead of
+    // being called with no arguments — only when a construct actually
+    // declares it, so every construct without one keeps this line byte-for-
+    // byte unchanged.
+    const facade = c.empty ? '(_props, ctx) => <App element={ctx.element} />' : '() => <App />';
     return `import { defineWebComponent } from '@kitn.ai/ui/define';
 import { App } from './App';
 
 // The one facade. Interior stays pure Solid (no nested element registrations);
 // the kit CSS is injected into the shadow root by defineWebComponent itself.
-defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' | 'auto' }, () => <App />);
+defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' | 'auto' }, ${facade});
 `;
   }
 
@@ -550,12 +556,13 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
   const styleText =
     foregroundCss + `${CONTRAST_COLOR_SUPPORTS} {\n  :host { --kai-color-primary-foreground: contrast-color(var(--kai-color-primary)); }\n}`;
 
+  const appEl = c.empty ? ' element={ctx.element}' : '';
   const facade = `(_props, ctx) => {
   ctx.element.style.setProperty('--kai-color-primary', ${JSON.stringify(accent)});
   return (
     <>
       <style>{${JSON.stringify(styleText)}}</style>
-      <App />
+      <App${appEl} />
     </>
   );
 }`;
@@ -576,7 +583,7 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
 
 function emitApp(c: Construct): string {
   if (c.layout === 'custom') return emitCustomApp(c);
-  return `${emitSolidJsImport(c)}import { ChatThread, createKaiChat${emitLayoutImport(c)}${emitCardComponentImport(c)} } from '@kitn.ai/ui/solid';
+  return `${emitSolidJsImport(c)}${emitEmptyPortalImport(c)}import { ChatThread, createKaiChat${emitLayoutImport(c)}${emitCardComponentImport(c)}${emitEmptyComponentImport(c)} } from '@kitn.ai/ui/solid';
 import type { AttachmentData${emitHistoryTypeImport(c)} } from '@kitn.ai/ui/solid';
 ${emitProviderImports(c)}
 ${emitCardsImport(c)}
@@ -634,9 +641,16 @@ ${emitHistorySetup(c)}
 //     here, just anchored on the medium's existing default instead of an
 //     "off" value, since a reasoning disclosure is normal chat behavior, not
 //     an opt-in affordance like the paperclip or a starter chip.
-export function App() {
+//   - empty (the welcome-screen greeting, Task 14): gated via ChatThread's
+//     own \`empty\` REPLACE-slot boundary, which is LIGHT-DOM (see
+//     emitEmptyPortal's own doc for why) — so this is the one field in this
+//     file that changes \`App\`'s own signature (an \`element\` param) rather
+//     than just adding a prop/import. \`capabilities.starters\`' chips and the
+//     composer still render underneath it: ChatThread's own doc comment on
+//     \`empty\` is explicit that it replaces only the empty MESSAGE LIST.
+export function App(${emitAppElementParam(c)}) {
   return (
-${emitLayoutOpen(c)}${emitSlots(c.slots, '      ')}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitHeaderProp(c)}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitReasoningOpenProp(c)}${emitCardTypesProp(c)} />
+${emitLayoutOpen(c)}${emitSlots(c.slots, '      ')}${emitEmptyPortal(c, '      ')}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitHeaderProp(c)}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitReasoningOpenProp(c)}${emitEmptyProp(c)}${emitCardTypesProp(c)} />
 ${emitLayoutClose(c)}  );
 }
 `;
@@ -688,9 +702,9 @@ ${emitHistorySetup(c)}
 // layout: custom — minimal chrome, no ChatThread/Dock/PaneGroup. The bare
 // spine (Thread + PromptInput) plus the declared slots, positioned by hand so
 // YOU own the surrounding DOM. Capabilities beyond the spine (starters,
-// attachments, reasoning display-mode, reasoningOpen, header.title) are NOT
-// wired here in v1 — this file is the eject artifact; add them the way
-// ChatThread composes them (components/chat-thread.tsx in the kit's own
+// attachments, reasoning display-mode, reasoningOpen, header.title, empty)
+// are NOT wired here in v1 — this file is the eject artifact; add them the
+// way ChatThread composes them (components/chat-thread.tsx in the kit's own
 // source) if this construct needs them on a custom layout.
 export function App() {
   const [value, setValue] = createSignal('');
@@ -729,6 +743,85 @@ function emitHeaderProp(c: Construct): string {
   const title = c.header?.title;
   if (!title) return '';
   return ` chatTitle={${JSON.stringify(title)}}`;
+}
+
+/** `App`'s function-parameter list. Only `empty` needs the custom-element
+ *  host (see `emitEmptyPortal`'s doc for why); every other construct keeps
+ *  `App()` byte-for-byte unchanged from before this field existed. */
+function emitAppElementParam(c: Construct): string {
+  return c.empty ? 'props: { element: HTMLElement }' : '';
+}
+
+/** `empty` -> ChatThread's own `empty` REPLACE-slot boundary (chat-thread.tsx:
+ *  `<Show when={props.empty && props.messages.length === 0}><slot name="empty"
+ *  /></Show>`). That boundary is LIGHT-DOM: the slotted content has to be a
+ *  real child of the custom element itself, not JSX rendered inside App (App
+ *  already lives INSIDE the one shadow root defineWebComponent attaches, same
+ *  as ChatThread — nesting a `<slot>` there redistributes light-DOM children
+ *  of the HOST, not App's own descendants). Construct-authored `empty.title`/
+ *  `description`/`icon` are DATA baked in at generation time, not a consumer's
+ *  own slotted markup, so there is no external light-DOM node supplying it —
+ *  `<Portal mount={element}>` is what manufactures one: it appends the Empty
+ *  composition as a real child of the host element (`element`, threaded in via
+ *  `emitAppElementParam`/`emitElement`), tagged `slot="empty"`, exactly
+ *  mirroring what a consumer's own `<div slot="empty">` would do by hand (see
+ *  the `slots` field's own demo in `emitIndexHtml`). ChatThread's own doc
+ *  comment on `empty` is explicit that this REPLACES only the empty MESSAGE
+ *  LIST — the composer and `capabilities.starters`' chips still render below
+ *  it unconditionally, so the welcome-screen chips are never lost.
+ *
+ *  Uses the kit's own `Empty`/`EmptyHeader`/`EmptyMedia`/`EmptyTitle`/
+ *  `EmptyDescription` composition (components/empty.tsx) rather than hand-
+ *  rolled markup — the same "don't restate the kit's own layout" rule
+ *  `emitApp`'s header comment states for ChatThread itself. `title`/
+ *  `description` are construct-authored/untrusted text, JSON.stringify'd into
+ *  real JS string-literal expressions like every other free-text field in
+ *  this file; `icon` is schema-validated by `isSafeUrl` (schema.ts) before
+ *  codegen ever sees it, the same policy `widget.launcherIcon` uses. */
+function emitEmptyPortal(c: Construct, indent: string): string {
+  const empty = c.empty;
+  if (!empty) return '';
+  const title = `${indent}      <EmptyTitle>{${JSON.stringify(empty.title)}}</EmptyTitle>\n`;
+  const icon = empty.icon
+    ? `${indent}      <EmptyMedia><img src={${JSON.stringify(empty.icon)}} alt="" style={{ width: '40px', height: '40px', 'border-radius': '9999px' }} /></EmptyMedia>\n`
+    : '';
+  const description = empty.description
+    ? `${indent}      <EmptyDescription>{${JSON.stringify(empty.description)}}</EmptyDescription>\n`
+    : '';
+  return `${indent}<Portal mount={props.element}>
+${indent}  <Empty slot="empty">
+${indent}    <EmptyHeader>
+${icon}${title}${description}${indent}    </EmptyHeader>
+${indent}  </Empty>
+${indent}</Portal>
+`;
+}
+
+/** ChatThread's `empty` boolean prop — gates the REPLACE slot on (chat-
+ *  thread.tsx). Off-by-default like every other capability here: omitted
+ *  entirely (not even the prop) when no `empty` block is declared. */
+function emitEmptyProp(c: Construct): string {
+  return c.empty ? ' empty={true}' : '';
+}
+
+/** `solid-js/web`'s `Portal`, needed only by `emitEmptyPortal` above. */
+function emitEmptyPortalImport(c: Construct): string {
+  return c.empty ? `import { Portal } from 'solid-js/web';\n` : '';
+}
+
+/** The `Empty` composition components `emitEmptyPortal` needs, appended onto
+ *  the same `@kitn.ai/ui/solid` import ChatThread/createKaiChat already use —
+ *  never a second import statement for the same module. `EmptyMedia`/
+ *  `EmptyDescription` are named only when `icon`/`description` are actually
+ *  declared: `verify:scaffold` compiles emitted output with `tsc --strict
+ *  --noUnusedLocals`, so an always-imported-but-sometimes-unused name would
+ *  fail that gate the moment a construct omits one. */
+function emitEmptyComponentImport(c: Construct): string {
+  if (!c.empty) return '';
+  let names = ', Empty, EmptyHeader, EmptyTitle';
+  if (c.empty.icon) names += ', EmptyMedia';
+  if (c.empty.description) names += ', EmptyDescription';
+  return names;
 }
 
 /** capabilities.attachments -> ChatThread's own \`attach\`/\`accept\` props.

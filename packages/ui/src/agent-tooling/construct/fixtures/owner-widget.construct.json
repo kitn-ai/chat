@@ -5,6 +5,10 @@
   "provider": { "mode": "mock" },
   "userId": "user_123",
   "header": { "title": "Acme Support" },
+  "empty": {
+    "title": "Hi, we're Acme Support",
+    "description": "Ask us about orders, refunds, and more."
+  },
   "widget": {
     "position": "top-start",
     "launcherIcon": "https://example.com/logo.png",
