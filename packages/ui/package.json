@@ -194,6 +194,7 @@
     "verify:starters": "node scripts/verify-starters.mjs",
     "lint:attachment-object-urls": "node scripts/lint-attachment-object-urls.mjs --self-test && node scripts/lint-attachment-object-urls.mjs",
     "lint:cdn-pins": "node scripts/lint-cdn-pins.mjs --self-test && node scripts/lint-cdn-pins.mjs --check-release-wiring && node scripts/lint-cdn-pins.mjs",
+    "lint:llms-size": "node scripts/lint-llms-size.mjs --self-test && node scripts/lint-llms-size.mjs",
     "lint:pack-parse": "node scripts/lint-pack-json-parse.mjs --self-test && node scripts/lint-pack-json-parse.mjs",
     "fix:cdn-pins": "node scripts/lint-cdn-pins.mjs --fix",
     "lint:silent-drops": "node scripts/lint-silent-drops.mjs --self-test && node scripts/lint-silent-drops.mjs",

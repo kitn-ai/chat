@@ -204,6 +204,26 @@ jobs:
       - name: CDN version-pin staleness guard (docs, README, examples)
         run: pnpm --filter @kitn.ai/ui run lint:cdn-pins
 
+      # Size budget for the committed llms-full.txt. The file is generated, so
+      # it grows as a SIDE EFFECT of unrelated work -- a new element, a fatter
+      # doc comment, a new generated section -- and nothing else prices that
+      # growth. Both costs it guards degrade quietly with the byte count: grep
+      # precision (more near-duplicate rows per query) and whole-file ingestion
+      # cost for agents that read it wholesale. The ceiling makes growth a
+      # conscious act: raise it only with a dated note on what grew and why, in
+      # the style of verify-pack-weight.mjs.
+      #
+      # It cannot pass vacuously: a MISSING artifact is a hard failure, and a
+      # floor catches the truncation this repo already shipped once (gen-llms
+      # run standalone silently rewrote the file with LESS data; the oversized
+      # diff was the only tell). `--self-test` runs the real verdict + stat path
+      # against on-disk fixtures on every invocation.
+      #
+      # Reads the committed artifact only, no dist/, so it is a seam anyone can
+      # grab to watch it fail (`node packages/ui/scripts/lint-llms-size.mjs`).
+      - name: llms-full.txt size budget
+        run: pnpm --filter @kitn.ai/ui run lint:llms-size
+
       # Every script reading `npm pack --json` must go through the one parser
       # that knows both container shapes. npm 12 made the top level an object
       # keyed by package name; `JSON.parse(raw)[0]` is `undefined` under it, and
