@@ -18,9 +18,9 @@ const pkg = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf-8'))
 };
 
 describe('createServer', () => {
-  it('registers exactly the four tools (helper)', () => {
+  it('registers exactly the five tools (helper)', () => {
     const tools = createServer().__listToolsForTest();
-    expect(tools.sort()).toEqual(['component_reference', 'debug', 'scaffold', 'theme']);
+    expect(tools.sort()).toEqual(['component_reference', 'construct', 'debug', 'scaffold', 'theme']);
   });
 
   // ── serverInfo ──────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ describe('createServer', () => {
     ).toEqual([]);
   });
 
-  it('lists the four tools end-to-end over an in-memory transport', async () => {
+  it('lists the five tools end-to-end over an in-memory transport', async () => {
     const server = createServer();
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
@@ -76,6 +76,7 @@ describe('createServer', () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       'component_reference',
+      'construct',
       'debug',
       'scaffold',
       'theme',
