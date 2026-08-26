@@ -556,7 +556,7 @@ ${emitHistorySetup(c)}
 //     an opt-in affordance like the paperclip or a starter chip.
 export function App() {
   return (
-${emitLayoutOpen(c)}${emitSlots(c.slots, '      ')}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitCardTypesProp(c)} />
+${emitLayoutOpen(c)}${emitSlots(c.slots, '      ')}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitHeaderProp(c)}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitCardTypesProp(c)} />
 ${emitLayoutClose(c)}  );
 }
 `;
@@ -638,6 +638,17 @@ ${emitSlots(restSlots, '      ')}    </div>
   );
 }
 `;
+}
+
+/** header.title -> ChatThread's own \`chatTitle\` prop. Construct-authored/
+ *  untrusted text like starters/theme.accent/provider.url, so JSON.stringify'd
+ *  into a real JS string-literal expression. Omitted entirely (not even the
+ *  prop) when no header is declared — the same off-by-default gating as every
+ *  capability in this file, even though \`header\` isn't itself a capability. */
+function emitHeaderProp(c: Construct): string {
+  const title = c.header?.title;
+  if (!title) return '';
+  return ` chatTitle={${JSON.stringify(title)}}`;
 }
 
 /** capabilities.attachments -> ChatThread's own \`attach\`/\`accept\` props.

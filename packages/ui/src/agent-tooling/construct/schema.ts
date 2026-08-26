@@ -62,6 +62,21 @@ export const ConstructSchema = z
       })
       .strict()
       .optional(),
+    /** Construct-wide header chrome, valid on every layout (not layout-scoped
+     *  like `widget`, and not a capability toggle — a header is a construct-
+     *  wide fact, like `theme`). Rendered inside ChatThread's own built-in
+     *  header bar; a logo/icon projects through the kit's EXISTING
+     *  `header-start` named slot (`slots` vocabulary above), not a second
+     *  image-prop convention here. */
+    header: z
+      .object({
+        /** Rendered in ChatThread's built-in header bar (left side). Construct-
+         *  authored/untrusted text, like theme.accent/provider.url — JSON.stringify'd
+         *  at its one emit site, never a raw JSX attribute string. */
+        title: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional(),
     // Capability vocabulary, widened one field at a time by later tasks.
     capabilities: z
       .object({

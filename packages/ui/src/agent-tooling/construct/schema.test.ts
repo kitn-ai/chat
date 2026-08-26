@@ -207,3 +207,29 @@ describe('widget (layout-scoped FAB chrome)', () => {
     expect(out.ok).toBe(true);
   });
 });
+
+describe('header', () => {
+  it('accepts a title on any layout', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'fullscreen', provider: { mode: 'mock' },
+      header: { title: 'Acme Support' },
+    });
+    expect(out.ok).toBe(true);
+  });
+
+  it('rejects an empty title (min length 1, same discipline as starters)', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+      header: { title: '' },
+    });
+    expect(out.ok).toBe(false);
+  });
+
+  it('rejects an unknown key on header (vocabulary is closed)', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+      header: { title: 'x', icon: 'https://example.com/a.png' },
+    });
+    expect(out.ok).toBe(false);
+  });
+});

@@ -281,6 +281,46 @@ describe('widget chrome (Task 19a)', () => {
   });
 });
 
+describe('header (Task 19c)', () => {
+  it('header.title threads into ChatThread\'s own chatTitle prop', () => {
+    const app = file(
+      generateProject(construct({ header: { title: 'Acme Support' } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('chatTitle={"Acme Support"}');
+  });
+
+  it('no header declared: no chatTitle prop at all', () => {
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    expect(app).not.toContain('chatTitle');
+  });
+
+  it('a hostile title cannot break out of the emitted string literal', () => {
+    const hostile = '"};alert(1);//';
+    const app = file(
+      generateProject(construct({ header: { title: hostile } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain(JSON.stringify(hostile));
+    // Same discriminator as the launcherIcon hostile-payload test above (Task
+    // 19a): JSON.stringify's own closing delimiter always lands right after
+    // `//` in this payload, safe or not, so a plain
+    // `.not.toContain('alert(1);//"')` can't tell safe output from a real
+    // breakout — it would fail against CORRECTLY escaped output too. The
+    // real signal is whether the embedded quote right before `};alert(1)`
+    // is backslash-escaped.
+    expect(app).not.toMatch(/(?<!\\)"\};alert\(1\)/);
+  });
+
+  it('custom layout: header.title is NOT wired (Thread has no chatTitle prop) — declared loudly, matching CU-1\'s precedent for undeclared capabilities on custom', () => {
+    const app = file(
+      generateProject(construct({ layout: 'custom', slots: ['header'], header: { title: 'x' } })),
+      'src/App.tsx',
+    );
+    expect(app).not.toContain('chatTitle');
+  });
+});
+
 describe('layouts (Task 12)', () => {
   it.each([
     ['fullscreen', 'height: \'100dvh\''],
