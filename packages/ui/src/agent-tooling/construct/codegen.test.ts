@@ -2,7 +2,14 @@ import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { accentContrastNotice, generateProject, resolveContrastForeground, writeProject } from './codegen';
+import ts from 'typescript';
+import {
+  accentContrastNotice,
+  generateProject,
+  mergeToolArgsIntoFormDefaults,
+  resolveContrastForeground,
+  writeProject,
+} from './codegen';
 import { validateConstruct, type Construct } from './schema';
 
 function construct(overrides: Partial<Construct> = {}): Construct {
@@ -1020,6 +1027,132 @@ describe('CD-1: model tool-call args merge into FormField defaults (Task 19g)', 
     const app = file(generateProject(cardConstruct()), 'src/App.tsx');
     expect(app).toContain('properties: { ...schema.properties');
   });
+});
+
+/**
+ * `mergeToolArgsIntoFormDefaults` exists TWICE (review round 1, Task 19g fix):
+ * a real, exported TS function in this module (used directly by tests, e.g.
+ * codegen-cards.render.test.tsx) and an EMITTED-STRING twin inside
+ * `emitCardsImport`'s return value that App.tsx gets verbatim — kept in sync
+ * by hand, not by import, same as every other piece of construct-glue logic
+ * this file emits. `verify:construct` proves the twin COMPILES under a
+ * real cell's strict tsconfig, but nothing proved it BEHAVES the same as the
+ * real function — a future edit to one (adding recursion, changing
+ * precedence) could drift silently.
+ *
+ * This describe block extracts the twin's actual source out of a generated
+ * App.tsx, strips its TS type annotations with the real TypeScript compiler
+ * (not hand-written string surgery, and NOT `.toString()` on the real
+ * function — that would lose the emitted copy's own annotations, which is
+ * exactly what the strict per-cell tsc pass needs and what this guard must
+ * exercise), and runs it through `new Function` so it is executed, not just
+ * pattern-matched. The same case table then runs against both the real
+ * function and the extracted twin and asserts identical outputs — so any
+ * behavioral drift between the two turns this test red.
+ */
+describe('CD-1 drift guard: the real mergeToolArgsIntoFormDefaults and its emitted twin behave identically', () => {
+  type MergeFn = (
+    schema: Record<string, unknown>,
+    args: Record<string, unknown>,
+  ) => Record<string, unknown>;
+
+  /** Pull the emitted twin's source out of a generated App.tsx, strip its TS
+   *  annotations via the real TypeScript compiler, and return it as a
+   *  callable function — the twin, actually running, not just grepped. */
+  function extractEmittedTwin(appSource: string): MergeFn {
+    // Non-greedy up to the function's own closing brace on its own line at
+    // column 0 — every brace INSIDE the function body is indented, so this
+    // uniquely bounds the declaration regardless of what code follows it in
+    // the concatenated App.tsx (this function is not always the last thing
+    // emitCardsImport's own template contributes once other emit* functions'
+    // output is appended after it).
+    const match = appSource.match(/function mergeToolArgsIntoFormDefaults\([\s\S]*?\n\}\n/);
+    if (!match) {
+      throw new Error('mergeToolArgsIntoFormDefaults not found in the emitted App.tsx — extraction regex is stale.');
+    }
+    const { outputText } = ts.transpileModule(match[0], {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval -- deliberate: executing the EMITTED twin's own stripped source is the point of this guard.
+    const factory = new Function(`${outputText}\nreturn mergeToolArgsIntoFormDefaults;`);
+    return factory() as MergeFn;
+  }
+
+  const cardConstruct = () =>
+    construct({
+      cards: [
+        {
+          name: 'refund_approval',
+          schema: {
+            type: 'object',
+            properties: {
+              amount: { type: 'number', title: 'Amount' },
+              reason: { type: 'string', title: 'Reason' },
+            },
+          },
+        },
+      ],
+    });
+
+  const app = () => file(generateProject(cardConstruct()), 'src/App.tsx');
+
+  const CASES: Array<{ name: string; schema: Record<string, unknown>; args: Record<string, unknown> }> = [
+    {
+      name: 'merges a known top-level key onto default',
+      schema: { type: 'object', properties: { amount: { type: 'number', title: 'Amount' } } },
+      args: { amount: 50 },
+    },
+    {
+      name: 'ignores a key the schema does not declare',
+      schema: { type: 'object', properties: { amount: { type: 'number', title: 'Amount' } } },
+      args: { amount: 50, bogus_field: 'nope' },
+    },
+    {
+      name: 'a model arg overrides an explicit static default (precedence)',
+      schema: { type: 'object', properties: { amount: { type: 'number', title: 'Amount', default: 10 } } },
+      args: { amount: 75 },
+    },
+    {
+      name: 'x-kai-mask/x-kai-format hints on the field survive the merge untouched',
+      schema: {
+        type: 'object',
+        properties: {
+          ticket: {
+            type: 'string',
+            title: 'Change ticket',
+            pattern: '^CHG-[0-9]{4}$',
+            'x-kai-format': 'custom',
+            'x-kai-mask': 'CHG-####',
+            'x-kai-mask-guide': 'CHG-####',
+          },
+        },
+      },
+      args: { ticket: 'CHG-4821' },
+    },
+    {
+      name: 'no properties on the schema at all — returned unchanged',
+      schema: { type: 'object' },
+      args: { amount: 1 },
+    },
+    {
+      name: 'empty args — no field gets a new default',
+      schema: { type: 'object', properties: { amount: { type: 'number', title: 'Amount' } } },
+      args: {},
+    },
+  ];
+
+  it('the extraction regex actually finds the twin (sanity — fails loudly if codegen.ts moves it)', () => {
+    expect(() => extractEmittedTwin(app())).not.toThrow();
+  });
+
+  for (const { name, schema, args } of CASES) {
+    it(`identical output: ${name}`, () => {
+      const twin = extractEmittedTwin(app());
+      const fromReal = mergeToolArgsIntoFormDefaults(schema, args);
+      const fromTwin = twin(schema, args);
+      expect(fromTwin).toEqual(fromReal);
+    });
+  }
 });
 
 describe('writeProject', () => {
