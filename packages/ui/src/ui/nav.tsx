@@ -221,7 +221,7 @@ function NavRows(props: NavRowsProps) {
                   </span>
                 </Show>
                 <Show when={item.badge}>
-                  <Badge variant="default" class="px-1.5 py-0 text-[0.625rem] font-medium uppercase tracking-wide">{item.badge}</Badge>
+                  <Badge variant="default" class="px-1.5 py-0 text-micro font-medium uppercase tracking-wide">{item.badge}</Badge>
                 </Show>
                 <Show when={item.trailing}>{renderIcon(item.trailing, { class: 'size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-60' })}</Show>
               </button>

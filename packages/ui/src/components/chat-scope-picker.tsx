@@ -36,7 +36,7 @@ export function ChatScopePicker(props: ChatScopePickerProps) {
       <DropdownContent class="min-w-[180px]">
         <DropdownItem onSelect={() => local.onScopeChange(undefined)}>All Content</DropdownItem>
         <Show when={local.availableAuthors?.length}>
-          <div class="px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">Authors</div>
+          <div class="px-2 py-1 text-micro uppercase tracking-wider text-muted-foreground">Authors</div>
           <For each={local.availableAuthors}>
             {(author) => (
               <DropdownItem onSelect={() => local.onScopeChange({ authors: [author] })}>{author}</DropdownItem>
@@ -44,7 +44,7 @@ export function ChatScopePicker(props: ChatScopePickerProps) {
           </For>
         </Show>
         <Show when={local.availableTags?.length}>
-          <div class="px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">Tags</div>
+          <div class="px-2 py-1 text-micro uppercase tracking-wider text-muted-foreground">Tags</div>
           <For each={local.availableTags}>
             {(tag) => (
               <DropdownItem onSelect={() => local.onScopeChange({ tags: [tag] })}>{tag}</DropdownItem>

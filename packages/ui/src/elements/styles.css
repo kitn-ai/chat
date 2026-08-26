@@ -16,10 +16,19 @@
   /* Base typography is token-driven so a theme can restyle it. --kai-font-base is
      the family for ALL text/UI (named "base", not "sans", so a serif body works);
      --kai-tracking is global letter-spacing. Both pierce the Shadow DOM via the
-     var() fallback, exactly like the --kai-color-* tokens. */
+     var() fallback, exactly like the --kai-color-* tokens.
+
+     font-size is the third: without it every shadow root inherited the DOCUMENT's
+     size (16px in a stock page), so any surface that never set an explicit text-*
+     class rendered a step larger than the rest of the kit and looked like a bug in
+     that one component. --text-body is the scale's primary reading size and itself
+     resolves through --kai-text-body, so overriding that one token still moves the
+     default. The literal fallback matches theme.css's --text-body so the rule is
+     still correct if this sheet is ever used without the @theme block. */
   :host {
     display: block;
     font-family: var(--kai-font-base, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
+    font-size: var(--text-body, var(--kai-text-body, 0.875rem));
     letter-spacing: var(--kai-tracking, normal);
   }
   /* Code/monospace surfaces use --kai-font-code (named for its ROLE — code — not

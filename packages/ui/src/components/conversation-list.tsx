@@ -324,13 +324,13 @@ export function ConversationList(props: ConversationListProps) {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-muted-foreground"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input ref={searchInput} type="text" value={searchQuery()} onInput={(e) => setQuery(e.currentTarget.value)} placeholder="Search chats..."
               aria-label="Search chats"
-              class="bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full" />
+              class="bg-transparent text-compact text-foreground placeholder:text-muted-foreground rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring w-full" />
           </div>
         </div>
       </Show>
       {/* Item mode: the consumer's own rows in a list region. The container's
           filter/grouping/empty states do not apply — the consumer's loop owns
-          them (spec § 2a batteries boundary). */}
+          them. */}
       <Show when={itemMode()}>
         <ScrollArea class="flex-1 px-2">
           <div
@@ -411,11 +411,11 @@ function GroupSection(props: { name: string; count: number; conversations: Conve
   const [open, setOpen] = createSignal(true);
   return (
     <Collapsible open={open()} onOpenChange={setOpen}>
-      <CollapsibleTrigger class="flex items-center gap-1.5 w-full px-1.5 py-1 rounded-md text-[13px] text-muted-foreground font-medium hover:bg-muted/30 transition-colors cursor-pointer mt-1.5">
+      <CollapsibleTrigger class="flex items-center gap-1.5 w-full px-1.5 py-1 rounded-md text-compact text-muted-foreground font-medium hover:bg-muted/30 transition-colors cursor-pointer mt-1.5">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
           class={cn('transition-transform', !open() && '-rotate-90')}><polyline points="6 9 12 15 18 9"/></svg>
         <span>{props.name}</span>
-        <Badge variant="count" class="ml-auto text-[11px]">{props.count}</Badge>
+        <Badge variant="count" class="ml-auto text-caption">{props.count}</Badge>
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div class="pl-2 mt-0.5 space-y-0.5">

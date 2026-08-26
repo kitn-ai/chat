@@ -228,7 +228,7 @@ export function Coachmark(props: CoachmarkProps) {
                 <Show when={props.badge}>
                   <span
                     part="badge"
-                    class={cn('inline-flex items-center rounded-full px-1.5 py-0.5 text-[0.625rem] font-medium uppercase leading-none tracking-wide', BADGE_CLS)}
+                    class={cn('inline-flex items-center rounded-full px-1.5 py-0.5 text-micro font-medium uppercase leading-none tracking-wide', BADGE_CLS)}
                   >
                     {props.badge}
                   </span>

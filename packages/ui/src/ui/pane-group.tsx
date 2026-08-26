@@ -201,7 +201,7 @@ export function PaneGroup(props: PaneGroupProps) {
             </Show>
             <span
               class={cn(
-                'relative flex size-[18px] items-center justify-center rounded text-[11px] font-bold leading-none tabular-nums',
+                'relative flex size-[18px] items-center justify-center rounded text-caption font-bold leading-none tabular-nums',
                 TONE_BG[tone()],
                 TONE_BADGE_FG[tone()],
               )}
@@ -215,7 +215,7 @@ export function PaneGroup(props: PaneGroupProps) {
           <Show when={tab().status?.label}>
             <span
               class={cn(
-                'truncate text-[10px] font-medium',
+                'truncate text-micro font-medium',
                 TONE_TEXT[tone()],
                 alwaysWord() ? 'inline' : 'hidden group-hover/tab:inline',
               )}

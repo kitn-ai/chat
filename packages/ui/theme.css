@@ -108,18 +108,42 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
-  /* Typography scale — semantic sizes shared by all components. Each generates a
-     Tailwind utility (text-caption / text-meta / text-body / text-title). To
-     restyle the kit's typography, override the namespaced --kai-text-* token on
-     :root (e.g. `--kai-text-body: 0.9375rem`) — it pierces the Shadow DOM via the
+  /* Typography scale — ONE scale for the whole kit. Each semantic name
+     (text-micro / text-caption / text-meta / text-compact / text-body /
+     text-title / text-lg)
+     resolves through a namespaced --kai-text-* token, so overriding that token
+     on :root restyles the kit globally — it pierces the Shadow DOM via the
      var() fallback, exactly like the --kai-color-* tokens. The bare --text-*
-     names stay internal so a host's own --text-* can't collide. (Message/markdown/
-     input reading size also scales with the `proseSize` prop; these tokens cover
-     the fixed chrome & controls.) */
-  --text-caption: var(--kai-text-caption, 0.6875rem);  --text-caption--line-height: 1rem;      /* 11px — micro labels, badges, sub-counts */
-  --text-meta: var(--kai-text-meta, 0.75rem);     --text-meta--line-height: 1.1rem;       /* 12px — controls, toggles, switchers, captions */
-  --text-body: var(--kai-text-body, 0.875rem);    --text-body--line-height: 1.45rem;      /* 14px — primary reading text */
-  --text-title: var(--kai-text-title, 1rem);        --text-title--line-height: 1.5rem;      /* 16px — emphasis / headers */
+     names stay internal so a host's own --text-* can't collide.
+
+     Tailwind's OWN scale is re-pointed at the same tokens: in Tailwind v4 the
+     `text-xs` / `text-sm` / `text-base` / `text-lg` utilities are generated FROM
+     --text-xs/sm/base/lg in this very @theme block, so aliasing them makes
+     text-xs ≡ text-meta, text-sm ≡ text-body, text-base ≡ text-title and
+     text-lg ≡ text-lg. That matters because the vast majority of the kit's call
+     sites spell the Tailwind name; without the alias the --kai-text-* knobs
+     reached ~12% of them and the "globally" promise in the theming guide was
+     false. Defaults are byte-identical to stock Tailwind, so nothing moves
+     until a consumer actually sets a --kai-text-* token — including in a
+     consumer's own Tailwind build that imports this file, which is the point:
+     one scale everywhere, kit and app moving together.
+
+     Line-heights are UNITLESS RATIOS (Tailwind's own), never fixed rem. A fixed
+     leading does not scale: --kai-text-body: 1.25rem under the old 1.45rem
+     leading gave 20px text on 23.2px leading — near solid-set — which made the
+     themable token unsafe to actually theme.
+     (Message/markdown reading size also scales with the `proseSize` prop; these
+     tokens cover the fixed chrome & controls.) */
+  --text-micro: var(--kai-text-micro, 0.625rem);      --text-micro--line-height: calc(0.875 / 0.625);   /* 10px — badges, pills, uppercase eyebrows */
+  --text-caption: var(--kai-text-caption, 0.6875rem); --text-caption--line-height: calc(1 / 0.6875);    /* 11px — micro labels, sub-counts, xs code */
+  --text-meta: var(--kai-text-meta, 0.75rem);         --text-meta--line-height: calc(1 / 0.75);         /* 12px — controls, toggles, switchers, captions */
+  --text-xs: var(--kai-text-meta, 0.75rem);           --text-xs--line-height: calc(1 / 0.75);           /* ≡ text-meta */
+  --text-compact: var(--kai-text-compact, 0.8125rem); --text-compact--line-height: calc(1.21875 / 0.8125); /* 13px — dense chrome & code: a notch below body */
+  --text-body: var(--kai-text-body, 0.875rem);        --text-body--line-height: calc(1.25 / 0.875);     /* 14px — primary reading text */
+  --text-sm: var(--kai-text-body, 0.875rem);          --text-sm--line-height: calc(1.25 / 0.875);       /* ≡ text-body */
+  --text-title: var(--kai-text-title, 1rem);          --text-title--line-height: calc(1.5 / 1);         /* 16px — emphasis / headers */
+  --text-base: var(--kai-text-title, 1rem);           --text-base--line-height: calc(1.5 / 1);          /* ≡ text-title */
+  --text-lg: var(--kai-text-lg, 1.125rem);            --text-lg--line-height: calc(1.75 / 1.125);       /* 18px — section headings, lg prose */
 
   @keyframes typing { 0%,100% { transform: translateY(0); opacity: .5 } 50% { transform: translateY(-2px); opacity: 1 } }
   @keyframes loading-dots { 0%,100% { opacity: 0 } 50% { opacity: 1 } }
