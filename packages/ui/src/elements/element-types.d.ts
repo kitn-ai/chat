@@ -757,6 +757,8 @@ export interface KaiDockElement extends HTMLElement {
   unread?: boolean;
   /** Disable the launcher; `show()` and `toggle()` are gated on it. */
   disabled?: boolean;
+  /** Suppress the dock's own built-in mobile close X. Set this when your slotted panel content supplies its own close affordance (e.g. a `<kai-chat slot="header-end">` close button) — otherwise the two stack. Attribute: `hide-close`. */
+  hideClose?: boolean;
   /** Where focus lands on open: `content` (default, the first element you slotted), `panel`, or `none`. Attribute: `focus-on-open`. */
   focusOnOpen?: "content" | "panel" | "none";
   /** Open it programmatically (no-op while disabled). */
@@ -2614,6 +2616,8 @@ export interface KaiDockElementProps {
   unread?: boolean;
   /** Disable the launcher; `show()` and `toggle()` are gated on it. */
   disabled?: boolean;
+  /** Suppress the dock's own built-in mobile close X. Set this when your slotted panel content supplies its own close affordance (e.g. a `<kai-chat slot="header-end">` close button) — otherwise the two stack. Attribute: `hide-close`. */
+  hideClose?: boolean;
   /** Where focus lands on open: `content` (default, the first element you slotted), `panel`, or `none`. Attribute: `focus-on-open`. */
   focusOnOpen?: "content" | "panel" | "none";
 }

@@ -28,6 +28,11 @@ interface Props extends Record<string, unknown> {
   unread?: boolean;
   /** Disable the launcher; `show()` and `toggle()` are gated on it. */
   disabled?: boolean;
+  /** Suppress the dock's own built-in mobile close X. Set this when your slotted
+   *  panel content supplies its own close affordance (e.g. a `<kai-chat
+   *  slot="header-end">` close button) — otherwise the two stack. Attribute:
+   *  `hide-close`. */
+  hideClose?: boolean;
   /** Where focus lands on open: `content` (default, the first element you slotted),
    *  `panel`, or `none`. Attribute: `focus-on-open`. */
   focusOnOpen?: DockFocusOnOpen;
@@ -108,6 +113,7 @@ defineWebComponent<Props, Events>('kai-dock', {
   closeLabel: undefined,
   unread: undefined,
   disabled: undefined,
+  hideClose: undefined,
   focusOnOpen: 'content',
 }, (props, ctx) => {
   const { flag, element, expose, reflectFlag } = ctx;
@@ -128,6 +134,7 @@ defineWebComponent<Props, Events>('kai-dock', {
   reflectFlag('unread');
   reflectFlag('disabled');
   reflectFlag('defaultOpen');
+  reflectFlag('hideClose');
 
   // Seed the primitive from EITHER spelling, read once at upgrade.
   //
@@ -178,6 +185,7 @@ defineWebComponent<Props, Events>('kai-dock', {
       closeLabel={props.closeLabel as string | undefined}
       unread={flag('unread')}
       disabled={flag('disabled')}
+      hideClose={flag('hideClose')}
       focusOnOpen={props.focusOnOpen as DockFocusOnOpen}
       contentTarget={contentTarget}
       controllerRef={(a) => (api = a)}

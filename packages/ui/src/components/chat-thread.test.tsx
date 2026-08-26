@@ -62,6 +62,56 @@ describe('ChatThread header composition', () => {
     expect(container.querySelector('header')).toBeTruthy();
     expect(getByText('Assistant')).toBeInTheDocument();
   });
+
+  // headerEndContent: a Solid-composed caller's JSX escape hatch for the header-end
+  // region (a docked widget's own close control being the motivating case — see
+  // ui/dock.tsx's hideClose doc). Renders ALONGSIDE the named slot, not instead of
+  // it, and counts toward showHeader() on its own.
+  it('shows the header for headerEndContent alone, with no title/models/context/slots', () => {
+    const { container } = render(() => <ChatThread messages={[]} headerEndContent={<button>Close</button>} />);
+    expect(container.querySelector('header')).toBeTruthy();
+  });
+
+  it('renders headerEndContent in the header, alongside (not instead of) the header-end slot', () => {
+    const { container, getByText } = render(() => (
+      <ChatThread messages={[]} headerEnd headerEndContent={<button>Close</button>} />
+    ));
+    const header = container.querySelector('header');
+    expect(header).toBeTruthy();
+    expect(header!.querySelector('slot[name="header-end"]')).toBeTruthy();
+    expect(getByText('Close')).toBeInTheDocument();
+  });
+});
+
+// emptyContent: a Solid-composed caller's JSX escape hatch for the empty-state
+// region, rendered in-tree (fully styled by the adopted stylesheet) rather than
+// through the light-DOM `slot="empty"` boundary `empty` targets. Wins over
+// `empty`/`slot="empty"` when both are set.
+describe('ChatThread emptyContent (JSX empty-state escape hatch)', () => {
+  it('renders emptyContent while the thread is empty', () => {
+    const { getByText } = render(() => <ChatThread messages={[]} emptyContent={<div>Welcome!</div>} />);
+    expect(getByText('Welcome!')).toBeInTheDocument();
+  });
+
+  it('does not render emptyContent once the thread has messages', () => {
+    const messages: ChatMessage[] = [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }];
+    const { queryByText } = render(() => <ChatThread messages={messages} emptyContent={<div>Welcome!</div>} />);
+    expect(queryByText('Welcome!')).toBeNull();
+  });
+
+  it('emptyContent wins over the empty/slot="empty" boundary when both are set', () => {
+    const { container, getByText, queryByText } = render(() => (
+      <ChatThread messages={[]} empty emptyContent={<div>Welcome!</div>} />
+    ));
+    expect(getByText('Welcome!')).toBeInTheDocument();
+    expect(container.querySelector('slot[name="empty"]')).toBeNull();
+    expect(queryByText('Welcome!')).not.toBeNull();
+  });
+
+  it('empty alone (no emptyContent) still falls back to the slot', () => {
+    const { container } = render(() => <ChatThread messages={[]} empty />);
+    expect(container.querySelector('slot[name="empty"]')).toBeTruthy();
+  });
 });
 
 // `attach` passthrough: mirrors the existing webSearch/voice pattern (ChatThreadProps

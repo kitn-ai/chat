@@ -15,7 +15,19 @@ import type { ModelOption } from '../types';
 type Props = Omit<ChatThreadProps,
   'class' | 'onValueChange' | 'onSubmit' | 'onAttachmentsChange' | 'onSuggestionClick' | 'onModelChange'
   | 'onMessageAction' | 'onWebSearch' | 'onVoice' | 'controllerRef' | 'cardTypes' | 'cardSchemas' | 'cardHostElement' | 'messages'
-  | 'accept' | 'onAttachmentsRejected'> & Record<string, unknown> & {
+  | 'accept' | 'onAttachmentsRejected'
+  // `headerEndContent`/`emptyContent` are JSX.Element escape hatches for a caller
+  // composing `ChatThread` directly as a Solid component (see their doc comments in
+  // chat-thread.tsx — the construct-engine's emitted App is the motivating case).
+  // `<kai-chat>` is the OPPOSITE shape: a custom element crossing the shadow-DOM
+  // boundary, where a `JSX.Element` value cannot exist for a consumer to construct
+  // (React/Vue/plain HTML have no such type) and the facade already has its own
+  // working mechanism for both regions — `slot="header-end"` and `slot="empty"`.
+  // Omitted here rather than left to flow through `Omit`'s default pass-through:
+  // without this, `gen-element-api.mjs` picked them up and put a JSX.Element type
+  // (which it stringifies as Solid's internal array-like union — meaningless to a
+  // web-component consumer) into `<kai-chat>`'s public prop surface and docs.
+  | 'headerEndContent' | 'emptyContent'> & Record<string, unknown> & {
     /** Which attachment media types the user may stage, in HTML `accept` syntax:
      *  `<kai-chat accept="image/*,application/pdf">`. A plain string, so unlike
      *  `messages` it DOES work as an attribute. Omitted means no filter.

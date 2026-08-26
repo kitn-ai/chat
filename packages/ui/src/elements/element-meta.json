@@ -3601,6 +3601,14 @@
         "displayType": "undefined | false | true"
       },
       {
+        "name": "hideClose",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Suppress the dock's own built-in mobile close X. Set this when your slotted panel content supplies its own close affordance (e.g. a `<kai-chat slot=\"header-end\">` close button) — otherwise the two stack. Attribute: `hide-close`.",
+        "displayType": "undefined | false | true"
+      },
+      {
         "name": "focusOnOpen",
         "type": "undefined | \"content\" | \"panel\" | \"none\"",
         "optional": true,

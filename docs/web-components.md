@@ -3504,6 +3504,7 @@ One panel inside `<kai-resizable>`: `size` (the starting share), `min` / `max` b
 | `closeLabel` | `close-label` | `undefined | string` | — | i18n override for the launcher's name while open (default `Close ${label}`). |
 | `unread` | `unread` | `undefined | false | true` | — | Show the unread dot. YOURS: it renders only while closed, and the dock never writes it back. Clear it in your `kai-open-change` handler. |
 | `disabled` | `disabled` | `undefined | false | true` | — | Disable the launcher; `show()` and `toggle()` are gated on it. |
+| `hideClose` | `hide-close` | `undefined | false | true` | — | Suppress the dock's own built-in mobile close X. Set this when your slotted panel content supplies its own close affordance (e.g. a `<kai-chat slot="header-end">` close button) — otherwise the two stack. Attribute: `hide-close`. |
 | `focusOnOpen` | `focus-on-open` | `undefined | "content" | "panel" | "none"` | `'content'` | Where focus lands on open: `content` (default, the first element you slotted), `panel`, or `none`. Attribute: `focus-on-open`. |
 
 #### Events

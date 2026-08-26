@@ -328,29 +328,73 @@ describe('header (Task 19c)', () => {
   });
 });
 
+// owner feedback on the live widget: a mobile close X on its own dead row,
+// separate from the title, "doesn't look intentional". The fix: a `widget`
+// layout with a declared header.title gets its close control threaded into
+// ChatThread's own header row (headerEndContent) instead of relying only on
+// Dock's floating fallback X — zero collision by construction, no reserved
+// dead-row band needed.
+describe('widget close control shares the header row (owner feedback fix)', () => {
+  it('widget + header.title: ChatThread gets headerEndContent, Dock gets hideClose + a controllerRef, App declares the closure', () => {
+    const app = file(
+      generateProject(construct({ layout: 'widget', header: { title: 'Acme Support' } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('let dockClose: (() => void) | undefined;');
+    expect(app).toContain(
+      '<Dock label="acme-support" hideClose={true} controllerRef={(api) => (dockClose = () => api.setOpen(false))}>',
+    );
+    const chatThreadLine = app.split('\n').find((l) => l.includes('<ChatThread '));
+    expect(chatThreadLine).toBeDefined();
+    expect(chatThreadLine).toContain('headerEndContent={');
+    expect(chatThreadLine).toContain('onClick={() => dockClose?.()}');
+    expect(chatThreadLine).toContain('<DockCloseGlyph />');
+    expect(app).toContain(', Button, DockCloseGlyph } from \'@kitn.ai/ui/solid\';');
+  });
+
+  it('widget with NO header.title: no headerEndContent, no hideClose, Dock unchanged — its own floating X stays the fallback (nothing renders in the header row for a close control to join)', () => {
+    const app = file(generateProject(construct({ layout: 'widget' })), 'src/App.tsx');
+    // The capability-gating doc comment above App() names "headerEndContent"/
+    // "hideClose" in prose regardless (same discriminator as the empty/
+    // reasoningOpen precedents above) — the real signal is actual code usage:
+    // an import, a JSX attribute, or the closure declaration/reference.
+    expect(app).not.toMatch(/\bheaderEndContent=\{/);
+    expect(app).not.toMatch(/\bhideClose=\{/);
+    expect(app).not.toMatch(/\bdockClose\s*[:=?]/);
+    expect(app).toContain('<Dock label="acme-support">');
+    expect(app).not.toContain('DockCloseGlyph');
+  });
+
+  it('non-widget layouts with a header.title: no Dock at all, so no close-control wiring even though a header exists', () => {
+    const app = file(
+      generateProject(construct({ layout: 'fullscreen', header: { title: 'Acme Support' } })),
+      'src/App.tsx',
+    );
+    expect(app).not.toMatch(/\bheaderEndContent=\{/);
+    expect(app).not.toMatch(/\bdockClose\s*[:=?]/);
+    expect(app).not.toContain('<Dock');
+  });
+});
+
 describe('empty (Task 14 — welcome-screen)', () => {
-  it('threads empty={true} onto ChatThread and the Empty composition through a Portal onto the host element, tagged slot="empty"', () => {
+  it('threads the Empty composition straight onto ChatThread\'s emptyContent prop — no Portal, no App signature change', () => {
     const app = file(
       generateProject(construct({ empty: { title: 'Hi, welcome' } })),
       'src/App.tsx',
     );
-    expect(app).toContain('empty={true}');
-    // Portal always wraps its children in its OWN container div appended
-    // directly to `mount` — an attribute on a nested child (e.g. on
-    // `<Empty>`) is invisible to slot assignment, which only looks at direct
-    // children of the shadow host. So `slot="empty"` has to land on Portal's
-    // own wrapper via its `ref` callback, confirmed against a real ejected
-    // widget cell in a browser (a `slot="empty"` on `<Empty>` itself left
-    // `assignedNodes()` empty and the greeting never painted).
-    expect(app).toContain(
-      "<Portal mount={props.element} ref={(el) => el.setAttribute('slot', 'empty')}>",
-    );
-    expect(app).toContain('<Empty>');
+    // emptyContent is a plain JSX prop: App composes ChatThread directly in the
+    // SAME shadow tree defineWebComponent attaches, so there is no light-DOM
+    // boundary to cross and no Portal needed at all (that indirection used to
+    // leave the Empty composition's Tailwind classes unstyled — light-DOM
+    // slotted content sits outside the shadow root's adopted stylesheet).
+    expect(app).toContain('emptyContent={<Empty><EmptyHeader>');
     expect(app).toContain('<EmptyTitle>{"Hi, welcome"}</EmptyTitle>');
-    // App has to receive the host element to portal into — that's a real
-    // signature change, only when `empty` is declared.
-    expect(app).toContain('export function App(props: { element: HTMLElement })');
-    expect(app).toContain("import { Portal } from 'solid-js/web';");
+    expect(app).not.toContain('<Portal');
+    expect(app).not.toContain("import { Portal }");
+    expect(app).not.toMatch(/\bempty=\{true\}/);
+    // App keeps its original zero-arg signature — nothing needs the host
+    // element any more.
+    expect(app).toContain('export function App() {');
     expect(app).toContain('Empty, EmptyHeader, EmptyTitle } from \'@kitn.ai/ui/solid\';');
   });
 
@@ -376,15 +420,13 @@ describe('empty (Task 14 — welcome-screen)', () => {
     expect(noIcon).not.toContain('EmptyMedia');
   });
 
-  it('no empty declared: no empty prop, no Portal usage/import, no Empty-composition import, App() keeps its original zero-arg signature', () => {
+  it('no empty declared: no emptyContent prop, no Empty-composition import, App() keeps its original zero-arg signature', () => {
     const app = file(generateProject(construct()), 'src/App.tsx');
-    // The capability-gating doc comment above App() names "empty"/"Portal" in
-    // prose regardless (same discriminator as the reasoningOpen precedent
+    // The capability-gating doc comment above App() names "empty"/"emptyContent"
+    // in prose regardless (same discriminator as the reasoningOpen precedent
     // above: a plain `.not.toContain` would false-fail on that comment) — the
     // real signal is actual code usage: an import, a JSX tag, or a prop.
-    expect(app).not.toMatch(/\bempty=\{true\}/);
-    expect(app).not.toMatch(/import \{ Portal \}/);
-    expect(app).not.toMatch(/<Portal /);
+    expect(app).not.toMatch(/\bemptyContent=\{/);
     expect(app).not.toMatch(/<Empty /);
     expect(app).not.toMatch(/, Empty,/);
     expect(app).toContain('export function App() {');
@@ -405,14 +447,13 @@ describe('empty (Task 14 — welcome-screen)', () => {
       ),
       'src/App.tsx',
     );
-    expect(app).toContain('empty={true}');
     expect(app).toContain('<EmptyTitle>{"Hi, welcome"}</EmptyTitle>');
     expect(app).toContain('suggestions={["Where\'s my order?","Request a refund"]}');
-    // Both attributes land on the SAME <ChatThread ... /> tag — the empty
-    // Portal is not a substitute for the suggestions prop, and vice versa.
+    // Both attributes land on the SAME <ChatThread ... /> tag — emptyContent
+    // is not a substitute for the suggestions prop, and vice versa.
     const chatThreadLine = app.split('\n').find((l) => l.includes('<ChatThread '));
     expect(chatThreadLine).toBeDefined();
-    expect(chatThreadLine).toContain('empty={true}');
+    expect(chatThreadLine).toContain('emptyContent={');
     expect(chatThreadLine).toContain('suggestions={');
   });
 
@@ -437,8 +478,7 @@ describe('empty (Task 14 — welcome-screen)', () => {
       generateProject(construct({ layout: 'custom', slots: ['header'], empty: { title: 'x' } })),
       'src/App.tsx',
     );
-    expect(app).not.toContain('empty={true}');
-    expect(app).not.toContain('<Portal');
+    expect(app).not.toMatch(/\bemptyContent=\{/);
   });
 });
 

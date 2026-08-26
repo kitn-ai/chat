@@ -1094,20 +1094,39 @@ describe('mobile close X (<=480px full-bleed)', () => {
     );
   });
 
-  test('CSS: the <=480px block reserves a top padding band for the close button, DERIVED from its own tokens', async () => {
+  // -------------------------------------------------------------------------
+  // Fix round 2 (owner feedback against the live construct-engine widget): the
+  // reserved padding band above read as a dead empty strip with a lone X
+  // floating in it — "why is the X button on its own row instead of shared
+  // with the title... that doesn't look intentional" — worse than the
+  // collision it fixed. The actual fix composes instead of reserving space:
+  // `ChatThread` gained its own `headerEndContent` escape hatch so a caller
+  // puts the close control INSIDE the header row, and `hideClose` here
+  // suppresses this built-in X for that case. What is left is a plain
+  // absolute overlay with no reserved space at all — the fallback for panel
+  // content with no header of its own.
+  // -------------------------------------------------------------------------
+
+  test('CSS: the <=480px block no longer reserves a padding band above the panel — the X overlays instead of pushing content down', async () => {
     const el = await mount();
     const css = Array.from(shadow(el).querySelectorAll('style')).map((s) => s.textContent).join('\n');
     const mediaBlock = css.match(/@media \(max-width: 480px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
     expect(mediaBlock, 'the <=480px block must be found').not.toBe('');
-    // The panel rule (not the close button's own rule) must carry the reserved
-    // band, built from the SAME --kai-dock-close-inset-block token and the button's
-    // own 2.25rem footprint — a copy of the fact, not a second number invented for
-    // this purpose alone.
     const panelRule = mediaBlock.match(/\[data-kai-dock\] \[part="panel"\] \{([\s\S]*?)\}/)?.[1] ?? '';
     expect(panelRule, 'the mobile panel rule must be found').not.toBe('');
-    expect(panelRule, 'padding-block-start must be derived from --kai-dock-close-inset-block, not a bare number').toMatch(
-      /padding-block-start:\s*calc\(2 \* var\(--kai-dock-close-inset-block,\s*0\.75rem\)\s*\+\s*2\.25rem\)/,
-    );
+    expect(panelRule).not.toMatch(/padding-block-start/);
+  });
+
+  test('hideClose drops the built-in close button from the render tree entirely, not just hides it', async () => {
+    const el = await mount('<div slot="panel">body</div>');
+    el.setAttribute('hide-close', '');
+    await flush();
+    expect(closeBtn(el)).toBeNull();
+  });
+
+  test('without hideClose the built-in close button still renders (default unchanged)', async () => {
+    const el = await mount('<div slot="panel">body</div>');
+    expect(closeBtn(el)).not.toBeNull();
   });
 
   test('CSS: the <=480px block switches the close part on and hides the launcher only while the panel is expanded', async () => {

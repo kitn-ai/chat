@@ -19,6 +19,7 @@ import type { ProseSize } from '../primitives/chat-config';
 import type { ModelOption } from '../types';
 import type { CardComponentMap } from '../primitives/card-registry';
 import type { CardSchemaMap } from './card-renderer';
+import type { JSX } from 'solid-js';
 
 export interface ChatThreadContextUsage {
   usedTokens: number;
@@ -108,6 +109,17 @@ export interface ChatThreadProps {
   headerStart?: boolean;
   /** Whether the host has `slot="header-end"` content (right of the controls). */
   headerEnd?: boolean;
+  /** Extra content rendered in the header-end region, AFTER `slot="header-end"`.
+   *  This is a JSX escape hatch for a caller composing `ChatThread` directly as a
+   *  Solid component (no shadow-DOM host, so there is no light-DOM node to slot) —
+   *  the `kai-dock`-docked construct widget is the motivating case: it needs its
+   *  own close affordance to sit IN the header row, sharing it with the title
+   *  instead of floating as a second control with no visible relationship to the
+   *  chat surface. Renders alongside the named slot rather than replacing it, so a
+   *  real `slot="header-end"` consumer and this prop can both be present. Counts
+   *  toward `showHeader()` the same as `headerEnd`, so a construct with no title
+   *  and only this content still gets a header row to sit in. */
+  headerEndContent?: JSX.Element;
   // ── Composition slots ─────────────────────────────────────────────────────
   // Each flag below is set by the `<kai-chat>` facade when matching light-DOM
   // `slot="…"` content is projected, and gates one composition slot. Two kinds:
@@ -124,6 +136,17 @@ export interface ChatThreadProps {
   sidebar?: boolean;
   /** REPLACE: custom zero-state rendered in the message area while the thread is empty (replaces the empty message list only; the composer and its suggestions still render). */
   empty?: boolean;
+  /** REPLACE, JSX form: the empty-state content itself, for a caller composing
+   *  `ChatThread` directly as a Solid component rather than through the `<kai-chat>`
+   *  shadow-DOM boundary that `empty`/`slot="empty"` targets. Renders INSIDE this
+   *  component's own tree — so a caller passing the kit's own `<Empty>` composition
+   *  (`components/empty.tsx`) gets it fully styled by the adopted stylesheet, unlike
+   *  `slot="empty"`: that slot only ever receives LIGHT-DOM children of the shadow
+   *  HOST, and light-DOM nodes are outside the shadow root's adopted stylesheets, so
+   *  Tailwind-utility-class content projected there renders bare. Takes priority
+   *  over `empty`/`slot="empty"` when both are set — the two are alternate delivery
+   *  mechanisms for the same region, not additive like `headerEndContent`. */
+  emptyContent?: JSX.Element;
   /** REPLACE: full custom composer in place of the built-in prompt input. The
    *  projected content wires its own submit (the data-flow boundary). */
   composer?: boolean;
@@ -274,7 +297,7 @@ export function ChatThread(props: ChatThreadProps) {
     if ((props.suggestionMode ?? 'submit') === 'fill') { handleChange(v); props.onSuggestionClick?.(v); }
     else { props.onSubmit?.({ value: v, attachments: attachments() }); afterSubmit(); }
   };
-  const showHeader = () => !!(props.chatTitle || props.models || props.context || props.headerStart || props.headerEnd);
+  const showHeader = () => !!(props.chatTitle || props.models || props.context || props.headerStart || props.headerEnd || props.headerEndContent);
   // Suggestions are conversation starters: show only on an empty thread unless
   // the host opts into persisting them.
   const visibleSuggestions = () =>
@@ -350,6 +373,11 @@ export function ChatThread(props: ChatThreadProps) {
                     {/* Consumer-injected trailing controls (share, settings, …).
                         Projects light-DOM `slot="header-end"` children of <kai-chat>. */}
                     <slot name="header-end" />
+                    {/* JSX escape hatch for a Solid-composed caller with no shadow-DOM
+                        host to slot into (see the prop doc) — a docked widget's own
+                        close affordance is the motivating case, sharing this row with
+                        the title instead of floating as an unrelated second control. */}
+                    {props.headerEndContent}
                   </div>
                 </header>
               </Show>
@@ -360,11 +388,15 @@ export function ChatThread(props: ChatThreadProps) {
           <div class="relative flex-1 overflow-hidden">
             <ChatContainer class="h-full px-4 py-3">
               <ChatContainerContent class="mx-auto w-full max-w-3xl space-y-4">
-                {/* REPLACE — custom empty-state slot, shown only while the thread is
+                {/* REPLACE — custom empty-state content, shown only while the thread is
                     empty. The component still owns WHEN it shows (data state); the
-                    consumer owns WHAT it looks like. */}
-                <Show when={props.empty && props.messages.length === 0}>
-                  <slot name="empty" />
+                    consumer owns WHAT it looks like. `emptyContent` (JSX, rendered
+                    in-tree and fully styled) wins over `empty`/`slot="empty"`
+                    (light-DOM projection) when both are set — see the prop doc. */}
+                <Show when={(props.empty || props.emptyContent) && props.messages.length === 0}>
+                  <Show when={props.emptyContent} fallback={<slot name="empty" />}>
+                    {props.emptyContent}
+                  </Show>
                 </Show>
                 {/* Keyed by message id (see the note above this component), so a
                     streaming delta updates the row instead of replacing it. */}

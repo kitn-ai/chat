@@ -42,6 +42,15 @@ export interface DockProps {
   unread?: boolean;
   /** Disable the launcher. */
   disabled?: boolean;
+  /** Suppress the dock's own built-in mobile `[part="close"]` X. Off (rendered) by
+   *  default — the built-in X is the FALLBACK close route for panel content with no
+   *  header of its own, which is the general case the dock has to cover since it
+   *  never reads what it holds. Set `true` when the slotted/composed content
+   *  supplies its own close affordance in its own header row (e.g. `ChatThread`'s
+   *  `headerEndContent`) — with both present the two X's stack, one floating over
+   *  the other's row, which is exactly the "doesn't look intentional" feedback this
+   *  prop exists to let a caller avoid. */
+  hideClose?: boolean;
   /** Where focus lands on open. Defaults to `content`. */
   focusOnOpen?: DockFocusOnOpen;
   /** Controlled open state. When set, the component never changes it itself — drive it
@@ -184,13 +193,22 @@ const DOCK_CSS = `
    value in this file (--kai-dock-width and friends). The dock is content-agnostic —
    it never reads what is slotted into the panel — so it cannot know whether that
    content renders its own trailing controls (a ChatThread header-end slot with
-   share/settings icons, say) in the same top-right corner. Two things follow: (1)
-   the mobile block below reserves a BAND of the panel's own padding above whatever
-   is slotted, sized to this button's own footprint, so out of the box nothing
-   slotted renders under the X regardless of what it is — a general fix, not a
-   ChatThread-shaped one. (2) a consumer who wants the X to sit IN FRONT of their
-   own top-right content instead of above it (overlapping it on purpose, e.g. a
-   single small badge) can still pull the inset in via these tokens. */
+   share/settings icons, say) in the same top-right corner.
+
+   An earlier version of this rule had the mobile block below reserve a BAND of the
+   panel's own padding above whatever was slotted, sized to this button's own
+   footprint, so nothing painted under the X. Owner feedback on the real widget: the
+   band read as a dead empty strip with a lone X floating in it -- "that doesn't
+   look like the empty component either, lets do better" -- worse than the
+   collision it fixed. The actual fix composes instead of reserving space: ChatThread
+   now has its own headerEndContent escape hatch (see its prop doc) so a caller puts
+   the close control INSIDE the header row, sharing it with the title -- zero
+   collision by construction. hideClose on this component (see its prop doc) then
+   suppresses this built-in X for exactly that case. What remains here is the
+   FALLBACK: a plain absolute overlay, top-right of the panel, for content with no
+   header of its own to hold a close control -- and these tokens are there for the
+   rare case it should deliberately sit in front of something (e.g. a single small
+   badge). */
 [data-kai-dock] [part="close"] {
   display: none;
   position: absolute;
@@ -282,17 +300,6 @@ const DOCK_CSS = `
     max-block-size: none;
     border: 0;
     border-radius: 0;
-    /* Reserve a band for the close button ABOVE whatever is slotted, rather than
-       overlaying it on top of the panel's own content — verified against a real
-       collision: a ChatThread header-end slot (a couple of trailing icon
-       buttons, the documented "share, settings, ..." case) renders in this exact
-       corner, and without this the X painted directly over it. The band is
-       DERIVED from the button's own inset + size tokens, not a second hand-typed
-       number, and it works for ANY slotted content because it reserves space
-       structurally instead of assuming what is at that corner — the dock still
-       never reads what it is holding. Only the block-start side needs it: the
-       close button is the only thing this rule adds to the panel's top-right. */
-    padding-block-start: calc(2 * var(--kai-dock-close-inset-block, 0.75rem) + 2.25rem);
   }
 
   /* The full-bleed panel gets its own close affordance instead of relying on the
@@ -300,8 +307,12 @@ const DOCK_CSS = `
      floating over a full-bleed panel with no other visible close route is exactly
      what the owner flagged. Escape and the X both still work; the launcher comes
      back the instant the panel closes because data-expanded is gone by then.
-     Absolutely positioned, so the padding-block-start above (a content-box
-     concern) does not shift IT — only the in-flow slotted content. */
+     Absolutely positioned, so it overlays rather than shifting the panel's
+     in-flow content — the FALLBACK route for content with no header of its own
+     (see the [part="close"] comment above). Content that supplies its own close
+     control passes hideClose, which drops the button from the render tree
+     entirely (see the component body) rather than being gated here — so this
+     rule stays a plain, unconditional width-query switch. */
   [data-kai-dock] [part="close"] { display: inline-flex; }
   [data-kai-dock]:has([part="panel"][data-expanded]) [part="launcher"] { display: none; }
 }
@@ -381,8 +392,11 @@ function isWithin(root: Node, node: Node | null): boolean {
  *   hides while it is open — a floating launcher over a full-bleed panel is not an
  *   obvious close affordance. The panel gets its own `[part="close"]` X, top-right,
  *   CSS-gated by the SAME media query and `[data-expanded]`, so it needs no viewport
- *   JS and no new prop. Desktop is unaffected: the launcher keeps toggling and no X
- *   ever renders.
+ *   JS. Desktop is unaffected: the launcher keeps toggling and no X ever renders.
+ *   This is the FALLBACK route, for panel content with no header of its own to hold
+ *   a close control — content that does (a `ChatThread` using `headerEndContent`,
+ *   say) passes `hideClose` to drop this X instead of stacking a second one over
+ *   its own header row.
  *
  * WHAT IT REFUSES: it never aborts a request, never persists its own open state, never
  * decides what "unread" means, and never clears `unread` on open — writing over a
@@ -513,10 +527,16 @@ export function Dock(props: DockProps) {
           {/* Mobile-only (see the <=480px rule in DOCK_CSS): the full-bleed panel's
               own close affordance, since the launcher is hidden by the same query
               while the panel is open. Reuses the launcher's derived close name
-              rather than a new prop — same string, same i18n override. */}
-          <button type="button" part="close" aria-label={launcherName()} onClick={() => setOpen(false)}>
-            <DockCloseGlyph />
-          </button>
+              rather than a new prop — same string, same i18n override. Dropped
+              from the render tree entirely (not just hidden) when `hideClose` is
+              set — the panel content supplies its own, in its own header, and a
+              second X floating over that row is the exact "doesn't look
+              intentional" feedback `hideClose` exists to avoid. */}
+          <Show when={!props.hideClose}>
+            <button type="button" part="close" aria-label={launcherName()} onClick={() => setOpen(false)}>
+              <DockCloseGlyph />
+            </button>
+          </Show>
           {props.children}
         </div>
       </div>

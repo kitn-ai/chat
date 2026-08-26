@@ -494,12 +494,12 @@ function emitIndexHtml(c: Construct): string {
 function emitElement(c: Construct): string {
   const accent = c.theme?.accent;
   if (!accent) {
-    // `empty` (Task 14) needs the host element as a Portal target (see
-    // emitEmptyPortal's doc), so the facade has to receive `ctx` instead of
-    // being called with no arguments — only when a construct actually
-    // declares it, so every construct without one keeps this line byte-for-
-    // byte unchanged.
-    const facade = c.empty ? '(_props, ctx) => <App element={ctx.element} />' : '() => <App />';
+    // `empty` (Task 14) composes straight into ChatThread's own `emptyContent`
+    // prop now (see emitEmptyContentProp's doc) — a plain JSX value passed down
+    // through App, not a Portal onto the host — so the facade needs no `ctx` and
+    // every construct, `empty` declared or not, keeps this line byte-for-byte
+    // unchanged.
+    const facade = '() => <App />';
     return `import { defineWebComponent } from '@kitn.ai/ui/define';
 import { App } from './App';
 
@@ -556,13 +556,12 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
   const styleText =
     foregroundCss + `${CONTRAST_COLOR_SUPPORTS} {\n  :host { --kai-color-primary-foreground: contrast-color(var(--kai-color-primary)); }\n}`;
 
-  const appEl = c.empty ? ' element={ctx.element}' : '';
   const facade = `(_props, ctx) => {
   ctx.element.style.setProperty('--kai-color-primary', ${JSON.stringify(accent)});
   return (
     <>
       <style>{${JSON.stringify(styleText)}}</style>
-      <App${appEl} />
+      <App />
     </>
   );
 }`;
@@ -583,7 +582,7 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
 
 function emitApp(c: Construct): string {
   if (c.layout === 'custom') return emitCustomApp(c);
-  return `${emitSolidJsImport(c)}${emitEmptyPortalImport(c)}import { ChatThread, createKaiChat${emitLayoutImport(c)}${emitCardComponentImport(c)}${emitEmptyComponentImport(c)} } from '@kitn.ai/ui/solid';
+  return `${emitSolidJsImport(c)}import { ChatThread, createKaiChat${emitLayoutImport(c)}${emitCardComponentImport(c)}${emitEmptyComponentImport(c)}${emitHeaderCloseImport(c)} } from '@kitn.ai/ui/solid';
 import type { AttachmentData${emitHistoryTypeImport(c)} } from '@kitn.ai/ui/solid';
 ${emitProviderImports(c)}
 ${emitCardsImport(c)}
@@ -642,15 +641,22 @@ ${emitHistorySetup(c)}
 //     "off" value, since a reasoning disclosure is normal chat behavior, not
 //     an opt-in affordance like the paperclip or a starter chip.
 //   - empty (the welcome-screen greeting, Task 14): gated via ChatThread's
-//     own \`empty\` REPLACE-slot boundary, which is LIGHT-DOM (see
-//     emitEmptyPortal's own doc for why) — so this is the one field in this
-//     file that changes \`App\`'s own signature (an \`element\` param) rather
-//     than just adding a prop/import. \`capabilities.starters\`' chips and the
-//     composer still render underneath it: ChatThread's own doc comment on
-//     \`empty\` is explicit that it replaces only the empty MESSAGE LIST.
-export function App(${emitAppElementParam(c)}) {
-  return (
-${emitLayoutOpen(c)}${emitSlots(c.slots, '      ')}${emitEmptyPortal(c, '      ')}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitHeaderProp(c)}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitReasoningOpenProp(c)}${emitEmptyProp(c)}${emitCardTypesProp(c)} />
+//     own \`emptyContent\` prop, plain JSX rendered in the SAME shadow tree
+//     this file's App already composes ChatThread inside of (see
+//     emitEmptyContentProp's own doc for why that boundary needs no Portal
+//     at all). \`capabilities.starters\`' chips and the composer still render
+//     underneath it: ChatThread's own doc comment on \`emptyContent\` is
+//     explicit that it replaces only the empty MESSAGE LIST.
+//   - the widget close control (owner feedback on the live demo): a declared
+//     \`header.title\` on a \`widget\` layout gets its close button threaded
+//     into ChatThread's own header row via \`headerEndContent\`, wired back to
+//     Dock's \`controllerRef\` seam through a local closure — see
+//     emitDockCloseVar/emitHeaderEndContentProp's docs. No header means no
+//     row for it to sit in, so that case is untouched and Dock's own built-in
+//     mobile X keeps covering it.
+export function App() {
+${emitDockCloseVar(c, '  ')}  return (
+${emitLayoutOpen(c)}${emitSlots(c.slots, '      ')}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitHeaderProp(c)}${emitHeaderEndContentProp(c)}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitReasoningOpenProp(c)}${emitEmptyContentProp(c)}${emitCardTypesProp(c)} />
 ${emitLayoutClose(c)}  );
 }
 `;
@@ -745,30 +751,27 @@ function emitHeaderProp(c: Construct): string {
   return ` chatTitle={${JSON.stringify(title)}}`;
 }
 
-/** `App`'s function-parameter list. Only `empty` needs the custom-element
- *  host (see `emitEmptyPortal`'s doc for why); every other construct keeps
- *  `App()` byte-for-byte unchanged from before this field existed. */
-function emitAppElementParam(c: Construct): string {
-  return c.empty ? 'props: { element: HTMLElement }' : '';
-}
-
-/** `empty` -> ChatThread's own `empty` REPLACE-slot boundary (chat-thread.tsx:
- *  `<Show when={props.empty && props.messages.length === 0}><slot name="empty"
- *  /></Show>`). That boundary is LIGHT-DOM: the slotted content has to be a
- *  real child of the custom element itself, not JSX rendered inside App (App
- *  already lives INSIDE the one shadow root defineWebComponent attaches, same
- *  as ChatThread — nesting a `<slot>` there redistributes light-DOM children
- *  of the HOST, not App's own descendants). Construct-authored `empty.title`/
- *  `description`/`icon` are DATA baked in at generation time, not a consumer's
- *  own slotted markup, so there is no external light-DOM node supplying it —
- *  `<Portal mount={element}>` is what manufactures one: it appends the Empty
- *  composition as a real child of the host element (`element`, threaded in via
- *  `emitAppElementParam`/`emitElement`), tagged `slot="empty"`, exactly
- *  mirroring what a consumer's own `<div slot="empty">` would do by hand (see
- *  the `slots` field's own demo in `emitIndexHtml`). ChatThread's own doc
- *  comment on `empty` is explicit that this REPLACES only the empty MESSAGE
- *  LIST — the composer and `capabilities.starters`' chips still render below
- *  it unconditionally, so the welcome-screen chips are never lost.
+/** `empty` -> ChatThread's own `emptyContent` prop (chat-thread.tsx), a plain
+ *  JSX value rendered INSIDE ChatThread's own tree — fully covered by the
+ *  shadow root's adopted stylesheet, unlike the `empty`/`slot="empty"` boolean
+ *  pairing this used to go through. That boundary was LIGHT-DOM: `<Portal
+ *  mount={element}>` manufactured a real child of the host element tagged
+ *  `slot="empty"` so ChatThread's `<slot name="empty">` could redistribute it
+ *  — a detour needed only because a shadow `<slot>` redistributes light-DOM
+ *  children of the HOST, never a Solid sibling's own JSX. It worked, but light
+ *  DOM sits outside the shadow root's adopted stylesheet, so the Tailwind
+ *  utility classes the kit's own `Empty` composition is built from resolved to
+ *  nothing — the greeting rendered, unstyled (owner report against the live
+ *  widget: "doesn't look like the empty component"). `App` already composes
+ *  `ChatThread` directly as a plain Solid component in the SAME shadow tree
+ *  `defineWebComponent` attaches, so there is no boundary to cross here at
+ *  all — `emptyContent` just hands the JSX straight down, and it inherits the
+ *  same styling as the rest of `App`. No Portal, no host-element param on
+ *  `App`, no light-DOM indirection.
+ *
+ *  `capabilities.starters`' chips and the composer still render underneath
+ *  it: ChatThread's own doc comment on `empty`/`emptyContent` is explicit
+ *  that this REPLACES only the empty MESSAGE LIST.
  *
  *  Uses the kit's own `Empty`/`EmptyHeader`/`EmptyMedia`/`EmptyTitle`/
  *  `EmptyDescription` composition (components/empty.tsx) rather than hand-
@@ -778,50 +781,22 @@ function emitAppElementParam(c: Construct): string {
  *  real JS string-literal expressions like every other free-text field in
  *  this file; `icon` is schema-validated by `isSafeUrl` (schema.ts) before
  *  codegen ever sees it, the same policy `widget.launcherIcon` uses. */
-function emitEmptyPortal(c: Construct, indent: string): string {
+function emitEmptyContentProp(c: Construct): string {
   const empty = c.empty;
   if (!empty) return '';
-  const title = `${indent}    <EmptyTitle>{${JSON.stringify(empty.title)}}</EmptyTitle>\n`;
+  const title = `<EmptyTitle>{${JSON.stringify(empty.title)}}</EmptyTitle>`;
   const icon = empty.icon
-    ? `${indent}    <EmptyMedia><img src={${JSON.stringify(empty.icon)}} alt="" style={{ width: '40px', height: '40px', 'border-radius': '9999px' }} /></EmptyMedia>\n`
+    ? `<EmptyMedia><img src={${JSON.stringify(empty.icon)}} alt="" style={{ width: '40px', height: '40px', 'border-radius': '9999px' }} /></EmptyMedia>`
     : '';
   const description = empty.description
-    ? `${indent}    <EmptyDescription>{${JSON.stringify(empty.description)}}</EmptyDescription>\n`
+    ? `<EmptyDescription>{${JSON.stringify(empty.description)}}</EmptyDescription>`
     : '';
-  // Portal ALWAYS wraps its children in its own container <div> (or <g> for
-  // SVG) appended directly to `mount` — solid-js/web's Portal, not a detail
-  // this file controls. Slot ASSIGNMENT only ever looks at a node's `slot`
-  // attribute when that node is a DIRECT CHILD of the shadow host; an
-  // attribute on a node Portal nested one level deeper (e.g. on `<Empty>`
-  // itself) is invisible to it — confirmed against a real ejected+built
-  // widget cell, where `slot="empty"` on `<Empty>` left `assignedNodes()`
-  // empty and the greeting never painted. So the attribute has to land on
-  // Portal's OWN wrapper, via its `ref` callback (the one hook it exposes
-  // onto that wrapper), not as a prop passed through to `<Empty>`.
-  return `${indent}<Portal mount={props.element} ref={(el) => el.setAttribute('slot', 'empty')}>
-${indent}  <Empty>
-${indent}    <EmptyHeader>
-${icon}${title}${description}${indent}    </EmptyHeader>
-${indent}  </Empty>
-${indent}</Portal>
-`;
+  return ` emptyContent={<Empty><EmptyHeader>${icon}${title}${description}</EmptyHeader></Empty>}`;
 }
 
-/** ChatThread's `empty` boolean prop — gates the REPLACE slot on (chat-
- *  thread.tsx). Off-by-default like every other capability here: omitted
- *  entirely (not even the prop) when no `empty` block is declared. */
-function emitEmptyProp(c: Construct): string {
-  return c.empty ? ' empty={true}' : '';
-}
-
-/** `solid-js/web`'s `Portal`, needed only by `emitEmptyPortal` above. */
-function emitEmptyPortalImport(c: Construct): string {
-  return c.empty ? `import { Portal } from 'solid-js/web';\n` : '';
-}
-
-/** The `Empty` composition components `emitEmptyPortal` needs, appended onto
- *  the same `@kitn.ai/ui/solid` import ChatThread/createKaiChat already use —
- *  never a second import statement for the same module. `EmptyMedia`/
+/** The `Empty` composition components `emitEmptyContentProp` needs, appended
+ *  onto the same `@kitn.ai/ui/solid` import ChatThread/createKaiChat already
+ *  use — never a second import statement for the same module. `EmptyMedia`/
  *  `EmptyDescription` are named only when `icon`/`description` are actually
  *  declared: `verify:scaffold` compiles emitted output with `tsc --strict
  *  --noUnusedLocals`, so an always-imported-but-sometimes-unused name would
@@ -832,6 +807,62 @@ function emitEmptyComponentImport(c: Construct): string {
   if (c.empty.icon) names += ', EmptyMedia';
   if (c.empty.description) names += ', EmptyDescription';
   return names;
+}
+
+/** `widget` layout with a declared `header.title` gets its own close control
+ *  integrated INTO ChatThread's header row instead of relying solely on
+ *  Dock's own floating mobile X (see `dock.tsx`'s `hideClose` doc for the
+ *  "why": a header-row X and a floating X over that same row read as
+ *  unintentional together — owner feedback against the live widget). No
+ *  header means no row for a close control to sit in at all, so this stays
+ *  false and Dock's built-in fallback X keeps covering that case unchanged. */
+function widgetHasHeaderClose(c: Construct): boolean {
+  return c.layout === 'widget' && !!c.header?.title;
+}
+
+/** The local closure `emitHeaderEndContentProp`/`emitDockControllerRef` share:
+ *  Dock's `controllerRef` hands back `{ open, setOpen }` (ui/dock.tsx) — the
+ *  existing imperative seam, not a new one — and this captures `setOpen`
+ *  behind a plain function so ChatThread's `headerEndContent` button (which
+ *  renders as a sibling, not a Dock descendant) can call it. Declared inside
+ *  `App()`, not at module scope: `App()` runs once per widget instance, and a
+ *  module-level variable would let one instance's close button reach into
+ *  another's Dock if two ever rendered on the same page. */
+function emitDockCloseVar(c: Construct, indent: string): string {
+  return widgetHasHeaderClose(c) ? `${indent}let dockClose: (() => void) | undefined;\n` : '';
+}
+
+/** Threads `emitDockCloseVar`'s closure onto `<Dock controllerRef>`. */
+function emitDockControllerRef(c: Construct): string {
+  return widgetHasHeaderClose(c) ? ' controllerRef={(api) => (dockClose = () => api.setOpen(false))}' : '';
+}
+
+/** Suppresses Dock's own built-in mobile close X (see its `hideClose` doc)
+ *  when ChatThread's header row is carrying an equivalent control instead —
+ *  otherwise the two stack, one floating over the other's row. */
+function emitDockHideClose(c: Construct): string {
+  return widgetHasHeaderClose(c) ? ' hideClose={true}' : '';
+}
+
+/** ChatThread's `headerEndContent` prop (chat-thread.tsx): the close button
+ *  itself, sharing the header row with the title instead of floating as a
+ *  second, visually unrelated control — the owner's stated preference over
+ *  Dock's previous "reserved dead-row band" fix. Reuses the kit's own
+ *  `DockCloseGlyph` (the same X Dock's built-in button draws) and `Button`
+ *  (ghost/icon-sm, the same weight ChatThread's own header controls use —
+ *  see `ModelSwitcher`'s trigger) rather than hand-rolling either, and calls
+ *  back into `emitDockCloseVar`'s closure to actually close the panel —
+ *  Dock's own `controllerRef` seam, not a new one. */
+function emitHeaderEndContentProp(c: Construct): string {
+  if (!widgetHasHeaderClose(c)) return '';
+  return ` headerEndContent={<Button variant="ghost" size="icon-sm" aria-label="Close ${c.name}" onClick={() => dockClose?.()}><DockCloseGlyph /></Button>}`;
+}
+
+/** `Button`/`DockCloseGlyph`, needed only by `emitHeaderEndContentProp` above
+ *  — appended onto the same `@kitn.ai/ui/solid` import as `emitEmptyComponentImport`,
+ *  never a second import statement for the module. */
+function emitHeaderCloseImport(c: Construct): string {
+  return widgetHasHeaderClose(c) ? ', Button, DockCloseGlyph' : '';
 }
 
 /** capabilities.attachments -> ChatThread's own \`attach\`/\`accept\` props.
@@ -1231,7 +1262,7 @@ function emitDockDefaultOpen(c: Construct): string {
 function emitLayoutOpen(c: Construct): string {
   switch (c.layout) {
     case 'widget':
-      return `    <Dock label="${c.name}"${emitDockPosition(c)}${emitDockLauncher(c)}${emitDockDefaultOpen(c)}>\n`;
+      return `    <Dock label="${c.name}"${emitDockPosition(c)}${emitDockLauncher(c)}${emitDockDefaultOpen(c)}${emitDockHideClose(c)}${emitDockControllerRef(c)}>\n`;
     case 'fullscreen':
       return `    <div style={{ height: '100dvh', display: 'flex', 'flex-direction': 'column' }}>\n`;
     case 'aside':

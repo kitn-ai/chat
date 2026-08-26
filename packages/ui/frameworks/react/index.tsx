@@ -761,6 +761,8 @@ export interface DockProps extends WebComponentProps {
   unread?: boolean;
   /** Disable the launcher; `show()` and `toggle()` are gated on it. */
   disabled?: boolean;
+  /** Suppress the dock's own built-in mobile close X. Set this when your slotted panel content supplies its own close affordance (e.g. a `<kai-chat slot="header-end">` close button) — otherwise the two stack. Attribute: `hide-close`. */
+  hideClose?: boolean;
   /** Where focus lands on open: `content` (default, the first element you slotted), `panel`, or `none`. Attribute: `focus-on-open`. */
   focusOnOpen?: "content" | "panel" | "none";
   /** The dock opened or closed (the launcher, Escape, a driven `open`, or a method). */
@@ -769,7 +771,7 @@ export interface DockProps extends WebComponentProps {
 
 export const Dock = /*#__PURE__*/ createWebComponent<DockProps>(
   'kai-dock',
-  ["theme","open","defaultOpen","position","label","openLabel","closeLabel","unread","disabled","focusOnOpen"],
+  ["theme","open","defaultOpen","position","label","openLabel","closeLabel","unread","disabled","hideClose","focusOnOpen"],
   { onOpenChange: 'kai-open-change' },
   () => import('@kitn.ai/ui/elements/dock'),
 );
