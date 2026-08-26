@@ -214,6 +214,31 @@ describe('generateProject (widget + mock core)', () => {
   });
 });
 
+describe('layouts (Task 12)', () => {
+  it.each([
+    ['fullscreen', 'height: \'100dvh\''],
+    ['aside', 'border-inline-start'],
+    ['split', 'PaneGroup'],
+  ] as const)('layout %s emits its chrome', (layout, marker) => {
+    const app = file(generateProject(construct({ layout })), 'src/App.tsx');
+    expect(app).toContain(marker);
+    expect(app).not.toContain('<Dock');
+  });
+
+  it('widget stays unchanged: still wraps in Dock, no other layout chrome', () => {
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    expect(app).toContain('<Dock label="acme-support">');
+    expect(app).not.toContain('PaneGroup');
+  });
+
+  it('index.html gates the widget-specific host hint to the widget layout only', () => {
+    for (const layout of ['fullscreen', 'aside', 'split'] as const) {
+      const html = file(generateProject(construct({ layout })), 'index.html');
+      expect(html).not.toMatch(/bottom-right corner/);
+    }
+  });
+});
+
 describe('capabilities.starters', () => {
   it('starters thread into ChatThread\'s own suggestions prop, which already submits on click', () => {
     // ChatThread (chat-thread.tsx) already owns starter-prompt rendering AND

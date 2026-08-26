@@ -375,8 +375,10 @@ function emitIndexHtml(c: Construct): string {
   // isn't a mystery blank tab with one small launcher in the corner. Outside
   // the custom element entirely (a sibling in <body>), inline-styled, and
   // worded so nobody mistakes it for the construct's own output. Keyed off
-  // `layout` so a future non-widget layout (Task 12) isn't told the widget is
-  // "in the corner" when it isn't one.
+  // `layout`: the "bottom-right corner" wording is only true for `widget` (a
+  // floating launcher) — `fullscreen`/`aside`/`split` (Task 12) fill or dock
+  // the page themselves, so they get no hint at all rather than a wrong one.
+  // Decide loudly by omission, not by a stale claim.
   const hint =
     c.layout === 'widget'
       ? `\n    <p style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); margin: 0; color: #94a3b8; font: 14px system-ui, sans-serif; text-align: center; max-width: 28rem; padding: 0 1rem;">This blank page stands in for your site. The chat widget is in the bottom-right corner.</p>`
@@ -480,7 +482,7 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
 // determinism test keeps holding.
 
 function emitApp(c: Construct): string {
-  return `${emitSolidJsImport(c)}import { ChatThread, Dock, createKaiChat${emitCardComponentImport(c)} } from '@kitn.ai/ui/solid';
+  return `${emitSolidJsImport(c)}import { ChatThread, createKaiChat${emitLayoutImport(c)}${emitCardComponentImport(c)} } from '@kitn.ai/ui/solid';
 import type { AttachmentData${emitHistoryTypeImport(c)} } from '@kitn.ai/ui/solid';
 ${emitProviderImports(c)}
 ${emitCardsImport(c)}
@@ -811,18 +813,91 @@ async function submit(detail: { value: string; attachments: AttachmentData[] }) 
 }`;
 }
 
+/** The layout-conditional named import spliced onto the `@kitn.ai/ui/solid`
+ *  import list in App.tsx: `Dock` only for `widget`, `PaneGroup` only for
+ *  `split` — nothing for `fullscreen`/`aside`, which are plain styled
+ *  containers (the kit has no dedicated fullscreen/docked-aside component;
+ *  see the emitLayoutOpen doc for why that's the honest choice here rather
+ *  than a hand-rolled component of our own). Gated so the generated
+ *  project's own `noUnusedLocals` never trips on an import used by a layout
+ *  that isn't this construct's. */
+function emitLayoutImport(c: Construct): string {
+  switch (c.layout) {
+    case 'widget':
+      return ', Dock';
+    case 'split':
+      return ', PaneGroup';
+    case 'fullscreen':
+    case 'aside':
+      return '';
+  }
+}
+
+/**
+ * The layout shell wrapping ChatThread — one pair (open above, close below)
+ * per `layout`, composing the kit's own layout primitives over a hand-rolled
+ * div wherever the kit ships one:
+ *
+ *  - `widget`: the kit's Dock (launcher + panel + focus contract) — unchanged
+ *    from before Task 12. No theming wrapper needed here — the accent lands
+ *    on the HOST element from element.tsx's facade (see emitElement), which
+ *    reaches both the launcher (a DOM sibling of this panel content, outside
+ *    Dock's own `children`) and everything below via normal custom-property
+ *    inheritance from :host down through the whole shadow tree.
+ *  - `fullscreen`: the kit has no dedicated "fill the viewport" component —
+ *    this genuinely is just sizing, not chrome — so a minimally-styled
+ *    `<div>` (100dvh, column flex) IS the honest composition, not a
+ *    restatement of something the kit already owns.
+ *  - `aside`: same reasoning — a persistent, single-edge docked panel is a
+ *    styled container (fixed inline-end column, the kit's own
+ *    `--kai-color-border` token for the divider), not a kit component. `dvh`/
+ *    logical properties (`inset-inline-end`, `border-inline-start`) keep it
+ *    correct under RTL and mobile viewport chrome the same way `100dvh` does
+ *    for fullscreen.
+ *  - `split`: composes the kit's real `PaneGroup` (recorded decision 2) for
+ *    its FRAME (bordered, rounded, `bg-surface` — reads correctly in light
+ *    and dark) rather than reinventing pane chrome. PaneGroup's actual
+ *    contract (src/ui/pane-group.tsx) is an editor GROUP — a tab strip over
+ *    ONE content area, not a simultaneous side-by-side splitter — so it's
+ *    used here as a single always-active tab (no `onTabChange`/close: there
+ *    is nothing to switch between yet) whose one body is a plain flex row
+ *    holding the two SIMULTANEOUS panes the recorded decision actually asks
+ *    for: chat in the start pane (60%), the construct's `slots` projected
+ *    into the end pane (40%) via `<slot name="pane">` — Task 13's seam, not
+ *    read by anything yet. PaneGroup supplies the frame; the two-column
+ *    math is the plain flex row inside it, same "styled container where the
+ *    kit has no component for THIS specific shape" reasoning as
+ *    fullscreen/aside above.
+ *
+ * The exhaustive switch with no `default` is deliberate: TypeScript makes
+ * Task 13's `custom` layout a compile error here, so it cannot be forgotten.
+ */
 function emitLayoutOpen(c: Construct): string {
-  // Widget: the kit's Dock (launcher + panel + focus contract). No theming
-  // wrapper needed here — the accent lands on the HOST element from
-  // element.tsx's facade (see emitElement), which reaches both the launcher
-  // (a DOM sibling of this panel content, outside Dock's own `children`) and
-  // everything below via normal custom-property inheritance from :host down
-  // through the whole shadow tree. More layouts in Task 12.
-  return `    <Dock label="${c.name}">\n`;
+  switch (c.layout) {
+    case 'widget':
+      return `    <Dock label="${c.name}">\n`;
+    case 'fullscreen':
+      return `    <div style={{ height: '100dvh', display: 'flex', 'flex-direction': 'column' }}>\n`;
+    case 'aside':
+      return `    <aside style={{ position: 'fixed', 'inset-block': '0', 'inset-inline-end': '0', width: '380px', display: 'flex', 'flex-direction': 'column', 'border-inline-start': '1px solid var(--kai-color-border)' }}>\n`;
+    case 'split':
+      return `    <div style={{ height: '100dvh' }}>\n      <PaneGroup tabs={[{ id: 'panel', name: '${c.name}' }]} class="h-full">\n        <div style={{ display: 'flex', height: '100%' }}>\n          <div style={{ flex: '1 1 60%', display: 'flex', 'flex-direction': 'column', 'min-width': '0' }}>\n`;
+  }
 }
 
 function emitLayoutClose(c: Construct): string {
-  return `    </Dock>\n`;
+  switch (c.layout) {
+    case 'widget':
+      return `    </Dock>\n`;
+    case 'fullscreen':
+      return `    </div>\n`;
+    case 'aside':
+      return `    </aside>\n`;
+    case 'split':
+      // The end pane is this layout's own projection point for Task 13's
+      // `slots` field — nothing reads it yet.
+      return `          </div>\n          <div style={{ flex: '1 1 40%', 'min-width': '0', 'border-inline-start': '1px solid var(--kai-color-border)' }}>\n            <slot name="pane" />\n          </div>\n        </div>\n      </PaneGroup>\n    </div>\n`;
+  }
 }
 
 // ── kai compile: the d.ts alongside the single .js ─────────────────────────

@@ -14,6 +14,13 @@ describe('validateConstruct', () => {
     if (out.ok) expect(out.construct.name).toBe('acme-support');
   });
 
+  it('layout enum: widget | fullscreen | aside | split', () => {
+    for (const layout of ['widget', 'fullscreen', 'aside', 'split']) {
+      expect(validateConstruct({ ...minimal, layout }).ok).toBe(true);
+    }
+    expect(validateConstruct({ ...minimal, layout: 'popup' }).ok).toBe(false);
+  });
+
   it('rejects a name that is not a valid custom-element tag', () => {
     // customElements.define requires a hyphen and lowercase; the emitted tag IS the name.
     const out = validateConstruct({ ...minimal, name: 'Support' });

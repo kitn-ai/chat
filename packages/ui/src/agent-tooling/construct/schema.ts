@@ -38,8 +38,8 @@ export const ConstructSchema = z
     name: z
       .string()
       .regex(TAG_RE, 'must be a valid custom-element tag: lowercase, with a hyphen (e.g. "acme-support")'),
-    // Widened progressively: fullscreen/aside/split land in Task 12, custom in Task 13.
-    layout: z.enum(['widget']),
+    // Widened progressively: fullscreen/aside/split landed in Task 12, custom in Task 13.
+    layout: z.enum(['widget', 'fullscreen', 'aside', 'split']),
     provider: ProviderSchema,
     theme: z
       .object({
