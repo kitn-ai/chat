@@ -78,6 +78,12 @@ export interface ChatThreadProps {
   /** Enable Shiki syntax highlighting in code blocks. Turn off to render plain
    *  `<pre>` blocks (lighter, no highlighter load). Default true. */
   codeHighlight?: boolean;
+  /** How `reasoning` parts render across the thread. `'full'` (default) is the
+   *  current collapsible-disclosure behavior; `'compact'` shows only a shimmer
+   *  loader while a reasoning part streams and nothing once it settles (no
+   *  expandable detail); `'off'` renders reasoning parts not at all. Forwarded
+   *  to every `MessageBody` as `reasoningMode`. */
+  reasoning?: 'full' | 'compact' | 'off';
   /** Optional header title shown on the left of the header. */
   chatTitle?: string;
   /** Optional model list. When set (>1 model) a ModelSwitcher is shown in the
@@ -373,6 +379,7 @@ export function ChatThread(props: ChatThreadProps) {
                                assistant turn. No second streaming source; the
                                reasoning disclosure auto-opens on it. */
                             isStreaming={props.loading === true && m().role === 'assistant' && i() === props.messages.length - 1}
+                            reasoningMode={props.reasoning}
                             cardTypes={props.cardTypes}
                             cardSchemas={props.cardSchemas}
                             cardHostElement={props.cardHostElement}

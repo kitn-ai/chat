@@ -392,9 +392,17 @@ ${emitHistorySetup(c)}
 //     attachments into the outgoing message's parts at the submit site
 //     (see emitProviderSetup) since createKaiChat's own append/streamAssistant
 //     ops don't do that folding themselves.
+//   - reasoning: gated via ChatThread's own \`reasoning\` prop (kit gap closed
+//     — ChatThread forwards it to every MessageBody as \`reasoningMode\`,
+//     mirroring attach/accept). \`'full'\` is both the schema default and
+//     ChatThread's own default, so it and an absent field emit no prop at
+//     all — the SAME off-by-default convention as every other capability
+//     here, just anchored on the medium's existing default instead of an
+//     "off" value, since a reasoning disclosure is normal chat behavior, not
+//     an opt-in affordance like the paperclip or a starter chip.
 export function App() {
   return (
-${emitLayoutOpen(c)}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitAttachProps(c)}${emitStartersProp(c)} />
+${emitLayoutOpen(c)}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)} />
 ${emitLayoutClose(c)}  );
 }
 `;
@@ -427,6 +435,21 @@ function emitStartersProp(c: Construct): string {
   const starters = c.capabilities?.starters;
   if (!starters || starters.length === 0) return '';
   return ` suggestions={${JSON.stringify(starters)}}`;
+}
+
+/** capabilities.reasoning -> ChatThread's own `reasoning` prop. `'full'`
+ *  and absent are the SAME thing (the schema default, matching ChatThread's
+ *  own default) so both emit nothing at all — the off-by-default gating
+ *  convention every other capability in this file follows: only a value that
+ *  DEVIATES from the medium's default costs a byte in the emitted source.
+ *  `'compact'`/`'off'` are plain string literals, not JSON.stringify'd like
+ *  starters/accept/url — the schema already constrains this to one of three
+ *  fixed enum members (schema.ts), so unlike those fields there is no
+ *  construct-authored free text here to escape. */
+function emitReasoningProp(c: Construct): string {
+  const reasoning = c.capabilities?.reasoning;
+  if (!reasoning || reasoning === 'full') return '';
+  return ` reasoning="${reasoning}"`;
 }
 
 /** capabilities.history -> whether the App module needs `createEffect`

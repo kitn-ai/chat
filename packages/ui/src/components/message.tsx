@@ -8,6 +8,7 @@ import { actionIcon, BUILTIN_ACTION_LABEL } from "../ui/action-icons";
 import type { ChatMessageAction, CustomAction, FeedbackVote, MessagePart, MessageSource } from "../elements/chat-types";
 import { useChatConfig, textClass } from "../primitives/chat-config";
 import { Reasoning, ReasoningTrigger, ReasoningContent } from "./reasoning";
+import { Loader } from "./loader";
 import { Tool } from "./tool";
 import {
   Attachments,
@@ -359,6 +360,15 @@ export interface MessageBodyProps {
    *  thinking window). The caller owns the definition of "streaming" — for
    *  `ChatThread` that is `loading` + being the last assistant message. */
   isStreaming?: boolean;
+  /** How a `reasoning` part renders. `'full'` (default) is the current
+   *  behavior: the collapsible `<Reasoning>` disclosure, with the "Thinking…"
+   *  shimmer on its trigger while `isStreaming`. `'compact'` drops the
+   *  disclosure entirely and shows only a shimmer loader while the part is
+   *  streaming — nothing once it settles, so there is no expandable detail to
+   *  open. `'off'` renders the part not at all, in either state. Kit-decides-
+   *  HOW: this is a display-mode fact about the medium, not a per-message
+   *  toggle, so it applies uniformly to every reasoning part in the body. */
+  reasoningMode?: 'full' | 'compact' | 'off';
   /** INJECT slot projected at the TOP of the body — above the reasoning / tools /
    *  content. A per-message header: a model-name label, a role + timestamp line.
    *  In the `<kai-message>` shadow this is `<slot name="before-body" />`. */
@@ -638,12 +648,32 @@ function MessageBody(props: MessageBodyProps) {
                     </Match>
                     <Match when={carrierOnly()}>{null}</Match>
                     <Match when={shownReasoning()}>
-                      {(p) => (
-                        <Reasoning class="mb-2 w-full" isStreaming={props.isStreaming}>
-                          <ReasoningTrigger>{p().label ?? 'Reasoning'}</ReasoningTrigger>
-                          <ReasoningContent markdown>{p().text}</ReasoningContent>
-                        </Reasoning>
-                      )}
+                      {(p) => {
+                        // Default 'full' is the pre-existing behavior byte for
+                        // byte — every consumer that never sets reasoningMode
+                        // renders exactly the disclosure below, unchanged.
+                        const mode = () => props.reasoningMode ?? 'full';
+                        return (
+                          <Switch fallback={null}>
+                            <Match when={mode() === 'full'}>
+                              <Reasoning class="mb-2 w-full" isStreaming={props.isStreaming}>
+                                <ReasoningTrigger>{p().label ?? 'Reasoning'}</ReasoningTrigger>
+                                <ReasoningContent markdown>{p().text}</ReasoningContent>
+                              </Reasoning>
+                            </Match>
+                            {/* 'compact': the same "Thinking…" shimmer the full
+                                disclosure's trigger shows while streaming — no
+                                <Reasoning>/<ReasoningContent>, so there is no
+                                expandable detail and nothing left once the part
+                                settles (isStreaming false → this Match doesn't
+                                fire, matching 'off'). 'off' never reaches here:
+                                its Match doesn't fire either. */}
+                            <Match when={mode() === 'compact' && props.isStreaming}>
+                              <Loader variant="text-shimmer" text={p().label ?? 'Reasoning'} class="mb-2" />
+                            </Match>
+                          </Switch>
+                        );
+                      }}
                     </Match>
                     <Match when={partAs(part(), 'tool')}>
                       {(p) => <Tool toolPart={p().tool} class="mb-2 w-full" />}

@@ -347,6 +347,60 @@ describe('MessageBody reasoning auto-open while streaming (F-21)', () => {
   });
 });
 
+// ─── Task 10b: reasoningMode ─────────────────────────────────────────────────
+//
+// `reasoningMode` controls how a `reasoning` part renders: 'full' (default) is
+// the collapsible disclosure pinned above; 'compact' drops the disclosure and
+// shows only a shimmer loader while the part streams; 'off' renders nothing.
+// The default MUST be a no-op — every test above this block passes no
+// `reasoningMode` at all and pins the 'full' disclosure, so this block only
+// adds the 'compact'/'off' cases plus one explicit-'full' parity check.
+describe('MessageBody reasoningMode (Task 10b)', () => {
+  const reasoningParts = () => appendReasoningPart([], 'Considering the options.', { index: 0, streamId: 's1' });
+
+  const renderMode = (mode: 'full' | 'compact' | 'off' | undefined, streaming: boolean) =>
+    render(() => (
+      <MessageBody parts={reasoningParts()} isUser={false} markdown={false} isStreaming={streaming} reasoningMode={mode} />
+    ));
+
+  it('defaults to the full disclosure when reasoningMode is unset (no-op)', () => {
+    const { container } = renderMode(undefined, true);
+    expect(reasoningTrigger(container)).toBeTruthy();
+    expect(reasoningOpen(container)).toBe(true);
+  });
+
+  it('explicit "full" renders the same disclosure as the default', () => {
+    const { container } = renderMode('full', true);
+    expect(reasoningTrigger(container)).toBeTruthy();
+    expect(container.textContent).toContain('Considering the options.');
+  });
+
+  it('"compact" renders a loader, not the disclosure, while streaming', () => {
+    const { container } = renderMode('compact', true);
+    expect(reasoningTrigger(container)).toBeUndefined();
+    // The loader shows the part's label as its shimmer text (default 'Reasoning').
+    expect(container.textContent).toContain('Reasoning');
+    // No expandable detail: the reasoning TEXT itself is not rendered.
+    expect(container.textContent).not.toContain('Considering the options.');
+  });
+
+  it('"compact" renders nothing once the part has settled (not streaming)', () => {
+    const { container } = renderMode('compact', false);
+    expect(reasoningTrigger(container)).toBeUndefined();
+    expect(container.textContent).not.toContain('Reasoning');
+    expect(container.textContent).not.toContain('Considering the options.');
+  });
+
+  it('"off" renders nothing at all, streaming or not', () => {
+    const streamingCase = renderMode('off', true);
+    expect(streamingCase.container.textContent).toBe('');
+    cleanup();
+
+    const settledCase = renderMode('off', false);
+    expect(settledCase.container.textContent).toBe('');
+  });
+});
+
 // ─── The citation row ────────────────────────────────────────────────────────
 //
 // `source` parts arrive on the message correctly (the wire and

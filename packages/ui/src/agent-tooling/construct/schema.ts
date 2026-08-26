@@ -86,6 +86,21 @@ export const ConstructSchema = z
           })
           .strict()
           .optional(),
+        /** How the model's thinking (reasoning parts) renders. `'full'`
+         *  (the default when omitted — see codegen.ts's emitReasoningProp)
+         *  is the collapsible "Thinking" disclosure, shimmering while it
+         *  streams. `'compact'` shows only a shimmer/typing loader while
+         *  reasoning streams, with no expandable detail. `'off'` hides
+         *  reasoning entirely. This is HOW an existing medium fact (the
+         *  model's thinking) displays — the kit's call — so it maps straight
+         *  onto ChatThread's own `reasoning` prop; there is no app-layer
+         *  quota or retention decision hiding in it. Left `.optional()`
+         *  rather than `.default('full')`, matching every sibling field in
+         *  this object: a zod `.default()` here would make `reasoning`
+         *  REQUIRED on the inferred input type (z.infer is the output type),
+         *  breaking every `capabilities: {...}` object literal in this file
+         *  and its tests that doesn't mention it. */
+        reasoning: z.enum(['full', 'compact', 'off']).optional(),
       })
       .strict()
       .optional(),

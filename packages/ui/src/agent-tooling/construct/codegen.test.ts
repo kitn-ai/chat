@@ -249,6 +249,33 @@ describe('capabilities.starters', () => {
   });
 });
 
+describe('capabilities.reasoning', () => {
+  it('"compact" threads into ChatThread\'s own reasoning prop as a plain string', () => {
+    const app = file(
+      generateProject(construct({ capabilities: { reasoning: 'compact' } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('reasoning="compact"');
+    expect(app).toContain('<ChatThread messages={chat.messages()}');
+  });
+
+  it('"off" threads into the same prop', () => {
+    const app = file(generateProject(construct({ capabilities: { reasoning: 'off' } })), 'src/App.tsx');
+    expect(app).toContain('reasoning="off"');
+  });
+
+  it('explicit "full" emits no reasoning prop at all — same as omitting the field entirely', () => {
+    const explicit = file(
+      generateProject(construct({ capabilities: { reasoning: 'full' } })),
+      'src/App.tsx',
+    );
+    const omitted = file(generateProject(construct()), 'src/App.tsx');
+    expect(explicit).not.toMatch(/\breasoning=/);
+    expect(omitted).not.toMatch(/\breasoning=/);
+    expect(explicit).toEqual(omitted);
+  });
+});
+
 describe('capabilities.attachments', () => {
   it('threads accept into ChatThread\'s own attach/accept props — the paperclip, staging, and FileReader.readAsDataURL round-trip already live in ChatThread/DefaultPromptInput; nothing to hand-compose', () => {
     // Branch reality (post kit-fix 93af0f62 + Task 3 gating): ChatThread

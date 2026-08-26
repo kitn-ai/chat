@@ -1434,6 +1434,14 @@
         "displayType": "undefined | false | true"
       },
       {
+        "name": "reasoning",
+        "type": "undefined | \"full\" | \"compact\" | \"off\"",
+        "optional": true,
+        "scalar": true,
+        "description": "How `reasoning` parts render across the thread. `'full'` (default) is the current collapsible-disclosure behavior; `'compact'` shows only a shimmer loader while a reasoning part streams and nothing once it settles (no expandable detail); `'off'` renders reasoning parts not at all. Forwarded to every `MessageBody` as `reasoningMode`.",
+        "displayType": "undefined | \"full\" | \"compact\" | \"off\""
+      },
+      {
         "name": "chatTitle",
         "type": "undefined | string",
         "optional": true,

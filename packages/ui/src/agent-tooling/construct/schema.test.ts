@@ -80,4 +80,25 @@ describe('validateConstruct', () => {
     expect(cap({ persistence: 'endpoint' }).ok).toBe(false);
     expect(cap({ persistence: 'local', url: '/api/thread' }).ok).toBe(false);
   });
+
+  it('reasoning: accepts full/compact/off and defaults to full when omitted', () => {
+    for (const reasoning of ['full', 'compact', 'off']) {
+      expect(validateConstruct({ ...minimal, capabilities: { reasoning } }).ok).toBe(true);
+    }
+    const out = validateConstruct(minimal);
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.construct.capabilities?.reasoning).toBeUndefined();
+
+    const withEmptyCapabilities = validateConstruct({ ...minimal, capabilities: {} });
+    expect(withEmptyCapabilities.ok).toBe(true);
+    // No zod-level default: 'full' is applied by codegen (emitReasoningProp),
+    // matching every sibling capability field's own optional-not-defaulted shape.
+    if (withEmptyCapabilities.ok) expect(withEmptyCapabilities.construct.capabilities?.reasoning).toBeUndefined();
+  });
+
+  it('reasoning: rejects an unknown value', () => {
+    const out = validateConstruct({ ...minimal, capabilities: { reasoning: 'verbose' } });
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.problems.some((p) => p.path === 'capabilities.reasoning')).toBe(true);
+  });
 });
