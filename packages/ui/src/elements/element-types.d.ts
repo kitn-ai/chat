@@ -757,7 +757,7 @@ export interface KaiDockElement extends HTMLElement {
   unread?: boolean;
   /** Disable the launcher; `show()` and `toggle()` are gated on it. */
   disabled?: boolean;
-  /** Suppress the dock's own built-in mobile close X. Set this when your slotted panel content supplies its own close affordance (e.g. a `<kai-chat slot="header-end">` close button) — otherwise the two stack. Attribute: `hide-close`. */
+  /** Suppress the dock's own built-in mobile close X. Set this when your slotted panel content supplies its own close affordance (e.g. a `<kai-chat slot="header-end">` close button) — otherwise the two stack. TRADEOFF: the mobile panel reserves a padding band above its content so the built-in X never paints over slotted content; that band stays reserved unless you set this true, so only set it once your own control is actually in place. Attribute: `hide-close`. */
   hideClose?: boolean;
   /** Where focus lands on open: `content` (default, the first element you slotted), `panel`, or `none`. Attribute: `focus-on-open`. */
   focusOnOpen?: "content" | "panel" | "none";
@@ -2616,7 +2616,7 @@ export interface KaiDockElementProps {
   unread?: boolean;
   /** Disable the launcher; `show()` and `toggle()` are gated on it. */
   disabled?: boolean;
-  /** Suppress the dock's own built-in mobile close X. Set this when your slotted panel content supplies its own close affordance (e.g. a `<kai-chat slot="header-end">` close button) — otherwise the two stack. Attribute: `hide-close`. */
+  /** Suppress the dock's own built-in mobile close X. Set this when your slotted panel content supplies its own close affordance (e.g. a `<kai-chat slot="header-end">` close button) — otherwise the two stack. TRADEOFF: the mobile panel reserves a padding band above its content so the built-in X never paints over slotted content; that band stays reserved unless you set this true, so only set it once your own control is actually in place. Attribute: `hide-close`. */
   hideClose?: boolean;
   /** Where focus lands on open: `content` (default, the first element you slotted), `panel`, or `none`. Attribute: `focus-on-open`. */
   focusOnOpen?: "content" | "panel" | "none";

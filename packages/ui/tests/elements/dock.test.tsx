@@ -1095,38 +1095,73 @@ describe('mobile close X (<=480px full-bleed)', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Fix round 2 (owner feedback against the live construct-engine widget): the
-  // reserved padding band above read as a dead empty strip with a lone X
-  // floating in it — "why is the X button on its own row instead of shared
-  // with the title... that doesn't look intentional" — worse than the
-  // collision it fixed. The actual fix composes instead of reserving space:
-  // `ChatThread` gained its own `headerEndContent` escape hatch so a caller
-  // puts the close control INSIDE the header row, and `hideClose` here
-  // suppresses this built-in X for that case. What is left is a plain
-  // absolute overlay with no reserved space at all — the fallback for panel
-  // content with no header of its own.
+  // Fix round 2 (owner feedback against the live construct-engine widget): for a
+  // construct whose header carries only a title, the reserved padding band read
+  // as a dead empty strip with a lone X floating in it — "why is the X button on
+  // its own row instead of shared with the title... that doesn't look
+  // intentional." The composing fix: `ChatThread` gained its own
+  // `headerEndContent` escape hatch so a caller puts the close control INSIDE
+  // the header row, and `hideClose` here suppresses this built-in X for that
+  // case, band included (nothing left for it to protect).
+  //
+  // ROUND 2 REVIEW FINDING (fix round 1 of round 2): the band was first removed
+  // UNCONDITIONALLY, which silently reopened the exact collision round 1 fixed
+  // for every consumer who never opted into `hideClose` — a hand-authored
+  // `<kai-dock>` with real `slot="header-end"` content and default `hideClose`
+  // (false/absent) has no escape hatch of its own and got the floating X painted
+  // back over its icons. Fix: the band's CSS selector is scoped to
+  // `:not([data-hide-close])`, and the dock root carries `data-hide-close` only
+  // when `hideClose` is true — so the band (and the X it protects) come off
+  // TOGETHER, only for the case that supplies its own control, and stay on by
+  // default for everyone else. Round 1's own coverage of this was an ephemeral,
+  // never-committed Playwright fixture — the pair below is the committed
+  // regression pin that was missing.
   // -------------------------------------------------------------------------
 
-  test('CSS: the <=480px block no longer reserves a padding band above the panel — the X overlays instead of pushing content down', async () => {
+  test('CSS: the reserved padding band is scoped to :not([data-hide-close]), not removed unconditionally', async () => {
     const el = await mount();
     const css = Array.from(shadow(el).querySelectorAll('style')).map((s) => s.textContent).join('\n');
     const mediaBlock = css.match(/@media \(max-width: 480px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
     expect(mediaBlock, 'the <=480px block must be found').not.toBe('');
-    const panelRule = mediaBlock.match(/\[data-kai-dock\] \[part="panel"\] \{([\s\S]*?)\}/)?.[1] ?? '';
-    expect(panelRule, 'the mobile panel rule must be found').not.toBe('');
-    expect(panelRule).not.toMatch(/padding-block-start/);
+    // The UNSCOPED [part="panel"] rule (the one every consumer's panel matches
+    // regardless of hideClose) must NOT itself carry the band — it has to live
+    // behind the :not([data-hide-close]) selector, or it would apply even when
+    // hideClose is true.
+    const baseRule = mediaBlock.match(/\[data-kai-dock\] \[part="panel"\] \{([\s\S]*?)\}/)?.[1] ?? '';
+    expect(baseRule, 'the base mobile panel rule must be found').not.toBe('');
+    expect(baseRule).not.toMatch(/padding-block-start/);
+    // The SCOPED rule is where the band actually lives, derived from the same
+    // tokens as the close button's own inset + footprint, not a bare number.
+    const scopedRule = mediaBlock.match(
+      /\[data-kai-dock\]:not\(\[data-hide-close\]\) \[part="panel"\] \{([\s\S]*?)\}/,
+    )?.[1] ?? '';
+    expect(scopedRule, 'the :not([data-hide-close]) scoped panel rule must be found').not.toBe('');
+    expect(scopedRule, 'padding-block-start must be derived from --kai-dock-close-inset-block, not a bare number').toMatch(
+      /padding-block-start:\s*calc\(2 \* var\(--kai-dock-close-inset-block,\s*0\.75rem\)\s*\+\s*2\.25rem\)/,
+    );
   });
 
-  test('hideClose drops the built-in close button from the render tree entirely, not just hides it', async () => {
+  // The committed regression pair: state (a) is the default every existing
+  // consumer gets today (band scoped ON, X present); state (b) is the
+  // header-integrated case (band scoped OFF via data-hide-close, X absent).
+  // Structural, not a real media-query/`:not()` cascade evaluation — same
+  // jsdom limitation noted throughout this file — but pins the DOM state the
+  // browser's cascade actually keys off in both directions at once.
+
+  test('(a) default (hideClose absent): the dock root carries NO data-hide-close, so the band-scoping selector applies — X is present in the tree', async () => {
+    const el = await mount('<div slot="panel">body</div>');
+    const root = shadow(el).querySelector('[data-kai-dock]')!;
+    expect(root.hasAttribute('data-hide-close'), 'no data-hide-close by default — the band stays scoped ON').toBe(false);
+    expect(closeBtn(el), 'the built-in close button still renders by default').not.toBeNull();
+  });
+
+  test('(b) hideClose true: the dock root carries data-hide-close, taking the band OUT of scope — X is absent from the tree entirely', async () => {
     const el = await mount('<div slot="panel">body</div>');
     el.setAttribute('hide-close', '');
     await flush();
-    expect(closeBtn(el)).toBeNull();
-  });
-
-  test('without hideClose the built-in close button still renders (default unchanged)', async () => {
-    const el = await mount('<div slot="panel">body</div>');
-    expect(closeBtn(el)).not.toBeNull();
+    const root = shadow(el).querySelector('[data-kai-dock]')!;
+    expect(root.hasAttribute('data-hide-close'), 'data-hide-close present — the band goes out of scope').toBe(true);
+    expect(closeBtn(el), 'the built-in close button is dropped from the render tree, not just hidden').toBeNull();
   });
 
   test('CSS: the <=480px block switches the close part on and hides the launcher only while the panel is expanded', async () => {
