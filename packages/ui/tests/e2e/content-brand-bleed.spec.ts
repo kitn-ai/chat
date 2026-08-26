@@ -10,6 +10,14 @@ import type { Page } from '@playwright/test';
  * accent bleed onto the reasoning "Thinking" label, loader status text, a
  * matched-suggestion highlight, a file-tree folder icon, and a citation's
  * domain header — none of which are controls. Each used to hardcode
+ *
+ * NOTE on `<kai-source>`'s hover card: `HoverCardContent` portals into a
+ * per-element `portalNode` div that `defineWebComponent` renders INSIDE the
+ * element's own shadow root (`src/elements/define.tsx`'s default
+ * `ChatConfig portalMount`), not into `document.body` — a standalone
+ * `<kai-source>` has no `<kai-chat>` ancestor to hand it a different mount.
+ * So the domain header has to be queried through `kai-source`'s own
+ * `shadowRoot`, not the top-level `document`.
  * `text-primary`, the BRAND token (`--color-primary` /
  * `--kai-color-primary`), on plain content/chrome text. Fixed by swapping to
  * `text-foreground` (or `text-foreground/NN` where the original carried an
@@ -83,6 +91,13 @@ async function mountAll(page: Page) {
 test('branded --kai-color-primary does not color content/chrome text, but DOES color a primary button', async ({ page }) => {
   await mountAll(page);
 
+  // Open the citation's hover card for real — mirrors how a reader actually
+  // reaches this text. `openDelay` is 150ms (source.tsx); the trigger's own
+  // `<a>` lives inside kai-source's shadow root.
+  const sourceTrigger = page.locator('kai-source a');
+  await sourceTrigger.hover();
+  await page.waitForTimeout(500);
+
   const result = await page.evaluate(() => {
     const mounts = document.getElementById('mounts')!;
     const q = (sel: string, root: ShadowRoot | Document) => root.querySelector(sel) as HTMLElement | null;
@@ -112,14 +127,23 @@ test('branded --kai-color-primary does not color content/chrome text, but DOES c
     const btn = mounts.querySelector('kai-button') as HTMLElement;
     const innerBtn = btn.shadowRoot?.querySelector('button') as HTMLElement | null;
 
+    // The hover card portals into a `portalNode` div INSIDE kai-source's own
+    // shadow root (see the file header note), not document.body.
+    const source = mounts.querySelector('kai-source') as HTMLElement;
+    const sourceRoot = source.shadowRoot!;
+    const domain = Array.from(sourceRoot.querySelectorAll('div')).find(
+      (d) => (d.textContent ?? '').trim() === 'kitn.dev' && d.classList.contains('truncate'),
+    ) as HTMLElement | null;
+
     return {
       reasoningLabelColor: reasoningLabel ? getComputedStyle(reasoningLabel).color : null,
       terminalCaretColor: terminalCaret ? getComputedStyle(terminalCaret).color : null,
       dotsLabelColor: dotsLabel ? getComputedStyle(dotsLabel).color : null,
       matchedColor: matched ? getComputedStyle(matched).color : null,
       folderIconColor: folderIcon ? getComputedStyle(folderIcon).color : null,
+      domainColor: domain ? getComputedStyle(domain).color : null,
       btnBg: innerBtn ? getComputedStyle(innerBtn).backgroundColor : null,
-      foundAll: !!(reasoningLabel && terminalCaret && dotsLabel && matched && folderIcon && innerBtn),
+      foundAll: !!(reasoningLabel && terminalCaret && dotsLabel && matched && folderIcon && domain && innerBtn),
     };
   });
 
@@ -131,6 +155,7 @@ test('branded --kai-color-primary does not color content/chrome text, but DOES c
     ['loading-dots label', result.dotsLabelColor],
     ['matched suggestion highlight', result.matchedColor],
     ['file-tree folder icon', result.folderIconColor],
+    ['citation domain header (SourceContent)', result.domainColor],
   ] as const) {
     expect(color, `${name} took the branded primary color directly (${color}) — content/chrome is branded.`).not.toBe(
       LOUD_PRIMARY,
@@ -144,16 +169,3 @@ test('branded --kai-color-primary does not color content/chrome text, but DOES c
     `POSITIVE CONTROL FAILED: a default kai-button did not take the branded primary color (got ${result.btnBg}).`,
   ).toBe(LOUD_PRIMARY);
 });
-
-// source.tsx's SourceContent domain header (the 6th changed site) is
-// deliberately NOT covered here. Its `HoverCardContent` never opened in this
-// bare harness — confirmed with both a real `.focus()` and a real Playwright
-// `.hover()` on the trigger, with `ctx.open()`'s own `aria-describedby` side
-// effect also never appearing — despite the identical trigger/focusin wiring
-// working correctly in `tests/ui/hover-card.test.tsx` (jsdom) and this
-// exact harness proving out for every other element above. This looks like a
-// pre-existing environment gap in the bare/no-Storybook harness (nothing here
-// tests HoverCardContent's real-browser open+render path before this), not a
-// regression from this fix — see the report for the investigation. The
-// site's own jsdom pin (`source-list.test.tsx`, which DOES open the card
-// successfully via fake timers) stands in as the class-list guard for now.
