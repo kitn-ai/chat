@@ -14,6 +14,7 @@ import {
 } from 'solid-js';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
+import { Checkbox } from '../ui/checkbox';
 import { ProgressBar } from '../ui/progress-bar';
 import { Card } from './card';
 import { DismissedStub } from './dismissed-stub';
@@ -21,7 +22,7 @@ import type { CardEnvelope, CardEvent, CardHost, CardResolution } from '../primi
 import { useCardResolution } from './use-card-resolution';
 import { emitCardEvent } from '../primitives/card-routing';
 import { useCardHost } from '../primitives/card-host';
-import { Check, Circle, CircleCheck, X } from 'lucide-solid';
+import { Check, Circle, CircleCheck } from 'lucide-solid';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types (tasks.schema.json) — AUTHORED IN ../primitives/card-data-types.ts.
@@ -415,14 +416,23 @@ export function TasksCard(props: TasksCardProps): JSX.Element {
             progress() || res.isResolved() || readOnly() ? undefined : (
               <div class="flex w-full flex-wrap items-center justify-between gap-2">
                 <Show when={local.data?.dismissible === true}>
+                  {/* The contract `dismiss` verb — a footer ACTION (it emits
+                      `{kind:'dismiss'}` and collapses the card to a re-openable
+                      stub), not the chrome close in `Card`'s own `dismissible`
+                      prop, which the contract cards deliberately never set.
+                      Labelled rather than a bare ghost ✕: every other control in
+                      this row says what it does, and an unlabelled 28px glyph
+                      300px from the primary button reads as stray chrome. Same
+                      shape in all four cards — `form` already looked like this.
+                      `aria-label` is kept (redundant with the text) so the
+                      element tests that select on it keep working. */}
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon-sm"
                     aria-label="Dismiss"
                     onClick={onDismiss}
                   >
-                    <X size={16} aria-hidden="true" />
+                    Dismiss
                   </Button>
                 </Show>
                 <span id={countId} aria-live="polite" class="text-xs text-muted-foreground">
@@ -485,7 +495,7 @@ export function TasksCard(props: TasksCardProps): JSX.Element {
                 if (confirmEnabled()) onConfirm();
               }}
             >
-              <div class="divide-y divide-border overflow-hidden rounded-lg border border-input">
+              <div class="divide-y divide-border overflow-hidden rounded-lg border border-border">
                 <Show when={showMaster()}>
                   {(() => {
                     const indeterminate = () => masterState() === 'indeterminate';
@@ -501,17 +511,20 @@ export function TasksCard(props: TasksCardProps): JSX.Element {
                               : 'text-foreground hover:bg-muted/50',
                         )}
                       >
-                        <input
-                          type="checkbox"
-                          class="kai-checkbox"
+                        {/* SQUARE `Checkbox` (the `.kai-checkbox` look), and the checklist below draws a
+                            ROUND lucide Circle/CircleCheck instead. Deliberate, not drift: this
+                            is `select` mode — a pick-list whose rows are a pending selection that
+                            only commits when the confirm button fires, which is what a checkbox
+                            means everywhere else. `progress` mode has no confirm and toggling a
+                            row IS the action, so it uses the done/not-done affordance of a todo
+                            list. See the D-2 row in
+                            docs/superpowers/plans/2026-08-25-form-control-primitives.md; owner has
+                            not ruled, so do not converge these on your own. */}
+                        <Checkbox
                           checked={masterState() === 'checked'}
                           disabled={groupDisabled() || readOnly()}
+                          indeterminate={indeterminate()}
                           aria-checked={indeterminate() ? 'mixed' : masterState() === 'checked'}
-                          ref={(el) => {
-                            createEffect(() => {
-                              el.indeterminate = indeterminate();
-                            });
-                          }}
                           onChange={(e) => toggleAll(e.currentTarget.checked)}
                         />
                         <span>Select all</span>
@@ -541,9 +554,8 @@ export function TasksCard(props: TasksCardProps): JSX.Element {
                         )}
                         data-task-id={task.id}
                       >
-                        <input
-                          type="checkbox"
-                          class="kai-checkbox mt-0.5"
+                        <Checkbox
+                          class="mt-0.5"
                           checked={checked()}
                           disabled={blocked() || readOnly()}
                           aria-disabled={blocked() ? 'true' : undefined}
@@ -603,7 +615,10 @@ function ProgressChecklist(props: {
     <div class={cn('flex flex-col gap-3', props.groupClass)}>
       <Show when={props.heading}>
         <div class="flex items-center justify-between gap-3">
-          <span id={props.headingId} class="text-sm font-medium text-foreground">
+          <span
+            id={props.headingId}
+            class="text-title font-semibold tracking-tight text-foreground"
+          >
             {props.heading}
           </span>
           <span
@@ -646,8 +661,23 @@ function ProgressChecklist(props: {
                     // row doesn't leave a noisy persistent outline — and it makes a
                     // Tab-focused completed row's open description perceivable. Dropped
                     // entirely when readonly (the row isn't focusable then).
+                    //
+                    // TWO tab stops exist per row and the ring has to cover both.
+                    // `focus-visible:` matches only when the LABEL itself is focused,
+                    // which is completed rows only (the `tabindex` below). Every row's
+                    // other — and for an incomplete row, only — tab stop is the sr-only
+                    // checkbox inside, so without `has-[:focus-visible]:` tabbing to an
+                    // unchecked row put focus on an off-screen input with no indicator
+                    // anywhere on screen. Both halves stay on the focus-VISIBLE axis on
+                    // purpose: `focus-within:` would also fire for a mouse click (which
+                    // forwards focus from the label to the checkbox), which is exactly
+                    // the persistent-outline noise the paragraph above rejects. The
+                    // description reveal below uses `group-focus-within:` because a
+                    // hover-or-focus reveal wants the looser condition.
                     !props.readonly &&
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+                    !props.readonly &&
+                      'has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-ring',
                     props.readonly
                       ? 'cursor-default'
                       : blocked()
@@ -680,6 +710,18 @@ function ProgressChecklist(props: {
                     )}
                     aria-hidden="true"
                   >
+                    {/* ROUND, where `select` mode uses the square `Checkbox`. Deliberate:
+                        this mode has no confirm button, so ticking a row IS the action and the
+                        row is done-or-not rather than selected-or-not — the todo-list
+                        affordance, which is how this mode has been described since it landed
+                        (see the `mode` argType in tasks-card.stories.tsx and the JSDoc on
+                        src/elements/tasks.tsx). D-2 in
+                        docs/superpowers/plans/2026-08-25-form-control-primitives.md tracks
+                        whether to keep the split; unruled, so leave both. NOTE the cost: the
+                        icon replaces the visible native control, which is why the real input
+                        above is `sr-only` and why the row's focus ring has to be driven by
+                        `has-[:focus-visible]:`. Converging on `Checkbox` would take that
+                        hazard away with it. */}
                     <Show
                       when={checked()}
                       fallback={<Circle size={18} />}

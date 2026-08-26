@@ -103,7 +103,7 @@ test('empty options → inline error state + `error` event; no radios', () => {
 
 test('allowOther: select Other reveals input; the one Submit emits __other__ with text', () => {
   const { host, events } = makeHost();
-  const { getByText, getByLabelText, queryByLabelText } = render(() => (
+  const { getByText, queryByLabelText } = render(() => (
     <ChoiceCard
       host={host}
       cardId="c1"
@@ -111,8 +111,13 @@ test('allowOther: select Other reveals input; the one Submit emits __other__ wit
     />
   ));
   const submit = getByText('Submit') as HTMLButtonElement;
-  // Before selecting Other: no input, Submit disabled.
-  expect(queryByLabelText('Other…')).toBeNull();
+  // `{ selector }` is load-bearing, not tidying. The "Other…" ROW is now a <label>
+  // wrapping a real <input type="radio">, so the row's own radio is labelled "Other…"
+  // too and a bare getByLabelText matches two elements. What this test is about is the
+  // free-text input, which only exists once Other is selected — so it names the type.
+  const otherText = () => queryByLabelText('Other…', { selector: 'input[type="text"]' });
+  // Before selecting Other: no text input, Submit disabled.
+  expect(otherText()).toBeNull();
   expect(submit.disabled).toBe(true);
 
   // Selecting Other reveals the input but does not emit; Submit still disabled (empty).
@@ -120,7 +125,8 @@ test('allowOther: select Other reveals input; the one Submit emits __other__ wit
   expect(action(events)).toBeUndefined();
   expect(submit.disabled).toBe(true);
 
-  const input = getByLabelText('Other…') as HTMLInputElement;
+  const input = otherText() as HTMLInputElement;
+  expect(input).toBeTruthy();
   fireEvent.input(input, { target: { value: 'My custom answer' } });
   expect(submit.disabled).toBe(false);
   fireEvent.click(submit);

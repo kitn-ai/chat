@@ -91,7 +91,12 @@ const ROW_INPUT =
   'min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed';
 
 const SIZE_SM = 'px-2.5 py-1';
-const INVALID = 'border-destructive dark:border-red-400/70';
+// The invalid-state border, EXPORTED because `src/ui/select.tsx` renders the same
+// field box and a second hand-typed copy of this string is exactly the kind of
+// restatement that rots (`docs/coupling-map.md` §4). `INVALID` stays as the local
+// alias so the three call sites below read unchanged.
+export const FIELD_INVALID = 'border-destructive dark:border-red-400/70';
+const INVALID = FIELD_INVALID;
 
 // Suppress the native search affordances Chrome/WebKit render for `type="search"`.
 // Without this the browser's `::-webkit-search-cancel-button` (×) stacks on top of
