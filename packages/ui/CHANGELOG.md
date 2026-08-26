@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.27.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.26.0...@kitn.ai/ui-v0.27.0) (2026-08-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* **construct:** reasoning ("Thinking") panels now default to a closed shimmering chip and no longer auto-open while streaming. Opt back in with reasoningOpen (ChatThread/kai-chat/React Chat) or openOnStream+defaultOpen on Reasoning. Also: JsonSchema.enum/.required on ./schemas are now readonly; unknown CLI subcommands exit 2 instead of falling through to the MCP server.
+
+### Features
+
+* **construct:** the construct engine — JSON constructs compile to chat widgets, + widget chrome ([62ac3ea](https://github.com/kitn-ai/ui/commit/62ac3ea4fc9bc3dcaf69e061fb20a6a458857772))
+* **elements:** kai-pane-grid; roster rewrite; delete Stat; close popover/dropdown convergence ([#314](https://github.com/kitn-ai/ui/issues/314)) ([61779be](https://github.com/kitn-ai/ui/commit/61779bec57ecad5fb2a774f776d827f22d3bcbaf))
+* form-field formats and input masking (tiers 1+2) ([#311](https://github.com/kitn-ai/ui/issues/311)) ([6e40b40](https://github.com/kitn-ai/ui/commit/6e40b40cde29d51edcecf665225cc92c6c5eb5a3))
+* **guards:** llms-full size budget + llms.txt index coverage ([#321](https://github.com/kitn-ai/ui/issues/321)) ([b363ede](https://github.com/kitn-ai/ui/commit/b363edea9f936984a62e484a689dabbd41b4014e))
+* post-rung-6 rulings — standalone item activation, toast adoption, llms dedupe; D-9 report ([#320](https://github.com/kitn-ai/ui/issues/320)) ([8a4ba9e](https://github.com/kitn-ai/ui/commit/8a4ba9e781dbfc07aee1fe2d5807b70377b85101))
+* rung-6 fix waves — programmatic-layer teaching, composed-thread recipe, docs fixes ([#318](https://github.com/kitn-ai/ui/issues/318)) ([f112b51](https://github.com/kitn-ai/ui/commit/f112b51b1abc38bd11c440e61e9cc06057106287))
+
+
+### Bug Fixes
+
+* component tweaks — type scale, form-control primitives, contrast, and a shipped type-generator bug ([#323](https://github.com/kitn-ai/ui/issues/323)) ([f815593](https://github.com/kitn-ai/ui/commit/f8155931c5249689be76e6f177f2264e719b52d0))
+* WS1 round 1 — card-event host (F-26), mock tool calls (F-35), surface audit ([#313](https://github.com/kitn-ai/ui/issues/313)) ([c0855c1](https://github.com/kitn-ai/ui/commit/c0855c17cfe908cf7d082d415c03a819b7d3f419))
+
 ## [0.26.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.25.2...@kitn.ai/ui-v0.26.0) (2026-08-24)
 
 
