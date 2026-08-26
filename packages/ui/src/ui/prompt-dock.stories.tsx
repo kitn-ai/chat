@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { type JSX } from 'solid-js';
-import { PromptDock } from './prompt-dock';
+import { PromptDock, type PromptDockProps } from './prompt-dock';
 import { PromptInput, PromptInputTextarea, PromptInputActions } from '../components/prompt-input';
 import { Button } from './button';
 import { componentDescription } from '../stories/docs/element-controls';
@@ -33,6 +33,8 @@ const meta = {
   tags: ['autodocs'],
   parameters: {
     layout: 'padded',
+    // Panel scope; `parameters.docs.controls` filters the autodocs table only.
+    controls: { include: ['frame', 'appearance', 'topClass', 'bottomClass', 'class'] },
     docs: {
       controls: { exclude: ['use:eventListener'] },
       description: componentDescription([
@@ -55,12 +57,21 @@ const meta = {
       description:
         'Tray surface: `soft` (sunken fill + border, default), `outlined` (border only), `filled` (fill only), or `plain` (bare — no fill, border, or radius).',
     },
+    topClass: { control: 'text', description: 'Extra classes for the TOP lip wrapper, merged over the default band styling.' },
+    bottomClass: { control: 'text', description: 'Extra classes for the BOTTOM lip wrapper.' },
     children: { control: false, description: 'The prompt input - the raised card on the tray.' },
     class: { control: 'text', description: 'Extra classes for the outer tray.' },
   },
-  render: () => (
+  args: {
+    frame: 'inset',
+    appearance: 'soft',
+    topClass: '',
+    bottomClass: '',
+    class: '',
+  },
+  render: (args) => (
     <div class="max-w-xl">
-      <PromptDock>
+      <PromptDock {...args}>
         <DockedInput />
       </PromptDock>
     </div>
@@ -74,6 +85,36 @@ const IMPORT = `import { PromptDock, PromptInput, PromptInputTextarea, PromptInp
 const src = (code: string) => ({
   parameters: { docs: { source: { code: `${IMPORT}\n\n${code}`, language: 'tsx' } } },
 });
+
+/** Both lips slotted, so `frame` and `appearance` read clearly as you change them:
+ *  `frame` moves the inset around the input, `appearance` swaps the tray surface. */
+export const Playground: Story = {
+  // Story-level `render` does not infer its parameter here, so name the props type.
+  render: (args: Partial<PromptDockProps>) => (
+    <div class="max-w-xl">
+      <PromptDock
+        {...args}
+        top={<span>Heads up, context is getting long.</span>}
+        bottom={
+          <div class="flex items-center gap-2">
+            <Pill>Project or folder ▾</Pill>
+            <Pill>Ask ▾</Pill>
+          </div>
+        }
+      >
+        <DockedInput />
+      </PromptDock>
+    </div>
+  ),
+  ...src(`<PromptDock frame="inset" appearance="soft" top={<Notice />} bottom={<Controls />}>
+  <PromptInput>
+    <PromptInputTextarea placeholder="Ask anything..." />
+    <PromptInputActions class="w-full justify-end px-1 pb-0.5">
+      <Button variant="default" size="sm">Send</Button>
+    </PromptInputActions>
+  </PromptInput>
+</PromptDock>`),
+};
 
 /** No top or bottom slotted: the dock collapses to just the input, with the tray
  *  showing only as a thin frame around the card. */

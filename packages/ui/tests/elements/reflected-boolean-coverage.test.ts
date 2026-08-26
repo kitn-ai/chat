@@ -160,6 +160,17 @@ const EXEMPT: Record<string, string> = {
   'switch.tsx':
     'kai-switch binds `checked` to its internal signal directly — a stronger contract '
     + 'than the store-backed read-back, and it has no suite to validate a migration against',
+
+  // kai-checkbox is kai-switch's structure, deliberately and line for line: `checked`
+  // is an own accessor bound to the internal signal (`get: () => checked()`), so a
+  // click is visible on the property with no attribute round-trip, and a host write
+  // after mount drives the control because the setter calls `setChecked`. reflectFlag's
+  // accessor delegates to component-register's prop store instead, which is the weaker
+  // contract here for exactly the reasons written above kai-switch. Exempt for the same
+  // reason, not by copy-paste: if kai-switch ever migrates, this migrates with it.
+  'checkbox.tsx':
+    'kai-checkbox binds `checked` to its internal signal directly, the same stronger '
+    + 'contract as kai-switch — the two move together or not at all',
 };
 
 /**

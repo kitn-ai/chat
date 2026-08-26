@@ -333,7 +333,7 @@ export interface KaiCardsElement extends HTMLElement {
   /** JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `types`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.schemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name, matching `mergeCardTags`, where your entry is spread over ours. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. See `CardSchemaMap` in components/card-renderer.tsx. */
   schemas?: Record<string, object>;
   /** Optional CardPolicy handling child events. Property: `el.policy`. */
-  policy?: { onSubmit?: (cardId: string, data: unknown) => void; onAction?: (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: (text: string, opts: { mode: "compose" | "send"; context?: unknown; }) => void; onOpen?: (url: string, target: "tab" | "artifact") => void; onState?: (cardId: string, patch: unknown) => void; onDismiss?: (cardId: string) => void; onReopen?: (cardId: string) => void; onError?: (cardId: string, message: string) => void; maxSendPromptMode?: "compose" | "send" };
+  policy?: { onSubmit?: ((cardId: string, data: unknown) => void); onAction?: ((cardId: string, action: string, payload?: unknown) => void); onSendPrompt?: ((text: string, opts: { mode: "compose" | "send"; context?: unknown; }) => void); onOpen?: ((url: string, target: "tab" | "artifact") => void); onState?: ((cardId: string, patch: unknown) => void); onDismiss?: ((cardId: string) => void); onReopen?: ((cardId: string) => void); onError?: ((cardId: string, message: string) => void); maxSendPromptMode?: "compose" | "send" };
   /** Validate each envelope's `data` against the schema for its type before rendering it, using a built-in's own schema or yours from `schemas`. Default `true`; set `validate-cards="false"` (or `el.validateCards = false`) to opt out. A hard failure (wrong type, a missing required field) renders a diagnostic naming the field instead of the card; a soft failure (bounds) renders the card unchanged. Both emit a contract `error` event. On in production too: a model emitting a bad shape is a production failure mode, so stripping the check there would hide it from exactly the person who needs to see it. */
   validateCards?: boolean;
   /** Programmatically resolve a child card by id: set that envelope's `resolution` so the child re-renders into its read-only/resolved view. The imperative twin of the consumer mutating the cards array. No-op for an unknown id. */
@@ -438,6 +438,48 @@ export interface KaiChatElement extends HTMLElement {
   send(): void;
   /** Scroll the message viewport to the newest message. Defaults to `'smooth'`; pass `'instant'` to jump without animating. */
   scrollToBottom(behavior?: "auto" | "instant" | "smooth"): void;
+}
+
+export interface KaiCheckboxElement extends HTMLElement {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** Controlled checked state. Settable and reflected to the `checked` attribute. `el.checked = true` (or `<kai-checkbox checked>`) drives it; ticking the box updates it and fires `kai-change`. Read `el.checked` for live state. */
+  checked?: boolean;
+  /** Initial checked state on mount (uncontrolled seed). Bare attribute (`<kai-checkbox default-checked>`) turns it on. */
+  defaultChecked?: boolean;
+  /** The mixed state, for a parent box whose children are partly ticked. Visual plus an accessibility hint: the box still reports `checked === false`. */
+  indeterminate?: boolean;
+  /** Disable interaction. */
+  disabled?: boolean;
+  /** Set the native `required` attribute, and nothing more. Whether an unticked box is an error is the application's rule, not the kit's. */
+  required?: boolean;
+  /** Accessible label. The visible text beside the box is the consumer's to render. */
+  label?: string;
+  /** Form-control name (paired with `value`). */
+  name?: string;
+  /** Submitted value when checked (paired with `name`). Defaults to `'on'`. */
+  value?: string;
+  /** Flip the box and fire `kai-change` (no-op while disabled). */
+  toggle(): void;
+  /** Focus the inner input (the host element can't reach it). */
+  focus(options?: FocusOptions): void;
+}
+
+export interface KaiCheckboxGroupElement extends HTMLElement {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** The choices, top to bottom. Set as a JS PROPERTY (array), never an attribute. Rendered in full: the kit never truncates, re-orders or de-duplicates them. */
+  options: { value: string; label: string; description?: undefined | string; disabled?: undefined | boolean }[];
+  /** The FIRST selected value. Settable and reflected to the `value` attribute, so `:host([value])` and `el.value` see live state, and a seed can be written in markup. Writing it makes that the whole selection; to read or drive the rest, use `el.values`. */
+  value?: string;
+  /** The shared form-control name every box carries, so `FormData.getAll(name)` reads the whole selection back under one key. NO DEFAULT, unlike `<kai-radio-group>`. A radio set needs a shared `name` for the browser to make it exclusive and arrow-navigable, so one is generated when none is given; checkboxes are independent controls and behave correctly with no name at all. Generating one here would submit the selection under a random key, which is worse than submitting nothing. The element is NOT form-associated (no `ElementInternals`, no `setFormValue()`), the same known gap `<kai-input>` records: the boxes live in a shadow root, so a surrounding `<form>` collects nothing from them whether or not `name` is set. Read `el.values`. The name still lands on every inner input, so it is right the day form association arrives. */
+  name?: string;
+  /** Disable every row. Individual rows carry their own `disabled`. */
+  disabled?: boolean;
+  /** Accessible name for the group. */
+  label?: string;
+  /** Focus the group's first box. Not "the first ticked one", which is `<kai-radio-group>`'s rule: a radio group is ONE tab stop that lands on the selection, while every checkbox here is its own tab stop, so the entry point is simply the top of the list. */
+  focus(options?: FocusOptions): void;
 }
 
 export interface KaiCheckpointElement extends HTMLElement {
@@ -911,7 +953,7 @@ export interface KaiInputElement extends HTMLElement {
   theme?: "light" | "dark" | "auto";
   /** Native input type: `text` (default) · `email` · `url` · `search` · `tel` · `password` · `number`. Single-line only. */
   type?: string;
-  /** Controlled value, and always the CANONICAL one when a mask is active: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom` (spec §4). Settable and reflected to the `value` attribute. `el.value = '5551234567'` drives it (no event) and is re-fitted to the mask on the way in, so the field shows `555-123-4567`. Read `el.value` for live state; the formatted text rides along on every `kai-input` / `kai-change` detail as `formattedValue`. */
+  /** Controlled value, and always the CANONICAL one when a mask is active: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom`. Settable and reflected to the `value` attribute. `el.value = '5551234567'` drives it (no event) and is re-fitted to the mask on the way in, so the field shows `555-123-4567`. Read `el.value` for live state; the formatted text rides along on every `kai-input` / `kai-change` detail as `formattedValue`. */
   value?: string;
   /** Placeholder shown when empty. */
   placeholder?: string;
@@ -951,7 +993,7 @@ export interface KaiInputElement extends HTMLElement {
   focus(options?: FocusOptions): void;
   /** Select the inner input's text. */
   select(): void;
-  /** The canonical value: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom`, and the field text when no mask is on. Identical to reading `el.value`; it carries the name spec §5.8 uses for the submitted form of a masked field, so code written against that name finds it. The mask engine has a third, narrower notion of raw (the fill characters with no literals at all) and that one is internal: it is not what any backend wants and it is not exposed here. */
+  /** The canonical value: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom`, and the field text when no mask is on. Identical to reading `el.value`, under the name backends use for the submitted form of a masked field. The mask engine has a third, narrower notion of raw (the fill characters with no literals at all) and that one is internal: it is not what any backend wants and it is not exposed here. */
   getRawValue(): string;
   /** The text on screen, literals and guide included. The counterpart to `formattedValue` on the `kai-input` / `kai-change` details, for a consumer that needs it outside an event. */
   getFormattedValue(): string;
@@ -1245,6 +1287,23 @@ export interface KaiPromptInputElement extends HTMLElement {
   send(): void;
 }
 
+export interface KaiRadioGroupElement extends HTMLElement {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** The choices, top to bottom. Set as a JS PROPERTY (array), never an attribute. */
+  options: { value: string; label: string; description?: undefined | string; disabled?: undefined | boolean }[];
+  /** Controlled selected `value`. Settable and reflected to the `value` attribute. `el.value = 'degraded'` drives it; choosing a row updates it and fires `kai-change`. Read `el.value` for live state. */
+  value?: string;
+  /** Shared form-control name for every radio in the group. Defaults to a generated id, so the group is exclusive and keyboard-navigable even when nothing is submitted. */
+  name?: string;
+  /** Disable every row. Individual rows carry their own `disabled`. */
+  disabled?: boolean;
+  /** Accessible name for the group. */
+  label?: string;
+  /** Focus the group's tab stop. That is the selected radio, or the first row when nothing is selected yet. */
+  focus(options?: FocusOptions): void;
+}
+
 export interface KaiReasoningElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
@@ -1390,6 +1449,10 @@ export interface KaiScrollButtonElement extends HTMLElement {
   variant?: "outline" | "ghost" | "default";
   /** Button size token. Defaults to `'icon'` (square). */
   size?: "sm" | "md" | "lg" | "icon" | "icon-sm";
+  /** The button's accessible name. It is announced whether or not the label is visible, so the text is always localisable. Defaults to `'Scroll to bottom'`. */
+  label?: string;
+  /** Also render `label` visibly beside the icon. Defaults to `false`, which is the icon-only button. When the text is visible it IS the accessible name, so nothing gets announced twice. */
+  showLabel?: boolean;
 }
 
 export interface KaiSearchElement extends HTMLElement {
@@ -1422,6 +1485,31 @@ export interface KaiSegmentedElement extends HTMLElement {
   value?: string;
   /** Control density: `sm` or `md`. Defaults to `md`. */
   size?: "sm" | "md";
+}
+
+export interface KaiSelectElement extends HTMLElement {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** The choices, in display order. Set as a JS PROPERTY (array), never an attribute. Rendered in full: the kit never truncates, re-orders or de-duplicates them. */
+  options: { value: string; label?: undefined | string; disabled?: undefined | boolean }[];
+  /** Controlled selected value. Settable and reflected to the `value` attribute. `el.value = 'high'` drives it; choosing an option updates it and fires `kai-change`. Read `el.value` for live state; for a `multiple` select read `el.values` instead. */
+  value?: string;
+  /** Text for a leading, disabled, empty option: the "nothing chosen yet" row. Omitted means no such row at all; there is no default wording, because inventing one would put words in your UI. */
+  placeholder?: string;
+  /** Allow more than one selection. Turns the control into the platform's list box, so the kit's chevron is not drawn. */
+  multiple?: boolean;
+  /** Force the invalid (destructive-border) state. */
+  invalid?: boolean;
+  /** Disable interaction. */
+  disabled?: boolean;
+  /** Set the native `required` attribute, and nothing more. Whether an empty select is an error is the application's rule, not the kit's. */
+  required?: boolean;
+  /** Accessible label for the control. */
+  label?: string;
+  /** Form-control name, for a native form submit. */
+  name?: string;
+  /** Focus the inner select (the host element can't reach it). */
+  focus(options?: FocusOptions): void;
 }
 
 export interface KaiSeparatorElement extends HTMLElement {
@@ -1467,6 +1555,29 @@ export interface KaiSkillsElement extends HTMLElement {
   theme?: "light" | "dark" | "auto";
   /** The active skills to badge. Set as a JS property. Omit to supply them as `<kai-skill>` light-DOM children instead; when both are present the property's skills come first. Nothing renders when there are none. */
   skills: { id: string; name: string }[];
+}
+
+export interface KaiSliderElement extends HTMLElement {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** Lowest selectable value. Required: a range with no bounds is a guess, and the guess belongs to whoever knows what the number means. */
+  min?: number;
+  /** Highest selectable value. Required, for the same reason as `min`. */
+  max?: number;
+  /** Granularity. Omitted means the native default of 1; `any` means continuous. */
+  step?: number | "any";
+  /** Controlled value. Settable and reflected to the `value` attribute. `el.value = 40` drives it; dragging updates it and fires `kai-input` per step, `kai-change` on release. Read `el.value` for live state. */
+  value?: number;
+  /** Disable interaction. */
+  disabled?: boolean;
+  /** Accessible label for the slider. */
+  label?: string;
+  /** Form-control name, for a native form submit. */
+  name?: string;
+  /** Show the current value beside the track. Off by default. Two ways in, because one of them is not a scalar. As a bare ATTRIBUTE (`<kai-slider value-label>`) it renders the raw number. As a JS PROPERTY it also accepts a formatter function (`el.valueLabel = (v) => v + '%'`), for a slider that is not counting bare numbers. A function cannot survive an attribute, so that half is property-only. The readout is hidden from assistive tech: the slider already reports the same number, and an exposed copy would be announced twice. */
+  valueLabel?: boolean | ((value: number) => string);
+  /** Focus the inner range input (the host element can't reach it). */
+  focus(options?: FocusOptions): void;
 }
 
 export interface KaiSourceElement extends HTMLElement {
@@ -1790,6 +1901,8 @@ declare global {
     'kai-cards': KaiCardsElement;
     'kai-chain-of-thought': KaiChainOfThoughtElement;
     'kai-chat': KaiChatElement;
+    'kai-checkbox': KaiCheckboxElement;
+    'kai-checkbox-group': KaiCheckboxGroupElement;
     'kai-checkpoint': KaiCheckpointElement;
     'kai-choice': KaiChoiceElement;
     'kai-coachmark': KaiCoachmarkElement;
@@ -1831,6 +1944,7 @@ declare global {
     'kai-progress-bar': KaiProgressBarElement;
     'kai-prompt-dock': KaiPromptDockElement;
     'kai-prompt-input': KaiPromptInputElement;
+    'kai-radio-group': KaiRadioGroupElement;
     'kai-reasoning': KaiReasoningElement;
     'kai-remote': KaiRemoteElement;
     'kai-resizable': KaiResizableElement;
@@ -1842,11 +1956,13 @@ declare global {
     'kai-scroll-button': KaiScrollButtonElement;
     'kai-search': KaiSearchElement;
     'kai-segmented': KaiSegmentedElement;
+    'kai-select': KaiSelectElement;
     'kai-separator': KaiSeparatorElement;
     'kai-setting-item': KaiSettingItemElement;
     'kai-settings-group': KaiSettingsGroupElement;
     'kai-skeleton': KaiSkeletonElement;
     'kai-skills': KaiSkillsElement;
+    'kai-slider': KaiSliderElement;
     'kai-source': KaiSourceElement;
     'kai-sources': KaiSourcesElement;
     'kai-status': KaiStatusElement;
@@ -1892,6 +2008,8 @@ declare module 'react' {
       'kai-cards': KaiElementJsxProps;
       'kai-chain-of-thought': KaiElementJsxProps;
       'kai-chat': KaiElementJsxProps;
+      'kai-checkbox': KaiElementJsxProps;
+      'kai-checkbox-group': KaiElementJsxProps;
       'kai-checkpoint': KaiElementJsxProps;
       'kai-choice': KaiElementJsxProps;
       'kai-coachmark': KaiElementJsxProps;
@@ -1933,6 +2051,7 @@ declare module 'react' {
       'kai-progress-bar': KaiElementJsxProps;
       'kai-prompt-dock': KaiElementJsxProps;
       'kai-prompt-input': KaiElementJsxProps;
+      'kai-radio-group': KaiElementJsxProps;
       'kai-reasoning': KaiElementJsxProps;
       'kai-remote': KaiElementJsxProps;
       'kai-resizable': KaiElementJsxProps;
@@ -1944,11 +2063,13 @@ declare module 'react' {
       'kai-scroll-button': KaiElementJsxProps;
       'kai-search': KaiElementJsxProps;
       'kai-segmented': KaiElementJsxProps;
+      'kai-select': KaiElementJsxProps;
       'kai-separator': KaiElementJsxProps;
       'kai-setting-item': KaiElementJsxProps;
       'kai-settings-group': KaiElementJsxProps;
       'kai-skeleton': KaiElementJsxProps;
       'kai-skills': KaiElementJsxProps;
+      'kai-slider': KaiElementJsxProps;
       'kai-source': KaiElementJsxProps;
       'kai-sources': KaiElementJsxProps;
       'kai-status': KaiElementJsxProps;
@@ -2155,7 +2276,7 @@ export interface KaiCardsElementProps {
   /** JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `types`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.schemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name, matching `mergeCardTags`, where your entry is spread over ours. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. See `CardSchemaMap` in components/card-renderer.tsx. */
   schemas?: Record<string, object>;
   /** Optional CardPolicy handling child events. Property: `el.policy`. */
-  policy?: { onSubmit?: (cardId: string, data: unknown) => void; onAction?: (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: (text: string, opts: { mode: "compose" | "send"; context?: unknown; }) => void; onOpen?: (url: string, target: "tab" | "artifact") => void; onState?: (cardId: string, patch: unknown) => void; onDismiss?: (cardId: string) => void; onReopen?: (cardId: string) => void; onError?: (cardId: string, message: string) => void; maxSendPromptMode?: "compose" | "send" };
+  policy?: { onSubmit?: ((cardId: string, data: unknown) => void); onAction?: ((cardId: string, action: string, payload?: unknown) => void); onSendPrompt?: ((text: string, opts: { mode: "compose" | "send"; context?: unknown; }) => void); onOpen?: ((url: string, target: "tab" | "artifact") => void); onState?: ((cardId: string, patch: unknown) => void); onDismiss?: ((cardId: string) => void); onReopen?: ((cardId: string) => void); onError?: ((cardId: string, message: string) => void); maxSendPromptMode?: "compose" | "send" };
   /** Validate each envelope's `data` against the schema for its type before rendering it, using a built-in's own schema or yours from `schemas`. Default `true`; set `validate-cards="false"` (or `el.validateCards = false`) to opt out. A hard failure (wrong type, a missing required field) renders a diagnostic naming the field instead of the card; a soft failure (bounds) renders the card unchanged. Both emit a contract `error` event. On in production too: a model emitting a bad shape is a production failure mode, so stripping the check there would hide it from exactly the person who needs to see it. */
   validateCards?: boolean;
 }
@@ -2238,6 +2359,42 @@ export interface KaiChatElementProps {
   cardTypes?: Record<string, string>;
   /** JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. */
   cardSchemas?: Record<string, object>;
+}
+
+export interface KaiCheckboxElementProps {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** Controlled checked state. Settable and reflected to the `checked` attribute. `el.checked = true` (or `<kai-checkbox checked>`) drives it; ticking the box updates it and fires `kai-change`. Read `el.checked` for live state. */
+  checked?: boolean;
+  /** Initial checked state on mount (uncontrolled seed). Bare attribute (`<kai-checkbox default-checked>`) turns it on. */
+  defaultChecked?: boolean;
+  /** The mixed state, for a parent box whose children are partly ticked. Visual plus an accessibility hint: the box still reports `checked === false`. */
+  indeterminate?: boolean;
+  /** Disable interaction. */
+  disabled?: boolean;
+  /** Set the native `required` attribute, and nothing more. Whether an unticked box is an error is the application's rule, not the kit's. */
+  required?: boolean;
+  /** Accessible label. The visible text beside the box is the consumer's to render. */
+  label?: string;
+  /** Form-control name (paired with `value`). */
+  name?: string;
+  /** Submitted value when checked (paired with `name`). Defaults to `'on'`. */
+  value?: string;
+}
+
+export interface KaiCheckboxGroupElementProps {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** The choices, top to bottom. Set as a JS PROPERTY (array), never an attribute. Rendered in full: the kit never truncates, re-orders or de-duplicates them. */
+  options: { value: string; label: string; description?: undefined | string; disabled?: undefined | boolean }[];
+  /** The FIRST selected value. Settable and reflected to the `value` attribute, so `:host([value])` and `el.value` see live state, and a seed can be written in markup. Writing it makes that the whole selection; to read or drive the rest, use `el.values`. */
+  value?: string;
+  /** The shared form-control name every box carries, so `FormData.getAll(name)` reads the whole selection back under one key. NO DEFAULT, unlike `<kai-radio-group>`. A radio set needs a shared `name` for the browser to make it exclusive and arrow-navigable, so one is generated when none is given; checkboxes are independent controls and behave correctly with no name at all. Generating one here would submit the selection under a random key, which is worse than submitting nothing. The element is NOT form-associated (no `ElementInternals`, no `setFormValue()`), the same known gap `<kai-input>` records: the boxes live in a shadow root, so a surrounding `<form>` collects nothing from them whether or not `name` is set. Read `el.values`. The name still lands on every inner input, so it is right the day form association arrives. */
+  name?: string;
+  /** Disable every row. Individual rows carry their own `disabled`. */
+  disabled?: boolean;
+  /** Accessible name for the group. */
+  label?: string;
 }
 
 export interface KaiCheckpointElementProps {
@@ -2609,7 +2766,7 @@ export interface KaiInputElementProps {
   theme?: "light" | "dark" | "auto";
   /** Native input type: `text` (default) · `email` · `url` · `search` · `tel` · `password` · `number`. Single-line only. */
   type?: string;
-  /** Controlled value, and always the CANONICAL one when a mask is active: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom` (spec §4). Settable and reflected to the `value` attribute. `el.value = '5551234567'` drives it (no event) and is re-fitted to the mask on the way in, so the field shows `555-123-4567`. Read `el.value` for live state; the formatted text rides along on every `kai-input` / `kai-change` detail as `formattedValue`. */
+  /** Controlled value, and always the CANONICAL one when a mask is active: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom`. Settable and reflected to the `value` attribute. `el.value = '5551234567'` drives it (no event) and is re-fitted to the mask on the way in, so the field shows `555-123-4567`. Read `el.value` for live state; the formatted text rides along on every `kai-input` / `kai-change` detail as `formattedValue`. */
   value?: string;
   /** Placeholder shown when empty. */
   placeholder?: string;
@@ -2899,6 +3056,21 @@ export interface KaiPromptInputElementProps {
   kindIcons?: Record<string, string>;
 }
 
+export interface KaiRadioGroupElementProps {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** The choices, top to bottom. Set as a JS PROPERTY (array), never an attribute. */
+  options: { value: string; label: string; description?: undefined | string; disabled?: undefined | boolean }[];
+  /** Controlled selected `value`. Settable and reflected to the `value` attribute. `el.value = 'degraded'` drives it; choosing a row updates it and fires `kai-change`. Read `el.value` for live state. */
+  value?: string;
+  /** Shared form-control name for every radio in the group. Defaults to a generated id, so the group is exclusive and keyboard-navigable even when nothing is submitted. */
+  name?: string;
+  /** Disable every row. Individual rows carry their own `disabled`. */
+  disabled?: boolean;
+  /** Accessible name for the group. */
+  label?: string;
+}
+
 export interface KaiReasoningElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
@@ -3020,6 +3192,10 @@ export interface KaiScrollButtonElementProps {
   variant?: "outline" | "ghost" | "default";
   /** Button size token. Defaults to `'icon'` (square). */
   size?: "sm" | "md" | "lg" | "icon" | "icon-sm";
+  /** The button's accessible name. It is announced whether or not the label is visible, so the text is always localisable. Defaults to `'Scroll to bottom'`. */
+  label?: string;
+  /** Also render `label` visibly beside the icon. Defaults to `false`, which is the icon-only button. When the text is visible it IS the accessible name, so nothing gets announced twice. */
+  showLabel?: boolean;
 }
 
 export interface KaiSearchElementProps {
@@ -3048,6 +3224,29 @@ export interface KaiSegmentedElementProps {
   value?: string;
   /** Control density: `sm` or `md`. Defaults to `md`. */
   size?: "sm" | "md";
+}
+
+export interface KaiSelectElementProps {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** The choices, in display order. Set as a JS PROPERTY (array), never an attribute. Rendered in full: the kit never truncates, re-orders or de-duplicates them. */
+  options: { value: string; label?: undefined | string; disabled?: undefined | boolean }[];
+  /** Controlled selected value. Settable and reflected to the `value` attribute. `el.value = 'high'` drives it; choosing an option updates it and fires `kai-change`. Read `el.value` for live state; for a `multiple` select read `el.values` instead. */
+  value?: string;
+  /** Text for a leading, disabled, empty option: the "nothing chosen yet" row. Omitted means no such row at all; there is no default wording, because inventing one would put words in your UI. */
+  placeholder?: string;
+  /** Allow more than one selection. Turns the control into the platform's list box, so the kit's chevron is not drawn. */
+  multiple?: boolean;
+  /** Force the invalid (destructive-border) state. */
+  invalid?: boolean;
+  /** Disable interaction. */
+  disabled?: boolean;
+  /** Set the native `required` attribute, and nothing more. Whether an empty select is an error is the application's rule, not the kit's. */
+  required?: boolean;
+  /** Accessible label for the control. */
+  label?: string;
+  /** Form-control name, for a native form submit. */
+  name?: string;
 }
 
 export interface KaiSeparatorElementProps {
@@ -3093,6 +3292,27 @@ export interface KaiSkillsElementProps {
   theme?: "light" | "dark" | "auto";
   /** The active skills to badge. Set as a JS property. Omit to supply them as `<kai-skill>` light-DOM children instead; when both are present the property's skills come first. Nothing renders when there are none. */
   skills?: { id: string; name: string }[];
+}
+
+export interface KaiSliderElementProps {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** Lowest selectable value. Required: a range with no bounds is a guess, and the guess belongs to whoever knows what the number means. */
+  min?: number;
+  /** Highest selectable value. Required, for the same reason as `min`. */
+  max?: number;
+  /** Granularity. Omitted means the native default of 1; `any` means continuous. */
+  step?: number | "any";
+  /** Controlled value. Settable and reflected to the `value` attribute. `el.value = 40` drives it; dragging updates it and fires `kai-input` per step, `kai-change` on release. Read `el.value` for live state. */
+  value?: number;
+  /** Disable interaction. */
+  disabled?: boolean;
+  /** Accessible label for the slider. */
+  label?: string;
+  /** Form-control name, for a native form submit. */
+  name?: string;
+  /** Show the current value beside the track. Off by default. Two ways in, because one of them is not a scalar. As a bare ATTRIBUTE (`<kai-slider value-label>`) it renders the raw number. As a JS PROPERTY it also accepts a formatter function (`el.valueLabel = (v) => v + '%'`), for a slider that is not counting bare numbers. A function cannot survive an attribute, so that half is property-only. The readout is hidden from assistive tech: the slider already reports the same number, and an exposed copy would be announced twice. */
+  valueLabel?: boolean | ((value: number) => string);
 }
 
 export interface KaiSourceElementProps {
@@ -3431,6 +3651,16 @@ export interface KaiChatElementEvents {
   onKaiWebSearch?: (event: CustomEvent<Record<string, never>>) => void;
 }
 
+export interface KaiCheckboxElementEvents {
+  /** The box was ticked or unticked. */
+  onKaiChange?: (event: CustomEvent<{ checked: boolean }>) => void;
+}
+
+export interface KaiCheckboxGroupElementEvents {
+  /** A row was ticked or unticked. `values` is the whole selection after the change, which is what a multi-select control needs; `value` is the first of them (empty when nothing is selected). Both are always present, so neither shape silently loses the other. This is `<kai-select>`'s detail, deliberately. */
+  onKaiChange?: (event: CustomEvent<{ value: string; values: string[] }>) => void;
+}
+
 export interface KaiCheckpointElementEvents {
   /** The checkpoint was clicked. */
   onKaiSelect?: (event: CustomEvent) => void;
@@ -3499,7 +3729,7 @@ export interface KaiContextElementEvents {
 }
 
 export interface KaiConversationItemElementEvents {
-  /** STANDALONE activation only (F-45 tier 2, owner-ruled 2026-08-25): the row was activated (click, Enter or Space on its body) while the item is NOT a direct child of `<kai-conversations>`. `id` is the row's identity: the `conversation-id` attribute, else the host `id`. Inside a container this never fires: activation surfaces once, as `kai-conversation-select` on the container. */
+  /** STANDALONE activation only: the row was activated (click, Enter or Space on its body) while the item is NOT a direct child of `<kai-conversations>`. `id` is the row's identity: the `conversation-id` attribute, else the host `id`. Inside a container this never fires: activation surfaces once, as `kai-conversation-select` on the container. */
   onKaiSelect?: (event: CustomEvent<{ id: string }>) => void;
 }
 
@@ -3697,6 +3927,11 @@ export interface KaiPromptInputElementEvents {
   onKaiWebSearch?: (event: CustomEvent<Record<string, never>>) => void;
 }
 
+export interface KaiRadioGroupElementEvents {
+  /** A row was chosen. */
+  onKaiChange?: (event: CustomEvent<{ value: string }>) => void;
+}
+
 export interface KaiReasoningElementEvents {
   /** The reasoning block expanded or collapsed (via the trigger, streaming auto-open, or a method). */
   onKaiOpenChange?: (event: CustomEvent<{ open: boolean }>) => void;
@@ -3763,6 +3998,11 @@ export interface KaiSegmentedElementEvents {
   onKaiChange?: (event: CustomEvent<{ value: string }>) => void;
 }
 
+export interface KaiSelectElementEvents {
+  /** A choice was made. `value` is the first selected option (empty when nothing is selected); `values` is every selected option, which is what a `multiple` select needs. Both are always present, so neither shape silently loses the other. */
+  onKaiChange?: (event: CustomEvent<{ value: string; values: string[] }>) => void;
+}
+
 export interface KaiSeparatorElementEvents {
 
 }
@@ -3781,6 +4021,13 @@ export interface KaiSkeletonElementEvents {
 
 export interface KaiSkillsElementEvents {
 
+}
+
+export interface KaiSliderElementEvents {
+  /** The value was committed: pointer released, or a key press finished. */
+  onKaiChange?: (event: CustomEvent<{ value: number }>) => void;
+  /** The thumb moved. Fires per step during a drag or a key press. */
+  onKaiInput?: (event: CustomEvent<{ value: number }>) => void;
 }
 
 export interface KaiSourceElementEvents {
@@ -3914,6 +4161,10 @@ declare module 'vue' {
     KaiChainOfThought: KaiVueElement<KaiChainOfThoughtElementProps, KaiChainOfThoughtElementEvents>;
     'kai-chat': KaiVueElement<KaiChatElementProps, KaiChatElementEvents>;
     KaiChat: KaiVueElement<KaiChatElementProps, KaiChatElementEvents>;
+    'kai-checkbox': KaiVueElement<KaiCheckboxElementProps, KaiCheckboxElementEvents>;
+    KaiCheckbox: KaiVueElement<KaiCheckboxElementProps, KaiCheckboxElementEvents>;
+    'kai-checkbox-group': KaiVueElement<KaiCheckboxGroupElementProps, KaiCheckboxGroupElementEvents>;
+    KaiCheckboxGroup: KaiVueElement<KaiCheckboxGroupElementProps, KaiCheckboxGroupElementEvents>;
     'kai-checkpoint': KaiVueElement<KaiCheckpointElementProps, KaiCheckpointElementEvents>;
     KaiCheckpoint: KaiVueElement<KaiCheckpointElementProps, KaiCheckpointElementEvents>;
     'kai-choice': KaiVueElement<KaiChoiceElementProps, KaiChoiceElementEvents>;
@@ -3996,6 +4247,8 @@ declare module 'vue' {
     KaiPromptDock: KaiVueElement<KaiPromptDockElementProps, KaiPromptDockElementEvents>;
     'kai-prompt-input': KaiVueElement<KaiPromptInputElementProps, KaiPromptInputElementEvents>;
     KaiPromptInput: KaiVueElement<KaiPromptInputElementProps, KaiPromptInputElementEvents>;
+    'kai-radio-group': KaiVueElement<KaiRadioGroupElementProps, KaiRadioGroupElementEvents>;
+    KaiRadioGroup: KaiVueElement<KaiRadioGroupElementProps, KaiRadioGroupElementEvents>;
     'kai-reasoning': KaiVueElement<KaiReasoningElementProps, KaiReasoningElementEvents>;
     KaiReasoning: KaiVueElement<KaiReasoningElementProps, KaiReasoningElementEvents>;
     'kai-remote': KaiVueElement<KaiRemoteElementProps, KaiRemoteElementEvents>;
@@ -4018,6 +4271,8 @@ declare module 'vue' {
     KaiSearch: KaiVueElement<KaiSearchElementProps, KaiSearchElementEvents>;
     'kai-segmented': KaiVueElement<KaiSegmentedElementProps, KaiSegmentedElementEvents>;
     KaiSegmented: KaiVueElement<KaiSegmentedElementProps, KaiSegmentedElementEvents>;
+    'kai-select': KaiVueElement<KaiSelectElementProps, KaiSelectElementEvents>;
+    KaiSelect: KaiVueElement<KaiSelectElementProps, KaiSelectElementEvents>;
     'kai-separator': KaiVueElement<KaiSeparatorElementProps, KaiSeparatorElementEvents>;
     KaiSeparator: KaiVueElement<KaiSeparatorElementProps, KaiSeparatorElementEvents>;
     'kai-setting-item': KaiVueElement<KaiSettingItemElementProps, KaiSettingItemElementEvents>;
@@ -4028,6 +4283,8 @@ declare module 'vue' {
     KaiSkeleton: KaiVueElement<KaiSkeletonElementProps, KaiSkeletonElementEvents>;
     'kai-skills': KaiVueElement<KaiSkillsElementProps, KaiSkillsElementEvents>;
     KaiSkills: KaiVueElement<KaiSkillsElementProps, KaiSkillsElementEvents>;
+    'kai-slider': KaiVueElement<KaiSliderElementProps, KaiSliderElementEvents>;
+    KaiSlider: KaiVueElement<KaiSliderElementProps, KaiSliderElementEvents>;
     'kai-source': KaiVueElement<KaiSourceElementProps, KaiSourceElementEvents>;
     KaiSource: KaiVueElement<KaiSourceElementProps, KaiSourceElementEvents>;
     'kai-sources': KaiVueElement<KaiSourcesElementProps, KaiSourcesElementEvents>;

@@ -9,7 +9,7 @@
 // element, so it carries its own shadow root + the shared kit stylesheet — it's
 // viewport-positioned AND fully kit-styled, never a raw div.
 //
-// ADOPTS, else creates (F-48, owner-ruled 2026-08-25): `ensureMounted` first
+// ADOPTS, else creates: `ensureMounted` first
 // looks for a connected `<kai-toast-region>` already in the document and binds
 // the store to it, so an app that placed its own region and also calls
 // `toast()` gets ONE region, not two overlapping ones. It creates a region only
@@ -170,7 +170,7 @@ function resolveDuration(item: Pick<ToastItem, 'duration' | 'action'>): number {
  * loads; setting the property before/after upgrade both work because
  * `customElement` reflects late-set properties.
  *
- * ADOPT-IF-PRESENT (F-48, owner-ruled 2026-08-25): a connected
+ * ADOPT-IF-PRESENT: a connected
  * `<kai-toast-region>` already in the document (same `target`, not already
  * claimed for another target) is adopted — the store binds to IT, and no
  * second region mounts. Adoption respects the region's authored attributes
@@ -211,7 +211,7 @@ export function ensureMounted(target: HTMLElement | null = null): HTMLElement | 
   // can never swallow toasts, and resolve fresh below.
   if (cached) regions.delete(target);
 
-  // Adopt a region the app already placed (F-48). Regions this store already
+  // Adopt a region the app already placed. Regions this store already
   // claimed for OTHER targets are not candidates.
   const claimed = new Set(regions.values());
   const candidates = Array.from(

@@ -11,7 +11,7 @@ import { componentDescription } from '../stories/docs/element-controls';
 const Pane = (props: { n: number; children?: JSX.Element }) => (
   <section class="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card text-foreground">
     <header class="flex shrink-0 items-center gap-2 border-b border-border bg-muted/40 px-3 py-1.5">
-      <span class="grid size-5 place-items-center rounded bg-primary/10 text-[0.6875rem] font-semibold text-primary">
+      <span class="grid size-5 place-items-center rounded bg-primary/10 text-caption font-semibold text-primary">
         {props.n}
       </span>
       <span class="truncate text-xs font-semibold">Pane {props.n}</span>

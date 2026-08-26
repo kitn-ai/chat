@@ -1,5 +1,18 @@
-/* Element-bundle stylesheet. Compiled to compiled.css and injected into each
-   custom element's shadow root. Mirrors .storybook/styles.css but scans src/. */
+/* Element-bundle stylesheet, and the SOURCE OF TRUTH for element CSS. Compiled to
+   compiled.css and injected into each custom element's shadow root;
+   .storybook/styles.css @imports this file rather than restating it, so a rule
+   added here reaches the shadow roots AND the light-DOM Solid stories at once.
+
+   It used to be the other way round — Storybook hand-copied a few of these rules
+   under "Mirror the shipped ..." comments. Nothing enforced the copy, so
+   .kai-radio, .kai-checkbox, .kai-range and .kai-focus-inset were simply missing
+   there: three form controls rendered as raw OS chrome in every story while the
+   shipped element rendered them fully designed, and an agent and the owner each
+   concluded the kit had unstyled controls. Never copy a rule from here into the
+   Storybook sheet; add it here.
+
+   The one thing that cannot cross is :host, which selects nothing in the light
+   DOM. Its defaults are re-stated on `body` in the Storybook sheet's shim. */
 @import "tailwindcss";
 /* tw-animate-css supplies the animate-in/animate-out + slide/fade/zoom utilities
    the kit uses for every overlay enter/exit (toast, popover, tooltip, dropdown,
@@ -16,10 +29,19 @@
   /* Base typography is token-driven so a theme can restyle it. --kai-font-base is
      the family for ALL text/UI (named "base", not "sans", so a serif body works);
      --kai-tracking is global letter-spacing. Both pierce the Shadow DOM via the
-     var() fallback, exactly like the --kai-color-* tokens. */
+     var() fallback, exactly like the --kai-color-* tokens.
+
+     font-size is the third: without it every shadow root inherited the DOCUMENT's
+     size (16px in a stock page), so any surface that never set an explicit text-*
+     class rendered a step larger than the rest of the kit and looked like a bug in
+     that one component. --text-body is the scale's primary reading size and itself
+     resolves through --kai-text-body, so overriding that one token still moves the
+     default. The literal fallback matches theme.css's --text-body so the rule is
+     still correct if this sheet is ever used without the @theme block. */
   :host {
     display: block;
     font-family: var(--kai-font-base, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
+    font-size: var(--text-body, var(--kai-text-body, 0.875rem));
     letter-spacing: var(--kai-tracking, normal);
   }
   /* Code/monospace surfaces use --kai-font-code (named for its ROLE — code — not
@@ -82,6 +104,40 @@
   }
   *::-webkit-scrollbar-thumb:hover { background-color: var(--color-scrollbar-thumb-hover); }
   *::-webkit-scrollbar-corner { background: transparent; }
+
+  /* SELECTED text, kit-owned. Scoped to the shadow root — deliberately, and this
+     is the whole design decision, so read it before "simplifying" it into
+     theme.css.
+
+     WHY THE KIT OWNS IT AT ALL: left to the UA, the browser's blue selection was
+     visually stronger than the kit's OWN deliberate emphasis (the composer's
+     --color-highlight mark), so an incidental drag-select outranked a keyword the
+     app had flagged on purpose. How selected text reads is a fact about the
+     medium, which is the kit's call.
+
+     WHY ONLY HERE, AND NOT IN theme.css: theme.css is imported into a CONSUMER's
+     Tailwind build, so a bare ::selection there would restyle every paragraph on
+     their page — the kit deciding for the app's own content, which is not ours to
+     decide. The shadow root IS the kit's DOM, so the same rule is unambiguous
+     here. Identical reasoning to the scrollbar and :focus-visible rules above,
+     which are scoped the same way and for the same reason. theme.css therefore
+     carries the TOKENS only, and a Solid-layer consumer rendering our components
+     into their own light DOM opts in with one rule of their own:
+     `.my-chat ::selection { background-color: var(--color-selection); … }`.
+
+     WHY THE RULE MUST BE IN THIS SHEET AND NOT INHERITED: ::selection does NOT
+     cross the shadow boundary the way ordinary inherited properties do — a
+     document-level ::selection leaves shadow content on the UA default. The
+     --kai-color-selection TOKEN does pierce (custom properties inherit normally),
+     which is what keeps a consumer override working.
+
+     Both background AND color are set; see the theme.css note for why the
+     foreground is load-bearing rather than cosmetic (coloured text falls under
+     WCAG AA on this fill if it keeps its own colour). */
+  ::selection {
+    background-color: var(--color-selection);
+    color: var(--color-selection-foreground);
+  }
 
   /* Respect a user's reduced-motion preference: disable the tw-animate-css
      enter/exit keyframe animations (toasts, overlays, cards) so they appear and
@@ -168,6 +224,36 @@
   .kai-checkbox:active:not(:disabled) { transform: scale(0.92); }
   .kai-checkbox:checked {
     box-shadow: 0 1px 4px color-mix(in srgb, var(--color-primary) 26%, transparent);
+  }
+  /* The mixed state ("some of the children below are ticked"). `indeterminate` is a
+     DOM property with no HTML attribute, so a rule is the ONLY way it can be seen —
+     without one a mixed box paints pixel-identically to an unchecked one and lies
+     about its state. That was live: `<kai-tasks>` in `select` mode puts an
+     indeterminate select-all above a partial selection, and it read as "none
+     selected".
+
+     Same fill and the same masked `::after` as `:checked`, with the tick mask
+     swapped for a bar, so the two states are siblings of one technique rather than
+     two: the bar is `--color-primary-foreground` on `--color-primary`, exactly the
+     pair the tick already uses, so it themes and contrasts identically in both
+     themes and stays consumer-themable through the same tokens.
+
+     Ordered AFTER the `:checked` rules on purpose. `indeterminate` is independent of
+     `checked`, so a box can be both; specificity is equal, so source order decides,
+     and mixed-wins is what the browser's own native rendering does.
+
+     Scoped to `.kai-checkbox` on purpose: `:indeterminate` also matches every radio
+     in a group with nothing selected, and an empty radio group must go on reading as
+     empty rather than sprouting a third state. */
+  .kai-checkbox:indeterminate {
+    background-color: var(--color-primary);
+    border-color: var(--color-primary);
+    box-shadow: 0 1px 4px color-mix(in srgb, var(--color-primary) 26%, transparent);
+  }
+  .kai-checkbox:indeterminate::after {
+    transform: scale(1);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E") center / contain no-repeat;
   }
   .kai-radio:disabled,
   .kai-checkbox:disabled { opacity: 0.5; cursor: not-allowed; }

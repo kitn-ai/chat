@@ -48,7 +48,7 @@ Or via CDN:
 ```
 
 <Aside type="caution" title="Tailwind v4: theme.css can override your own tokens">
-The components need no CSS import - they are shadow-isolated. Import `theme.css` only for the shadcn-style unprefixed `--color-*` path. In a Tailwind v4 app those generic names merge into your `@theme` and can override your own `bg-primary`, `bg-card`, and friends (last import wins). Prefer the namespaced `--kai-color-*` tokens below (no import), or - if you do import `theme.css` - import it **before** your own token overrides.
+The components need no CSS import - they are shadow-isolated. Import `theme.css` only for the shadcn-style unprefixed `--color-*` path. In a Tailwind v4 app those generic names merge into your `@theme` and can override your own `bg-primary`, `bg-card`, and friends (last import wins) - and the same is true of the [type scale](#typography), which re-points `text-xs` / `text-sm` / `text-base` / `text-lg`. Prefer the namespaced `--kai-color-*` tokens below (no import), or - if you do import `theme.css` - import it **before** your own token overrides.
 </Aside>
 
 ## Override tokens
@@ -136,22 +136,33 @@ This is the lightest-weight override path — no stylesheet import needed.
 
 ## Typography
 
-The kit exposes four namespaced typography tokens. Override them to adjust the size of UI chrome (labels, badges, controls) globally:
+One scale runs the whole kit. Seven namespaced tokens set it, and every text surface in every element resolves through them:
 
-| Token | Default | Applies to |
-|---|---|---|
-| `--kai-text-caption` | `0.6875rem` | Micro labels, badges, sub-counts |
-| `--kai-text-meta` | `0.75rem` | Controls, toggles, captions |
-| `--kai-text-body` | `0.875rem` | Primary reading text |
-| `--kai-text-title` | `1rem` | Emphasis, headers |
+| Token | Default | Tailwind twin | Applies to |
+|---|---|---|---|
+| `--kai-text-micro` | `0.625rem` | — | Badges, pills, uppercase eyebrows |
+| `--kai-text-caption` | `0.6875rem` | — | Micro labels, sub-counts, xs code |
+| `--kai-text-meta` | `0.75rem` | `text-xs` | Controls, toggles, switchers, captions |
+| `--kai-text-compact` | `0.8125rem` | — | Dense chrome and code: a notch below body |
+| `--kai-text-body` | `0.875rem` | `text-sm` | Primary reading text, most chrome |
+| `--kai-text-title` | `1rem` | `text-base` | Emphasis, headers |
+| `--kai-text-lg` | `1.125rem` | `text-lg` | Section headings, `proseSize="lg"` |
 
 ```css
 :root {
-  --kai-text-body: 0.9375rem;   /* bump reading text to 15px */
+  --kai-text-body: 0.9375rem;   /* 14px -> 15px across every element */
 }
 ```
 
-Message and markdown reading size scales separately via the `proseSize` prop — see [Appearance settings](#appearance-settings) below.
+The **Tailwind twin** column is what makes that global. Tailwind v4 generates `text-xs` / `text-sm` / `text-base` / `text-lg` from `--text-*` theme variables, and `theme.css` points those at the same `--kai-text-*` tokens. `text-sm` and `text-body` are one declaration under two names, so a token override moves every call site whichever name it spells. Defaults match stock Tailwind exactly — nothing shifts until you set a token.
+
+Line-heights are unitless ratios. Bump a size and the leading follows it.
+
+<Aside type="caution" title="This reaches your app too">
+If you import `theme.css` into your own Tailwind build, the re-point applies to **your** `text-sm` too. Deliberate: kit and app move together on one scale. But it does mean a `--kai-text-*` override is not sandboxed to `kai-*` elements.
+</Aside>
+
+Message and markdown body copy rides the same scale. `proseSize` picks which rung a message renders at (`sm`, the default, is `--kai-text-body`); the token sets how big that rung is. Headings, lists and code inside the markdown block are sized in `em`, so they follow. See [Appearance settings](#appearance-settings) for `proseSize`.
 
 ## Appearance settings
 

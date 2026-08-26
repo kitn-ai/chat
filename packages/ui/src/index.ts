@@ -419,7 +419,8 @@ export type { KaiTabItem } from './ui/tabs';
 export type { PaneStatus } from './ui/pane';
 export type { PaneTab } from './ui/pane-group';
 export type {
-  KaiCommandItem, KaiContextUsage, KaiMenuItem, KaiSegmentedOption, KaiSourceItem,
+  KaiCheckboxOption, KaiCommandItem, KaiContextUsage, KaiMenuItem, KaiRadioOption, KaiSegmentedOption, KaiSelectOption,
+  KaiSourceItem,
 } from './elements/element-data-types';
 // `kai-audio-visualizer.shader` takes a ShaderSpec. The element arrived from main
 // after this block was written, and prop-types-exported.test.ts caught it, which

@@ -8,8 +8,11 @@
  *
  *  Light and dark are edited independently (each canvas host runs at the studio's
  *  own mode, not the page's), and Copy CSS exports the paste-ready `:root` +
- *  `.dark` blocks. Bounded to real tokens — colors and radius — so it never
- *  promises theming the kit can't actually do.
+ *  `.dark` blocks. Bounded to real tokens — colors, radius, the type scale and
+ *  the font/tracking/shadow knobs — so it never promises theming the kit can't
+ *  actually do. The type-size rungs earned their place when theme.css re-pointed
+ *  Tailwind's `text-xs`/`text-sm`/`text-base`/`text-lg` at `--kai-text-*`: before
+ *  that a size slider would have moved a small minority of the kit's call sites.
  */
 import { createSignal, createEffect, onMount, onCleanup, For, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
@@ -138,6 +141,9 @@ const GROUPS: Group[] = [
       { token: '--kai-color-destructive', label: 'Destructive', hint: 'Danger / delete', light: 'hsl(0 72% 45%)', dark: 'hsl(0 62.8% 30.6%)' },
       { token: '--kai-color-destructive-foreground', label: 'On destructive', hint: 'Text on danger', light: 'hsl(0 0% 98%)', dark: 'hsl(0 0% 98%)' },
       { token: '--kai-color-code-foreground', label: 'Code', hint: 'Inline code accent', light: 'hsl(224.3 76.3% 48%)', dark: 'hsl(213 94% 78%)' },
+      { token: '--kai-color-highlight', label: 'Highlight', hint: 'Marked keywords (composer highlights)', light: 'hsl(45 96% 78%)', dark: 'hsl(40 75% 26%)' },
+      { token: '--kai-color-selection', label: 'Selection', hint: 'Selected-text background', light: 'hsl(213 94% 87%)', dark: 'hsl(217 60% 32%)' },
+      { token: '--kai-color-selection-foreground', label: 'On selection', hint: 'Selected-text colour', light: 'hsl(240 10% 3.9%)', dark: 'hsl(0 0% 98%)' },
       { token: '--kai-color-tool-blue', label: 'Tool blue', hint: 'Tool / status chip', light: 'hsl(217 91% 38%)', dark: 'hsl(217 91% 70%)' },
       { token: '--kai-color-tool-amber', label: 'Tool amber', hint: 'Tool / status chip', light: 'hsl(38 92% 28%)', dark: 'hsl(38 92% 50%)' },
       { token: '--kai-color-tool-green', label: 'Tool green', hint: 'Tool / status chip', light: 'hsl(142 71% 26%)', dark: 'hsl(142 71% 45%)' },
@@ -155,6 +161,28 @@ const GROUPS: Group[] = [
 
 const ALL_TOKENS = GROUPS.flatMap((g) => g.tokens);
 const DEFAULT_RADIUS = 0.6; // rem — kit default --kai-radius
+
+/** The kit's semantic type scale. Every rung is a `--kai-text-*` token that
+ *  theme.css resolves through (and that Tailwind's own text-xs/sm/base/lg are
+ *  re-pointed at), so setting one here moves the whole kit, not one component.
+ *  Defaults are verbatim from theme.css. `body` is the medium rung the ladder
+ *  hangs off — labelled as such so nobody has to infer which one is the default. */
+type TextRung = { token: string; label: string; hint: string; def: number; min: number; max: number };
+const TEXT_RUNGS: TextRung[] = [
+  { token: '--kai-text-micro', label: 'Micro', hint: 'Badges, pills, eyebrows', def: 0.625, min: 0.5, max: 1 },
+  { token: '--kai-text-caption', label: 'Caption', hint: 'Sub-counts, xs code', def: 0.6875, min: 0.5, max: 1.125 },
+  { token: '--kai-text-meta', label: 'Meta', hint: 'Controls, toggles, switchers', def: 0.75, min: 0.5, max: 1.25 },
+  { token: '--kai-text-body', label: 'Body (default)', hint: 'Primary reading text', def: 0.875, min: 0.625, max: 1.375 },
+  { token: '--kai-text-title', label: 'Title', hint: 'Emphasis & headers', def: 1, min: 0.75, max: 1.625 },
+  { token: '--kai-text-lg', label: 'Large', hint: 'Section headings, lg prose', def: 1.125, min: 0.875, max: 2 },
+];
+const TEXT_STEP = 0.0625; // rem — 1px at a 16px root
+type TextScale = Record<string, number>;
+const seedText = (): TextScale => Object.fromEntries(TEXT_RUNGS.map((r) => [r.token, r.def]));
+/** Fill any rung a saved/imported scale is missing (older presets, partial paste). */
+const fillText = (t: TextScale | undefined): TextScale => ({ ...seedText(), ...(t ?? {}) });
+/** rem → px at the 16px root, for the readout beside each slider. */
+const remPx = (rem: number) => `${Math.round(rem * 16 * 100) / 100}px`;
 
 /** Resolve any CSS color (hex, hsl, oklch, named…) to #rrggbb for a native color
  *  input. Uses a canvas so CSS Color 4 formats like oklch convert to real sRGB
@@ -320,13 +348,14 @@ const REPLY =
 let uid = 0;
 const nextId = () => `s${++uid}`;
 
-interface ThemeExtras { radius: number; fontBase: string; fontCode: string; tracking: number; shadow: string }
+interface ThemeExtras { radius: number; fontBase: string; fontCode: string; tracking: number; shadow: string; text: TextScale }
 
-/** Build paste-ready CSS: full light set on :root (+ radius/font/tracking/shadow),
- *  dark set on .dark. */
+/** Build paste-ready CSS: full light set on :root (+ radius/type scale/font/
+ *  tracking/shadow), dark set on .dark. */
 function buildCss(light: Palette, dark: Palette, x: ThemeExtras): string {
   const rootExtra = [
     `  --kai-radius: ${x.radius}rem;`,
+    ...TEXT_RUNGS.map((r) => `  ${r.token}: ${x.text[r.token] ?? r.def}rem;`),
     x.fontBase ? `  --kai-font-base: ${x.fontBase};` : '',
     x.fontCode ? `  --kai-font-code: ${x.fontCode};` : '',
     x.tracking ? `  --kai-tracking: ${x.tracking}em;` : '',
@@ -339,7 +368,7 @@ function buildCss(light: Palette, dark: Palette, x: ThemeExtras): string {
 
 /** Tolerant parse of pasted CSS: pull --kai-* declarations from the :root block
  *  (light) and the .dark block (dark). Unknown tokens are ignored. */
-function parseCss(css: string): { light: Palette; dark: Palette; radius?: number } | null {
+function parseCss(css: string): { light: Palette; dark: Palette; radius?: number; text: TextScale } | null {
   const grab = (selector: string): Palette => {
     const re = new RegExp(`${selector}\\s*\\{([^}]*)\\}`);
     const block = css.match(re)?.[1] ?? '';
@@ -349,9 +378,15 @@ function parseCss(css: string): { light: Palette; dark: Palette; radius?: number
   };
   const light = grab(':root');
   const dark = grab('\\.dark');
-  if (!Object.keys(light).length && !Object.keys(dark).length) return null;
+  const anyText = /--kai-text-[a-z-]+\s*:\s*[\d.]+rem/.test(css);
+  if (!Object.keys(light).length && !Object.keys(dark).length && !anyText) return null;
   const radiusMatch = css.match(/--kai-radius\s*:\s*([\d.]+)rem/);
-  return { light, dark, radius: radiusMatch ? parseFloat(radiusMatch[1]) : undefined };
+  // Type scale: rem only, and only rungs the kit actually has.
+  const text: TextScale = {};
+  for (const m of css.matchAll(/(--kai-text-[a-z-]+)\s*:\s*([\d.]+)rem/g)) {
+    if (TEXT_RUNGS.some((r) => r.token === m[1])) text[m[1]] = parseFloat(m[2]);
+  }
+  return { light, dark, radius: radiusMatch ? parseFloat(radiusMatch[1]) : undefined, text };
 }
 
 export default function ThemeStudio() {
@@ -370,12 +405,13 @@ export default function ThemeStudio() {
   const [fontBase, setFontBase] = createSignal('');
   const [fontCode, setFontCode] = createSignal('');
   const [tracking, setTracking] = createSignal(0); // em
+  const [textScale, setTextScale] = createSignal<TextScale>(seedText()); // --kai-text-* rungs, rem
   const [shadowColor, setShadowColor] = createSignal('#000000');
   // Global HSL nudge — layered non-destructively over the edited palette.
   const [hsl, setHsl] = createSignal<Hsl>({ ...HSL_IDENTITY });
   const [preset, setPreset] = createSignal('Default');
   // Custom presets the user saves (persisted to localStorage).
-  type SavedPreset = { name: string; light: Palette; dark: Palette; radius: number; fontBase: string; fontCode: string; tracking: number; shadow: string };
+  type SavedPreset = { name: string; light: Palette; dark: Palette; radius: number; fontBase: string; fontCode: string; tracking: number; shadow: string; text?: TextScale };
   const PRESET_KEY = 'kai-theme-studio-presets';
   const [saved, setSaved] = createSignal<SavedPreset[]>([]);
   const persistSaved = (list: SavedPreset[]) => { setSaved(list); try { localStorage.setItem(PRESET_KEY, JSON.stringify(list)); } catch { /* storage blocked */ } };
@@ -401,7 +437,7 @@ export default function ThemeStudio() {
   const toggleGroup = (name: string) => setOpenGroups((o) => ({ ...o, [name]: !o[name] }));
 
   const active = () => (mode() === 'light' ? light() : dark());
-  const extras = (): ThemeExtras => ({ radius: radius(), fontBase: fontBase(), fontCode: fontCode(), tracking: tracking(), shadow: shadowColor() });
+  const extras = (): ThemeExtras => ({ radius: radius(), fontBase: fontBase(), fontCode: fontCode(), tracking: tracking(), shadow: shadowColor(), text: textScale() });
   // The palette as the canvas/export actually see it: base colors + the HSL nudge.
   const effLight = () => shiftPalette(light(), hsl());
   const effDark = () => shiftPalette(dark(), hsl());
@@ -421,6 +457,8 @@ export default function ThemeStudio() {
     setOrClear('--kai-font-base', fontBase());
     setOrClear('--kai-font-code', fontCode());
     canvasEl.style.setProperty('--kai-tracking', `${tracking()}em`);
+    const scale = textScale();
+    for (const r of TEXT_RUNGS) canvasEl.style.setProperty(r.token, `${scale[r.token] ?? r.def}rem`);
     canvasEl.style.setProperty('--kai-shadow-color', shadowColor());
     ensureFont(fontBase());
     ensureFont(fontCode());
@@ -443,12 +481,14 @@ export default function ThemeStudio() {
     if (s) {
       setLight(s.light); setDark(s.dark); setRadius(s.radius);
       setFontBase(s.fontBase); setFontCode(s.fontCode); setTracking(s.tracking); setShadowColor(s.shadow);
+      setTextScale(fillText(s.text));
       ensureFont(s.fontBase); ensureFont(s.fontCode);
       setPreset(name);
       return;
     }
     const l = seedPalette('light');
     const d = seedPalette('dark');
+    setTextScale(seedText()); // no built-in preset ships a type scale — back to the kit ladder
     const t = THEME_PRESETS.find((x) => x.name === name);
     if (t) {
       for (const [k, tok] of Object.entries(SHADCN_TO_KAI)) {
@@ -486,7 +526,7 @@ export default function ThemeStudio() {
   const commitSave = () => {
     const name = saveName().trim();
     if (!name) { setSaveError('Give the theme a name.'); return; }
-    const p: SavedPreset = { name, light: effLight(), dark: effDark(), radius: radius(), fontBase: fontBase(), fontCode: fontCode(), tracking: tracking(), shadow: shadowColor() };
+    const p: SavedPreset = { name, light: effLight(), dark: effDark(), radius: radius(), fontBase: fontBase(), fontCode: fontCode(), tracking: tracking(), shadow: shadowColor(), text: textScale() };
     persistSaved([...saved().filter((x) => x.name !== name), p]);
     setPreset(name);
     setSaveOpen(false);
@@ -513,12 +553,13 @@ export default function ThemeStudio() {
   const applyImport = () => {
     const parsed = parseCss(importText());
     if (!parsed) {
-      setImportError('No --kai-color-* tokens found. Paste a :root / .dark block.');
+      setImportError('No --kai-color-* or --kai-text-* tokens found. Paste a :root / .dark block.');
       return;
     }
     setLight((v) => ({ ...v, ...parsed.light }));
     setDark((v) => ({ ...v, ...parsed.dark }));
     if (parsed.radius !== undefined) setRadius(parsed.radius);
+    if (Object.keys(parsed.text).length) setTextScale((v) => ({ ...v, ...parsed.text }));
     setPreset('Custom');
     setImportOpen(false);
     setImportText('');
@@ -626,6 +667,47 @@ export default function ThemeStudio() {
       </div>
     );
   };
+
+  /** One type-size rung. Two lines rather than SliderRow's one, because these
+   *  labels are words ("Body (default)") not one-word knob names, and the row
+   *  carries a px readout beside the rem — a type scale is the one place the
+   *  computed pixel size is what you're actually judging. */
+  const RungRow = (props: { r: TextRung }) => {
+    const val = () => textScale()[props.r.token] ?? props.r.def;
+    const set = (n: number) => {
+      const v = Math.min(props.r.max, Math.max(props.r.min, n));
+      setTextScale((t) => ({ ...t, [props.r.token]: v }));
+      setPreset('Custom');
+    };
+    return (
+      <div class="flex flex-col gap-1">
+        <div class="flex items-baseline justify-between gap-2">
+          <span class="shrink-0 text-sm font-medium text-ink">{props.r.label}</span>
+          <span class="truncate text-[11px] text-ink/55">{props.r.hint}</span>
+        </div>
+        <div class="flex items-center gap-2.5">
+          <input
+            type="range" min={props.r.min} max={props.r.max} step={TEXT_STEP} value={val()}
+            onInput={(e) => set(parseFloat(e.currentTarget.value))}
+            class="min-w-0 flex-1" style={{ 'accent-color': 'var(--kai-ink-3)' }} aria-label={`${props.r.label} size`}
+          />
+          <input
+            type="number" min={props.r.min} max={props.r.max} step={TEXT_STEP} value={val()}
+            onChange={(e) => {
+              const n = parseFloat(e.currentTarget.value);
+              if (Number.isNaN(n)) { e.currentTarget.value = String(val()); return; }
+              set(n);
+            }}
+            class="w-16 shrink-0 rounded-md border border-line bg-surface px-1.5 py-1 text-right text-xs tabular-nums text-ink [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            aria-label={`${props.r.label} size in rem`}
+          />
+          <span class="w-[4.5rem] shrink-0 text-right text-xs tabular-nums text-ink-3">rem · {remPx(val())}</span>
+        </div>
+      </div>
+    );
+  };
+
+  const textIsDefault = () => TEXT_RUNGS.every((r) => (textScale()[r.token] ?? r.def) === r.def);
 
   /** One showroom item: a labeled, bordered slot the element mounts into. */
   const ShowSlot = (props: { s: Slot }) => (
@@ -810,6 +892,18 @@ export default function ThemeStudio() {
               </select>
             </label>
             <SliderRow label="Tracking" value={tracking()} min={-0.05} max={0.2} step={0.005} unit="em" onInput={(n) => { setTracking(n); setPreset('Custom'); }} />
+          </div>
+          <div class="border-t border-line/60 px-3 py-3">
+            <div class="mb-1 flex items-center justify-between gap-2">
+              <span class="text-xs font-semibold uppercase tracking-wide text-ink-2">Type size</span>
+              <Show when={!textIsDefault()}>
+                <button type="button" onClick={() => { setTextScale(seedText()); setPreset('Custom'); }} class="rounded px-1.5 py-0.5 text-[11px] text-ink-3 transition-colors hover:bg-ink/5 hover:text-ink">Reset</button>
+              </Show>
+            </div>
+            <p class="mb-3 text-xs text-ink/55">One semantic scale for the whole kit — each rung is a <span class="font-mono text-ink-2">--kai-text-*</span> token, so moving it moves every component that sits on that rung. Body is the medium rung the rest step off.</p>
+            <div class="flex flex-col gap-3">
+              <For each={TEXT_RUNGS}>{(r) => <RungRow r={r} />}</For>
+            </div>
           </div>
           </Show>
 

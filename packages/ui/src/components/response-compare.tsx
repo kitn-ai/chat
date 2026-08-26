@@ -365,7 +365,7 @@ function CompareColumn(props: ColumnProps): JSX.Element {
   return (
     <div
       class={cn(
-        'flex min-w-0 flex-col gap-3 rounded-lg border border-input bg-background/40 p-3',
+        'flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-background/40 p-3',
         props.hiddenClass?.(),
       )}
     >
@@ -432,7 +432,7 @@ function CollapsedWinner(props: {
 }): JSX.Element {
   return (
     <div
-      class="flex flex-col gap-2 rounded-lg border border-input bg-accent/40 p-3"
+      class="flex flex-col gap-2 rounded-lg border border-border bg-accent/40 p-3"
       role={props.optimistic ? 'status' : undefined}
     >
       <div class="flex items-center gap-2 text-sm font-medium text-accent-foreground">

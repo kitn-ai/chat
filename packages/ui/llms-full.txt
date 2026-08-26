@@ -3,7 +3,7 @@
 
 # @kitn.ai/ui
 
-> Framework-agnostic, Shadow-DOM web components for building AI chat interfaces — works in React, Vue, Angular, Svelte, or plain HTML. 84 custom elements, every one prefixed `kai-` (e.g. `<kai-chat>`, `<kai-artifact>`): streaming responses, markdown + code rendering, reasoning/tool panels, attachments, conversation sidebar, voice input. Zero framework dependency for consumers; the SolidJS runtime it is authored in is bundled in, so the host needs nothing.
+> Framework-agnostic, Shadow-DOM web components for building AI chat interfaces — works in React, Vue, Angular, Svelte, or plain HTML. 89 custom elements, every one prefixed `kai-` (e.g. `<kai-chat>`, `<kai-artifact>`): streaming responses, markdown + code rendering, reasoning/tool panels, attachments, conversation sidebar, voice input. Zero framework dependency for consumers; the SolidJS runtime it is authored in is bundled in, so the host needs nothing.
 
 ## Install
 
@@ -37,7 +37,7 @@ Drop an element into any framework (React, Vue, plain HTML). Data in via JS prop
 - `<kai-prompt-input>` — standalone composer with send button.
 
 **Layer 2 — composable primitives** (`import { … } from '@kitn.ai/ui'`):
-All 84 elements are also exported individually. Use them for custom layouts or features `<kai-chat>` does not expose (ChainOfThought, FeedbackBar, ThinkingBar, VoiceInput, …). Your bundler tree-shakes the rest.
+All 89 elements are also exported individually. Use them for custom layouts or features `<kai-chat>` does not expose (ChainOfThought, FeedbackBar, ThinkingBar, VoiceInput, …). Your bundler tree-shakes the rest.
 
 ## Key rules for the web components
 
@@ -151,7 +151,7 @@ For Tailwind builds: `@import "@kitn.ai/ui/theme.css"` in your CSS.
 
 ## Docs
 
-- Element reference (all 84 elements, every prop/event/method/slot/part): the "Element reference" section of ./llms-full.txt — https://kitn.dev/llms-full.txt
+- Element reference (all 89 elements, every prop/event/method/slot/part): the "Element reference" section of ./llms-full.txt — https://kitn.dev/llms-full.txt
 - Programmatic layer (`@kitn.ai/ui/state` + `@kitn.ai/ui/wire`: streaming folds, the mock responder, the SSE readers/encoders): the "Programmatic layer" section of llms-full.txt
 - How to build a chat app in 5 steps (install → pick a layer → handle submit + stream → wire features → theme, with working code): the "How to build a chat app in 5 steps" section of llms-full.txt
 - Streaming recipe (the two rules that bite: reassign new references per chunk, fold deltas onto the trailing text part): the "Streaming recipe" section of llms-full.txt
@@ -1223,7 +1223,7 @@ any integration with the `kai` MCP `scaffold` tool to get the full preamble.
 
 ---
 
-## Element reference (84 elements, generated from custom-elements.json)
+## Element reference (89 elements, generated from custom-elements.json)
 
 Every element also accepts the `theme` attribute. Array/object properties are marked with a `—` attribute: they must be set as JS properties.
 
@@ -1520,7 +1520,7 @@ _No events._
 | `cards` | — | `undefined \| { type: string; id: string; data: unknown; title?: undefined \| string; resolution?: undefined \| { kind: "action"; action: string; payload?: unknown; at?: undefined \| string } \| { kind: "submit"; data: unknown; at?: undefined \| string } \| { kind: "dismissed"; at?: undefined \| string } \| { kind: "expired"; reason?: undefined \| string; at?: undefined \| string } }[]` | The stream of card envelopes to render. Set as a JS PROPERTY: `el.cards = [...]`. |
 | `types` | — | `undefined \| Record<string, string>` | Optional type→tag overrides/additions (merged over the built-ins). Property: `el.types`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. |
 | `schemas` | — | `undefined \| Record<string, object>` | JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `types`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.schemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name, matching `mergeCardTags`, where your entry is spread over ours. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. See `CardSchemaMap` in components/card-renderer.tsx. |
-| `policy` | — | `undefined \| { onSubmit?: undefined \| (cardId: string, data: unknown) => void; onAction?: undefined \| (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: undefined \| (text: string, opts: { mode: "compose" \| "send"; context?: unknown; }) => void; onOpen?: undefined \| (url: string, target: "tab" \| "artifact") => void; onState?: undefined \| (cardId: string, patch: unknown) => void; onDismiss?: undefined \| (cardId: string) => void; onReopen?: undefined \| (cardId: string) => void; onError?: undefined \| (cardId: string, message: string) => void; maxSendPromptMode?: undefined \| "compose" \| "send" }` | Optional CardPolicy handling child events. Property: `el.policy`. |
+| `policy` | — | `undefined \| { onSubmit?: undefined \| ((cardId: string, data: unknown) => void); onAction?: undefined \| ((cardId: string, action: string, payload?: unknown) => void); onSendPrompt?: undefined \| ((text: string, opts: { mode: "compose" \| "send"; context?: unknown; }) => void); onOpen?: undefined \| ((url: string, target: "tab" \| "artifact") => void); onState?: undefined \| ((cardId: string, patch: unknown) => void); onDismiss?: undefined \| ((cardId: string) => void); onReopen?: undefined \| ((cardId: string) => void); onError?: undefined \| ((cardId: string, message: string) => void); maxSendPromptMode?: undefined \| "compose" \| "send" }` | Optional CardPolicy handling child events. Property: `el.policy`. |
 | `validateCards` | `validate-cards` | `undefined \| false \| true` | Validate each envelope's `data` against the schema for its type before rendering it, using a built-in's own schema or yours from `schemas`. Default `true`; set `validate-cards="false"` (or `el.validateCards = false`) to opt out. A hard failure (wrong type, a missing required field) renders a diagnostic naming the field instead of the card; a soft failure (bounds) renders the card unchanged. Both emit a contract `error` event. On in production too: a model emitting a bad shape is a production failure mode, so stripping the check there would hide it from exactly the person who needs to see it. |
 
 **Events** (non-bubbling `CustomEvent`s — listen directly on the element):
@@ -1657,6 +1657,64 @@ _No events._
 | `::part(header)` | Full custom header; replaces the built-in title/model/context bar. |
 | `::part(sidebar)` | Left column (your nav / conversation list). Fixed width; use compose-your-own for resizable. |
 | `::part(footer)` | Row below the composer (disclaimers, token meter). |
+
+---
+
+### `kai-checkbox` / `Checkbox`
+
+**Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
+
+| Property | Attribute | Type | Description |
+|---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
+| `checked` | `checked` | `undefined \| false \| true` | Controlled checked state. Settable and reflected to the `checked` attribute. `el.checked = true` (or `<kai-checkbox checked>`) drives it; ticking the box updates it and fires `kai-change`. Read `el.checked` for live state. |
+| `defaultChecked` | `default-checked` | `undefined \| false \| true` | Initial checked state on mount (uncontrolled seed). Bare attribute (`<kai-checkbox default-checked>`) turns it on. |
+| `indeterminate` | `indeterminate` | `undefined \| false \| true` | The mixed state, for a parent box whose children are partly ticked. Visual plus an accessibility hint: the box still reports `checked === false`. |
+| `disabled` | `disabled` | `undefined \| false \| true` | Disable interaction. |
+| `required` | `required` | `undefined \| false \| true` | Set the native `required` attribute, and nothing more. Whether an unticked box is an error is the application's rule, not the kit's. |
+| `label` | `label` | `undefined \| string` | Accessible label. The visible text beside the box is the consumer's to render. |
+| `name` | `name` | `undefined \| string` | Form-control name (paired with `value`). |
+| `value` | `value` | `undefined \| string` | Submitted value when checked (paired with `name`). Defaults to `'on'`. |
+
+**Events** (non-bubbling `CustomEvent`s — listen directly on the element):
+
+| Event | `detail` type | Description |
+|---|---|---|
+| `kai-change` | `CustomEvent<{ checked: false \| true }>` | The box was ticked or unticked. |
+
+**Methods** (call on the element instance: `document.querySelector('kai-checkbox').toggle()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `toggle` | `(): void` | Flip the box and fire `kai-change` (no-op while disabled). |
+| `focus` | `(options?: FocusOptions): void` | Focus the inner input (the host element can't reach it). |
+
+---
+
+### `kai-checkbox-group` / `CheckboxGroup`
+
+**Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
+
+| Property | Attribute | Type | Description |
+|---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
+| `options` | — | `{ value: string; label: string; description?: undefined \| string; disabled?: undefined \| false \| true }[]` | The choices, top to bottom. Set as a JS PROPERTY (array), never an attribute. Rendered in full: the kit never truncates, re-orders or de-duplicates them. |
+| `value` | `value` | `undefined \| string` | The FIRST selected value. Settable and reflected to the `value` attribute, so `:host([value])` and `el.value` see live state, and a seed can be written in markup. Writing it makes that the whole selection; to read or drive the rest, use `el.values`. |
+| `name` | `name` | `undefined \| string` | The shared form-control name every box carries, so `FormData.getAll(name)` reads the whole selection back under one key. NO DEFAULT, unlike `<kai-radio-group>`. A radio set needs a shared `name` for the browser to make it exclusive and arrow-navigable, so one is generated when none is given; checkboxes are independent controls and behave correctly with no name at all. Generating one here would submit the selection under a random key, which is worse than submitting nothing. The element is NOT form-associated (no `ElementInternals`, no `setFormValue()`), the same known gap `<kai-input>` records: the boxes live in a shadow root, so a surrounding `<form>` collects nothing from them whether or not `name` is set. Read `el.values`. The name still lands on every inner input, so it is right the day form association arrives. |
+| `disabled` | `disabled` | `undefined \| false \| true` | Disable every row. Individual rows carry their own `disabled`. |
+| `label` | `label` | `undefined \| string` | Accessible name for the group. |
+
+**Events** (non-bubbling `CustomEvent`s — listen directly on the element):
+
+| Event | `detail` type | Description |
+|---|---|---|
+| `kai-change` | `CustomEvent<{ value: string; values: string[] }>` | A row was ticked or unticked. `values` is the whole selection after the change, which is what a multi-select control needs; `value` is the first of them (empty when nothing is selected). Both are always present, so neither shape silently loses the other. This is `<kai-select>`'s detail, deliberately. |
+
+**Methods** (call on the element instance: `document.querySelector('kai-checkbox-group').focus(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `focus` | `(options?: FocusOptions): void` | Focus the group's first box. Not "the first ticked one", which is `<kai-radio-group>`'s rule: a radio group is ONE tab stop that lands on the selection, while every checkbox here is its own tab stop, so the entry point is simply the top of the list. |
 
 ---
 
@@ -1962,7 +2020,7 @@ _No events._
 
 | Event | `detail` type | Description |
 |---|---|---|
-| `kai-select` | `CustomEvent<{ id: string }>` | STANDALONE activation only (F-45 tier 2, owner-ruled 2026-08-25): the row was activated (click, Enter or Space on its body) while the item is NOT a direct child of `<kai-conversations>`. `id` is the row's identity: the `conversation-id` attribute, else the host `id`. Inside a container this never fires: activation surfaces once, as `kai-conversation-select` on the container. |
+| `kai-select` | `CustomEvent<{ id: string }>` | STANDALONE activation only: the row was activated (click, Enter or Space on its body) while the item is NOT a direct child of `<kai-conversations>`. `id` is the row's identity: the `conversation-id` attribute, else the host `id`. Inside a container this never fires: activation surfaces once, as `kai-conversation-select` on the container. |
 
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
@@ -2034,7 +2092,7 @@ _No events._
 
 | Child element | Attributes | Text content | Notes |
 |---|---|---|---|
-| `<kai-conversation>` | `group-id`, `id` | yes | Parse a single light-DOM `<kai-conversation>` element into a `ConversationSummary`. Attribute mapping: - `id` → ConversationSummary.id - `group-id` → ConversationSummary.groupId (optional) - textContent → ConversationSummary.title Fields not expressible as HTML attributes are NOT fabricated (F-10): the optional `scope` and `lastMessageAt` stay absent, and the required `messageCount`/`updatedAt` get honest defaults — zero messages, and an empty `updatedAt` from which no trailing relative time is derived (the epoch it used to fabricate rendered a bogus "many days ago" on every declarative row). |
+| `<kai-conversation>` | `group-id`, `id` | yes | Parse a single light-DOM `<kai-conversation>` element into a `ConversationSummary`. Attribute mapping: - `id` → ConversationSummary.id - `group-id` → ConversationSummary.groupId (optional) - textContent → ConversationSummary.title Fields not expressible as HTML attributes are NOT fabricated: the optional `scope` and `lastMessageAt` stay absent, and the required `messageCount`/`updatedAt` get honest defaults — zero messages, and an empty `updatedAt` from which no trailing relative time is derived (the epoch it used to fabricate rendered a bogus "many days ago" on every declarative row). |
 
 **Styleable parts** (restyle from outside via `kai-conversations::part(name)`):
 
@@ -2447,7 +2505,7 @@ _No events._
 |---|---|---|---|
 | `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `type` | `type` | `undefined \| string` | Native input type: `text` (default) · `email` · `url` · `search` · `tel` · `password` · `number`. Single-line only. |
-| `value` | `value` | `undefined \| string` | Controlled value, and always the CANONICAL one when a mask is active: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom` (spec §4). Settable and reflected to the `value` attribute. `el.value = '5551234567'` drives it (no event) and is re-fitted to the mask on the way in, so the field shows `555-123-4567`. Read `el.value` for live state; the formatted text rides along on every `kai-input` / `kai-change` detail as `formattedValue`. |
+| `value` | `value` | `undefined \| string` | Controlled value, and always the CANONICAL one when a mask is active: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom`. Settable and reflected to the `value` attribute. `el.value = '5551234567'` drives it (no event) and is re-fitted to the mask on the way in, so the field shows `555-123-4567`. Read `el.value` for live state; the formatted text rides along on every `kai-input` / `kai-change` detail as `formattedValue`. |
 | `placeholder` | `placeholder` | `undefined \| string` | Placeholder shown when empty. |
 | `label` | `label` | `undefined \| string` | Field label, linked to the input. |
 | `hint` | `hint` | `undefined \| string` | Helper text below the control. |
@@ -2480,7 +2538,7 @@ _No events._
 |---|---|---|
 | `focus` | `(options?: FocusOptions): void` | Focus the inner input (the host can't reach into the shadow root). |
 | `select` | `(): void` | Select the inner input's text. |
-| `getRawValue` | `(): string` | The canonical value: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom`, and the field text when no mask is on. Identical to reading `el.value`; it carries the name spec §5.8 uses for the submitted form of a masked field, so code written against that name finds it. The mask engine has a third, narrower notion of raw (the fill characters with no literals at all) and that one is internal: it is not what any backend wants and it is not exposed here. |
+| `getRawValue` | `(): string` | The canonical value: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom`, and the field text when no mask is on. Identical to reading `el.value`, under the name backends use for the submitted form of a masked field. The mask engine has a third, narrower notion of raw (the fill characters with no literals at all) and that one is internal: it is not what any backend wants and it is not exposed here. |
 | `getFormattedValue` | `(): string` | The text on screen, literals and guide included. The counterpart to `formattedValue` on the `kai-input` / `kai-change` details, for a consumer that needs it outside an event. |
 | `clear` | `(): void` | Empty the value and fire `kai-change` with `''`. On a masked field this resets the mask itself, not just the text on screen, so the next character starts over. |
 
@@ -3046,6 +3104,33 @@ _No events._
 
 ---
 
+### `kai-radio-group` / `RadioGroup`
+
+**Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
+
+| Property | Attribute | Type | Description |
+|---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
+| `options` | — | `{ value: string; label: string; description?: undefined \| string; disabled?: undefined \| false \| true }[]` | The choices, top to bottom. Set as a JS PROPERTY (array), never an attribute. |
+| `value` | `value` | `undefined \| string` | Controlled selected `value`. Settable and reflected to the `value` attribute. `el.value = 'degraded'` drives it; choosing a row updates it and fires `kai-change`. Read `el.value` for live state. |
+| `name` | `name` | `undefined \| string` | Shared form-control name for every radio in the group. Defaults to a generated id, so the group is exclusive and keyboard-navigable even when nothing is submitted. |
+| `disabled` | `disabled` | `undefined \| false \| true` | Disable every row. Individual rows carry their own `disabled`. |
+| `label` | `label` | `undefined \| string` | Accessible name for the group. |
+
+**Events** (non-bubbling `CustomEvent`s — listen directly on the element):
+
+| Event | `detail` type | Description |
+|---|---|---|
+| `kai-change` | `CustomEvent<{ value: string }>` | A row was chosen. |
+
+**Methods** (call on the element instance: `document.querySelector('kai-radio-group').focus(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `focus` | `(options?: FocusOptions): void` | Focus the group's tab stop. That is the selected radio, or the first row when nothing is selected yet. |
+
+---
+
 ### `kai-reasoning` / `Reasoning`
 
 **Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
@@ -3291,6 +3376,8 @@ _No events._
 | `for` | `for` | `undefined \| string` | CSS id of the scroll container to control. When omitted the element walks up the DOM (outside its own shadow root) to find the nearest scrollable ancestor. Mirrors the `for` convention of `<label for="...">`. |
 | `variant` | `variant` | `undefined \| "outline" \| "ghost" \| "default"` | Button visual variant: `'outline' \| 'ghost' \| 'default'`. Defaults to `'outline'`. |
 | `size` | `size` | `undefined \| "sm" \| "md" \| "lg" \| "icon" \| "icon-sm"` | Button size token. Defaults to `'icon'` (square). |
+| `label` | `label` | `undefined \| string` | The button's accessible name. It is announced whether or not the label is visible, so the text is always localisable. Defaults to `'Scroll to bottom'`. |
+| `showLabel` | `show-label` | `undefined \| false \| true` | Also render `label` visibly beside the icon. Defaults to `false`, which is the icon-only button. When the text is visible it IS the accessible name, so nothing gets announced twice. |
 
 **Events** (non-bubbling `CustomEvent`s — listen directly on the element):
 
@@ -3362,6 +3449,37 @@ _No events._
 |---|---|
 | `::part(track)` | The segmented track (the pill container holding the segments). Restyle its background, radius, or padding. — `kai-segmented::part(track) { border-radius: 9999px }` |
 | `::part(segment)` | Each segment button. Restyle padding, font weight, or the selected look. — `kai-segmented::part(segment) { font-weight: 600 }` |
+
+---
+
+### `kai-select` / `Select`
+
+**Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
+
+| Property | Attribute | Type | Description |
+|---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
+| `options` | — | `{ value: string; label?: undefined \| string; disabled?: undefined \| false \| true }[]` | The choices, in display order. Set as a JS PROPERTY (array), never an attribute. Rendered in full: the kit never truncates, re-orders or de-duplicates them. |
+| `value` | `value` | `undefined \| string` | Controlled selected value. Settable and reflected to the `value` attribute. `el.value = 'high'` drives it; choosing an option updates it and fires `kai-change`. Read `el.value` for live state; for a `multiple` select read `el.values` instead. |
+| `placeholder` | `placeholder` | `undefined \| string` | Text for a leading, disabled, empty option: the "nothing chosen yet" row. Omitted means no such row at all; there is no default wording, because inventing one would put words in your UI. |
+| `multiple` | `multiple` | `undefined \| false \| true` | Allow more than one selection. Turns the control into the platform's list box, so the kit's chevron is not drawn. |
+| `invalid` | `invalid` | `undefined \| false \| true` | Force the invalid (destructive-border) state. |
+| `disabled` | `disabled` | `undefined \| false \| true` | Disable interaction. |
+| `required` | `required` | `undefined \| false \| true` | Set the native `required` attribute, and nothing more. Whether an empty select is an error is the application's rule, not the kit's. |
+| `label` | `label` | `undefined \| string` | Accessible label for the control. |
+| `name` | `name` | `undefined \| string` | Form-control name, for a native form submit. |
+
+**Events** (non-bubbling `CustomEvent`s — listen directly on the element):
+
+| Event | `detail` type | Description |
+|---|---|---|
+| `kai-change` | `CustomEvent<{ value: string; values: string[] }>` | A choice was made. `value` is the first selected option (empty when nothing is selected); `values` is every selected option, which is what a `multiple` select needs. Both are always present, so neither shape silently loses the other. |
+
+**Methods** (call on the element instance: `document.querySelector('kai-select').focus(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `focus` | `(options?: FocusOptions): void` | Focus the inner select (the host element can't reach it). |
 
 ---
 
@@ -3476,6 +3594,37 @@ _No events._
 | Child element | Attributes | Text content | Notes |
 |---|---|---|---|
 | `<kai-skill>` | `id` | yes | Parse a single light-DOM `<kai-skill>` element into a `Skill` descriptor. Attribute / content mapping: - `id` → Skill.id (falls back to `name` when absent) - `textContent` → Skill.name (the human-readable badge label) Example: `<kai-skill id="web-search">Web Search</kai-skill>` |
+
+---
+
+### `kai-slider` / `Slider`
+
+**Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
+
+| Property | Attribute | Type | Description |
+|---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
+| `min` | `min` | `undefined \| number` | Lowest selectable value. Required: a range with no bounds is a guess, and the guess belongs to whoever knows what the number means. |
+| `max` | `max` | `undefined \| number` | Highest selectable value. Required, for the same reason as `min`. |
+| `step` | `step` | `undefined \| number \| "any"` | Granularity. Omitted means the native default of 1; `any` means continuous. |
+| `value` | `value` | `undefined \| number` | Controlled value. Settable and reflected to the `value` attribute. `el.value = 40` drives it; dragging updates it and fires `kai-input` per step, `kai-change` on release. Read `el.value` for live state. |
+| `disabled` | `disabled` | `undefined \| false \| true` | Disable interaction. |
+| `label` | `label` | `undefined \| string` | Accessible label for the slider. |
+| `name` | `name` | `undefined \| string` | Form-control name, for a native form submit. |
+| `valueLabel` | — | `undefined \| false \| true \| ((value: number) => string)` | Show the current value beside the track. Off by default. Two ways in, because one of them is not a scalar. As a bare ATTRIBUTE (`<kai-slider value-label>`) it renders the raw number. As a JS PROPERTY it also accepts a formatter function (`el.valueLabel = (v) => v + '%'`), for a slider that is not counting bare numbers. A function cannot survive an attribute, so that half is property-only. The readout is hidden from assistive tech: the slider already reports the same number, and an exposed copy would be announced twice. |
+
+**Events** (non-bubbling `CustomEvent`s — listen directly on the element):
+
+| Event | `detail` type | Description |
+|---|---|---|
+| `kai-change` | `CustomEvent<{ value: number }>` | The value was committed: pointer released, or a key press finished. |
+| `kai-input` | `CustomEvent<{ value: number }>` | The thumb moved. Fires per step during a drag or a key press. |
+
+**Methods** (call on the element instance: `document.querySelector('kai-slider').focus(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `focus` | `(options?: FocusOptions): void` | Focus the inner range input (the host element can't reach it). |
 
 ---
 
@@ -3836,7 +3985,7 @@ _No events._
 | Property | Attribute | Type | Description |
 |---|---|---|---|
 | `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
-| `transcribe` | — | `undefined \| (audio: Blob) => Promise<string>` | Transcriber the host supplies: records audio, returns the text. This is a **function-valued property** (`el.transcribe = async blob => '...'`) because a value-returning callback can't be modelled as a fire-and-forget event. |
+| `transcribe` | — | `undefined \| ((audio: Blob) => Promise<string>)` | Transcriber the host supplies: records audio, returns the text. This is a **function-valued property** (`el.transcribe = async blob => '...'`) because a value-returning callback can't be modelled as a fire-and-forget event. |
 | `disabled` | `disabled` | `undefined \| false \| true` | Disable the mic button (non-interactive). |
 | `recognitionLang` | `recognition-lang` | `undefined \| string` | BCP-47 language tag for the native `SpeechRecognition` path (e.g. `en-US`). Attribute: `recognition-lang` (the plain `lang` attribute is reserved by `HTMLElement` and can't be a custom-element property). No effect when `transcribe` is set or the browser lacks SpeechRecognition. |
 | `interim` | `interim` | `undefined \| false \| true` | Emit live partial transcripts (`kai-transcript-interim`) during native recognition. Attribute: `interim`. No-op on the transcribe/fallback paths. |
@@ -3869,7 +4018,7 @@ _No events._
 | `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `text` | `text` | `undefined \| string` | The utterance to read aloud. |
 | `autoplay` | `autoplay` | `undefined \| false \| true` | Speak automatically when `text` is set/changed. |
-| `synthesize` | — | `undefined \| (text: string) => Promise<Blob>` | TTS model seam the host supplies: given text, returns an audio `Blob` to play. This is a **function-valued property** (`el.synthesize = async text => blob`); when set, the native `speechSynthesis` path is bypassed. Mirrors `<kai-voice-input>`'s `transcribe`. A value-returning callback can't be modelled as a fire-and-forget event, hence a property. |
+| `synthesize` | — | `undefined \| ((text: string) => Promise<Blob>)` | TTS model seam the host supplies: given text, returns an audio `Blob` to play. This is a **function-valued property** (`el.synthesize = async text => blob`); when set, the native `speechSynthesis` path is bypassed. Mirrors `<kai-voice-input>`'s `transcribe`. A value-returning callback can't be modelled as a fire-and-forget event, hence a property. |
 | `disabled` | `disabled` | `undefined \| false \| true` | Disable the button (non-interactive). |
 
 **Events** (non-bubbling `CustomEvent`s — listen directly on the element):

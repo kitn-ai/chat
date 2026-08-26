@@ -1,62 +1,84 @@
-@import "tailwindcss";
-@import "../theme.css";
+/* Storybook preview stylesheet.
 
-@source "../src/";
+   THE SHIPPED ELEMENT SHEET IS IMPORTED, NOT MIRRORED. `src/elements/styles.css`
+   is compiled into `compiled.css` and adopted into every `kai-*` shadow root, so
+   importing it here is what makes a Solid `Components/*` story — which renders in
+   the LIGHT DOM, with no shadow root and no adopted sheet — show the same thing a
+   consumer gets.
 
-/* NOTE: the @tailwindcss/typography plugin is intentionally NOT loaded. The kit
-   replaces `prose` with its own self-contained `.chat-markdown` styles (in
-   theme.css). Loading typography here made `prose` classes in the stories
-   override the kit's markdown colors and break contrast in dark mode — and it
-   didn't match production, which never ships the plugin. */
+   This file used to hand-copy a few of those rules under "Mirror the shipped ..."
+   comments. It copied the focus ring and the scrollbars and silently omitted
+   `.kai-radio`, `.kai-checkbox`, `.kai-range` and `.kai-focus-inset`, so every
+   story rendered those three controls as raw OS chrome (13x13 native radio) while
+   the shipped element rendered them designed (18x18, appearance: none). Both an
+   agent and the owner concluded from that the kit had unstyled form controls. It
+   does not. Nothing enforced the mirror and nothing could, so the mirror is gone:
+   every `@layer components` rule now arrives by import, permanently and for free.
+   Do NOT re-add a copy of anything that lives in the shipped sheet.
 
-/* Storybook-only base reset (NOT shipped in theme.css). */
+   The import also brings tailwindcss, tw-animate-css, ../theme.css, the typography
+   plugin and `@source "../"` (which resolves to `src/`, the same tree the old
+   `@source "../src/"` scanned) — all of them exactly as production compiles them.
+
+   What CANNOT come across is the shim below: `:host` selects nothing in the light
+   DOM. Everything else in this file styles Storybook's own docs chrome, which does
+   not exist in production. */
+@import "../src/elements/styles.css";
+
 @layer base {
-  * { @apply border-border; }
+  /* The one unavoidable copy: the shipped sheet puts these on `:host`, which does
+     not match in the light DOM where Solid stories render. Kept in sync by hand
+     with the `:host` block in src/elements/styles.css and nothing else.
+     Without the font-size, stories inherit Storybook's 16px while the same
+     component inside a kai-* element renders at --text-body, and every "is this
+     component sized right?" judgement in Storybook is made against the wrong
+     baseline. */
   body {
     @apply bg-background text-foreground;
-    font-family: system-ui, -apple-system, sans-serif;
+    font-family: var(--kai-font-base, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
+    font-size: var(--text-body, var(--kai-text-body, 0.875rem));
+    letter-spacing: var(--kai-tracking, normal);
     margin: 0;
   }
-  /* Drive `color-scheme` from the storybook-dark-mode `.dark` class so the CSS
-     `light-dark()` function — used by light-DOM story chrome like the toast
-     trigger buttons — follows the Storybook light/dark toggle, not the OS. */
+  /* Same reason: the shipped `:host { color-scheme: light }` cannot match here, so
+     the light half is re-stated on <html>. The dark half needs no shim — the
+     shipped `.dark { color-scheme: dark }` matches the `.dark` class that
+     storybook-dark-mode puts on the docs/preview <html>, which is also what drives
+     the CSS `light-dark()` function for light-DOM story chrome. */
   html { color-scheme: light; }
-  html.dark { color-scheme: dark; }
-  /* Mirror the shipped focus ring (src/elements/styles.css) so dev/docs match
-     production: one blue, token-driven :focus-visible outline on every
-     focusable element. Keeps Storybook honest about what real apps render. */
-  :focus-visible {
-    outline: 2px solid var(--color-ring);
-    outline-offset: 2px;
-  }
-  /* Mirror the shipped cross-platform scrollbar styling (src/elements/styles.css)
-     so Storybook matches what real apps render. */
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-scrollbar-thumb) transparent;
-  }
-  *::-webkit-scrollbar { width: 8px; height: 8px; }
-  *::-webkit-scrollbar-track { background: transparent; }
-  *::-webkit-scrollbar-thumb {
-    background-color: var(--color-scrollbar-thumb);
-    border-radius: 9999px;
-    border: 2px solid transparent;
-    background-clip: padding-box;
-  }
-  *::-webkit-scrollbar-thumb:hover { background-color: var(--color-scrollbar-thumb-hover); }
-  *::-webkit-scrollbar-corner { background: transparent; }
 }
+
+/* ── The `:not(.sb-story *)` guard on every docs-prose rule below ──────────
+   Everything from here down styles Storybook's own DOCS PROSE — the MDX text,
+   tables and code blocks the autodocs page renders around a story. Those rules
+   target BARE TAGS (`p`, `li`, `pre`, `code`, `td`) under `.sbdocs-content`, and
+   they carry `!important` to beat Storybook's injected emotion styles.
+
+   But an autodocs page also renders the LIVE STORY inside that same
+   `.sbdocs-content`, and a Solid `Components/*` story renders in the LIGHT DOM —
+   so a component's own `<p class="text-xs">` is a `.sbdocs-content p` too, and
+   the `!important` prose rule BEATS the Tailwind utility. That is the "helper
+   text is bigger than the label" bug: the form card's field descriptions
+   measured 16px/27.2px (this rule's 16px x 1.7) on the docs page against
+   12px/16px in the canvas, and the `<pre>` event logs inherited the dark
+   terminal skin's #e6e6e6 text onto a light card, rendering them illegible.
+   Only Solid stories are affected — the same component inside a `kai-*` element
+   is shadow-DOM isolated and never matches these selectors.
+
+   `.sb-story` is Storybook's wrapper around a live story render, so
+   `:not(.sb-story *)` excludes exactly the story and nothing else. Do NOT use
+   `.sb-unstyled` for this: Storybook also puts that class on `.sbdocs-title` and
+   on `.docblock-argstable`, both of which the rules below are MEANT to style.
+   Every rule from here down that targets a bare tag needs this guard. */
 
 /* Larger, more readable body text on the Storybook MDX docs pages.
    SB10 renders MDX prose as plain tags inside `.sbdocs-content` (default ~14px),
    not our chat components. !important to win over Storybook's injected styles. */
-.sbdocs-content p,
-.sbdocs-content li {
+.sbdocs-content :is(p, li):not(.sb-story *) {
   font-size: 16px !important;
   line-height: 1.7 !important;
 }
-.sbdocs-content p code,
-.sbdocs-content li code {
+.sbdocs-content :is(p, li) code:not(.sb-story *) {
   font-size: 0.9em !important;
 }
 
@@ -64,7 +86,7 @@
    ending in inline `code`/a link could leave a lone "." or ")." wrapped to the
    next line. `text-wrap: pretty` reflows the block to avoid a too-short last
    line; applied to docs prose + the args-table Description cells. */
-.sbdocs-content :is(p, li, td),
+.sbdocs-content :is(p, li, td):not(.sb-story *),
 .docblock-argstable td {
   text-wrap: pretty;
 }
@@ -79,22 +101,22 @@
 .dark .sbdocs-content {
   color: var(--color-foreground);
 }
-.dark .sbdocs-content :is(p, li, td, blockquote) {
+.dark .sbdocs-content :is(p, li, td, blockquote):not(.sb-story *) {
   color: var(--color-muted-foreground);
 }
-.dark .sbdocs-content :is(h1, h2, h3, h4, h5, strong) {
+.dark .sbdocs-content :is(h1, h2, h3, h4, h5, strong):not(.sb-story *) {
   color: var(--color-foreground) !important;
 }
-.dark .sbdocs-content a {
+.dark .sbdocs-content a:not(.sb-story *) {
   color: var(--color-primary);
 }
-.dark .sbdocs-content :is(hr, td, th, table) {
+.dark .sbdocs-content :is(hr, td, th, table):not(.sb-story *) {
   border-color: var(--color-border) !important;
 }
 /* Inline `code` in docs prose — NEUTRAL chip (foreground text on a subtle muted
    fill), borderless. The previous bright-blue accent read poorly in light mode,
    especially across the generated API spec tables; neutral works in both modes. */
-.sbdocs-content :not(pre) > code {
+.sbdocs-content :not(pre) > code:not(.sb-story *) {
   background: color-mix(in oklab, var(--color-muted-foreground) 12%, transparent) !important;
   color: var(--color-foreground) !important;
   border: none !important;
@@ -109,37 +131,37 @@
    isn't the look developers expect. Skin the Source block + any plain <pre>
    dark, with a VS Code-style token palette for readability. */
 .docblock-source,
-.sbdocs-content pre {
+.sbdocs-content pre:not(.sb-story *) {
   background: #1e1e1e !important;
   border-color: #2a2a2a !important;
 }
 .docblock-source pre,
 .docblock-source code,
-.sbdocs-content pre,
-.sbdocs-content pre code {
+.sbdocs-content pre:not(.sb-story *),
+.sbdocs-content pre:not(.sb-story *) code {
   background: transparent !important;
   color: #e6e6e6 !important;
 }
-:is(.docblock-source, .sbdocs-content pre) .token.comment {
+:is(.docblock-source, .sbdocs-content pre:not(.sb-story *)) .token.comment {
   color: #6a9955 !important;
   font-style: italic;
 }
-:is(.docblock-source, .sbdocs-content pre) :is(.token.string, .token.attr-value, .token.char) {
+:is(.docblock-source, .sbdocs-content pre:not(.sb-story *)) :is(.token.string, .token.attr-value, .token.char) {
   color: #ce9178 !important;
 }
-:is(.docblock-source, .sbdocs-content pre) :is(.token.keyword, .token.tag, .token.boolean, .token.selector) {
+:is(.docblock-source, .sbdocs-content pre:not(.sb-story *)) :is(.token.keyword, .token.tag, .token.boolean, .token.selector) {
   color: #569cd6 !important;
 }
-:is(.docblock-source, .sbdocs-content pre) .token.function {
+:is(.docblock-source, .sbdocs-content pre:not(.sb-story *)) .token.function {
   color: #dcdcaa !important;
 }
-:is(.docblock-source, .sbdocs-content pre) :is(.token.number, .token.constant) {
+:is(.docblock-source, .sbdocs-content pre:not(.sb-story *)) :is(.token.number, .token.constant) {
   color: #b5cea8 !important;
 }
-:is(.docblock-source, .sbdocs-content pre) :is(.token.operator, .token.punctuation) {
+:is(.docblock-source, .sbdocs-content pre:not(.sb-story *)) :is(.token.operator, .token.punctuation) {
   color: #d4d4d4 !important;
 }
-:is(.docblock-source, .sbdocs-content pre) :is(.token.property, .token.attr-name) {
+:is(.docblock-source, .sbdocs-content pre:not(.sb-story *)) :is(.token.property, .token.attr-name) {
   color: #9cdcfe !important;
 }
 /* Copy button on the code card — match the dark terminal style. */
@@ -186,7 +208,7 @@
 .dark .sbdocs-preview > div:first-child svg {
   color: var(--color-muted-foreground) !important;
 }
-.dark .sbdocs-content table :is(td, th) {
+.dark .sbdocs-content table :is(td, th):not(.sb-story *) {
   background-color: var(--color-background) !important;
 }
 

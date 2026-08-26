@@ -208,9 +208,9 @@ export type FormField = {
   'x-kai-placeholder'?: string;
   'x-kai-step'?: number;
   /**
-   * Display format for a string field (spec §7.3). `tel` / `ssn` / `credit-card`
+   * Display format for a string field. `tel` / `ssn` / `credit-card`
    * apply that type's standard mask and submit digits only; `custom` masks with
-   * `x-kai-mask` and submits the formatted value (spec §4).
+   * `x-kai-mask` and submits the formatted value.
    *
    * NOT the JSON Schema `format` keyword, and deliberately not an extension of it:
    * `format` has a registered vocabulary with assertion semantics, `widgetFor()`
@@ -232,7 +232,7 @@ export type FormField = {
    * A type import still has to RESOLVE, so importing the union would drag the engine into
    * the server-safe entry's graph.
    *
-   * AN APP CANNOT PIN THIS ON THE MODEL TODAY (spec §7.3, open question O-1).
+   * AN APP CANNOT PIN THIS ON THE MODEL TODAY.
    * `cardTools({ require })` narrows a projected tool schema by dot-path, but there is
    * no path that reaches a form FIELD: a form card's payload is itself a JSON Schema, so
    * `form.schema.json` describes `properties` as a map of field definitions rather than

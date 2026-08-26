@@ -4,13 +4,14 @@ import { Monitor, Sun, Moon, X, ChevronLeft } from 'lucide-solid';
 import { SettingsGroup, SettingItem } from './settings-group';
 import { Segmented } from './segmented';
 import { Switch } from './switch';
+import { Select } from './select';
 import { Nav, type KaiNavItem } from './nav';
 import { componentDescription } from '../stories/docs/element-controls';
 
 // --- A composed SETTINGS SCREEN ------------------------------------------
 //
 // This is a standalone example, not a primitive: it ASSEMBLES the building
-// blocks (`Nav`, `SettingsGroup`/`SettingItem`, `Segmented`, `Switch`, a select)
+// blocks (`Nav`, `SettingsGroup`/`SettingItem`, `Segmented`, `Switch`, `Select`)
 // into a full settings surface. The SAME `<SettingsContent />` is rendered by
 // BOTH hosts — the settings CHROME (left category rail + grouped rows + uniform
 // controls) is host-agnostic. Whether it lives in a modal or on a dedicated page
@@ -25,17 +26,24 @@ const CATEGORIES: KaiNavItem[] = [
   { id: 'usage', label: 'Usage', icon: 'clock', meta: '82%' },
 ];
 
-/** A styled native `<select>`. A real build would swap in a kai-menu trigger; for a
- *  visual prototype a token-styled select is plenty and stays light. */
+/** The kit's `Select`. This used to be a hand-styled native `<select>` with a note
+ *  saying a real build would swap in a menu trigger; the kit owns a select now, so the
+ *  screen shows the real control instead of a stand-in. `containerClass` narrows it,
+ *  because a settings row's control is not full width. */
 function LanguageSelect() {
   return (
-    <select aria-label="Language" class="rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-      <option>Auto Detect</option>
-      <option>English</option>
-      <option>Español</option>
-      <option>Deutsch</option>
-      <option>日本語</option>
-    </select>
+    <Select
+      aria-label="Language"
+      value="auto"
+      containerClass="w-44"
+      options={[
+        { value: 'auto', label: 'Auto Detect' },
+        { value: 'en', label: 'English' },
+        { value: 'es', label: 'Español' },
+        { value: 'de', label: 'Deutsch' },
+        { value: 'ja', label: '日本語' },
+      ]}
+    />
   );
 }
 
@@ -122,7 +130,7 @@ const meta = {
     layout: 'fullscreen',
     docs: {
       description: componentDescription([
-        'A composed settings SCREEN, assembled from the primitives: a two-pane body (left category `Nav` rail + grouped `SettingItem` rows with uniform controls — `Switch`, `Segmented`, a select).',
+        'A composed settings SCREEN, assembled from the primitives: a two-pane body (left category `Nav` rail + grouped `SettingItem` rows with uniform controls: `Switch`, `Segmented`, `Select`).',
         'Settings CONTENT differs per app, but the chrome is identical everywhere, so the same `SettingsContent` drops into either a modal (`AsModal`) or a full page (`AsPage`) unchanged. The host owns the frame; the content stays host-agnostic.',
       ]),
     },
@@ -187,16 +195,21 @@ function SettingsContent() {
               description="Minimize non-essential animations and transitions."
               control={<Switch defaultChecked={false} label="Reduce motion" />}
             />
-            {/* control: select */}
+            {/* control: Select */}
             <SettingItem
               label="Language"
               description="The interface language."
               control={
-                <select aria-label="Language" class="rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground">
-                  <option>Auto Detect</option>
-                  <option>English</option>
-                  <option>Español</option>
-                </select>
+                <Select
+                  aria-label="Language"
+                  value="auto"
+                  containerClass="w-44"
+                  options={[
+                    { value: 'auto', label: 'Auto Detect' },
+                    { value: 'en', label: 'English' },
+                    { value: 'es', label: 'Español' },
+                  ]}
+                />
               }
             />
           </SettingsGroup>
@@ -221,7 +234,7 @@ function SettingsContent() {
 
 const AS_MODAL_SNIPPET = `import { createSignal } from 'solid-js';
 import { Monitor, Sun, Moon, X } from 'lucide-solid';
-import { SettingsGroup, SettingItem, Segmented, Switch, Nav } from '@kitn.ai/ui/solid';
+import { SettingsGroup, SettingItem, Segmented, Select, Switch, Nav } from '@kitn.ai/ui/solid';
 
 ${SETTINGS_CONTENT_SNIPPET}
 
@@ -246,7 +259,7 @@ function SettingsModal() {
 
 const AS_PAGE_SNIPPET = `import { createSignal } from 'solid-js';
 import { Monitor, Sun, Moon, ChevronLeft } from 'lucide-solid';
-import { SettingsGroup, SettingItem, Segmented, Switch, Nav } from '@kitn.ai/ui/solid';
+import { SettingsGroup, SettingItem, Segmented, Select, Switch, Nav } from '@kitn.ai/ui/solid';
 
 ${SETTINGS_CONTENT_SNIPPET}
 

@@ -9,6 +9,16 @@ import {
   Archive, ArrowUp, Bookmark, Copy, Ellipsis, ExternalLink, Flag,
   GitBranch, GitPullRequest, ListFilter, RotateCw,
   Moon, Sun,
+  // Device / viewport glyphs.
+  Tablet, Smartphone, Laptop,
+  // Direction glyphs completing the chevron + arrow quartets.
+  ChevronRight, ChevronUp, ArrowRight, ArrowDown, PanelRight,
+  // Status glyphs (kai-notice / kai-toast / kai-tool render these already).
+  Check, Info, TriangleAlert, CircleCheck, CircleAlert, CircleX,
+  // Action glyphs the kit performs but could not be named.
+  Trash2, Download, Upload, Link, RotateCcw,
+  // Pane / media chrome.
+  Maximize2, Minimize2, Eye, EyeOff, Bell, Square, Minus, Play,
 } from 'lucide-solid';
 
 type IconComponent = Component<{ class?: string }>;
@@ -68,7 +78,50 @@ const NAMED_ICONS: Record<string, IconComponent> = {
   // Theme / appearance glyphs.
   moon: Moon,
   sun: Sun,
+  // Device / viewport glyphs. `desktop` and `mobile` are aliases onto the same
+  // components as `monitor`/`smartphone` — lucide's names are not the words a
+  // consumer reaches for, and an alias costs nothing in the bundle.
+  desktop: Monitor,
+  laptop: Laptop,
+  tablet: Tablet,
+  smartphone: Smartphone,
+  mobile: Smartphone,
+  // Direction glyphs — chevron-down/left and arrow-left/up were here without
+  // their opposites; both quartets are now complete.
+  'chevron-right': ChevronRight,
+  'chevron-up': ChevronUp,
+  'arrow-right': ArrowRight,
+  'arrow-down': ArrowDown,
+  'panel-right': PanelRight,
+  // Status glyphs. kai-notice / kai-toast / kai-tool already paint these, so a
+  // host building matching UI needs to be able to name them.
+  check: Check,
+  info: Info,
+  'triangle-alert': TriangleAlert,
+  'circle-check': CircleCheck,
+  'circle-alert': CircleAlert,
+  'circle-x': CircleX,
+  // Action glyphs. `trash`/`download`/`link` match the keys action-icons.ts
+  // already uses for message actions; `upload` is download's missing sibling.
+  trash: Trash2,
+  download: Download,
+  upload: Upload,
+  link: Link,
+  'rotate-ccw': RotateCcw,
+  // Pane / media chrome (kai-pane, kai-artifact, kai-embed, kai-agent-card).
+  'maximize-2': Maximize2,
+  'minimize-2': Minimize2,
+  eye: Eye,
+  'eye-off': EyeOff,
+  bell: Bell,
+  square: Square,
+  minus: Minus,
+  play: Play,
 };
+
+/** Every curated icon name, sorted. Derived from `NAMED_ICONS` so a gallery,
+ *  a story control or a test can never drift from the map itself. */
+export const ICON_NAMES: readonly string[] = Object.keys(NAMED_ICONS).sort();
 
 /** Render an item icon.
  *

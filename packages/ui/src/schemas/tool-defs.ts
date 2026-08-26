@@ -132,7 +132,7 @@ export interface CardToolOptions<P extends ToolProvider = ToolProvider> {
    */
   readonly strict?: boolean;
   /**
-   * Narrow the DERIVED tool schema per card type, after projection (F-23).
+   * Narrow the DERIVED tool schema per card type, after projection.
    *
    * A card's authored schema is deliberately permissive — `files` is optional on an
    * artifact, its items need only a `path` — because the card CONTRACT must accept
@@ -149,7 +149,7 @@ export interface CardToolOptions<P extends ToolProvider = ToolProvider> {
    * satisfied must not ship quietly.
    *
    * IT CANNOT REACH A FORM CARD'S FIELDS, and that is a known limitation rather
-   * than an oversight (form-field-formats spec §7.3, open question O-1). The form
+   * than an oversight. The form
    * card's payload IS a JSON Schema, so `form.schema.json` describes `properties`
    * as a map of field definitions and there is no node at `properties.ticketId`
    * for a rule to land on — `require: { form: [{ path: 'properties.ticketId' }] }`
@@ -452,7 +452,7 @@ function relaxRootCombinators(parameters: Record<string, unknown>, cardType: str
 }
 
 /**
- * Apply one card's `require` rules to its PROJECTED parameters (F-23).
+ * Apply one card's `require` rules to its PROJECTED parameters.
  *
  * Runs after `project()` and `relaxRootCombinators()`, on the copy the projection
  * built — never on the authored schema, which `registry.validate()` keeps reading.

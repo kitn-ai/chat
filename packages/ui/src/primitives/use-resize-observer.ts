@@ -14,8 +14,8 @@ export function observeContentHeight(el: Element, onHeight: (height: number) => 
 /** Observe an element's resizes but report the FULL rendered document height (not the
  *  observed element's own content-box) — `document.body.scrollHeight`.
  *
- *  Used by the remote-card provider runtime to size the host iframe (D1, rung 5 IVP
- *  task-10-report.md): `observeContentHeight` reports the ResizeObserver content-box of
+ *  Used by the remote-card provider runtime to size the host iframe:
+ *  `observeContentHeight` reports the ResizeObserver content-box of
  *  the observed root, which drops that root's OWN padding/border and any ancestor
  *  (e.g. `<body>`) padding above it — the host then clips the bottom of the card by
  *  exactly those lost pixels. `scrollHeight` is the full padding-box height as actually

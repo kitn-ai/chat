@@ -11,6 +11,7 @@ import {
   For,
 } from 'solid-js';
 import { cn } from '../utils/cn';
+import { useChatConfig, textClass } from '../primitives/chat-config';
 import {
   type ComposerDoc,
   type EntityRef,
@@ -242,6 +243,7 @@ function setCaretToOffset(root: HTMLElement, offset: number): void {
 }
 
 export function Composer(props: ComposerProps): JSX.Element {
+  const config = useChatConfig();
   let editable!: HTMLDivElement;
   // A SIGNAL (not a plain `let`): usePosition's floating ref must be reactive so
   // Floating UI recomputes once the menu mounts. A non-reactive ref left the menu
@@ -799,23 +801,78 @@ export function Composer(props: ComposerProps): JSX.Element {
   // This is covered by updateTriggerState() in handleInput.
 
   const maxH = () => props.maxHeight ?? 240;
-  // No `outline-none` in the default class. This element is `contenteditable`
-  // with `role="textbox"` — a real tab stop, and the primary one in the kit —
-  // and suppressing the outline left keyboard users with no indication that the
-  // message input was focused. `kai-focus-inset` draws the ring inside the
-  // border box, because the editable fills a rounded, clipping composer shell
-  // that would otherwise erase an outset one. A consumer passing
-  // `editableClass` still replaces this wholesale.
+  // This element is `contenteditable` with `role="textbox"` — a real tab stop,
+  // and the primary one in the kit — so it must never be left with NO focus
+  // affordance. WHICH element draws it depends on who owns the frame:
+  //
+  //  - Standalone (the `else` branch below renders the rounded shell): the FRAME
+  //    owns the ring via `focus-within:ring-*`, exactly like `PromptInput`, so
+  //    the editable neutralizes its own. The editable is a square, full-bleed
+  //    box inside a `rounded-xl` shell, so an outline on IT painted a sharp
+  //    rectangle hugging the text region inside the rounded border — the bug.
+  //  - Bare: the host owns radius/bg/padding and may draw nothing at all
+  //    (`PromptInput` passes its own `editableClass` and rings its frame), so
+  //    the editable keeps `kai-focus-inset` — a ring inside the border box,
+  //    since an outset one would be clipped by a rounded host shell.
+  //
+  // A consumer passing `editableClass` still replaces this wholesale — including
+  // the `text-start` pin below, so a replacement string owes its own (`PromptInput`,
+  // the one in-repo caller, carries it).
   const editableCls = () =>
     props.editableClass ??
-    'text-foreground min-h-[44px] w-full overflow-y-auto kai-focus-inset whitespace-pre-wrap break-words';
+    cn(
+      // `text-start` is a PIN, not a style choice: `text-align` inherits, so any
+      // centered ancestor (`Empty`'s root did exactly this) reached in and centered
+      // the placeholder AND the typed text. An input control's text alignment is a
+      // fact about the control, so it states it rather than inheriting it. LOGICAL
+      // (`start`), not `text-left` — in RTL the correct edge is the right one, and
+      // pinning the physical value would be a worse bug than the one it fixes.
+      'text-foreground min-h-[44px] w-full text-start overflow-y-auto whitespace-pre-wrap break-words',
+      // Size from the SAME token every other text surface reads (`ChatConfig`'s
+      // proseSize, default `sm` = the 14px the rest of the kit sets explicitly) —
+      // `Markdown`, `MessageContent` and `PromptInputTextarea` all go through
+      // `textClass`. Without it the editable set no size at all and just inherited
+      // whatever the shadow root's base was (16px in a stock page), so the composer
+      // read a step larger than every component beside it. Going through the token
+      // also means `proseSize` moves the composer like it moves `PromptInput`,
+      // rather than leaving one input deaf to it.
+      textClass(config.proseSize()),
+      props.bare
+        ? 'kai-focus-inset'
+        : 'outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0',
+    );
 
   const inner = (
     <>
       {/* Static style for CSS Custom Highlight API decoration.
           No-op in browsers that don't support ::highlight(); the selector
           is simply unrecognized and dropped. */}
-      <style>{`::highlight(${highlightName}) { background-color: color-mix(in srgb, var(--color-primary, #6366f1) 22%, transparent); }`}</style>
+      <style>{`
+        /* MARKED text, not selected text. Reads --color-highlight (overridable via
+           --kai-color-highlight), a warm <mark> yellow. It used to be a 22% tint of
+           --color-primary with a #6366f1 indigo fallback — but the kit's
+           --color-primary is a NEUTRAL (near-black in light, near-white in dark),
+           so the indigo the fallback implied never appeared and the highlight
+           rendered plain grey in both themes.
+
+           NO \`prefers-color-scheme\` here, deliberately — the same trap that put
+           the pill hues below at 2.33:1. The OS scheme and the kit's RESOLVED
+           theme are different questions, and \`theme="light"\` on a dark-OS machine
+           is an ordinary configuration; a scheme-keyed value would paint the dark
+           amber on the light field. The pills answer this by scoping to \`.dark\`,
+           which is NOT available here: \`::highlight()\` names a document-registered
+           highlight, so there is no wrapper to hang a descendant selector on.
+
+           It does not need one. \`--color-highlight\` reaches this pseudo through
+           highlight inheritance from the ORIGINATING element — the text inside the
+           \`.dark\` wrapper — so the token already answers the resolved theme,
+           verified by rendering the dark amber under \`theme="dark"\` with only the
+           LIGHT literal below as a fallback. The literal is therefore reachable
+           only when no kit stylesheet is loaded at all, and it is deliberately the
+           light one: an unstyled page is a white page, and guessing from the OS is
+           exactly the failure above. */
+        ::highlight(${highlightName}) { background-color: var(--color-highlight, hsl(45 96% 78%)); }
+      `}</style>
       {/* Atomic entity pill styling. Self-contained (currentColor-based) so it
           renders correctly without depending on a Tailwind rebuild for the
           custom .kai-composer-pill class. */}
@@ -846,12 +903,24 @@ export function Composer(props: ComposerProps): JSX.Element {
         .kai-composer-pill[data-kind="agent"] { color: var(--kai-pill-agent, #7c3aed); }
         /* Brighter hues on dark so they don't muddy against a dark field. The
            consumer's --kai-pill-* override still wins (it's the var value); only
-           the FALLBACK shifts per scheme. */
-        @media (prefers-color-scheme: dark) {
-          .kai-composer-pill[data-kind="skill"] { color: var(--kai-pill-skill, #6ea8fe); }
-          .kai-composer-pill[data-kind="agent"] { color: var(--kai-pill-agent, #c4a7fc); }
-        }
-        .kai-composer-pill-sigil { opacity: 0.6; font-weight: 600; }
+           the FALLBACK shifts per scheme.
+
+           Keyed on the kit's RESOLVED theme (the \`.dark\` wrapper an element
+           facade puts inside its shadow root, and the \`.dark\` class the docs /
+           Storybook put on <html>) — NOT \`prefers-color-scheme\`. Those are
+           different questions: \`theme="light"\` on a machine whose OS is dark is
+           an ordinary, common configuration, and the media query answered the OS
+           while the surface under the pill answered the attribute. That painted
+           the DARK hue (#6ea8fe) on the LIGHT field: 2.33:1, under both the
+           4.5:1 text floor (SC 1.4.3) and even 3:1. Matched pairs looked fine,
+           which is why it survived — never scheme-match a colour whose backdrop
+           is chosen by the theme attribute. */
+        .dark .kai-composer-pill[data-kind="skill"] { color: var(--kai-pill-skill, #6ea8fe); }
+        .dark .kai-composer-pill[data-kind="agent"] { color: var(--kai-pill-agent, #c4a7fc); }
+        /* Dimmer than the label, but the sigil is what makes a pill read as
+           \`/skill\` vs \`@agent\`, so it is a meaningful glyph and owes 3:1
+           (SC 1.4.11). At 0.6 the light-mode composite was 2.52:1. */
+        .kai-composer-pill-sigil { opacity: 0.8; font-weight: 600; }
         /* Plugins (and any other/unknown kind): the richer CHIP — background +
            icon — so a composite bundle reads differently at a glance. */
         .kai-composer-pill:not([data-kind="skill"]):not([data-kind="agent"]) {
@@ -991,7 +1060,12 @@ export function Composer(props: ComposerProps): JSX.Element {
   ) : (
     <div
       class={cn(
+        // Same frame-owns-the-ring pattern as `PromptInput`: the editable inside
+        // neutralizes its own outline (see `editableCls`), so this rounded shell
+        // draws the focus affordance and the ring follows `rounded-xl` instead of
+        // painting a square box around the inner text region.
         'kai-composer relative rounded-xl bg-surface p-2',
+        'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-0',
         props.disabled && 'cursor-not-allowed opacity-60',
       )}
     >

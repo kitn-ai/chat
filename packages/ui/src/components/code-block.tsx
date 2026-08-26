@@ -122,8 +122,8 @@ function CodeBlockCode(props: CodeBlockCodeProps) {
 
   const codeTextSize = () => {
     switch (config.proseSize()) {
-      case 'xs': return 'text-[11px]';
-      case 'sm': return 'text-[13px]';
+      case 'xs': return 'text-caption';
+      case 'sm': return 'text-compact';
       case 'base': return 'text-sm';
       case 'lg': return 'text-base';
     }

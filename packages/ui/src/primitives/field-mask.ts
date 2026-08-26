@@ -14,12 +14,12 @@
 /** How `normalizeToRaw` folds accepted characters. */
 export type CaseMode = 'preserve' | 'upper' | 'lower';
 
-/** Why an edit was refused. Rejection decides LOUDLY (spec §5.3): the stateful layer
+/** Why an edit was refused. Rejection decides LOUDLY: the stateful layer
  *  surfaces this on a callback and, on the element facade, as `kai-input-rejected`. */
 export type RejectReason = 'full' | 'wrong-class' | 'over-capacity';
 
 /** A compiled `format` + aligned display guide. Fill positions are `#` `@` `*`;
- *  every other index is a literal (spec §2). */
+ *  every other index is a literal. */
 export interface MaskPattern {
   readonly format: string;
   readonly guide: string;          // same length as `format`
@@ -46,7 +46,7 @@ function isFillToken(token: string): boolean {
 }
 
 /** The class test for a fill token. `*` is `@` for INPUT purposes -- the two differ only in
- *  how the display layer renders what was typed (spec §2 tier 3), never in what is accepted. */
+ *  how the display layer renders what was typed, never in what is accepted. */
 function matchesToken(token: string, ch: string): boolean {
   return token === '#' ? DIGIT.test(ch) : ALPHANUMERIC.test(ch);
 }
@@ -108,7 +108,7 @@ function fold(ch: string, caseMode: CaseMode): string {
 }
 
 /** Raw (fill-position-only) characters extracted from arbitrary input, with
- *  positional literal consumption and case folding. Spec §5.7, §2 "lenient".
+ *  positional literal consumption and case folding: literals are matched leniently.
  *
  *  LITERALS ARE MATCHED WHERE THEY SIT -- this is the fix for a real defect, and both halves
  *  of it are watched failing in the test file. A strip-then-fill normalizer (drop every
@@ -133,7 +133,7 @@ function fold(ch: string, caseMode: CaseMode): string {
  *
  *  Every iteration either consumes an input character or advances the format, so it
  *  terminates. Input past the last fill position is clipped -- the caller compares lengths
- *  to report `over-capacity` (§5.3). */
+ *  to report `over-capacity`. */
 export function normalizeToRaw(p: MaskPattern, input: string, caseMode: CaseMode = 'preserve'): string {
   let raw = '';
   let read = 0;
@@ -156,8 +156,8 @@ export function normalizeToRaw(p: MaskPattern, input: string, caseMode: CaseMode
   return raw;
 }
 
-/** Raw formatted for DATA purposes -- the canonical value a `custom` mask submits (spec §4:
- *  "formatted, trailing placeholders trimmed"). Literals are re-inserted at their positions
+/** Raw formatted for DATA purposes -- the canonical value a `custom` mask submits:
+ *  formatted, with trailing placeholders trimmed. Literals are re-inserted at their positions
  *  and the string is cut at the first UNFILLED position, because that placeholder and
  *  everything after it is not yet content.
  *
@@ -166,8 +166,8 @@ export function normalizeToRaw(p: MaskPattern, input: string, caseMode: CaseMode
  *  id rather than presentation. Cutting at `raw.length` instead would silently drop a fixed
  *  suffix from the submitted datum.
  *
- *  Empty raw is `''`, never the bare skeleton (`V-`) -- spec §4, "an empty field submits
- *  `''`, never the bare mask template". `formatForDisplay` is the other call site. */
+ *  Empty raw is `''`, never the bare skeleton (`V-`): an empty field submits `''`, never
+ *  the bare mask template. `formatForDisplay` is the other call site. */
 export function formatRaw(p: MaskPattern, raw: string): string {
   if (raw.length === 0) return '';
   let out = '';
@@ -221,7 +221,7 @@ export function rawFromFormatted(p: MaskPattern, formatted: string): string {
 }
 
 /** Caret position in `formatted` -> caret position in raw: the number of FILLED fill
- *  positions strictly before `pos` (spec §3, "position mapping"). */
+ *  positions strictly before `pos`. */
 export function formattedToRawIndex(p: MaskPattern, formatted: string, pos: number): number {
   const clamped = Math.max(0, Math.min(pos, formatted.length));
   let rawPos = 0;
@@ -244,7 +244,7 @@ export function formattedToRawIndex(p: MaskPattern, formatted: string, pos: numb
  *  The pull-forward is why this is a left inverse of `formattedToRawIndex` on every caret
  *  position EXCEPT the one immediately before a literal run: that position and the one after
  *  it map to the same raw index by definition, and only one of the two can come back. The
- *  post-literal one is canonical (spec §2, "the caret never rests inside a literal run"). */
+ *  post-literal one is canonical: the caret never rests inside a literal run. */
 export function rawToFormattedIndex(p: MaskPattern, formatted: string, rawPos: number): number {
   if (p.capacity === 0) return Math.min(p.format.length, formatted.length);
   const clamped = Math.max(0, Math.min(rawPos, p.capacity));

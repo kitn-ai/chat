@@ -18,7 +18,7 @@ import type { CardEnvelope, CardEvent, CardHost, CardResolution } from '../primi
 import { useCardResolution } from './use-card-resolution';
 import { emitCardEvent } from '../primitives/card-routing';
 import { useCardHost } from '../primitives/card-host';
-import { AlertTriangle, Check, X } from 'lucide-solid';
+import { AlertTriangle, Check } from 'lucide-solid';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types (confirm.schema.json) — AUTHORED IN ../primitives/card-data-types.ts.
@@ -316,14 +316,23 @@ export function ConfirmCard(props: ConfirmCardProps): JSX.Element {
             >
               <div class="flex w-full flex-wrap items-center justify-between gap-2">
                 <Show when={local.data?.dismissible === true}>
+                  {/* The contract `dismiss` verb — a footer ACTION (it emits
+                      `{kind:'dismiss'}` and collapses the card to a re-openable
+                      stub), not the chrome close in `Card`'s own `dismissible`
+                      prop, which the contract cards deliberately never set.
+                      Labelled rather than a bare ghost ✕: every other control in
+                      this row says what it does, and an unlabelled 28px glyph
+                      300px from the primary button reads as stray chrome. Same
+                      shape in all four cards — `form` already looked like this.
+                      `aria-label` is kept (redundant with the text) so the
+                      element tests that select on it keep working. */}
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon-sm"
                     aria-label="Dismiss"
                     onClick={onDismiss}
                   >
-                    <X size={16} aria-hidden="true" />
+                    Dismiss
                   </Button>
                 </Show>
                 <div ref={actionsRef} class="ml-auto flex flex-wrap items-center gap-2">
@@ -375,7 +384,14 @@ export function ConfirmCard(props: ConfirmCardProps): JSX.Element {
               <p class="text-sm font-semibold text-foreground">{local.data?.heading}</p>
             </Show>
             <Show when={local.data?.body}>
-              <p class="text-sm text-foreground">{local.data?.body}</p>
+              {/* The supporting sentence sits directly under the heading it
+                  supports, muted — the same contrast step the shell header makes
+                  between `heading` and `description`. It stays in the BODY (not
+                  the shell's `description` slot, where `form`'s and `choice`'s
+                  live) because `data.heading` is a documented IN-BODY heading
+                  that this sentence has to stay beneath, and because this div is
+                  the Enter-to-confirm tab stop. */}
+              <p class="text-sm text-muted-foreground">{local.data?.body}</p>
             </Show>
           </div>
         </Card>

@@ -1,7 +1,7 @@
 import { createSignal, onCleanup, type Accessor } from 'solid-js';
 
 /**
- * Fit-to-container scaling (owner finding, rung 2): the size tiers are fixed
+ * Fit-to-container scaling: the size tiers are fixed
  * px by design (`sizes.ts`), so a container narrower than a tier's natural
  * footprint used to CLIP the picture at its edges. The dispatcher now scales
  * the WHOLE visualization down proportionally to fit, and renders byte-equal

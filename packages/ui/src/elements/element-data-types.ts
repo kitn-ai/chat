@@ -36,6 +36,46 @@ export interface KaiSegmentedOption {
   icon?: string;
 }
 
+/** A single row of `<kai-radio-group>`.
+ *
+ *  Distinct from the Solid `RadioOption`, whose `label` and `description` are JSX
+ *  nodes: on the element both are plain strings, because an element property has to
+ *  survive being assigned from HTML/React/Vue/Svelte with no framework in between. */
+export interface KaiRadioOption {
+  value: string;
+  label: string;
+  description?: string;
+  disabled?: boolean;
+}
+
+/** A single row of `<kai-checkbox-group>`.
+ *
+ *  Distinct from the Solid `CheckboxOption`, whose `value` is generic and whose
+ *  `label` and `description` are JSX nodes: on the element all three are plain
+ *  strings, because an element property has to survive being assigned from
+ *  HTML/React/Vue/Svelte with no framework in between. Structurally identical to
+ *  `KaiRadioOption`, and kept as its own name anyway: the two elements are free to
+ *  diverge, and a consumer typing a checkbox list should not have to import the radio
+ *  group's type to do it. */
+export interface KaiCheckboxOption {
+  value: string;
+  label: string;
+  description?: string;
+  disabled?: boolean;
+}
+
+/** A single choice in `<kai-select>`.
+ *
+ *  Distinct from the Solid `SelectOption`, whose `value` is generic: on the element
+ *  it is a string, because a native `<option>`'s value is a string and an element
+ *  property has to survive being assigned from HTML/React/Vue/Svelte with no
+ *  framework in between. `label` defaults to `value`. */
+export interface KaiSelectOption {
+  value: string;
+  label?: string;
+  disabled?: boolean;
+}
+
 /** A single citation in `<kai-sources>`' `sources` property. Also the shape
  *  `<kai-source>` light-DOM children are parsed into. */
 export interface KaiSourceItem {
