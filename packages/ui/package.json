@@ -176,6 +176,7 @@
     "build:subpath-dts": "node scripts/emit-subpath-dts.mjs",
     "verify:card-validation": "node scripts/gen-card-validation-schemas.mjs --self-test && node scripts/gen-card-validation-schemas.mjs --check",
     "verify:consumer": "node scripts/verify-consumer-sideeffects.mjs",
+    "verify:construct": "node scripts/verify-construct.mjs --self-test && node scripts/verify-construct.mjs",
     "verify:dts": "node scripts/verify-dts-boundaries.mjs --self-test && node scripts/verify-dts-boundaries.mjs",
     "verify:elements-bundle": "node scripts/verify-elements-bundle.mjs --self-test && node scripts/verify-elements-bundle.mjs",
     "verify:fresh": "node scripts/verify-artifact-fresh.mjs --self-test && node scripts/verify-artifact-fresh.mjs",

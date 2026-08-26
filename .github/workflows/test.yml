@@ -573,6 +573,17 @@ jobs:
       - name: Scaffolder output compiles (tsc --strict over emitted code)
         run: pnpm --filter @kitn.ai/ui run verify:scaffold
 
+      # The construct engine's real emit chain: node bin/mcp.js eject (the CLI,
+      # not the library) -> a real npm install -> tsc --noEmit under the cell's
+      # OWN emitted tsconfig -> npm run build -> for one cell per layout, a real
+      # Vite 8 consumer bundle asserting the registration survives. Axes (layout,
+      # capability) are derived from the drift-guarded construct.v1.schema.json
+      # artifact, never typed here -- the script prints what it actually ran.
+      # --self-test runs first and proves the harness detects a spliced type
+      # error and a hand-stripped registration before the real cells are trusted.
+      - name: Construct engine emit chain (real eject + install + tsc + build + consumer bundle)
+        run: pnpm --filter @kitn.ai/ui run verify:construct
+
       # Cache the npm side of the starters. Six of the eight are pnpm workspace
       # members already installed by the step above; the other two (nextjs,
       # tanstack-start) are deliberately STANDALONE `file:` consumers, so they

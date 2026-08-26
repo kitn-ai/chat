@@ -6,8 +6,16 @@
 export interface JsonSchema {
   type?: 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object' | 'null';
   const?: unknown;
-  enum?: unknown[];
-  required?: string[];
+  // `readonly`: a construct's card schema is emitted `as const` (codegen.ts,
+  // emitCardsRegistry) so its literal types survive into CardTools' input —
+  // that turns array-valued fields into readonly tuples, which a mutable
+  // `T[]` does not structurally accept even under a `Readonly<Record<...>>`
+  // wrapper. JsonSchema is read-only data everywhere it is consumed (no
+  // caller mutates `.required`/`.enum` in place — see the callers in
+  // tool-defs.ts and form.tsx, which all build a fresh array via spread/
+  // filter/Set before assigning), so widening these two costs nothing.
+  enum?: readonly unknown[];
+  required?: readonly string[];
   properties?: Record<string, JsonSchema>;
   items?: JsonSchema;
   minimum?: number; maximum?: number;

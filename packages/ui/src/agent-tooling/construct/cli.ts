@@ -69,14 +69,15 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       return 0;
     }
     case 'eject': {
-      const [path, outDir] = rest;
+      const { uiSpec, positional } = parseUiFlag(rest);
+      const [path, outDir] = positional;
       if (!path || !outDir) {
         io.error(USAGE);
         return 2;
       }
       const construct = loadConstruct(path, io);
       if (!construct) return 1;
-      const overwritten = writeProject(generateProject(construct), resolve(outDir));
+      const overwritten = writeProject(generateProject(construct, { uiSpec }), resolve(outDir));
       if (overwritten.length > 0) {
         io.log(`overwriting ${overwritten.length} existing file(s)`);
       }

@@ -175,6 +175,14 @@ describe('kai CLI', () => {
     expect(ejectedIdx).toBeGreaterThan(noticeIdx);
   });
 
+  it('eject: --ui <spec> flows into the emitted package.json dependency, same parse as dev/compile', async () => {
+    const out = mkdtempSync(join(tmpdir(), 'kai-eject-ui-'));
+    const { io } = collect();
+    const spec = 'file:./kitn.ai-ui-0.0.0-test.tgz';
+    expect(await runCli(['eject', tmpConstruct(good), out, '--ui', spec], io)).toBe(0);
+    expect(readFileSync(join(out, 'package.json'), 'utf8')).toContain(spec);
+  });
+
   it('unknown subcommand: exit 2 with usage', async () => {
     const { io, lines } = collect();
     expect(await runCli(['frobnicate'], io)).toBe(2);
