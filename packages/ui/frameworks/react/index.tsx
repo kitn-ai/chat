@@ -266,7 +266,7 @@ export interface CardsProps extends WebComponentProps {
   /** JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `types`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.schemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name, matching `mergeCardTags`, where your entry is spread over ours. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. See `CardSchemaMap` in components/card-renderer.tsx. */
   schemas?: Record<string, object>;
   /** Optional CardPolicy handling child events. Property: `el.policy`. */
-  policy?: { onSubmit?: (cardId: string, data: unknown) => void; onAction?: (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: (text: string, opts: { mode: "compose" | "send"; context?: unknown; }) => void; onOpen?: (url: string, target: "tab" | "artifact") => void; onState?: (cardId: string, patch: unknown) => void; onDismiss?: (cardId: string) => void; onReopen?: (cardId: string) => void; onError?: (cardId: string, message: string) => void; maxSendPromptMode?: "compose" | "send" };
+  policy?: { onSubmit?: ((cardId: string, data: unknown) => void); onAction?: ((cardId: string, action: string, payload?: unknown) => void); onSendPrompt?: ((text: string, opts: { mode: "compose" | "send"; context?: unknown; }) => void); onOpen?: ((url: string, target: "tab" | "artifact") => void); onState?: ((cardId: string, patch: unknown) => void); onDismiss?: ((cardId: string) => void); onReopen?: ((cardId: string) => void); onError?: ((cardId: string, message: string) => void); maxSendPromptMode?: "compose" | "send" };
   /** Validate each envelope's `data` against the schema for its type before rendering it, using a built-in's own schema or yours from `schemas`. Default `true`; set `validate-cards="false"` (or `el.validateCards = false`) to opt out. A hard failure (wrong type, a missing required field) renders a diagnostic naming the field instead of the card; a soft failure (bounds) renders the card unchanged. Both emit a contract `error` event. On in production too: a model emitting a bad shape is a production failure mode, so stripping the check there would hide it from exactly the person who needs to see it. */
   validateCards?: boolean;
   /** A child card transitioned to a resolved/deferred state (an action was chosen, a form/tasks submission landed, or it was dismissed). Re-emitted off the host as a non-bubbling convenience event so a consumer can observe resolution centrally without diffing the cards array. `detail` = `{ cardId, resolution }`. (A `reopen` un-resolves a card and has no `CardResolution`, so it does NOT fire this; observe reopen via the underlying bubbling `kai-card` event.) */
@@ -388,6 +388,56 @@ export const Chat = /*#__PURE__*/ createWebComponent<ChatProps>(
   ["theme","value","placeholder","loading","suggestions","suggestionMode","persistSuggestions","proseSize","codeTheme","codeHighlight","chatTitle","models","currentModel","context","scrollButton","headerStart","headerEnd","headerFull","sidebar","empty","composer","composerActions","footer","webSearch","voice","triggers","kindIcons","actionsReveal","accept","messages","cardTypes","cardSchemas"],
   { onAttachmentsChange: 'kai-attachments-change', onAttachmentsRejected: 'kai-attachments-rejected', onMessageAction: 'kai-message-action', onModelChange: 'kai-model-change', onSubmit: 'kai-submit', onSuggestionClick: 'kai-suggestion-click', onValueChange: 'kai-value-change', onVoice: 'kai-voice', onWebSearch: 'kai-web-search' },
   () => import('@kitn.ai/ui/elements/chat'),
+);
+
+export interface CheckboxProps extends WebComponentProps {
+  /** Controlled checked state. Settable and reflected to the `checked` attribute. `el.checked = true` (or `<kai-checkbox checked>`) drives it; ticking the box updates it and fires `kai-change`. Read `el.checked` for live state. */
+  checked?: boolean;
+  /** Initial checked state on mount (uncontrolled seed). Bare attribute (`<kai-checkbox default-checked>`) turns it on. */
+  defaultChecked?: boolean;
+  /** The mixed state, for a parent box whose children are partly ticked. Visual plus an accessibility hint: the box still reports `checked === false`. */
+  indeterminate?: boolean;
+  /** Disable interaction. */
+  disabled?: boolean;
+  /** Set the native `required` attribute, and nothing more. Whether an unticked box is an error is the application's rule, not the kit's. */
+  required?: boolean;
+  /** Accessible label. The visible text beside the box is the consumer's to render. */
+  label?: string;
+  /** Form-control name (paired with `value`). */
+  name?: string;
+  /** Submitted value when checked (paired with `name`). Defaults to `'on'`. */
+  value?: string;
+  /** The box was ticked or unticked. */
+  onChange?: (event: CustomEvent<{ checked: boolean }>) => void;
+}
+
+export const Checkbox = /*#__PURE__*/ createWebComponent<CheckboxProps>(
+  'kai-checkbox',
+  ["theme","checked","defaultChecked","indeterminate","disabled","required","label","name","value"],
+  { onChange: 'kai-change' },
+  () => import('@kitn.ai/ui/elements/checkbox'),
+);
+
+export interface CheckboxGroupProps extends WebComponentProps {
+  /** The choices, top to bottom. Set as a JS PROPERTY (array), never an attribute. Rendered in full: the kit never truncates, re-orders or de-duplicates them. */
+  options: { value: string; label: string; description?: undefined | string; disabled?: undefined | boolean }[];
+  /** The FIRST selected value. Settable and reflected to the `value` attribute, so `:host([value])` and `el.value` see live state, and a seed can be written in markup. Writing it makes that the whole selection; to read or drive the rest, use `el.values`. */
+  value?: string;
+  /** The shared form-control name every box carries, so `FormData.getAll(name)` reads the whole selection back under one key. NO DEFAULT, unlike `<kai-radio-group>`. A radio set needs a shared `name` for the browser to make it exclusive and arrow-navigable, so one is generated when none is given; checkboxes are independent controls and behave correctly with no name at all. Generating one here would submit the selection under a random key, which is worse than submitting nothing. The element is NOT form-associated (no `ElementInternals`, no `setFormValue()`), the same known gap `<kai-input>` records: the boxes live in a shadow root, so a surrounding `<form>` collects nothing from them whether or not `name` is set. Read `el.values`. The name still lands on every inner input, so it is right the day form association arrives. */
+  name?: string;
+  /** Disable every row. Individual rows carry their own `disabled`. */
+  disabled?: boolean;
+  /** Accessible name for the group. */
+  label?: string;
+  /** A row was ticked or unticked. `values` is the whole selection after the change, which is what a multi-select control needs; `value` is the first of them (empty when nothing is selected). Both are always present, so neither shape silently loses the other. This is `<kai-select>`'s detail, deliberately. */
+  onChange?: (event: CustomEvent<{ value: string; values: string[] }>) => void;
+}
+
+export const CheckboxGroup = /*#__PURE__*/ createWebComponent<CheckboxGroupProps>(
+  'kai-checkbox-group',
+  ["theme","options","value","name","disabled","label"],
+  { onChange: 'kai-change' },
+  () => import('@kitn.ai/ui/elements/checkbox-group'),
 );
 
 export interface CheckpointProps extends WebComponentProps {
@@ -627,7 +677,7 @@ export interface ConversationItemProps extends WebComponentProps {
   active?: boolean;
   /** Dense single-line row padding. */
   compact?: boolean;
-  /** STANDALONE activation only (F-45 tier 2, owner-ruled 2026-08-25): the row was activated (click, Enter or Space on its body) while the item is NOT a direct child of `<kai-conversations>`. `id` is the row's identity: the `conversation-id` attribute, else the host `id`. Inside a container this never fires: activation surfaces once, as `kai-conversation-select` on the container. */
+  /** STANDALONE activation only: the row was activated (click, Enter or Space on its body) while the item is NOT a direct child of `<kai-conversations>`. `id` is the row's identity: the `conversation-id` attribute, else the host `id`. Inside a container this never fires: activation surfaces once, as `kai-conversation-select` on the container. */
   onSelect?: (event: CustomEvent<{ id: string }>) => void;
 }
 
@@ -951,7 +1001,7 @@ export const Image = /*#__PURE__*/ createWebComponent<ImageProps>(
 export interface InputProps extends WebComponentProps {
   /** Native input type: `text` (default) · `email` · `url` · `search` · `tel` · `password` · `number`. Single-line only. */
   type?: string;
-  /** Controlled value, and always the CANONICAL one when a mask is active: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom` (spec §4). Settable and reflected to the `value` attribute. `el.value = '5551234567'` drives it (no event) and is re-fitted to the mask on the way in, so the field shows `555-123-4567`. Read `el.value` for live state; the formatted text rides along on every `kai-input` / `kai-change` detail as `formattedValue`. */
+  /** Controlled value, and always the CANONICAL one when a mask is active: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom`. Settable and reflected to the `value` attribute. `el.value = '5551234567'` drives it (no event) and is re-fitted to the mask on the way in, so the field shows `555-123-4567`. Read `el.value` for live state; the formatted text rides along on every `kai-input` / `kai-change` detail as `formattedValue`. */
   value?: string;
   /** Placeholder shown when empty. */
   placeholder?: string;
@@ -1384,6 +1434,28 @@ export const PromptInput = /*#__PURE__*/ createWebComponent<PromptInputProps>(
   () => import('@kitn.ai/ui/elements/prompt-input'),
 );
 
+export interface RadioGroupProps extends WebComponentProps {
+  /** The choices, top to bottom. Set as a JS PROPERTY (array), never an attribute. */
+  options: { value: string; label: string; description?: undefined | string; disabled?: undefined | boolean }[];
+  /** Controlled selected `value`. Settable and reflected to the `value` attribute. `el.value = 'degraded'` drives it; choosing a row updates it and fires `kai-change`. Read `el.value` for live state. */
+  value?: string;
+  /** Shared form-control name for every radio in the group. Defaults to a generated id, so the group is exclusive and keyboard-navigable even when nothing is submitted. */
+  name?: string;
+  /** Disable every row. Individual rows carry their own `disabled`. */
+  disabled?: boolean;
+  /** Accessible name for the group. */
+  label?: string;
+  /** A row was chosen. */
+  onChange?: (event: CustomEvent<{ value: string }>) => void;
+}
+
+export const RadioGroup = /*#__PURE__*/ createWebComponent<RadioGroupProps>(
+  'kai-radio-group',
+  ["theme","options","value","name","disabled","label"],
+  { onChange: 'kai-change' },
+  () => import('@kitn.ai/ui/elements/radio-group'),
+);
+
 export interface ReasoningProps extends WebComponentProps {
   /** The reasoning text to display. */
   text: string;
@@ -1564,13 +1636,17 @@ export interface ScrollButtonProps extends WebComponentProps {
   variant?: "outline" | "ghost" | "default";
   /** Button size token. Defaults to `'icon'` (square). */
   size?: "sm" | "md" | "lg" | "icon" | "icon-sm";
+  /** The button's accessible name. It is announced whether or not the label is visible, so the text is always localisable. Defaults to `'Scroll to bottom'`. */
+  label?: string;
+  /** Also render `label` visibly beside the icon. Defaults to `false`, which is the icon-only button. When the text is visible it IS the accessible name, so nothing gets announced twice. */
+  showLabel?: boolean;
   /** Emitted when the user clicks the button and `scrollToBottom()` is called. Carries no detail; consumers use it to know a manual scroll occurred. */
   onScroll?: (event: CustomEvent) => void;
 }
 
 export const ScrollButton = /*#__PURE__*/ createWebComponent<ScrollButtonProps>(
   'kai-scroll-button',
-  ["theme","for","variant","size"],
+  ["theme","for","variant","size","label","showLabel"],
   { onScroll: 'kai-scroll' },
   () => import('@kitn.ai/ui/elements/scroll-button'),
 );
@@ -1619,6 +1695,36 @@ export const Segmented = /*#__PURE__*/ createWebComponent<SegmentedProps>(
   ["theme","options","value","size"],
   { onChange: 'kai-change' },
   () => import('@kitn.ai/ui/elements/segmented'),
+);
+
+export interface SelectProps extends WebComponentProps {
+  /** The choices, in display order. Set as a JS PROPERTY (array), never an attribute. Rendered in full: the kit never truncates, re-orders or de-duplicates them. */
+  options: { value: string; label?: undefined | string; disabled?: undefined | boolean }[];
+  /** Controlled selected value. Settable and reflected to the `value` attribute. `el.value = 'high'` drives it; choosing an option updates it and fires `kai-change`. Read `el.value` for live state; for a `multiple` select read `el.values` instead. */
+  value?: string;
+  /** Text for a leading, disabled, empty option: the "nothing chosen yet" row. Omitted means no such row at all; there is no default wording, because inventing one would put words in your UI. */
+  placeholder?: string;
+  /** Allow more than one selection. Turns the control into the platform's list box, so the kit's chevron is not drawn. */
+  multiple?: boolean;
+  /** Force the invalid (destructive-border) state. */
+  invalid?: boolean;
+  /** Disable interaction. */
+  disabled?: boolean;
+  /** Set the native `required` attribute, and nothing more. Whether an empty select is an error is the application's rule, not the kit's. */
+  required?: boolean;
+  /** Accessible label for the control. */
+  label?: string;
+  /** Form-control name, for a native form submit. */
+  name?: string;
+  /** A choice was made. `value` is the first selected option (empty when nothing is selected); `values` is every selected option, which is what a `multiple` select needs. Both are always present, so neither shape silently loses the other. */
+  onChange?: (event: CustomEvent<{ value: string; values: string[] }>) => void;
+}
+
+export const Select = /*#__PURE__*/ createWebComponent<SelectProps>(
+  'kai-select',
+  ["theme","options","value","placeholder","multiple","invalid","disabled","required","label","name"],
+  { onChange: 'kai-change' },
+  () => import('@kitn.ai/ui/elements/select'),
 );
 
 export interface SeparatorProps extends WebComponentProps {
@@ -1689,6 +1795,36 @@ export const Skills = /*#__PURE__*/ createWebComponent<SkillsProps>(
   ["theme","skills"],
   {  },
   () => import('@kitn.ai/ui/elements/message-skills'),
+);
+
+export interface SliderProps extends WebComponentProps {
+  /** Lowest selectable value. Required: a range with no bounds is a guess, and the guess belongs to whoever knows what the number means. */
+  min?: number;
+  /** Highest selectable value. Required, for the same reason as `min`. */
+  max?: number;
+  /** Granularity. Omitted means the native default of 1; `any` means continuous. */
+  step?: number | "any";
+  /** Controlled value. Settable and reflected to the `value` attribute. `el.value = 40` drives it; dragging updates it and fires `kai-input` per step, `kai-change` on release. Read `el.value` for live state. */
+  value?: number;
+  /** Disable interaction. */
+  disabled?: boolean;
+  /** Accessible label for the slider. */
+  label?: string;
+  /** Form-control name, for a native form submit. */
+  name?: string;
+  /** Show the current value beside the track. Off by default. Two ways in, because one of them is not a scalar. As a bare ATTRIBUTE (`<kai-slider value-label>`) it renders the raw number. As a JS PROPERTY it also accepts a formatter function (`el.valueLabel = (v) => v + '%'`), for a slider that is not counting bare numbers. A function cannot survive an attribute, so that half is property-only. The readout is hidden from assistive tech: the slider already reports the same number, and an exposed copy would be announced twice. */
+  valueLabel?: boolean | ((value: number) => string);
+  /** The value was committed: pointer released, or a key press finished. */
+  onChange?: (event: CustomEvent<{ value: number }>) => void;
+  /** The thumb moved. Fires per step during a drag or a key press. */
+  onInput?: (event: CustomEvent<{ value: number }>) => void;
+}
+
+export const Slider = /*#__PURE__*/ createWebComponent<SliderProps>(
+  'kai-slider',
+  ["theme","min","max","step","value","disabled","label","name","valueLabel"],
+  { onChange: 'kai-change', onInput: 'kai-input' },
+  () => import('@kitn.ai/ui/elements/slider'),
 );
 
 export interface SourceProps extends WebComponentProps {

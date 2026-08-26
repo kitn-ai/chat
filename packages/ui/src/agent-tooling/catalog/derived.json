@@ -941,6 +941,129 @@
       "tokens": []
     },
     {
+      "tag": "kai-checkbox",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "checked",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultChecked",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "indeterminate",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "required",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "name",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-change"
+      ],
+      "methods": [
+        "toggle",
+        "focus"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "Checkbox"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-checkbox-group",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "options",
+          "scalar": false,
+          "optional": false,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "name",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-change"
+      ],
+      "methods": [
+        "focus"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "CheckboxGroup"
+      ],
+      "tokens": []
+    },
+    {
       "tag": "kai-checkpoint",
       "props": [
         {
@@ -3369,6 +3492,58 @@
       "tokens": []
     },
     {
+      "tag": "kai-radio-group",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "options",
+          "scalar": false,
+          "optional": false,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "name",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-change"
+      ],
+      "methods": [
+        "focus"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "RadioGroup"
+      ],
+      "tokens": []
+    },
+    {
       "tag": "kai-reasoning",
       "props": [
         {
@@ -3795,6 +3970,18 @@
           "scalar": true,
           "optional": true,
           "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "showLabel",
+          "scalar": true,
+          "optional": true,
+          "fn": false
         }
       ],
       "events": [
@@ -3912,6 +4099,82 @@
       ],
       "composedFrom": [
         "Segmented"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-select",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "options",
+          "scalar": false,
+          "optional": false,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "placeholder",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "multiple",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "invalid",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "required",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "name",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-change"
+      ],
+      "methods": [
+        "focus"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "Select"
       ],
       "tokens": []
     },
@@ -4072,6 +4335,77 @@
       "parts": [],
       "composedFrom": [
         "MessageSkills"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-slider",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "min",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "max",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "step",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "name",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "valueLabel",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-change",
+        "kai-input"
+      ],
+      "methods": [
+        "focus"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "Slider"
       ],
       "tokens": []
     },
@@ -5115,6 +5449,7 @@
     "--kai-color-destructive-foreground",
     "--kai-color-destructive-soft",
     "--kai-color-foreground",
+    "--kai-color-highlight",
     "--kai-color-hover",
     "--kai-color-info",
     "--kai-color-info-foreground",
@@ -5132,6 +5467,8 @@
     "--kai-color-secondary",
     "--kai-color-secondary-foreground",
     "--kai-color-selected",
+    "--kai-color-selection",
+    "--kai-color-selection-foreground",
     "--kai-color-sidebar",
     "--kai-color-success",
     "--kai-color-success-foreground",
@@ -5153,7 +5490,10 @@
     "--kai-text-",
     "--kai-text-body",
     "--kai-text-caption",
+    "--kai-text-compact",
+    "--kai-text-lg",
     "--kai-text-meta",
+    "--kai-text-micro",
     "--kai-text-title"
   ],
   "eventExceptions": [
