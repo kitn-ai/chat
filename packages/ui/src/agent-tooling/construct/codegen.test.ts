@@ -321,6 +321,83 @@ describe('header (Task 19c)', () => {
   });
 });
 
+describe('userId (Task 19e)', () => {
+  it('endpoint provider: threads x-kai-user-id header onto the chat fetch', () => {
+    const app = file(
+      generateProject(construct({
+        provider: { mode: 'endpoint', url: '/api/chat', wire: 'openai' },
+        userId: 'user_123',
+      })),
+      'src/App.tsx',
+    );
+    expect(app).toContain(`'x-kai-user-id': "user_123"`);
+  });
+
+  it('no userId: no header added, fetch calls unchanged from before this task', () => {
+    const app = file(
+      generateProject(construct({ provider: { mode: 'endpoint', url: '/api/chat', wire: 'openai' } })),
+      'src/App.tsx',
+    );
+    expect(app).not.toContain('x-kai-user-id');
+  });
+
+  it('history local: userId folds into THREAD_KEY so different users don\'t share localStorage history', () => {
+    const app = file(
+      generateProject(construct({ capabilities: { history: { persistence: 'local' } }, userId: 'user_123' })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('kai:acme-support:user_123:thread');
+  });
+
+  it('history local, no userId: THREAD_KEY unchanged from before this task', () => {
+    const app = file(
+      generateProject(construct({ capabilities: { history: { persistence: 'local' } } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('kai:acme-support:thread');
+    expect(app).not.toContain('kai:acme-support:undefined:thread');
+  });
+
+  it('history endpoint: GET and PUT both carry the header', () => {
+    const app = file(
+      generateProject(construct({
+        capabilities: { history: { persistence: 'endpoint', url: '/api/thread' } },
+        userId: 'user_123',
+      })),
+      'src/App.tsx',
+    );
+    const occurrences = app.split(`'x-kai-user-id': "user_123"`).length - 1;
+    expect(occurrences).toBe(2); // GET + PUT
+  });
+
+  it('a hostile userId cannot break out of the emitted string literal at any of the three sites', () => {
+    const hostile = '"};alert(1);//';
+    const app = file(
+      generateProject(construct({
+        provider: { mode: 'endpoint', url: '/api/chat', wire: 'openai' },
+        capabilities: { history: { persistence: 'endpoint', url: '/api/thread' } },
+        userId: hostile,
+      })),
+      'src/App.tsx',
+    );
+    // A plain `.not.toContain('alert(1);//"')` is vacuous here (same class as
+    // the Task 19a/19c precedent, launcherIcon/header.title): JSON.stringify's
+    // own closing delimiter always lands right after `//` in this payload,
+    // safe or not, so that substring is present either way. The real signal
+    // is whether the embedded quote right before `};alert(1)` is
+    // backslash-escaped (JSON.stringify's doing) rather than a raw,
+    // string-closing quote — the actual breakout shape.
+    expect(app).not.toMatch(/(?<!\\)"\};alert\(1\)/);
+    const stringified = JSON.stringify(hostile);
+    expect(app.split(stringified).length - 1).toBeGreaterThanOrEqual(3); // provider POST + history GET + PUT
+  });
+
+  it('mock provider + no history: userId declared but inert — no crash, no emission anywhere', () => {
+    const app = file(generateProject(construct({ userId: 'user_123' })), 'src/App.tsx');
+    expect(app).not.toContain('x-kai-user-id');
+  });
+});
+
 describe('layouts (Task 12)', () => {
   it.each([
     ['fullscreen', 'height: \'100dvh\''],

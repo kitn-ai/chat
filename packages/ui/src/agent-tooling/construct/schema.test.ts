@@ -233,3 +233,40 @@ describe('header', () => {
     expect(out.ok).toBe(false);
   });
 });
+
+describe('userId', () => {
+  it('accepts a top-level userId independent of provider mode', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' }, userId: 'user_123',
+    });
+    expect(out.ok).toBe(true);
+  });
+
+  it('rejects an empty userId', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' }, userId: '',
+    });
+    expect(out.ok).toBe(false);
+  });
+
+  // Deviation from the brief: the brief's Step 1 only specified min(1) +
+  // top-level placement. userId reaches an HTTP header value (x-kai-user-id)
+  // as well as a JS string sink, and fetch() throws AT RUNTIME on a header
+  // value containing CR/LF or a code point outside ISO-8859-1. Schema.ts
+  // constrains userId to printable ASCII (no line breaks) so a bad value is
+  // a loud validation-time rejection, not an opaque runtime crash in the
+  // consumer's generated app. Covered here rather than left implicit.
+  it('rejects a userId containing CR/LF (would break the emitted header value at runtime)', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' }, userId: 'user\r\nX-Evil: 1',
+    });
+    expect(out.ok).toBe(false);
+  });
+
+  it('rejects a userId with a non-ISO-8859-1 code point (fetch() disallows it in a header value)', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' }, userId: 'user_\u{1F600}',
+    });
+    expect(out.ok).toBe(false);
+  });
+});

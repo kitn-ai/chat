@@ -756,12 +756,23 @@ function emitHistoryTypeImport(c: Construct): string {
  *  construct-authored/untrusted like theme.accent and provider.url, so it is
  *  JSON.stringify'd at both fetch call sites — never string-concatenated
  *  (see the endpoint-provider comment on this same class of bug). */
+/** Top-level userId -> the `x-kai-user-id` header on every emitted fetch that
+ *  talks to the consumer's own backend (the endpoint provider's chat POST, and
+ *  history's endpoint GET/PUT) — so a route can tell which user's thread this
+ *  is. `local` persistence folds it into THREAD_KEY instead (see
+ *  emitHistorySetup) — no network call to header there. userId is
+ *  construct-authored data (like theme.accent/provider.url), so it is
+ *  JSON.stringify'd wherever it is interpolated — never string-concatenated. */
+function emitUserIdHeaderEntry(c: Construct): string {
+  return c.userId ? `, 'x-kai-user-id': ${JSON.stringify(c.userId)}` : '';
+}
+
 function emitHistorySetup(c: Construct): string {
   const history = c.capabilities?.history;
   if (!history || history.persistence === 'none') return '';
 
   if (history.persistence === 'local') {
-    const key = JSON.stringify(`kai:${c.name}:thread`);
+    const key = JSON.stringify(c.userId ? `kai:${c.name}:${c.userId}:thread` : `kai:${c.name}:thread`);
     return `
 // History: persisted locally in this browser, keyed by the element tag. What to
 // retain and for how long is an app decision — clear the key to reset.
@@ -796,7 +807,7 @@ createEffect(() => {
 let hydrated = false;
 (async () => {
   try {
-    const r = await fetch(${url});
+    const r = await fetch(${url}${c.userId ? `, { headers: { 'x-kai-user-id': ${JSON.stringify(c.userId)} } }` : ''});
     const saved: unknown = r.ok ? await r.json() : [];
     if (Array.isArray(saved)) {
       chat.setMessages(() => saved as ChatMessage[]);
@@ -814,7 +825,7 @@ createEffect(() => {
   if (!hydrated) return;
   fetch(${url}, {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json'${emitUserIdHeaderEntry(c)} },
     body: JSON.stringify(snapshot),
   }).catch((err) => {
     console.error('history endpoint PUT failed; this change was not persisted', err);
@@ -904,7 +915,7 @@ async function submit(detail: { value: string; attachments: AttachmentData[] }) 
   try {
     const response = await fetch(${JSON.stringify(url)}, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json'${emitUserIdHeaderEntry(c)} },
       body: JSON.stringify({ messages: ${encode}(chat.messages())${emitToolsField(c)} }),
     });
     if (!response.ok) throw new Error(\`endpoint responded \${response.status}\`);

@@ -54,6 +54,32 @@ export const ConstructSchema = z
     // Widened progressively: fullscreen/aside/split landed in Task 12, custom in Task 13.
     layout: z.enum(['widget', 'fullscreen', 'aside', 'split', 'custom']),
     provider: ProviderSchema,
+    /** Plain (unsigned) identity passthrough — no signing/auth infra (owner
+     *  ruling, 2026-08-26: signed JWT/HMAC identity is later additive
+     *  vocabulary, not this field). TOP-LEVEL, not nested under `provider`:
+     *  local history scoping (`capabilities.history.persistence: 'local'`)
+     *  needs userId independent of provider mode — nesting it inside the
+     *  provider union would make it silently inert for `mode: 'mock'` +
+     *  local history, a real and common combination. Threaded as the
+     *  `x-kai-user-id` header on every emitted fetch to the CONSUMER's own
+     *  backend (the endpoint provider's chat POST, history's endpoint
+     *  GET/PUT), and folded into the localStorage key for `local` history so
+     *  different users on the same browser profile don't share one thread.
+     *  Constrained to printable-ASCII (no CR/LF, no non-ISO-8859-1 code
+     *  points) beyond the usual construct-authored-text escaping: this value
+     *  reaches an HTTP HEADER VALUE, not just a JS string literal, and
+     *  `fetch()` throws at RUNTIME on a header value containing CR/LF or
+     *  outside ISO-8859-1 — a bad userId would surface as an opaque crash in
+     *  the CONSUMER's generated app, not a construct-validation error. Reject
+     *  loudly here instead, where the author gets a path + message. */
+    userId: z
+      .string()
+      .min(1)
+      .regex(
+        /^[\x20-\x7E]+$/,
+        'must be printable ASCII with no line breaks (it becomes an HTTP header value)',
+      )
+      .optional(),
     theme: z
       .object({
         /** Any CSS color; becomes --kai-color-primary on the host. */
