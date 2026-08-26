@@ -218,7 +218,7 @@ describe('layouts (Task 12)', () => {
   it.each([
     ['fullscreen', 'height: \'100dvh\''],
     ['aside', 'border-inline-start'],
-    ['split', 'PaneGroup'],
+    ['split', 'WorkspaceShell'],
   ] as const)('layout %s emits its chrome', (layout, marker) => {
     const app = file(generateProject(construct({ layout })), 'src/App.tsx');
     expect(app).toContain(marker);
@@ -228,6 +228,14 @@ describe('layouts (Task 12)', () => {
   it('widget stays unchanged: still wraps in Dock, no other layout chrome', () => {
     const app = file(generateProject(construct()), 'src/App.tsx');
     expect(app).toContain('<Dock label="acme-support">');
+    expect(app).not.toContain('WorkspaceShell');
+  });
+
+  it('split: real draggable splitter via WorkspaceShell, not a hand-rolled flex row', () => {
+    const app = file(generateProject(construct({ layout: 'split' })), 'src/App.tsx');
+    expect(app).toContain('<WorkspaceShell');
+    expect(app).toContain('end={');
+    expect(app).toContain('<slot name="pane" />');
     expect(app).not.toContain('PaneGroup');
   });
 
@@ -236,6 +244,24 @@ describe('layouts (Task 12)', () => {
       const html = file(generateProject(construct({ layout })), 'index.html');
       expect(html).not.toMatch(/bottom-right corner/);
     }
+  });
+});
+
+describe('slots (Task 13)', () => {
+  it('declared slots become named <slot> projection points', () => {
+    const app = file(generateProject(construct({ slots: ['header'] })), 'src/App.tsx');
+    expect(app).toContain('<slot name="header" />');
+  });
+
+  it('custom layout: minimal chrome, every slot present, spine intact', () => {
+    const app = file(
+      generateProject(construct({ layout: 'custom', slots: ['header', 'footer'] })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('<slot name="header" />');
+    expect(app).toContain('<slot name="footer" />');
+    expect(app).toContain('<PromptInput'); // the spine is implied, never dropped
+    expect(app).not.toContain('<Dock');
   });
 });
 

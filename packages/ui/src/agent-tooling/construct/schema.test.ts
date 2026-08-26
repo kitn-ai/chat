@@ -129,4 +129,22 @@ describe('validateConstruct', () => {
     });
     expect(out.ok).toBe(false);
   });
+
+  it('slots are named, kebab-case; custom layout requires them', () => {
+    expect(validateConstruct({ ...minimal, slots: ['header'] }).ok).toBe(true);
+    expect(validateConstruct({ ...minimal, slots: ['Header!'] }).ok).toBe(false);
+    expect(validateConstruct({ ...minimal, layout: 'custom' }).ok).toBe(false);
+    expect(validateConstruct({ ...minimal, layout: 'custom', slots: ['header', 'footer'] }).ok).toBe(true);
+  });
+
+  it('slots: rejects duplicates and an empty array', () => {
+    expect(validateConstruct({ ...minimal, slots: ['header', 'header'] }).ok).toBe(false);
+    expect(validateConstruct({ ...minimal, slots: [] }).ok).toBe(false);
+  });
+
+  it('slots: max 8', () => {
+    const nine = Array.from({ length: 9 }, (_, i) => `slot-${i}`);
+    expect(validateConstruct({ ...minimal, slots: nine }).ok).toBe(false);
+    expect(validateConstruct({ ...minimal, slots: nine.slice(0, 8) }).ok).toBe(true);
+  });
 });

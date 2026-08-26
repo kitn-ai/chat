@@ -39,7 +39,7 @@ export const ConstructSchema = z
       .string()
       .regex(TAG_RE, 'must be a valid custom-element tag: lowercase, with a hyphen (e.g. "acme-support")'),
     // Widened progressively: fullscreen/aside/split landed in Task 12, custom in Task 13.
-    layout: z.enum(['widget', 'fullscreen', 'aside', 'split']),
+    layout: z.enum(['widget', 'fullscreen', 'aside', 'split', 'custom']),
     provider: ProviderSchema,
     theme: z
       .object({
@@ -128,9 +128,45 @@ export const ConstructSchema = z
       )
       .min(1)
       .optional(),
+    /** Named `<slot>` projection points the emitted web component exposes —
+     *  the format's ONLY escape hatch (named slots, no code-in-JSON). Each
+     *  name must be a valid HTML slot-attribute value AND a legible
+     *  identifier: kebab-case, starting with a letter (the same shape as a
+     *  CSS custom-ident) — `slot name="Header!"` is rejected, not sanitized,
+     *  matching the format's loud-rejection discipline everywhere else.
+     *  1-8 entries, no duplicates (superRefine below — a regex alone can't
+     *  see across array entries). `layout: 'custom'` requires at least one
+     *  declared slot (superRefine below): `custom` IS the slots grain — a
+     *  `custom` layout with nothing to project into is not meaningfully
+     *  different from `fullscreen`. */
+    slots: z
+      .array(z.string().regex(/^[a-z][a-z0-9-]*$/, 'slot names must be kebab-case, starting with a letter'))
+      .min(1)
+      .max(8)
+      .optional(),
   })
   .strict()
   .superRefine((construct, ctx) => {
+    if (construct.slots) {
+      const seen = new Set<string>();
+      construct.slots.forEach((name, i) => {
+        if (seen.has(name)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['slots', i],
+            message: `duplicate slot name "${name}"`,
+          });
+        }
+        seen.add(name);
+      });
+    }
+    if (construct.layout === 'custom' && (!construct.slots || construct.slots.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['slots'],
+        message: '"custom" layout requires at least one declared slot — custom IS the slots grain',
+      });
+    }
     const history = construct.capabilities?.history;
     if (!history) return;
     if (history.persistence === 'endpoint' && !history.url) {

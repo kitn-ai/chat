@@ -383,6 +383,20 @@ function emitIndexHtml(c: Construct): string {
     c.layout === 'widget'
       ? `\n    <p style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); margin: 0; color: #94a3b8; font: 14px system-ui, sans-serif; text-align: center; max-width: 28rem; padding: 0 1rem;">This blank page stands in for your site. The chat widget is in the bottom-right corner.</p>`
       : '';
+  // Task 13: when slots are declared, project real demo content into each one
+  // in the copy's own <${c.name}> tag — so the preview shows the escape hatch
+  // WORKING (light-DOM children of a custom element project into its shadow
+  // <slot> natively) rather than a mystery about how to use it. Slot names are
+  // already schema-validated to `^[a-z][a-z0-9-]*$` (schema.ts) — no
+  // quote/backslash payload possible, so no HTML-escaping is needed here,
+  // unlike a free-text construct-authored field.
+  const slotDemo = (c.slots ?? [])
+    .map(
+      (name) =>
+        `\n      <div slot="${name}" style="padding: 0.5rem 1rem; font: 13px system-ui, sans-serif; color: #64748b;">Projected into slot "${name}" — replace with your own markup.</div>`,
+    )
+    .join('');
+  const body = slotDemo ? `\n    <${c.name}>${slotDemo}\n    </${c.name}>` : `\n    <${c.name}></${c.name}>`;
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -390,8 +404,7 @@ function emitIndexHtml(c: Construct): string {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${c.name} — construct preview</title>
   </head>
-  <body style="margin: 0;">${hint}
-    <${c.name}></${c.name}>
+  <body style="margin: 0;">${hint}${body}
     <script type="module" src="/src/element.tsx"></script>
   </body>
 </html>
@@ -482,6 +495,7 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
 // determinism test keeps holding.
 
 function emitApp(c: Construct): string {
+  if (c.layout === 'custom') return emitCustomApp(c);
   return `${emitSolidJsImport(c)}import { ChatThread, createKaiChat${emitLayoutImport(c)}${emitCardComponentImport(c)} } from '@kitn.ai/ui/solid';
 import type { AttachmentData${emitHistoryTypeImport(c)} } from '@kitn.ai/ui/solid';
 ${emitProviderImports(c)}
@@ -542,8 +556,86 @@ ${emitHistorySetup(c)}
 //     an opt-in affordance like the paperclip or a starter chip.
 export function App() {
   return (
-${emitLayoutOpen(c)}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitCardTypesProp(c)} />
+${emitLayoutOpen(c)}${emitSlots(c.slots, '      ')}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitCardTypesProp(c)} />
 ${emitLayoutClose(c)}  );
+}
+`;
+}
+
+/**
+ * `layout: 'custom'` — the escape hatch's own layout: minimal/no chrome, just
+ * the bare chat spine plus the declared `slots` positioned by the consumer.
+ * Composed from `Thread` (the message-list primitive, no composer/header/
+ * suggestions of its own — components/thread.tsx) + the `PromptInput`
+ * compound primitive, NOT `ChatThread`: `ChatThread` bundles its composer
+ * INSIDE itself (`DefaultPromptInput`, internal-only), which leaves no seam to
+ * splice a slot between the thread and the input the way this layout's
+ * placement rule needs. This is the one layout where hand-composing the spine
+ * is correct rather than a restatement — every other layout in this file
+ * wraps `ChatThread` precisely to avoid this hand-composition (see emitApp's
+ * doc comment above).
+ *
+ * Slot placement is a fixed, deterministic rule, spelled out in the emitted
+ * comment: the FIRST declared slot sits above the thread, every other
+ * declared slot sits below the composer, in declaration order. There is no
+ * vocabulary for a different arrangement (a `position` per slot, an
+ * interleaved grain) — reordering means ejecting and rearranging the JSX by
+ * hand, which this format's own rule already commits to (no code-in-JSON).
+ *
+ * Capability gating: only cards are wired here (`Thread` accepts `cardTypes`
+ * natively, same as `ChatThread`). starters/attachments/reasoning are NOT
+ * wired for `custom` in v1 — `Thread`/`PromptInput` don't carry the kit's own
+ * plumbing for those (they live inside `ChatThread`'s composer), and
+ * hand-rolling a second copy here is exactly the restatement this file
+ * avoids everywhere else. Decided loudly in the emitted comment below, not
+ * silently: this is the eject artifact, so a construct author who needs one
+ * of them on `custom` adds it directly to the plain Solid file they now own.
+ */
+function emitCustomApp(c: Construct): string {
+  const slots = c.slots ?? [];
+  const [headerSlot, ...restSlots] = slots;
+  const history = c.capabilities?.history;
+  const solidJsNames = ['createSignal', ...(history && history.persistence !== 'none' ? ['createEffect'] : [])];
+  return `import { ${solidJsNames.join(', ')} } from 'solid-js';
+import { Thread, PromptInput, PromptInputTextarea, PromptInputActions, Button, createKaiChat${emitCardComponentImport(c)} } from '@kitn.ai/ui/solid';
+import type { AttachmentData${emitHistoryTypeImport(c)} } from '@kitn.ai/ui/solid';
+${emitProviderImports(c)}
+${emitCardsImport(c)}
+
+${emitProviderSetup(c)}
+${emitHistorySetup(c)}
+
+// layout: custom — minimal chrome, no ChatThread/Dock/PaneGroup. The bare
+// spine (Thread + PromptInput) plus the declared slots, positioned by hand so
+// YOU own the surrounding DOM. Capabilities beyond the spine (starters,
+// attachments, reasoning display-mode) are NOT wired here in v1 — this file
+// is the eject artifact; add them the way ChatThread composes them
+// (components/chat-thread.tsx in the kit's own source) if this construct
+// needs them on a custom layout.
+export function App() {
+  const [value, setValue] = createSignal('');
+
+  const handleSubmit = () => {
+    const text = value();
+    if (!text.trim() || chat.loading()) return;
+    setValue('');
+    void submit({ value: text, attachments: [] });
+  };
+
+  return (
+    <div style={{ height: '100dvh', display: 'flex', 'flex-direction': 'column' }}>
+${emitSlots(headerSlot ? [headerSlot] : undefined, '      ')}      <Thread messages={chat.messages()} loading={chat.loading()} class="min-h-0 flex-1"${emitCardTypesProp(c)} />
+      {/* Slot placement rule: first declared slot above the thread, every other
+          declared slot below the composer, in declaration order. Reorder by
+          ejecting — this is the whole grain dimmer. */}
+      <PromptInput value={value()} onValueChange={setValue} isLoading={chat.loading()} onSubmit={handleSubmit}>
+        <PromptInputTextarea placeholder="Ask anything" />
+        <PromptInputActions>
+          <Button onClick={handleSubmit}>Send</Button>
+        </PromptInputActions>
+      </PromptInput>
+${emitSlots(restSlots, '      ')}    </div>
+  );
 }
 `;
 }
@@ -826,11 +918,28 @@ function emitLayoutImport(c: Construct): string {
     case 'widget':
       return ', Dock';
     case 'split':
-      return ', PaneGroup';
+      return ', WorkspaceShell';
     case 'fullscreen':
     case 'aside':
       return '';
+    case 'custom':
+      // Unreachable: emitApp special-cases 'custom' into emitCustomApp before
+      // this is ever called (custom's spine is Thread + PromptInput, not
+      // ChatThread, so there is no shared import line to splice onto). Kept
+      // only so this switch stays exhaustive over the widened layout enum.
+      return '';
   }
+}
+
+/** Declared `slots`, one `<slot name="...">` per entry in declaration order.
+ *  Slot names are already schema-validated to `^[a-z][a-z0-9-]*$` (schema.ts)
+ *  — a closed character set with no quote/backslash, so they're interpolated
+ *  directly into the attribute rather than JSON.stringify'd like the
+ *  free-text construct-authored fields (starters, theme.accent, provider.url)
+ *  elsewhere in this file. `indent` matches the surrounding JSX depth. */
+function emitSlots(slots: readonly string[] | undefined, indent: string): string {
+  if (!slots || slots.length === 0) return '';
+  return slots.map((name) => `${indent}<slot name="${name}" />\n`).join('');
 }
 
 /**
@@ -854,23 +963,29 @@ function emitLayoutImport(c: Construct): string {
  *    logical properties (`inset-inline-end`, `border-inline-start`) keep it
  *    correct under RTL and mobile viewport chrome the same way `100dvh` does
  *    for fullscreen.
- *  - `split`: composes the kit's real `PaneGroup` (recorded decision 2) for
- *    its FRAME (bordered, rounded, `bg-surface` — reads correctly in light
- *    and dark) rather than reinventing pane chrome. PaneGroup's actual
- *    contract (src/ui/pane-group.tsx) is an editor GROUP — a tab strip over
- *    ONE content area, not a simultaneous side-by-side splitter — so it's
- *    used here as a single always-active tab (no `onTabChange`/close: there
- *    is nothing to switch between yet) whose one body is a plain flex row
- *    holding the two SIMULTANEOUS panes the recorded decision actually asks
- *    for: chat in the start pane (60%), the construct's `slots` projected
- *    into the end pane (40%) via `<slot name="pane">` — Task 13's seam, not
- *    read by anything yet. PaneGroup supplies the frame; the two-column
- *    math is the plain flex row inside it, same "styled container where the
- *    kit has no component for THIS specific shape" reasoning as
- *    fullscreen/aside above.
+ *  - `split`: composes the kit's real `WorkspaceShell` (components/
+ *    workspace-shell.tsx) for its frame -- chat in `children` (the main
+ *    region), the end pane's `<slot name="pane">` seam projected via `end`.
+ *    Superseded from Task 12's `PaneGroup` (recorded decision 2): `PaneGroup`
+ *    is an editor GROUP contract (src/ui/pane-group.tsx) -- a tab strip over
+ *    ONE content area -- so getting two SIMULTANEOUS panes out of it meant a
+ *    single always-active tab whose one body was a hand-rolled flex row doing
+ *    the actual two-column math; the "kit component" was supplying a frame
+ *    the composition didn't use for its defining feature (a resizable split)
+ *    at all. `WorkspaceShell` already IS a two-region layout with a REAL
+ *    draggable splitter between them (it composes `ResizablePanelGroup`
+ *    internally) -- start/end aside width props, collapse, drawer-below are
+ *    all left at their defaults here (this construct wants exactly one fixed
+ *    end pane, not a full workspace chrome), so the split's math is the kit's
+ *    own, not a restatement.
  *
- * The exhaustive switch with no `default` is deliberate: TypeScript makes
- * Task 13's `custom` layout a compile error here, so it cannot be forgotten.
+ * `custom` is handled entirely by `emitCustomApp` instead (its spine is
+ * Thread + PromptInput composed by hand, not ChatThread, so there's no shared
+ * chrome to open/close here) — `emitApp` special-cases it before either of
+ * these is called. Both switches still carry a `case 'custom'` so they stay
+ * exhaustive over the widened layout enum: TypeScript is what caught this
+ * exact gap when Task 13 added the enum member, and a `default` would have
+ * hidden it again for the next one.
  */
 function emitLayoutOpen(c: Construct): string {
   switch (c.layout) {
@@ -881,7 +996,9 @@ function emitLayoutOpen(c: Construct): string {
     case 'aside':
       return `    <aside style={{ position: 'fixed', 'inset-block': '0', 'inset-inline-end': '0', width: '380px', display: 'flex', 'flex-direction': 'column', 'border-inline-start': '1px solid var(--kai-color-border)' }}>\n`;
     case 'split':
-      return `    <div style={{ height: '100dvh' }}>\n      <PaneGroup tabs={[{ id: 'panel', name: '${c.name}' }]} class="h-full">\n        <div style={{ display: 'flex', height: '100%' }}>\n          <div style={{ flex: '1 1 60%', display: 'flex', 'flex-direction': 'column', 'min-width': '0' }}>\n`;
+      return `    <div style={{ height: '100dvh' }}>\n      <WorkspaceShell class="h-full" end={\n        <div style={{ height: '100%', overflow: 'auto' }}>\n          <slot name="pane" />\n        </div>\n      }>\n`;
+    case 'custom':
+      return ''; // unreachable — see the block comment above
   }
 }
 
@@ -894,9 +1011,16 @@ function emitLayoutClose(c: Construct): string {
     case 'aside':
       return `    </aside>\n`;
     case 'split':
-      // The end pane is this layout's own projection point for Task 13's
-      // `slots` field — nothing reads it yet.
-      return `          </div>\n          <div style={{ flex: '1 1 40%', 'min-width': '0', 'border-inline-start': '1px solid var(--kai-color-border)' }}>\n            <slot name="pane" />\n          </div>\n        </div>\n      </PaneGroup>\n    </div>\n`;
+      // The end pane (WorkspaceShell's `end`, opened above) is a fixed,
+      // always-present projection point for `split` specifically (Task 12) —
+      // orthogonal to Task 13's generic `slots` field, which still emits
+      // above the chat pane the same as every other non-custom layout (see
+      // emitApp). WorkspaceShell supplies its own real draggable splitter
+      // between the two, so there is no hand-rolled two-column math left to
+      // close here.
+      return `      </WorkspaceShell>\n    </div>\n`;
+    case 'custom':
+      return ''; // unreachable — see the block comment above
   }
 }
 
