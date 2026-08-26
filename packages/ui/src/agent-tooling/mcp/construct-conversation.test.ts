@@ -18,10 +18,18 @@ describe('four-sentence conversational construction', () => {
     name: 'acme-support',
     layout: 'widget',
     provider: { mode: 'mock' },
+    userId: 'user_123',
+    header: { title: 'Acme Support' },
+    widget: {
+      position: 'top-start',
+      launcherIcon: 'https://example.com/logo.png',
+      defaultOpen: true,
+    },
     capabilities: {
       attachments: { accept: ['image/*', 'application/pdf'] },
       history: { persistence: 'local' },
       starters: ["Where's my order?", 'Request a refund'],
+      reasoningOpen: true,
     },
   };
 
@@ -30,12 +38,16 @@ describe('four-sentence conversational construction', () => {
     const t1 = await constructTool.handler({ intent: 'a support widget for our site' });
     expect(text(t1)).toContain('"layout": "widget"');
 
-    // Turns 2-4: the agent grows the SAME file, full construct each turn.
+    // Turns 2-6: the agent grows the SAME file, full construct each turn —
+    // capabilities first, then the owner asks for widget chrome, identity
+    // and reasoning disclosure on top.
     const turns = [
-      { ...finalConstruct, capabilities: { attachments: finalConstruct.capabilities.attachments } },
-      { ...finalConstruct, capabilities: { attachments: finalConstruct.capabilities.attachments, history: finalConstruct.capabilities.history } },
+      { ...finalConstruct, userId: undefined, header: undefined, widget: undefined, capabilities: { attachments: finalConstruct.capabilities.attachments, reasoningOpen: undefined } },
+      { ...finalConstruct, userId: undefined, header: undefined, widget: undefined, capabilities: { attachments: finalConstruct.capabilities.attachments, history: finalConstruct.capabilities.history, reasoningOpen: undefined } },
+      { ...finalConstruct, userId: undefined, header: undefined, widget: undefined, capabilities: { ...finalConstruct.capabilities, reasoningOpen: undefined } },
+      { ...finalConstruct, header: undefined, widget: undefined, capabilities: { ...finalConstruct.capabilities, reasoningOpen: undefined } },
       finalConstruct,
-    ];
+    ].map((c) => JSON.parse(JSON.stringify(c)));
     for (const construct of turns) {
       expect(text(await constructTool.handler({ construct }))).toContain('VALID');
     }
@@ -73,7 +85,20 @@ describe('four-sentence conversational construction', () => {
     // `suggestions` prop, never a `PromptSuggestion` component/string. Markers
     // below assert the real wiring signals instead: `attach={true}` for the
     // attachments round-trip and `suggestions={` for starters.
-    for (const marker of ['attach={true}', 'localStorage', 'suggestions={', '<Dock']) {
+    for (const marker of [
+      'attach={true}',
+      'localStorage',
+      'suggestions={',
+      '<Dock',
+      // userId threads into the localStorage key (mock provider + local
+      // history emits no fetch, so no x-kai-user-id header here).
+      `kai:${finalConstruct.name}:${finalConstruct.userId}:thread`,
+      'reasoningOpen={true}',
+      'position="top-start"',
+      'defaultOpen={true}',
+      JSON.stringify(finalConstruct.widget.launcherIcon),
+      JSON.stringify(finalConstruct.header.title),
+    ]) {
       expect(app).toContain(marker);
     }
   });
