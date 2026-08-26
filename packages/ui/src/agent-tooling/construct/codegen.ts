@@ -1006,10 +1006,18 @@ function emitDockLauncher(c: Construct): string {
   return ` launcher={<img src={${JSON.stringify(w.launcherIcon)}} alt="" style={{ width: '24px', height: '24px', 'border-radius': '9999px' }} />}`;
 }
 
+/** widget.defaultOpen -> Dock's own `defaultOpen` prop. Only `true` costs a
+ *  byte — `false`/absent matches Dock's own default (closed), same
+ *  off-by-default convention as every other capability in this file. */
+function emitDockDefaultOpen(c: Construct): string {
+  const w = c.layout === 'widget' ? c.widget : undefined;
+  return w?.defaultOpen === true ? ' defaultOpen={true}' : '';
+}
+
 function emitLayoutOpen(c: Construct): string {
   switch (c.layout) {
     case 'widget':
-      return `    <Dock label="${c.name}"${emitDockPosition(c)}${emitDockLauncher(c)}>\n`;
+      return `    <Dock label="${c.name}"${emitDockPosition(c)}${emitDockLauncher(c)}${emitDockDefaultOpen(c)}>\n`;
     case 'fullscreen':
       return `    <div style={{ height: '100dvh', display: 'flex', 'flex-direction': 'column' }}>\n`;
     case 'aside':

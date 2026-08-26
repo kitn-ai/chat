@@ -198,4 +198,12 @@ describe('widget (layout-scoped FAB chrome)', () => {
       }).ok,
     ).toBe(true);
   });
+
+  it('accepts defaultOpen alongside position/launcherIcon', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+      widget: { defaultOpen: true },
+    });
+    expect(out.ok).toBe(true);
+  });
 });

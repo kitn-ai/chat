@@ -194,6 +194,9 @@
         "launcherIcon": {
           "type": "string",
           "minLength": 1
+        },
+        "defaultOpen": {
+          "type": "boolean"
         }
       },
       "additionalProperties": false

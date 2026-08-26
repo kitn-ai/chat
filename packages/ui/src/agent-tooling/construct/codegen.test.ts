@@ -261,6 +261,24 @@ describe('widget chrome (Task 19a)', () => {
     const app = file(generateProject(construct({ layout: 'fullscreen' })), 'src/App.tsx');
     expect(app).not.toContain('position=');
   });
+
+  it('widget.defaultOpen true emits defaultOpen={true} on Dock', () => {
+    const app = file(
+      generateProject(construct({ widget: { defaultOpen: true } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('<Dock label="acme-support" defaultOpen={true}>');
+  });
+
+  it('widget.defaultOpen false or absent: no defaultOpen prop at all (off-by-default gating)', () => {
+    const appFalse = file(
+      generateProject(construct({ widget: { defaultOpen: false } })),
+      'src/App.tsx',
+    );
+    expect(appFalse).not.toContain('defaultOpen');
+    const appAbsent = file(generateProject(construct()), 'src/App.tsx');
+    expect(appAbsent).not.toContain('defaultOpen');
+  });
 });
 
 describe('layouts (Task 12)', () => {

@@ -169,6 +169,9 @@ export const ConstructSchema = z
          *  built-in chat-bubble icon. Construct-authored/untrusted text, like
          *  theme.accent and provider.url — escaped the same way at its one emit site. */
         launcherIcon: z.string().min(1).optional(),
+        /** Seed Dock's open state at mount. Uncontrolled — never steals focus (Dock's
+         *  own focus contract, dock.tsx). Omitted keeps Dock's own default (closed). */
+        defaultOpen: z.boolean().optional(),
       })
       .strict()
       .optional(),
