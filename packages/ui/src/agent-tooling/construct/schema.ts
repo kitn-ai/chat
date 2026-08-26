@@ -68,11 +68,47 @@ export const ConstructSchema = z
           })
           .strict()
           .optional(),
+        /** Conversation persistence. `none` (default, nothing emitted): the
+         *  thread lives only in memory for the tab's lifetime. `local`:
+         *  persisted to this browser's localStorage, keyed by the construct's
+         *  tag — a mechanism decision (WHERE); what to retain and for how
+         *  long stays an app decision (component-scope-boundary), so no
+         *  retention count/quota lands here. `endpoint`: the CONSUMER's own
+         *  thread route (GET returns ChatMessage[], PUT stores them) —
+         *  requires `url`; `url` is rejected for any other persistence
+         *  (superRefine below, both directions loud). */
+        history: z
+          .object({
+            persistence: z.enum(['none', 'local', 'endpoint']),
+            /** endpoint persistence only: the CONSUMER's thread routes (GET returns
+             *  ChatMessage[], PUT stores them). Refined below. */
+            url: z.string().min(1).optional(),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((construct, ctx) => {
+    const history = construct.capabilities?.history;
+    if (!history) return;
+    if (history.persistence === 'endpoint' && !history.url) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['capabilities', 'history', 'url'],
+        message: '"endpoint" persistence requires a url',
+      });
+    }
+    if (history.persistence !== 'endpoint' && history.url !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['capabilities', 'history', 'url'],
+        message: 'url is only valid with "endpoint" persistence',
+      });
+    }
+  });
 
 export type Construct = z.infer<typeof ConstructSchema>;
 

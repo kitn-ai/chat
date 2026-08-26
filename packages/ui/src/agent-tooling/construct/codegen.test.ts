@@ -297,6 +297,48 @@ describe('capabilities.attachments', () => {
   });
 });
 
+describe('capabilities.history', () => {
+  it('history local: load-on-mount + persist-on-change via localStorage, keyed by tag', () => {
+    const app = file(
+      generateProject(construct({ capabilities: { history: { persistence: 'local' } } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('localStorage');
+    // JSON.stringify'd (double-quoted), same convention as the endpoint url
+    // below and provider.url — not the brief's hand-typed single-quote form.
+    expect(app).toContain(JSON.stringify('kai:acme-support:thread'));
+    expect(app).toContain('createEffect');
+  });
+
+  it('history endpoint: GET on mount, PUT on change — consumer owns the server', () => {
+    // url is JSON.stringify'd at the interpolation site, same convention as
+    // provider.url (see "endpoint provider" below) — double-quoted, not the
+    // brief's hand-typed single-quote form.
+    const app = file(
+      generateProject(
+        construct({ capabilities: { history: { persistence: 'endpoint', url: '/api/thread' } } }),
+      ),
+      'src/App.tsx',
+    );
+    expect(app).toContain(`fetch(${JSON.stringify('/api/thread')})`);
+    expect(app).toContain("method: 'PUT'");
+  });
+
+  it('history none / absent: no persistence code at all', () => {
+    expect(file(generateProject(construct()), 'src/App.tsx')).not.toContain('localStorage');
+  });
+
+  it('a hostile endpoint url cannot break out of the emitted string literal (JSON.stringify, not string concatenation)', () => {
+    const hostile = "'); alert(1); ('";
+    const app = file(
+      generateProject(construct({ capabilities: { history: { persistence: 'endpoint', url: hostile } } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain(`fetch(${JSON.stringify(hostile)})`);
+    expect(app).not.toContain(`fetch('${hostile}')`);
+  });
+});
+
 describe('accent contrast (paired --kai-color-primary-foreground)', () => {
   it('resolveContrastForeground: a light accent (yellow) picks black; #e91e63 picks white', () => {
     // Worked numbers (see the doc comment on resolveContrastForeground for

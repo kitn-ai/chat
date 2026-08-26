@@ -343,11 +343,12 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
 // determinism test keeps holding.
 
 function emitApp(c: Construct): string {
-  return `import { ChatThread, Dock, createKaiChat } from '@kitn.ai/ui/solid';
-import type { AttachmentData } from '@kitn.ai/ui/solid';
+  return `${emitSolidJsImport(c)}import { ChatThread, Dock, createKaiChat } from '@kitn.ai/ui/solid';
+import type { AttachmentData${emitHistoryTypeImport(c)} } from '@kitn.ai/ui/solid';
 ${emitProviderImports(c)}
 
 ${emitProviderSetup(c)}
+${emitHistorySetup(c)}
 
 // ChatThread is the kit's own MOST-INTEGRATED chat surface — the same
 // composition <kai-chat>'s facade renders (src/elements/chat.tsx). It owns
@@ -426,6 +427,100 @@ function emitStartersProp(c: Construct): string {
   const starters = c.capabilities?.starters;
   if (!starters || starters.length === 0) return '';
   return ` suggestions={${JSON.stringify(starters)}}`;
+}
+
+/** capabilities.history -> whether the App module needs `createEffect`
+ *  (both persisted variants react to `chat.messages()` changing; `none`/
+ *  absent needs no extra Solid import at all, matching the off-by-default
+ *  gating everywhere else in this file). */
+function emitSolidJsImport(c: Construct): string {
+  const history = c.capabilities?.history;
+  if (!history || history.persistence === 'none') return '';
+  return `import { createEffect } from 'solid-js';\n`;
+}
+
+/** capabilities.history -> whether the AttachmentData type import also needs
+ *  ChatMessage (only the persisted variants read/write full ChatMessage[]
+ *  arrays). */
+function emitHistoryTypeImport(c: Construct): string {
+  const history = c.capabilities?.history;
+  if (!history || history.persistence === 'none') return '';
+  // The enclosing statement is already `import type { ... }` (AttachmentData),
+  // so this must NOT repeat the `type` modifier inside the braces — `import
+  // type { AttachmentData, type ChatMessage }` is a TS syntax error.
+  return ', ChatMessage';
+}
+
+/** capabilities.history -> the persistence block spliced after
+ *  createKaiChat/submit (emitProviderSetup). `none`/absent emits nothing at
+ *  all — the format rule (undeclared capability's affordance is OFF).
+ *
+ *  `local`: keyed by the construct's own tag (one thread per construct, no
+ *  cross-construct collision) — restoring on mount MUST hand createKaiChat's
+ *  setMessages a NEW array reference (the kit's reactivity contract; see
+ *  CLAUDE.md), which the updater-returns-parsed-array form does for free.
+ *  localStorage access is wrapped: it can throw in private mode or over
+ *  quota, and a corrupt/foreign value under the key must not white-screen —
+ *  neither failure is guessed at silently, both fall back to running
+ *  in-memory (decide loudly: see the comment emitted alongside).
+ *  Retention/eviction (how much, how long) is deliberately absent — an
+ *  application-layer decision (component-scope-boundary), not this
+ *  construct's to make.
+ *
+ *  `endpoint`: the CONSUMER's own thread route — GET on mount (kit parses
+ *  the response as ChatMessage[]; a non-OK response falls back to an empty
+ *  thread rather than throwing), fire-and-forget PUT on every change. The
+ *  `hydrated` flag guards against the mount-load's own setMessages call
+ *  immediately re-triggering a PUT that writes back exactly what was just
+ *  read. url is construct-authored/untrusted like theme.accent and
+ *  provider.url, so it is JSON.stringify'd at both fetch call sites — never
+ *  string-concatenated (see the endpoint-provider comment on this same class
+ *  of bug). */
+function emitHistorySetup(c: Construct): string {
+  const history = c.capabilities?.history;
+  if (!history || history.persistence === 'none') return '';
+
+  if (history.persistence === 'local') {
+    const key = JSON.stringify(`kai:${c.name}:thread`);
+    return `
+// History: persisted locally in this browser, keyed by the element tag. What to
+// retain and for how long is an app decision — clear the key to reset.
+const THREAD_KEY = ${key};
+try {
+  const saved = localStorage.getItem(THREAD_KEY);
+  if (saved) chat.setMessages(() => JSON.parse(saved) as ChatMessage[]);
+} catch { /* storage unavailable: run in-memory */ }
+createEffect(() => {
+  try {
+    localStorage.setItem(THREAD_KEY, JSON.stringify(chat.messages()));
+  } catch { /* storage unavailable: run in-memory */ }
+});
+`;
+  }
+
+  const url = JSON.stringify(history.url);
+  return `
+// History: persisted to your endpoint (GET on mount, PUT on every change) —
+// the kit PARSES, this app FETCHES; your route owns the storage and what to
+// retain and for how long. \`hydrated\` guards the mount-load from immediately
+// PUTting back what it just loaded.
+let hydrated = false;
+fetch(${url})
+  .then((r) => (r.ok ? (r.json() as Promise<ChatMessage[]>) : []))
+  .then((saved) => {
+    chat.setMessages(() => saved);
+    hydrated = true;
+  });
+createEffect(() => {
+  const snapshot = chat.messages();
+  if (!hydrated) return;
+  void fetch(${url}, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(snapshot),
+  });
+});
+`;
 }
 
 function emitProviderImports(c: Construct): string {

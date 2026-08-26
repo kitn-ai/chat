@@ -72,4 +72,12 @@ describe('validateConstruct', () => {
     ).toBe(true);
     expect(validateConstruct({ ...minimal, capabilities: { attachments: {} } }).ok).toBe(false);
   });
+
+  it('history: endpoint persistence requires a url, and url requires endpoint', () => {
+    const cap = (history: unknown) => validateConstruct({ ...minimal, capabilities: { history } });
+    expect(cap({ persistence: 'local' }).ok).toBe(true);
+    expect(cap({ persistence: 'endpoint', url: '/api/thread' }).ok).toBe(true);
+    expect(cap({ persistence: 'endpoint' }).ok).toBe(false);
+    expect(cap({ persistence: 'local', url: '/api/thread' }).ok).toBe(false);
+  });
 });
