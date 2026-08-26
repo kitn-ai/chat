@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
-import { ConstructSchema } from './schema';
+import { CONSTRUCT_SCHEMA_URL, ConstructSchema } from './schema';
 
 // The checked-in artifact must equal what the Zod source produces RIGHT NOW.
 // gen-construct-schema.mjs is the writer; this test is the reader-side pin so
@@ -14,7 +14,7 @@ describe('construct.v1.schema.json', () => {
       readFileSync(resolve(__dirname, 'construct.v1.schema.json'), 'utf8'),
     );
     expect(artifact).toEqual({
-      $id: 'https://ui.kitn.ai/schemas/construct/v1.json',
+      $id: CONSTRUCT_SCHEMA_URL,
       ...(z.toJSONSchema(ConstructSchema) as Record<string, unknown>),
     });
   });

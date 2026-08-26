@@ -42,14 +42,16 @@ async function importTs(entry) {
 
 async function loadSchemaModule() {
   const { z } = await import('zod');
-  const { ConstructSchema } = await importTs(join(PKG_ROOT, 'src/agent-tooling/construct/schema.ts'));
-  return { z, ConstructSchema };
+  const { ConstructSchema, CONSTRUCT_SCHEMA_URL } = await importTs(
+    join(PKG_ROOT, 'src/agent-tooling/construct/schema.ts'),
+  );
+  return { z, ConstructSchema, CONSTRUCT_SCHEMA_URL };
 }
 
-const { z, ConstructSchema } = await loadSchemaModule();
+const { z, ConstructSchema, CONSTRUCT_SCHEMA_URL } = await loadSchemaModule();
 
 const schema = {
-  $id: 'https://ui.kitn.ai/schemas/construct/v1.json',
+  $id: CONSTRUCT_SCHEMA_URL,
   ...z.toJSONSchema(ConstructSchema),
 };
 const body = `${JSON.stringify(schema, null, 2)}\n`;
