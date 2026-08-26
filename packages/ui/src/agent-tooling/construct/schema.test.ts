@@ -174,4 +174,28 @@ describe('widget (layout-scoped FAB chrome)', () => {
     });
     expect(out.ok).toBe(false);
   });
+
+  it('rejects a javascript: launcherIcon (same isSafeUrl policy as markdown/artifact image sinks)', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+      widget: { launcherIcon: 'javascript:alert(1)' },
+    });
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.problems.some((p) => p.path === 'widget.launcherIcon')).toBe(true);
+  });
+
+  it('accepts an https launcherIcon and a relative one (isSafeUrl resolves relative against a base)', () => {
+    expect(
+      validateConstruct({
+        name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+        widget: { launcherIcon: 'https://example.com/logo.png' },
+      }).ok,
+    ).toBe(true);
+    expect(
+      validateConstruct({
+        name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+        widget: { launcherIcon: '/logo.png' },
+      }).ok,
+    ).toBe(true);
+  });
 });

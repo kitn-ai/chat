@@ -13,6 +13,19 @@
  * and a wire format, nothing else.
  */
 import { z } from 'zod';
+// REPO-INTERNAL ONLY: isSafeUrl is not reachable from the published package
+// (see agent-tooling/catalog/invariants.ts's own note on this), so the
+// emitted App.tsx cannot import it — the sink codegen writes to
+// (launcherIcon -> <img src>) has no guard it can reach at runtime. Enforcing
+// the SAME policy here, at authoring time, is the reachable equivalent: a
+// hostile launcherIcon is rejected before a construct ever validates, so
+// codegen never has an unsafe value to emit. Reuses the kit's one existing
+// URL-sink policy (markdown.tsx's image renderer, artifact.tsx) rather than
+// authoring a second one. Imported from url-scheme-policy.ts, NOT
+// card-routing.ts: this file compiles under tsconfig.mcp.json's Node-only, no-
+// DOM-lib pass (transitively, via mcp/tools/construct.ts), and card-routing.ts
+// pulls in HTMLElement/window/CustomEvent that pass can't see.
+import { isSafeUrl } from '../../primitives/url-scheme-policy';
 
 export const CONSTRUCT_SCHEMA_URL = 'https://ui.kitn.ai/schemas/construct/v1.json';
 
@@ -187,6 +200,13 @@ export const ConstructSchema = z
         code: z.ZodIssueCode.custom,
         path: ['widget'],
         message: '"widget" is only valid on layout: "widget"',
+      });
+    }
+    if (construct.widget?.launcherIcon && !isSafeUrl(construct.widget.launcherIcon)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['widget', 'launcherIcon'],
+        message: 'launcherIcon must be an http(s)/mailto or relative URL — no javascript:/data: schemes',
       });
     }
     const history = construct.capabilities?.history;
