@@ -112,8 +112,38 @@ const ALLOWED_LARGE_FILES = new Map([
  * dedupe; the ceiling reclaims the saving with ~0.24 MiB headroom, chosen so
  * the dist copy quietly coming back (~0.29 MiB with its llms.txt sibling)
  * trips this rule rather than hiding in slack.
+ *
+ * 13.15 -> 13.5 MiB (2026-08-26, the five form-control elements): tripped at
+ * 13.29 MiB, audited against the pack listing before raising. Dead weight was
+ * looked for FIRST and none was found -- no source maps, no stories, no tests,
+ * no .mdx, no fixtures, no stale hashed chunks orphaned in dist (checked by
+ * walking every hashed chunk name against the rest of dist), llms-full.txt
+ * still a single root copy, and the two largest unexported files are both
+ * reachable: dist/custom-elements.json through the `customElements` field and
+ * dist/mcp.es.js through the `kai-mcp` bin.
+ *
+ * The +0.38 MiB over main is the new shipped surface and nothing else:
+ * kai-checkbox, kai-radio-group, kai-checkbox-group, kai-slider and
+ * kai-select, taking the element count from 84 to 89. Measured split --
+ * +169 KiB of packed source (element-meta.json +20 KiB,
+ * element-types.d.ts +18 KiB, llms-full.txt +12 KiB,
+ * frameworks/react/index.tsx +9 KiB, the five src/ui primitives and five
+ * src/elements facades ~64 KiB, theme.css + elements/styles.css +11 KiB for
+ * the control tokens, the rest doc comments and the curated icon additions),
+ * and ~220 KiB of dist, of which only ~30 KiB is new per-element chunks and
+ * d.ts -- the remainder is the same element metadata re-inlined by the eight
+ * bundles that embed it (register-impl, index, index.server, both solid
+ * builds, mcp.es.js, custom-elements.json, elements.d.ts).
+ *
+ * That works out at ~78 KiB of tarball per element, all in. The 0.21 MiB of
+ * headroom is therefore about three more elements, and it is deliberately
+ * NOT more: the ceiling above was tuned so the dist llms-full copy quietly
+ * coming back (~0.29 MiB with its llms.txt sibling) trips this rule, and any
+ * headroom past ~0.29 MiB would hide exactly that regression again. When the
+ * next batch of elements trips this, raise it the same way -- attribute the
+ * delta first, keep the headroom under 0.29 MiB.
  */
-const MAX_UNPACKED_BYTES = 13.15 * 1024 * 1024;
+const MAX_UNPACKED_BYTES = 13.5 * 1024 * 1024;
 
 const kib = (n) => `${(n / 1024).toFixed(1)} KiB`;
 const mib = (n) => `${(n / 1024 / 1024).toFixed(2)} MiB`;
