@@ -178,12 +178,24 @@ const DOCK_CSS = `
    hides the launcher while the panel is open at that width — same query drives both,
    CSS-only, no JS viewport logic. Absolutely positioned against the panel, which is
    the panel's own containing block once the narrow-viewport rule below sets it to
-   position: fixed. */
+   position: fixed.
+
+   The inset is a CONSUMER-OVERRIDABLE TOKEN, same idiom as every other geometry
+   value in this file (--kai-dock-width and friends). The dock is content-agnostic —
+   it never reads what is slotted into the panel — so it cannot know whether that
+   content renders its own trailing controls (a ChatThread header-end slot with
+   share/settings icons, say) in the same top-right corner. Two things follow: (1)
+   the mobile block below reserves a BAND of the panel's own padding above whatever
+   is slotted, sized to this button's own footprint, so out of the box nothing
+   slotted renders under the X regardless of what it is — a general fix, not a
+   ChatThread-shaped one. (2) a consumer who wants the X to sit IN FRONT of their
+   own top-right content instead of above it (overlapping it on purpose, e.g. a
+   single small badge) can still pull the inset in via these tokens. */
 [data-kai-dock] [part="close"] {
   display: none;
   position: absolute;
-  inset-block-start: 0.75rem;
-  inset-inline-end: 0.75rem;
+  inset-block-start: var(--kai-dock-close-inset-block, 0.75rem);
+  inset-inline-end: var(--kai-dock-close-inset-inline, 0.75rem);
   z-index: 1;
   align-items: center;
   justify-content: center;
@@ -270,13 +282,26 @@ const DOCK_CSS = `
     max-block-size: none;
     border: 0;
     border-radius: 0;
+    /* Reserve a band for the close button ABOVE whatever is slotted, rather than
+       overlaying it on top of the panel's own content — verified against a real
+       collision: a ChatThread header-end slot (a couple of trailing icon
+       buttons, the documented "share, settings, ..." case) renders in this exact
+       corner, and without this the X painted directly over it. The band is
+       DERIVED from the button's own inset + size tokens, not a second hand-typed
+       number, and it works for ANY slotted content because it reserves space
+       structurally instead of assuming what is at that corner — the dock still
+       never reads what it is holding. Only the block-start side needs it: the
+       close button is the only thing this rule adds to the panel's top-right. */
+    padding-block-start: calc(2 * var(--kai-dock-close-inset-block, 0.75rem) + 2.25rem);
   }
 
   /* The full-bleed panel gets its own close affordance instead of relying on the
      launcher, which is hidden below while the panel is open at this width — a FAB
      floating over a full-bleed panel with no other visible close route is exactly
      what the owner flagged. Escape and the X both still work; the launcher comes
-     back the instant the panel closes because data-expanded is gone by then. */
+     back the instant the panel closes because data-expanded is gone by then.
+     Absolutely positioned, so the padding-block-start above (a content-box
+     concern) does not shift IT — only the in-flow slotted content. */
   [data-kai-dock] [part="close"] { display: inline-flex; }
   [data-kai-dock]:has([part="panel"][data-expanded]) [part="launcher"] { display: none; }
 }

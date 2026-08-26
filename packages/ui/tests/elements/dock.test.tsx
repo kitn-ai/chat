@@ -1066,6 +1066,50 @@ describe('mobile close X (<=480px full-bleed)', () => {
     expect(baseRule).toMatch(/position:\s*absolute/);
   });
 
+  // -------------------------------------------------------------------------
+  // Fix round 1 (post-review): the X is an ABSOLUTE overlay, and the dock is
+  // content-agnostic — it never reads what is slotted into the panel. Verified by
+  // rendering a real ChatThread `header-end` slot (a couple of trailing icon
+  // buttons, the documented "share, settings, ..." case) at a 375px viewport in
+  // Playwright: BEFORE this fix the X painted directly over both icons (`anyOverlap:
+  // true`, the settings icon fully hidden under the X). The fix has two parts, both
+  // covered here structurally (jsdom evaluates neither media queries nor `:has()`):
+  // consumer-overridable inset tokens for the rare case the X should overlap
+  // deliberately, PLUS a reserved padding band — derived from those SAME tokens, not
+  // a second hand-typed number — so nothing slotted renders under the X by default,
+  // regardless of what the content is. Re-rendered the same header-end fixture after
+  // the fix: `anyOverlap: false`, both icons now sit below the reserved band.
+  // -------------------------------------------------------------------------
+
+  test('CSS: the close button\'s inset is a consumer-overridable token, not a hardcoded value', async () => {
+    const el = await mount();
+    const css = Array.from(shadow(el).querySelectorAll('style')).map((s) => s.textContent).join('\n');
+    const baseRule = css.match(/\[data-kai-dock\] \[part="close"\] \{([^}]*)\}/)?.[1] ?? '';
+    expect(baseRule, 'the base [part="close"] rule must be found').not.toBe('');
+    expect(baseRule, 'inset-block-start must resolve through a --kai-dock-close-inset-block token').toMatch(
+      /inset-block-start:\s*var\(--kai-dock-close-inset-block,\s*0\.75rem\)/,
+    );
+    expect(baseRule, 'inset-inline-end must resolve through a --kai-dock-close-inset-inline token').toMatch(
+      /inset-inline-end:\s*var\(--kai-dock-close-inset-inline,\s*0\.75rem\)/,
+    );
+  });
+
+  test('CSS: the <=480px block reserves a top padding band for the close button, DERIVED from its own tokens', async () => {
+    const el = await mount();
+    const css = Array.from(shadow(el).querySelectorAll('style')).map((s) => s.textContent).join('\n');
+    const mediaBlock = css.match(/@media \(max-width: 480px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
+    expect(mediaBlock, 'the <=480px block must be found').not.toBe('');
+    // The panel rule (not the close button's own rule) must carry the reserved
+    // band, built from the SAME --kai-dock-close-inset-block token and the button's
+    // own 2.25rem footprint — a copy of the fact, not a second number invented for
+    // this purpose alone.
+    const panelRule = mediaBlock.match(/\[data-kai-dock\] \[part="panel"\] \{([\s\S]*?)\}/)?.[1] ?? '';
+    expect(panelRule, 'the mobile panel rule must be found').not.toBe('');
+    expect(panelRule, 'padding-block-start must be derived from --kai-dock-close-inset-block, not a bare number').toMatch(
+      /padding-block-start:\s*calc\(2 \* var\(--kai-dock-close-inset-block,\s*0\.75rem\)\s*\+\s*2\.25rem\)/,
+    );
+  });
+
   test('CSS: the <=480px block switches the close part on and hides the launcher only while the panel is expanded', async () => {
     const el = await mount();
     const css = Array.from(shadow(el).querySelectorAll('style')).map((s) => s.textContent).join('\n');
