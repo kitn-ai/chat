@@ -1,17 +1,13 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { For } from 'solid-js';
-import { renderIcon } from './icon';
+import { renderIcon, ICON_NAMES } from './icon';
 import { componentDescription } from '../stories/docs/element-controls';
 
-/** The curated set, keyed exactly as in `NAMED_ICONS` (src/ui/icon.tsx). */
-const ICON_NAMES = [
-  'plus', 'paperclip', 'github', 'globe', 'sparkles', 'settings',
-  'file-text', 'folder', 'monitor', 'message-circle', 'message-square', 'search',
-  'mic', 'audio-lines', 'x', 'chevron-down', 'pencil', 'book-open', 'code', 'smile',
-  'share', 'arrow-left', 'more-horizontal', 'chevron-left',
-  'home', 'clock', 'lock', 'box', 'briefcase', 'panel-left', 'circle',
-  'sliders-horizontal', 'workflow', 'square-pen',
-];
+// ICON_NAMES is DERIVED from NAMED_ICONS (src/ui/icon.tsx). It used to be a
+// hand-typed copy here, and it had already drifted: thirteen registered names
+// (the git, theme and list-action glyphs) were missing from the control and the
+// gallery, so icons that shipped were invisible to anyone browsing for them.
+const NAMES = [...ICON_NAMES];
 
 type IconArgs = { name: string; size: 'sm' | 'md' | 'lg' };
 const SIZE: Record<string, string> = { sm: 'size-4', md: 'size-5', lg: 'size-7' };
@@ -30,7 +26,7 @@ const meta = {
   argTypes: {
     name: {
       control: 'select',
-      options: ICON_NAMES,
+      options: NAMES,
       description: 'A curated icon name from `NAMED_ICONS`.',
     },
     size: {
@@ -44,7 +40,17 @@ const meta = {
     name: 'sparkles',
     size: 'md',
   },
-  render: (args) => renderIcon(args.name, { class: `${SIZE[args.size] ?? 'size-5'} text-foreground` }),
+  // The call MUST sit inside JSX. `renderIcon` is a plain function that reads
+  // its argument eagerly; only a JSX expression container gets compiled into a
+  // tracked `insert`, and the Storybook Solid renderer runs the story body once
+  // (untracked) and then relies on those inserts. Returning the call directly is
+  // what made the `name` control need a "reload story" to take effect. Pinned by
+  // icon.test.tsx.
+  render: (args) => (
+    <span class="inline-flex text-foreground">
+      {renderIcon(args.name, { class: `${SIZE[args.size] ?? 'size-5'} text-foreground` })}
+    </span>
+  ),
 } satisfies Meta<IconArgs>;
 
 export default meta;
@@ -66,7 +72,7 @@ export const Playground: Story = {
 export const Curated: Story = {
   render: () => (
     <div class="grid grid-cols-3 gap-3 sm:grid-cols-5">
-      <For each={ICON_NAMES}>
+      <For each={NAMES}>
         {(name) => (
           <div class="flex flex-col items-center gap-2 rounded-lg border border-border p-3 text-center">
             {renderIcon(name, { class: 'size-5 text-foreground' })}
