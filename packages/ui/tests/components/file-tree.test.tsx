@@ -130,6 +130,20 @@ describe('<FileTree>', () => {
       render(() => <FileTree {...({} as unknown as { files: FileTreeFile[] })} />),
     ).toThrow();
   });
+
+  // Decorative folder icon, not a control (the row is the click target) — used
+  // to carry `text-primary`, the BRAND token. Cheap jsdom pin on the class list
+  // only; the real computed-color proof lives in
+  // tests/e2e/content-brand-bleed.spec.ts.
+  test('folder icon never emits text-primary; uses text-foreground/80', () => {
+    const { getAllByRole } = render(() => <FileTree files={files} />);
+    const folder = getAllByRole('treeitem').find((el) => el.getAttribute('data-tree-kind') === 'folder')!;
+    const svgs = Array.from(folder.querySelectorAll('svg'));
+    const withPrimary = svgs.filter((s) => (s.getAttribute('class') ?? '').includes('text-primary'));
+    expect(withPrimary).toHaveLength(0);
+    const withForeground = svgs.filter((s) => (s.getAttribute('class') ?? '').includes('text-foreground/80'));
+    expect(withForeground.length).toBeGreaterThan(0);
+  });
 });
 
 describe('<FileTree> changed-files / diff presentation', () => {

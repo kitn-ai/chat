@@ -820,6 +820,15 @@ jobs:
       - name: Message text-token guard (brand must not color content, built bundle)
         run: pnpm --filter @kitn.ai/ui run test:message-text-token
 
+      # Same class of defect, found a third time (a live owner demo branded
+      # purple): reasoning.tsx's "Thinking" label, loader.tsx's terminal caret
+      # and loading-dots text, prompt-suggestion.tsx's matched-highlight, and
+      # file-tree.tsx's folder icon all hardcoded text-primary (BRAND) on
+      # content/chrome. Same bare, Tailwind-free, built-bundle harness; same
+      # positive-control shape.
+      - name: Content brand-bleed guard (accent must not color content/chrome, built bundle)
+        run: pnpm --filter @kitn.ai/ui run test:content-brand-bleed
+
       # Keyboard tab-stop behaviour for the hover-card, same shape as above:
       # Storybook-free, own port, drives the BUILT bundle. Added by PR #284;
       # this step is wired here deliberately BEFORE that branch merged, because

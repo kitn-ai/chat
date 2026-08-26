@@ -24,14 +24,59 @@ const panel = (c: HTMLElement) => {
   return id ? (c.querySelector(`[id="${CSS.escape(id)}"]`) as HTMLElement | null) : null;
 };
 
-function renderReasoning(props: { open?: boolean; disabled?: boolean } = {}) {
+function renderReasoning(props: { open?: boolean; disabled?: boolean; isStreaming?: boolean } = {}) {
   return render(() => (
-    <Reasoning open={props.open} disabled={props.disabled}>
+    <Reasoning open={props.open} disabled={props.disabled} isStreaming={props.isStreaming}>
       <ReasoningTrigger>Thinking</ReasoningTrigger>
       <ReasoningContent>Weighing the options.</ReasoningContent>
     </Reasoning>
   ));
 }
+
+// Content/chrome, not a control: the label used to carry `text-primary`, the
+// BRAND token, so a consumer's branded --kai-color-primary bled onto the
+// "Thinking" label. Cheap jsdom pin on the class list only — jsdom can't
+// resolve the real Tailwind cascade (see message.test.tsx's equivalent note),
+// so it can't prove the class doesn't compute to the branded color; that lives
+// in tests/e2e/content-brand-bleed.spec.ts.
+describe('ReasoningTrigger label text token', () => {
+  it('never emits text-primary on the label; uses text-foreground', () => {
+    const { container } = renderReasoning();
+    const label = trigger(container).querySelector('span');
+    expect(label).toBeTruthy();
+    const classes = (label!.getAttribute('class') ?? '').split(/\s+/);
+    expect(classes).not.toContain('text-primary');
+    expect(classes).toContain('text-foreground');
+  });
+});
+
+// Kit-decides-HOW (owner request): while streaming, the label renders with the
+// kit's own TextShimmer (the common "Thinking…" shimmer) instead of static
+// text; once settled it's the plain neutral span from the test above. Every
+// consumer gets this for free.
+describe('ReasoningTrigger label streaming shimmer', () => {
+  it('wraps the label in TextShimmer while isStreaming is true', () => {
+    const { container } = renderReasoning({ isStreaming: true });
+    const label = trigger(container).querySelector('span');
+    expect(label).toBeTruthy();
+    const classes = (label!.getAttribute('class') ?? '').split(/\s+/);
+    // TextShimmer's own signature classes (text-shimmer.tsx): transparent text
+    // clipped to a shimmering background-image, animated via the `shimmer` keyframe.
+    expect(classes).toContain('text-transparent');
+    expect(classes.some((c) => c.startsWith('animate-[shimmer'))).toBe(true);
+    expect(classes).not.toContain('text-primary');
+  });
+
+  it('renders plain static neutral text once settled (isStreaming false/undefined)', () => {
+    const { container } = renderReasoning({ isStreaming: false });
+    const label = trigger(container).querySelector('span');
+    expect(label).toBeTruthy();
+    const classes = (label!.getAttribute('class') ?? '').split(/\s+/);
+    expect(classes).toContain('text-foreground');
+    expect(classes).not.toContain('text-transparent');
+    expect(classes.some((c) => c.startsWith('animate-[shimmer'))).toBe(false);
+  });
+});
 
 describe('Reasoning disclosure aria wiring', () => {
   it('renders an explicit type="button" trigger', () => {

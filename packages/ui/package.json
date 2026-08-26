@@ -226,7 +226,8 @@
     "test:command-ivp": "playwright test --config playwright.command.config.ts",
     "test:focus-ring": "playwright test --config playwright.focus-ring.config.ts",
     "test:input-mask-ivp": "playwright test --config playwright.input-mask.config.ts",
-    "test:message-text-token": "playwright test --config playwright.message-text-token.config.ts"
+    "test:message-text-token": "playwright test --config playwright.message-text-token.config.ts",
+    "test:content-brand-bleed": "playwright test --config playwright.content-brand-bleed.config.ts"
   },
   "dependencies": {
     "@floating-ui/dom": "^1.7.6",

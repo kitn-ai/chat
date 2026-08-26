@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup } from '@solidjs/testing-library';
 import { For } from 'solid-js';
@@ -63,6 +63,48 @@ describe('parseKaiSourceElement', () => {
 // ---------------------------------------------------------------------------
 // SourceList component — verify citations render as anchor links
 // ---------------------------------------------------------------------------
+
+// Citation title/domain in the hover card is CONTENT, not a control — used to
+// carry `text-primary`, the BRAND token. Cheap jsdom pin on the class list
+// only; the real computed-color proof lives in
+// tests/e2e/content-brand-bleed.spec.ts.
+//
+// `HoverCardContent` only mounts (via `Portal`, outside `container`) once the
+// card is open, so this opens it for real by moving focus to the trigger's
+// `<a>` and advancing the open-delay timer — same shape as
+// `hover-card.test.tsx`'s "focus-open path" tests.
+describe('SourceContent domain header text token', () => {
+  it('never emits text-primary; uses text-foreground/80', () => {
+    const { container } = render(() => (
+      <Source href="https://kitn.dev">
+        <SourceTrigger />
+        <SourceContent title="kitn" description="Composable chat UI." />
+      </Source>
+    ));
+    const trigger = container.querySelector('a') as HTMLAnchorElement;
+    expect(trigger).toBeTruthy();
+
+    vi.useFakeTimers();
+    let domain: Element | undefined;
+    try {
+      trigger.focus();
+      vi.advanceTimersByTime(200);
+      // Several ancestor <div>s also contain "kitn.dev" in their textContent
+      // (the row wrapping the favicon + domain); the domain node itself is the
+      // innermost one, identified by its own `truncate` class.
+      domain = Array.from(document.querySelectorAll('div')).find(
+        (d) => (d.textContent ?? '').trim() === 'kitn.dev' && d.classList.contains('truncate'),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(domain).toBeTruthy();
+    const classes = (domain!.getAttribute('class') ?? '').split(/\s+/);
+    expect(classes).not.toContain('text-primary');
+    expect(classes).toContain('text-foreground/80');
+  });
+});
 
 describe('SourceList with Source children', () => {
   it('renders citation links for each source', () => {
