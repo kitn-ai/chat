@@ -178,6 +178,25 @@
         "type": "string",
         "pattern": "^[a-z][a-z0-9-]*$"
       }
+    },
+    "widget": {
+      "type": "object",
+      "properties": {
+        "position": {
+          "type": "string",
+          "enum": [
+            "bottom-end",
+            "bottom-start",
+            "top-end",
+            "top-start"
+          ]
+        },
+        "launcherIcon": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
     }
   },
   "required": [

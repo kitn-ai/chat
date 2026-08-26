@@ -987,10 +987,29 @@ function emitSlots(slots: readonly string[] | undefined, indent: string): string
  * exact gap when Task 13 added the enum member, and a `default` would have
  * hidden it again for the next one.
  */
+/** widget.position -> Dock's own `position` prop. A closed DockPosition enum
+ *  (schema-constrained), so plain string interpolation is safe — no
+ *  construct-authored free text here, unlike launcherIcon below. */
+function emitDockPosition(c: Construct): string {
+  const w = c.layout === 'widget' ? c.widget : undefined;
+  return w?.position ? ` position="${w.position}"` : '';
+}
+
+/** widget.launcherIcon -> Dock's `launcher` prop, replacing the built-in
+ *  closed-state glyph with an <img>. launcherIcon is construct-authored/
+ *  untrusted text (like theme.accent/provider.url elsewhere in this file),
+ *  so it is JSON.stringify'd into a real JS string-literal expression, never
+ *  interpolated into a raw JSX attribute string. */
+function emitDockLauncher(c: Construct): string {
+  const w = c.layout === 'widget' ? c.widget : undefined;
+  if (!w?.launcherIcon) return '';
+  return ` launcher={<img src={${JSON.stringify(w.launcherIcon)}} alt="" style={{ width: '24px', height: '24px', 'border-radius': '9999px' }} />}`;
+}
+
 function emitLayoutOpen(c: Construct): string {
   switch (c.layout) {
     case 'widget':
-      return `    <Dock label="${c.name}">\n`;
+      return `    <Dock label="${c.name}"${emitDockPosition(c)}${emitDockLauncher(c)}>\n`;
     case 'fullscreen':
       return `    <div style={{ height: '100dvh', display: 'flex', 'flex-direction': 'column' }}>\n`;
     case 'aside':

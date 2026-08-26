@@ -214,6 +214,55 @@ describe('generateProject (widget + mock core)', () => {
   });
 });
 
+describe('widget chrome (Task 19a)', () => {
+  it('position threads onto Dock as a plain prop (closed enum, no escaping needed)', () => {
+    const app = file(
+      generateProject(construct({ widget: { position: 'top-start' } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('<Dock label="acme-support" position="top-start">');
+  });
+
+  it('no widget field: Dock unchanged from before Task 19a', () => {
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    expect(app).toContain('<Dock label="acme-support">');
+  });
+
+  it('launcherIcon renders an <img> launcher override, JSON.stringify-escaped', () => {
+    const app = file(
+      generateProject(construct({ widget: { launcherIcon: 'https://example.com/a.png' } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('launcher={<img src={"https://example.com/a.png"}');
+  });
+
+  it('a hostile launcherIcon cannot break out of the emitted string literal', () => {
+    const hostile = '"};alert(1);//';
+    const app = file(
+      generateProject(construct({ widget: { launcherIcon: hostile } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain(JSON.stringify(hostile));
+    // The hostile payload's own embedded `"` must stay backslash-escaped
+    // (JSON.stringify's doing), never appear as a raw, unescaped
+    // string-closing quote immediately followed by `};alert(1)` — that raw
+    // form is what a vulnerable `src="${launcherIcon}"` interpolation would
+    // emit and is the actual breakout. A plain `.not.toContain('alert(1);//"')`
+    // can't discriminate here: JSON.stringify's own closing delimiter always
+    // sits right after `//` in the payload, safe or not, so that substring is
+    // present either way — the backslash before the *embedded* quote is the
+    // real signal.
+    expect(app).not.toMatch(/(?<!\\)"\};alert\(1\)/);
+  });
+
+  it('non-widget layouts never see widget props even if somehow present at the type level', () => {
+    // schema already rejects this construct-side; codegen only needs to prove
+    // the widget-only emit path is gated on c.layout === 'widget'.
+    const app = file(generateProject(construct({ layout: 'fullscreen' })), 'src/App.tsx');
+    expect(app).not.toContain('position=');
+  });
+});
+
 describe('layouts (Task 12)', () => {
   it.each([
     ['fullscreen', 'height: \'100dvh\''],

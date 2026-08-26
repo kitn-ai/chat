@@ -148,3 +148,30 @@ describe('validateConstruct', () => {
     expect(validateConstruct({ ...minimal, slots: nine.slice(0, 8) }).ok).toBe(true);
   });
 });
+
+describe('widget (layout-scoped FAB chrome)', () => {
+  it('accepts position + launcherIcon on layout: widget', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+      widget: { position: 'top-start', launcherIcon: 'https://example.com/logo.png' },
+    });
+    expect(out.ok).toBe(true);
+  });
+
+  it('rejects widget on any non-widget layout', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'fullscreen', provider: { mode: 'mock' },
+      widget: { position: 'top-start' },
+    });
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.problems.some((p) => p.path === 'widget')).toBe(true);
+  });
+
+  it('rejects an unknown position value', () => {
+    const out = validateConstruct({
+      name: 'acme-support', layout: 'widget', provider: { mode: 'mock' },
+      widget: { position: 'middle' },
+    });
+    expect(out.ok).toBe(false);
+  });
+});

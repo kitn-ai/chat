@@ -144,6 +144,21 @@ export const ConstructSchema = z
       .min(1)
       .max(8)
       .optional(),
+    /** Layout-scoped FAB chrome, `layout: 'widget'` only (superRefine below).
+     *  Purely additive sibling to `layout` (widen-never-restructure) — mirrors
+     *  Dock's own props verbatim, threaded through by codegen's emitLayoutOpen. */
+    widget: z
+      .object({
+        /** Which corner. Mirrors Dock's own DockPosition enum verbatim — not a
+         *  new left/right binary. Omitted keeps Dock's own default (bottom-end). */
+        position: z.enum(['bottom-end', 'bottom-start', 'top-end', 'top-start']).optional(),
+        /** An image URL for the closed-state launcher glyph, replacing Dock's
+         *  built-in chat-bubble icon. Construct-authored/untrusted text, like
+         *  theme.accent and provider.url — escaped the same way at its one emit site. */
+        launcherIcon: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((construct, ctx) => {
@@ -165,6 +180,13 @@ export const ConstructSchema = z
         code: z.ZodIssueCode.custom,
         path: ['slots'],
         message: '"custom" layout requires at least one declared slot — custom IS the slots grain',
+      });
+    }
+    if (construct.widget && construct.layout !== 'widget') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['widget'],
+        message: '"widget" is only valid on layout: "widget"',
       });
     }
     const history = construct.capabilities?.history;
