@@ -985,9 +985,11 @@ function emitSlots(slots: readonly string[] | undefined, indent: string): string
  *    the composition didn't use for its defining feature (a resizable split)
  *    at all. `WorkspaceShell` already IS a two-region layout with a REAL
  *    draggable splitter between them (it composes `ResizablePanelGroup`
- *    internally) -- start/end aside width props, collapse, drawer-below are
- *    all left at their defaults here (this construct wants exactly one fixed
- *    end pane, not a full workspace chrome), so the split's math is the kit's
+ *    internally) -- start/end aside width props and collapse are left at
+ *    their defaults here (this construct wants exactly one fixed end pane,
+ *    not a full workspace chrome); `drawerBelow={480}` IS wired (Task 19d) so
+ *    split gets the kit's own mobile takeover at the same breakpoint every
+ *    other layout uses, so the split's math is the kit's
  *    own, not a restatement.
  *
  * `custom` is handled entirely by `emitCustomApp` instead (its spine is
@@ -1032,9 +1034,20 @@ function emitLayoutOpen(c: Construct): string {
     case 'fullscreen':
       return `    <div style={{ height: '100dvh', display: 'flex', 'flex-direction': 'column' }}>\n`;
     case 'aside':
-      return `    <aside style={{ position: 'fixed', 'inset-block': '0', 'inset-inline-end': '0', width: '380px', display: 'flex', 'flex-direction': 'column', 'border-inline-start': '1px solid var(--kai-color-border)' }}>\n`;
+      return `    <aside data-kai-layout="aside" style={{ position: 'fixed', 'inset-block': '0', 'inset-inline-end': '0', width: '380px', display: 'flex', 'flex-direction': 'column', 'border-inline-start': '1px solid var(--kai-color-border)' }}>
+      {/* Mirrors Dock's own narrow-viewport full-bleed rule (ui/dock.tsx:229-240)
+          — aside has no dedicated kit component (see the emitLayoutOpen doc
+          comment above), so this is the honest hand-rolled equivalent, not a
+          new responsive strategy. */}
+      <style>{\`@media (max-width: 480px) { [data-kai-layout="aside"] { inset: 0; width: auto; height: auto; border-inline-start: 0; } }\`}</style>
+`;
     case 'split':
-      return `    <div style={{ height: '100dvh' }}>\n      <WorkspaceShell class="h-full" end={\n        <div style={{ height: '100%', overflow: 'auto' }}>\n          <slot name="pane" />\n        </div>\n      }>\n`;
+      // drawerBelow: split's mobile takeover is the kit's OWN WorkspaceShell
+      // capability (components/workspace-shell.tsx), not hand-rolled CSS — wiring
+      // it here is composition-over-reauthoring, not a media-query duplicate. 480
+      // matches Dock's own breakpoint (ui/dock.tsx:229) so every layout takes over
+      // at the same viewport width.
+      return `    <div style={{ height: '100dvh' }}>\n      <WorkspaceShell class="h-full" drawerBelow={480} end={\n        <div style={{ height: '100%', overflow: 'auto' }}>\n          <slot name="pane" />\n        </div>\n      }>\n`;
     case 'custom':
       return ''; // unreachable — see the block comment above
   }

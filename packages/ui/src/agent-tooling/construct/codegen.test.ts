@@ -354,6 +354,33 @@ describe('layouts (Task 12)', () => {
   });
 });
 
+describe('mobile takeover (Task 19d)', () => {
+  it('aside: emits a scoped @media(max-width:480px) full-bleed override, mirroring Dock\'s own rule', () => {
+    const app = file(generateProject(construct({ layout: 'aside' })), 'src/App.tsx');
+    expect(app).toContain('data-kai-layout="aside"');
+    expect(app).toMatch(/@media \(max-width: 480px\)/);
+    expect(app).toContain('[data-kai-layout="aside"]');
+  });
+
+  it('split: wires WorkspaceShell\'s own drawerBelow prop instead of hand-rolled CSS', () => {
+    const app = file(generateProject(construct({ layout: 'split' })), 'src/App.tsx');
+    expect(app).toContain('drawerBelow={480}');
+    // No second @media block for split — it delegates to the kit's own mobile mode.
+    expect(app).not.toMatch(/@media \(max-width: 480px\)[^]*WorkspaceShell/);
+  });
+
+  it('fullscreen: unchanged — already full-bleed at every width, nothing emitted', () => {
+    const app = file(generateProject(construct({ layout: 'fullscreen' })), 'src/App.tsx');
+    expect(app).not.toMatch(/@media \(max-width: 480px\)/);
+    expect(app).not.toContain('drawerBelow');
+  });
+
+  it('widget: untouched by this task (Dock already ships its own mobile mode)', () => {
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    expect(app).toContain('<Dock label="acme-support">');
+  });
+});
+
 describe('slots (Task 13)', () => {
   it('declared slots become named <slot> projection points', () => {
     const app = file(generateProject(construct({ slots: ['header'] })), 'src/App.tsx');
