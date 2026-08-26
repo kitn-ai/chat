@@ -335,8 +335,17 @@ describe('empty (Task 14 — welcome-screen)', () => {
       'src/App.tsx',
     );
     expect(app).toContain('empty={true}');
-    expect(app).toContain('<Portal mount={props.element}>');
-    expect(app).toContain('<Empty slot="empty">');
+    // Portal always wraps its children in its OWN container div appended
+    // directly to `mount` — an attribute on a nested child (e.g. on
+    // `<Empty>`) is invisible to slot assignment, which only looks at direct
+    // children of the shadow host. So `slot="empty"` has to land on Portal's
+    // own wrapper via its `ref` callback, confirmed against a real ejected
+    // widget cell in a browser (a `slot="empty"` on `<Empty>` itself left
+    // `assignedNodes()` empty and the greeting never painted).
+    expect(app).toContain(
+      "<Portal mount={props.element} ref={(el) => el.setAttribute('slot', 'empty')}>",
+    );
+    expect(app).toContain('<Empty>');
     expect(app).toContain('<EmptyTitle>{"Hi, welcome"}</EmptyTitle>');
     // App has to receive the host element to portal into — that's a real
     // signature change, only when `empty` is declared.

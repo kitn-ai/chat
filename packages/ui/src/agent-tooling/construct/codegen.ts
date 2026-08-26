@@ -781,15 +781,25 @@ function emitAppElementParam(c: Construct): string {
 function emitEmptyPortal(c: Construct, indent: string): string {
   const empty = c.empty;
   if (!empty) return '';
-  const title = `${indent}      <EmptyTitle>{${JSON.stringify(empty.title)}}</EmptyTitle>\n`;
+  const title = `${indent}    <EmptyTitle>{${JSON.stringify(empty.title)}}</EmptyTitle>\n`;
   const icon = empty.icon
-    ? `${indent}      <EmptyMedia><img src={${JSON.stringify(empty.icon)}} alt="" style={{ width: '40px', height: '40px', 'border-radius': '9999px' }} /></EmptyMedia>\n`
+    ? `${indent}    <EmptyMedia><img src={${JSON.stringify(empty.icon)}} alt="" style={{ width: '40px', height: '40px', 'border-radius': '9999px' }} /></EmptyMedia>\n`
     : '';
   const description = empty.description
-    ? `${indent}      <EmptyDescription>{${JSON.stringify(empty.description)}}</EmptyDescription>\n`
+    ? `${indent}    <EmptyDescription>{${JSON.stringify(empty.description)}}</EmptyDescription>\n`
     : '';
-  return `${indent}<Portal mount={props.element}>
-${indent}  <Empty slot="empty">
+  // Portal ALWAYS wraps its children in its own container <div> (or <g> for
+  // SVG) appended directly to `mount` — solid-js/web's Portal, not a detail
+  // this file controls. Slot ASSIGNMENT only ever looks at a node's `slot`
+  // attribute when that node is a DIRECT CHILD of the shadow host; an
+  // attribute on a node Portal nested one level deeper (e.g. on `<Empty>`
+  // itself) is invisible to it — confirmed against a real ejected+built
+  // widget cell, where `slot="empty"` on `<Empty>` left `assignedNodes()`
+  // empty and the greeting never painted. So the attribute has to land on
+  // Portal's OWN wrapper, via its `ref` callback (the one hook it exposes
+  // onto that wrapper), not as a prop passed through to `<Empty>`.
+  return `${indent}<Portal mount={props.element} ref={(el) => el.setAttribute('slot', 'empty')}>
+${indent}  <Empty>
 ${indent}    <EmptyHeader>
 ${icon}${title}${description}${indent}    </EmptyHeader>
 ${indent}  </Empty>
