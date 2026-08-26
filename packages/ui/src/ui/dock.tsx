@@ -139,7 +139,12 @@ const DOCK_CSS = `
   /* ABOVE the panel, always. At <=480px the panel goes fixed/inset:0 and it comes
      after the launcher in DOM order, so at z-index:auto it painted OVER the launcher
      and a touch user lost every pointer route to closing. Both reference
-     implementations stacked the launcher over the panel for the same reason. */
+     implementations stacked the launcher over the panel for the same reason. The
+     launcher itself is now HIDDEN while the panel is open at that width (see the
+     <=480px block below) in favour of the in-panel [part="close"] X, but this
+     z-index still matters for the moment between "open" landing and the panel's
+     own transition finishing, and for any consumer CSS that reintroduces the
+     launcher there. */
   z-index: 1;
   flex: none;
   display: inline-flex;
@@ -167,6 +172,33 @@ const DOCK_CSS = `
 [data-kai-dock] [part="launcher"]:hover:not(:disabled) { transform: translateY(-1px); }
 [data-kai-dock] [part="launcher"]:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 2px; }
 [data-kai-dock] [part="launcher"]:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* The mobile-only close affordance rendered INSIDE the panel. Hidden by default and
+   only switched on inside the <=480px media block below, alongside the rule that
+   hides the launcher while the panel is open at that width — same query drives both,
+   CSS-only, no JS viewport logic. Absolutely positioned against the panel, which is
+   the panel's own containing block once the narrow-viewport rule below sets it to
+   position: fixed. */
+[data-kai-dock] [part="close"] {
+  display: none;
+  position: absolute;
+  inset-block-start: 0.75rem;
+  inset-inline-end: 0.75rem;
+  z-index: 1;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  box-shadow: 0 2px 8px -2px rgb(0 0 0 / 0.3);
+  cursor: pointer;
+}
+[data-kai-dock] [part="close"]:hover { background: var(--color-muted, var(--color-background)); }
+[data-kai-dock] [part="close"]:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 2px; }
 
 [data-kai-dock] [part="badge"] {
   position: absolute;
@@ -222,10 +254,12 @@ const DOCK_CSS = `
 [data-kai-dock][data-position^="top"] [part="panel"][data-closed] { transform: translateY(-0.5rem); }
 
 /* Narrow viewports take the panel full-bleed. A SHIPPED DEFAULT, not a prop: both
-   references wrote this rule independently, which makes it a HOW. The launcher stays
-   in its corner and ON TOP of the full-bleed panel — that is the z-index: 1 in the
-   launcher rule above, not anything in this block, and without it a phone user has no
-   pointer route to closing at all (Escape alone strands exactly the touch user). */
+   references wrote this rule independently, which makes it a HOW. While the panel is
+   OPEN at this width the launcher hides and the panel's own [part="close"] X becomes
+   the pointer close route instead — a FAB floating over a full-bleed panel read as
+   wrong (owner feedback) and Escape alone strands a touch user with no visible
+   affordance at all. Closed, the launcher is unaffected: it is the panel's own
+   [data-expanded] state that gates both rules below, not the media query alone. */
 @media (max-width: 480px) {
   [data-kai-dock] [part="panel"] {
     position: fixed;
@@ -237,6 +271,14 @@ const DOCK_CSS = `
     border: 0;
     border-radius: 0;
   }
+
+  /* The full-bleed panel gets its own close affordance instead of relying on the
+     launcher, which is hidden below while the panel is open at this width — a FAB
+     floating over a full-bleed panel with no other visible close route is exactly
+     what the owner flagged. Escape and the X both still work; the launcher comes
+     back the instant the panel closes because data-expanded is gone by then. */
+  [data-kai-dock] [part="close"] { display: inline-flex; }
+  [data-kai-dock]:has([part="panel"][data-expanded]) [part="launcher"] { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -310,6 +352,12 @@ function isWithin(root: Node, node: Node | null): boolean {
  *   own menus; swallowing a key from a page you are a guest on is a decide-quietly move.
  * - **No focus trap**, deliberately, unlike `kai-dialog`. The page staying usable is
  *   the whole point of "docked", which is also why the panel is `aria-modal="false"`.
+ * - **Mobile close route.** At <=480px the panel goes full-bleed and the launcher
+ *   hides while it is open — a floating launcher over a full-bleed panel is not an
+ *   obvious close affordance. The panel gets its own `[part="close"]` X, top-right,
+ *   CSS-gated by the SAME media query and `[data-expanded]`, so it needs no viewport
+ *   JS and no new prop. Desktop is unaffected: the launcher keeps toggling and no X
+ *   ever renders.
  *
  * WHAT IT REFUSES: it never aborts a request, never persists its own open state, never
  * decides what "unread" means, and never clears `unread` on open — writing over a
@@ -437,6 +485,13 @@ export function Dock(props: DockProps) {
             'pointer-events': isOpen() ? 'auto' : 'none',
           }}
         >
+          {/* Mobile-only (see the <=480px rule in DOCK_CSS): the full-bleed panel's
+              own close affordance, since the launcher is hidden by the same query
+              while the panel is open. Reuses the launcher's derived close name
+              rather than a new prop — same string, same i18n override. */}
+          <button type="button" part="close" aria-label={launcherName()} onClick={() => setOpen(false)}>
+            <DockCloseGlyph />
+          </button>
           {props.children}
         </div>
       </div>

@@ -62,6 +62,7 @@ const shadow = (el: Dock) => el.shadowRoot!;
 const launcher = (el: Dock) => shadow(el).querySelector('[part="launcher"]') as HTMLButtonElement;
 const panel = (el: Dock) => shadow(el).querySelector('[part="panel"]') as HTMLElement;
 const badge = (el: Dock) => shadow(el).querySelector('[part="badge"]');
+const closeBtn = (el: Dock) => shadow(el).querySelector('[part="close"]') as HTMLButtonElement;
 /** The element's own answer to "am I open", read the way a consumer would see it. */
 const expanded = (el: Dock) => launcher(el).getAttribute('aria-expanded') === 'true';
 
@@ -983,5 +984,99 @@ describe('geometry is CSS tokens, and every prop is a scalar', () => {
 
     expect(found, 'the defineWebComponent call must be found (the scan is not vacuous)').toBe(true);
     expect(offenders, 'kai-dock is scalars-only by design — see the spec §2').toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mobile close X — owner feedback: a full-bleed panel with only a floating
+// launcher over it as the close route felt wrong. The panel gets its own
+// [part="close"] X, CSS-gated by the SAME <=480px query that takes the panel
+// full-bleed, with the launcher hidden by that same query while the panel is
+// open. jsdom evaluates neither media queries nor `:has()` selection, so — same
+// convention as the two IVP-defect tests above — this pins the DOM structure and
+// the CSS rule text the browser acts on, plus the button's real behaviour
+// (present, labelled, functional, reachable) which jsdom CAN exercise directly.
+// ---------------------------------------------------------------------------
+
+describe('mobile close X (<=480px full-bleed)', () => {
+  test('the close button exists, is a real labelled <button>, and lives inside the panel', async () => {
+    const el = await mount('<div slot="panel">body</div>');
+    const btn = closeBtn(el);
+    expect(btn.tagName).toBe('BUTTON');
+    expect(btn.getAttribute('type')).toBe('button');
+    expect(panel(el).contains(btn)).toBe(true);
+    expect(btn.getAttribute('aria-label')).toBeTruthy();
+  });
+
+  test('its aria-label is the dock\'s derived CLOSE name, and follows `label`/`close-label`', async () => {
+    const el = await mount('<div slot="panel">body</div>');
+    el.setAttribute('label', 'Aurora support');
+    el.show();
+    await flush();
+    expect(closeBtn(el).getAttribute('aria-label')).toBe('Close Aurora support');
+
+    el.setAttribute('close-label', 'Fermer le support');
+    await flush();
+    expect(closeBtn(el).getAttribute('aria-label')).toBe('Fermer le support');
+  });
+
+  test('clicking it closes the dock and returns focus to the launcher', async () => {
+    const el = await mount('<div slot="panel">body</div>');
+    el.show();
+    await flush();
+    expect(expanded(el)).toBe(true);
+
+    closeBtn(el).click();
+    await flush();
+    expect(expanded(el)).toBe(false);
+    expect(shadow(el).activeElement).toBe(launcher(el));
+  });
+
+  test('it is unreachable while closed, and reachable while open — same inert/visibility rule as the rest of the panel', async () => {
+    const el = await mount('<div slot="panel">body</div>');
+    expect(tabReachable(closeBtn(el))).toBe(false);
+
+    el.show();
+    await flush();
+    expect(tabReachable(closeBtn(el))).toBe(true);
+  });
+
+  test('it does not steal the D-B focus-on-open target — the first slotted element still wins', async () => {
+    const el = await mount('<div slot="panel" tabindex="0" id="content">body</div>');
+    el.show();
+    await flush();
+    expect(document.activeElement).toBe(el.querySelector('#content'));
+  });
+
+  test('Escape still closes with the X present (D-C untouched)', async () => {
+    const el = await mount('<div slot="panel">body</div>');
+    el.show();
+    await flush();
+    escapeFrom(launcher(el));
+    await flush();
+    expect(expanded(el)).toBe(false);
+  });
+
+  test('CSS: the close part is display:none by default, i.e. desktop never shows it', async () => {
+    const el = await mount();
+    const css = Array.from(shadow(el).querySelectorAll('style')).map((s) => s.textContent).join('\n');
+    const baseRule = css.match(/\[data-kai-dock\] \[part="close"\] \{([^}]*)\}/)?.[1] ?? '';
+    expect(baseRule, 'the base [part="close"] rule must be found').not.toBe('');
+    expect(baseRule).toMatch(/display:\s*none/);
+    expect(baseRule).toMatch(/position:\s*absolute/);
+  });
+
+  test('CSS: the <=480px block switches the close part on and hides the launcher only while the panel is expanded', async () => {
+    const el = await mount();
+    const css = Array.from(shadow(el).querySelectorAll('style')).map((s) => s.textContent).join('\n');
+    const mediaBlock = css.match(/@media \(max-width: 480px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
+    expect(mediaBlock, 'the <=480px block must be found').not.toBe('');
+    expect(mediaBlock, 'the close X switches on at this width').toMatch(
+      /\[part="close"\]\s*\{\s*display:\s*inline-flex/,
+    );
+    expect(
+      mediaBlock,
+      'the launcher hides only when the panel carries [data-expanded], not unconditionally',
+    ).toMatch(/:has\(\[part="panel"\]\[data-expanded\]\)\s*\[part="launcher"\]\s*\{\s*display:\s*none/);
   });
 });
