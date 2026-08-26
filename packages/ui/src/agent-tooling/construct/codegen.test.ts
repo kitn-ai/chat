@@ -249,6 +249,54 @@ describe('capabilities.starters', () => {
   });
 });
 
+describe('capabilities.attachments', () => {
+  it('threads accept into ChatThread\'s own attach/accept props — the paperclip, staging, and FileReader.readAsDataURL round-trip already live in ChatThread/DefaultPromptInput; nothing to hand-compose', () => {
+    // Branch reality (post kit-fix 93af0f62 + Task 3 gating): ChatThread
+    // already owns the whole attach affordance end to end — the button, the
+    // hidden file input, staging previews, reading each file with
+    // FileReader.readAsDataURL (never URL.createObjectURL), and handing the
+    // staged list back via onSubmit's `attachments`. Its Message component
+    // already groups consecutive file parts into one <Attachments> row. So
+    // codegen's only job is threading the construct's accept list into the
+    // existing attach/accept props — hand-rolling a second picker or a
+    // second file-part renderer here would restate what the kit already
+    // owns, exactly the lesson `capabilities.starters` pinned above.
+    const app = file(
+      generateProject(construct({ capabilities: { attachments: { accept: ['image/*', 'application/pdf'] } } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('attach={true}');
+    expect(app).toContain('accept={"image/*,application/pdf"}');
+    // The construct's own submit() folds the picked attachments into the
+    // outgoing user message's parts — the one piece createKaiChat's
+    // append/streamAssistant ops don't do on their own.
+    expect(app).toContain("type: 'file' as const, attachment");
+    expect(app).toContain('detail.attachments.map');
+    // No hand-rolled file input/FileReader/Attachments import: that would be
+    // restating ChatThread + Message's own implementation.
+    expect(app).not.toContain('readAsDataURL');
+    expect(app).not.toContain('createObjectURL');
+    expect(app).not.toContain('<Attachments');
+    expect(app).not.toContain('<Attachment ');
+  });
+
+  it('no attachments capability, attach stays explicitly off and no accept prop at all', () => {
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    expect(app).toContain('attach={false}');
+    expect(app).not.toMatch(/\baccept=\{/);
+  });
+
+  it('a hostile accept entry cannot break out of the emitted string literal (JSON.stringify, not a raw JSX attribute string)', () => {
+    const hostile = '"} onLoad={alert(1)} x={"';
+    const app = file(
+      generateProject(construct({ capabilities: { attachments: { accept: [hostile] } } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain(`accept={${JSON.stringify(hostile)}}`);
+    expect(app).not.toContain(`accept="${hostile}"`);
+  });
+});
+
 describe('accent contrast (paired --kai-color-primary-foreground)', () => {
   it('resolveContrastForeground: a light accent (yellow) picks black; #e91e63 picks white', () => {
     // Worked numbers (see the doc comment on resolveContrastForeground for

@@ -65,4 +65,11 @@ describe('validateConstruct', () => {
     const unknown = validateConstruct({ ...minimal, capabilities: { voice: true } });
     expect(unknown.ok).toBe(false);
   });
+
+  it('attachments require a non-empty accept list (WHETHER stays with the author)', () => {
+    expect(
+      validateConstruct({ ...minimal, capabilities: { attachments: { accept: ['image/*'] } } }).ok,
+    ).toBe(true);
+    expect(validateConstruct({ ...minimal, capabilities: { attachments: {} } }).ok).toBe(false);
+  });
 });

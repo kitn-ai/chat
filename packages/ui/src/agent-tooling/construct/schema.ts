@@ -56,6 +56,18 @@ export const ConstructSchema = z
          *  1-6 non-empty strings — construct-authored text, escaped like
          *  `theme.accent`/`provider.url` at every emit interpolation site. */
         starters: z.array(z.string().min(1)).min(1).max(6).optional(),
+        /** Enables the paperclip attach affordance; accept is a non-empty
+         *  list of media types/globs, e.g. ["image/*", "application/pdf"] —
+         *  WHETHER stays with the construct author (this field), HOW stays
+         *  with the kit (ChatThread's own attach/accept props, threaded
+         *  through by codegen). */
+        attachments: z
+          .object({
+            /** Accept-list of media types/globs, e.g. ["image/*", "application/pdf"]. */
+            accept: z.array(z.string().min(1)).min(1),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .optional(),

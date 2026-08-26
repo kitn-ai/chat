@@ -375,18 +375,43 @@ ${emitProviderSetup(c)}
 //     nothing to hand-compose. Omitted (undefined) when no starters are
 //     declared, same off-by-default effect as the booleans above.
 //   - models: omitted (undefined) — no model switcher; no capabilities field yet.
-//   - attachments (the paperclip): gated via ChatThread's \`attach\` prop
-//     (kit gap closed — ChatThread now forwards it to DefaultPromptInput,
-//     mirroring webSearch/voice). \`attach={false}\` here since the construct
-//     schema has no capabilities.attachments field yet; a later task flips
-//     this to \`attach={c.capabilities?.attachments === true}\` once that
-//     field lands.
+//   - attachments (the paperclip): gated via ChatThread's \`attach\`/\`accept\`
+//     props (kit gap closed — ChatThread forwards both to DefaultPromptInput,
+//     mirroring webSearch/voice). ChatThread ALREADY owns the whole
+//     round-trip end to end — the paperclip button, staged previews, staging
+//     each file as a data URI (never a blob object URL; see
+//     AttachmentData.url's doc in components/attachment-types.ts), and
+//     handing the staged list back via onSubmit's \`attachments\` — and its
+//     Message component ALREADY groups consecutive file parts into one
+//     attachment row (message.tsx). So there is nothing to hand-compose
+//     here, same lesson as suggestions above: hand-rolling a second picker or
+//     a second file-part renderer would restate what ChatThread/Message
+//     already own. capabilities.attachments threads straight into
+//     attach/accept; the only App.tsx-owned piece is folding the picked
+//     attachments into the outgoing message's parts at the submit site
+//     (see emitProviderSetup) since createKaiChat's own append/streamAssistant
+//     ops don't do that folding themselves.
 export function App() {
   return (
-${emitLayoutOpen(c)}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false} attach={false}${emitStartersProp(c)} />
+${emitLayoutOpen(c)}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitAttachProps(c)}${emitStartersProp(c)} />
 ${emitLayoutClose(c)}  );
 }
 `;
+}
+
+/** capabilities.attachments -> ChatThread's own \`attach\`/\`accept\` props.
+ *  Undeclared keeps the explicit off-by-default gating (\`attach={false}\`,
+ *  matching webSearch/voice above). Declared flips \`attach={true}\` and
+ *  threads the accept list through — construct-authored/untrusted like
+ *  \`starters\`/\`theme.accent\`/\`provider.url\`, so JSON.stringify'd into a
+ *  real JS string-literal expression rather than a raw JSX attribute
+ *  string (JSX attribute strings don't interpret escapes the way JS string
+ *  literals do, so a raw \`accept="..."\` would be a breakout surface for a
+ *  hostile media-type entry containing a \`"\`). */
+function emitAttachProps(c: Construct): string {
+  const attachments = c.capabilities?.attachments;
+  if (!attachments) return ' attach={false}';
+  return ` attach={true} accept={${JSON.stringify(attachments.accept.join(','))}}`;
 }
 
 /** capabilities.starters -> ChatThread's own \`suggestions\` prop. Starter
@@ -427,7 +452,14 @@ const chat = createKaiChat();
 
 async function submit(detail: { value: string; attachments: AttachmentData[] }) {
   if (!detail.value.trim() || chat.loading()) return;
-  chat.append({ id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: detail.value }] });
+  chat.append({
+    id: crypto.randomUUID(),
+    role: 'user',
+    parts: [
+      { type: 'text', text: detail.value },
+      ...detail.attachments.map((attachment) => ({ type: 'file' as const, attachment })),
+    ],
+  });
   const stream = chat.streamAssistant();
   try {
     await readOpenAIStream(respond(detail.value), stream);
@@ -459,7 +491,14 @@ const chat = createKaiChat();
 
 async function submit(detail: { value: string; attachments: AttachmentData[] }) {
   if (!detail.value.trim() || chat.loading()) return;
-  chat.append({ id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: detail.value }] });
+  chat.append({
+    id: crypto.randomUUID(),
+    role: 'user',
+    parts: [
+      { type: 'text', text: detail.value },
+      ...detail.attachments.map((attachment) => ({ type: 'file' as const, attachment })),
+    ],
+  });
   const stream = chat.streamAssistant();
   try {
     const response = await fetch(${JSON.stringify(url)}, {
