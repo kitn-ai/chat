@@ -104,6 +104,30 @@ export const ConstructSchema = z
       })
       .strict()
       .optional(),
+    /** Named generative-UI card definitions the model can emit as tool calls,
+     *  rendered in the thread. Top-level (not a capability): a card is
+     *  something the construct's model can DO at any point once a card is
+     *  declared, not a thread-affordance toggle like starters/attachments/
+     *  reasoning. Reuses the kit's own card-tool projection end to end
+     *  (`cardTools`/`toOpenAITools`/`toAnthropicTools`, `@kitn.ai/ui/schemas`)
+     *  — never a second one authored here. `schema` is validated structurally
+     *  only; deep card validation (incl. `x-kai-format` mask hints) is the
+     *  kit's own card contract at render time. */
+    cards: z
+      .array(
+        z
+          .object({
+            /** Tool-facing card name, e.g. "refund_approval". */
+            name: z.string().regex(/^[a-z][a-z0-9_]*$/),
+            /** The kit's card schema JSON (incl. x-kai-format mask hints).
+             *  Validated structurally here; deep card validation is the kit's
+             *  own card contract at render time. */
+            schema: z.record(z.string(), z.unknown()),
+          })
+          .strict(),
+      )
+      .min(1)
+      .optional(),
   })
   .strict()
   .superRefine((construct, ctx) => {

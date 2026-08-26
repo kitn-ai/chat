@@ -568,6 +568,102 @@ describe('endpoint provider', () => {
   });
 });
 
+describe('cards', () => {
+  it('renders card parts via CardRenderer and projects tools via @kitn.ai/ui/schemas', () => {
+    const files = generateProject(
+      construct({
+        cards: [{ name: 'refund_approval', schema: { type: 'object', properties: { amount: { type: 'number' } } } }],
+      }),
+    );
+    const app = file(files, 'src/App.tsx');
+    expect(app).toContain('CardRenderer');
+    expect(app).toContain("part.type === 'card'");
+    expect(app).toContain("from '@kitn.ai/ui/schemas'");
+    expect(file(files, 'src/cards.ts')).toContain('refund_approval');
+  });
+
+  it('no cards, no card code and no src/cards.ts', () => {
+    const files = generateProject(construct());
+    expect(files.some((f) => f.path === 'src/cards.ts')).toBe(false);
+    expect(file(files, 'src/App.tsx')).not.toContain('CardRenderer');
+  });
+
+  it('src/cards.ts emits the registry verbatim, keyed by card name, deterministic', () => {
+    const files = generateProject(
+      construct({
+        cards: [{ name: 'refund_approval', schema: { type: 'object', properties: { amount: { type: 'number' } } } }],
+      }),
+    );
+    const cardsFile = file(files, 'src/cards.ts');
+    expect(cardsFile).toContain('export const cards = {');
+    expect(cardsFile).toContain('refund_approval:');
+    expect(cardsFile).toContain('"amount"');
+    expect(cardsFile).toMatch(/}\s*as const;/);
+  });
+
+  it('App.tsx registers the cards on ChatThread via cardSchemas', () => {
+    const app = file(
+      generateProject(construct({ cards: [{ name: 'refund_approval', schema: { type: 'object' } }] })),
+      'src/App.tsx',
+    );
+    expect(app).toContain("import { cards } from './cards';");
+    expect(app).toContain('cardSchemas={cards}');
+    expect(app).toContain('cardFromToolCall');
+  });
+
+  it('endpoint + openai wire: the fetch body carries tools: toOpenAITools(cards)', () => {
+    const app = file(
+      generateProject(
+        construct({
+          provider: { mode: 'endpoint', url: '/api/chat', wire: 'openai' },
+          cards: [{ name: 'refund_approval', schema: { type: 'object' } }],
+        }),
+      ),
+      'src/App.tsx',
+    );
+    expect(app).toContain('toOpenAITools(cards)');
+    expect(app).toMatch(/tools:\s*toOpenAITools\(cards\)/);
+  });
+
+  it('endpoint + anthropic wire: the fetch body carries tools: toAnthropicTools(cards)', () => {
+    const app = file(
+      generateProject(
+        construct({
+          provider: { mode: 'endpoint', url: '/api/chat', wire: 'anthropic' },
+          cards: [{ name: 'refund_approval', schema: { type: 'object' } }],
+        }),
+      ),
+      'src/App.tsx',
+    );
+    expect(app).toContain('toAnthropicTools(cards)');
+    expect(app).not.toContain('toOpenAITools');
+  });
+
+  it('no cards: no tools field on the endpoint fetch body, no schemas import', () => {
+    const app = file(
+      generateProject(construct({ provider: { mode: 'endpoint', url: '/api/chat', wire: 'openai' } })),
+      'src/App.tsx',
+    );
+    expect(app).not.toContain('tools:');
+    expect(app).not.toContain("from '@kitn.ai/ui/schemas'");
+  });
+
+  it('mock provider + cards: a settled tool call is converted to a card via cardFromToolCall/addCard', () => {
+    const app = file(
+      generateProject(construct({ cards: [{ name: 'refund_approval', schema: { type: 'object' } }] })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('cardFromToolCall(');
+    expect(app).toContain('stream.addCard(');
+    // Settled before stream.done(), reading the just-written tool part back off
+    // chat.messages() (the mutator API has no getter of its own).
+    const cardIdx = app.indexOf('stream.addCard(');
+    const doneIdx = app.indexOf('stream.done();');
+    expect(cardIdx).toBeGreaterThan(-1);
+    expect(doneIdx).toBeGreaterThan(cardIdx);
+  });
+});
+
 describe('writeProject', () => {
   it('writes files and prunes stale ones tracked via .kai-manifest.json', () => {
     const dir = mkdtempSync(join(tmpdir(), 'kai-construct-'));

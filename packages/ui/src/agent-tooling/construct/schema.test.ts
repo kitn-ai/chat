@@ -101,4 +101,25 @@ describe('validateConstruct', () => {
     expect(out.ok).toBe(false);
     if (!out.ok) expect(out.problems.some((p) => p.path === 'capabilities.reasoning')).toBe(true);
   });
+
+  it('cards: named entries with schema objects; bad tool names rejected', () => {
+    const card = { name: 'refund_approval', schema: { type: 'object', properties: {} } };
+    expect(validateConstruct({ ...minimal, cards: [card] }).ok).toBe(true);
+    expect(validateConstruct({ ...minimal, cards: [{ ...card, name: 'Refund-Approval' }] }).ok).toBe(false);
+  });
+
+  it('cards: rejects an empty array and an unstructured schema', () => {
+    expect(validateConstruct({ ...minimal, cards: [] }).ok).toBe(false);
+    expect(
+      validateConstruct({ ...minimal, cards: [{ name: 'refund_approval', schema: 'not-an-object' }] }).ok,
+    ).toBe(false);
+  });
+
+  it('cards: rejects an unknown key on a card entry (vocabulary is closed)', () => {
+    const out = validateConstruct({
+      ...minimal,
+      cards: [{ name: 'refund_approval', schema: { type: 'object' }, description: 'x' }],
+    });
+    expect(out.ok).toBe(false);
+  });
 });

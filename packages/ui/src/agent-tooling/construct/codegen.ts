@@ -152,7 +152,7 @@ export function accentContrastNotice(construct: Construct): string | null {
 
 export function generateProject(construct: Construct, opts: GenerateOptions = {}): GeneratedFile[] {
   const uiSpec = opts.uiSpec ?? `^${kitVersion()}`;
-  return [
+  const files: GeneratedFile[] = [
     { path: 'package.json', code: emitPackageJson(construct, uiSpec) },
     { path: 'tsconfig.json', code: emitTsconfig() },
     { path: 'vite.config.ts', code: emitViteDev() },
@@ -161,6 +161,87 @@ export function generateProject(construct: Construct, opts: GenerateOptions = {}
     { path: 'src/element.tsx', code: emitElement(construct) },
     { path: 'src/App.tsx', code: emitApp(construct) },
   ];
+  if (construct.cards) files.push({ path: 'src/cards.ts', code: emitCardsRegistry(construct.cards) });
+  return files;
+}
+
+// ── cards ────────────────────────────────────────────────────────────────
+// Named generative-UI card definitions the model can emit as tool calls.
+// Registration only — the projection into provider tool definitions is the
+// kit's OWN `cardTools`/`toOpenAITools`/`toAnthropicTools` (@kitn.ai/ui/schemas,
+// src/schemas/tool-defs.ts), never a second one authored here.
+
+/** `src/cards.ts` — the construct's card registry, verbatim from the
+ *  construct. Each schema is `JSON.stringify(schema, null, 2)`'d and reindented
+ *  under its key — deterministic because the construct's own key order (and
+ *  each schema's own JSON key order) is preserved; nothing here re-sorts. */
+function emitCardsRegistry(cards: NonNullable<Construct['cards']>): string {
+  const entries = cards
+    .map((card) => `  ${card.name}: ${JSON.stringify(card.schema, null, 2).split('\n').join('\n  ')},`)
+    .join('\n');
+  return `// src/cards.ts — the construct's card registry, verbatim from the construct.
+// Tool definitions for YOUR backend derive from this same object via
+// @kitn.ai/ui/schemas (cardTools / toOpenAITools / toAnthropicTools) — one
+// projection, shared with the kit.
+export const cards = {
+${entries}
+} as const;
+`;
+}
+
+/** The `import`s cards need in App.tsx: the registry itself, plus
+ *  `cardFromToolCall` (turns a settled tool-call ToolPart into a renderable
+ *  `card` MessagePart — see emitApplyCardTools) and, for an endpoint
+ *  construct, the wire-matching tool projection for the fetch body. Empty
+ *  when the construct declares no cards at all (format rule: undeclared ->
+ *  no affordance, no import). */
+function emitCardsImport(c: Construct): string {
+  if (!c.cards) return '';
+  const toolsImport =
+    c.provider.mode === 'endpoint' ? (c.provider.wire === 'openai' ? ', toOpenAITools' : ', toAnthropicTools') : '';
+  return `import { cards } from './cards';
+// Generative-UI cards: registering them is \`cardSchemas={cards}\` on ChatThread
+// below — ChatThread's own MessageBody already matches \`part.type === 'card'\`
+// in its part rendering and draws it with the kit's own \`CardRenderer\`
+// (components/card-renderer.tsx), so there is nothing to hand-compose here.
+// Turning a model's tool call into that renderable part is \`cardFromToolCall\`
+// (the inverse of \`cardTools\`), applied once per settled turn below.
+import { cardFromToolCall${toolsImport} } from '@kitn.ai/ui/schemas';`;
+}
+
+/** `cardSchemas={cards}` on ChatThread — the only App.tsx-owned piece of
+ *  drawing a card: registering what a VALID one looks like. What DRAWS one
+ *  (`cardTypes`) and the host to emit card events off are already supplied by
+ *  the ChatThread/kai-chat path (F-26); nothing else to thread through here. */
+function emitCardSchemasProp(c: Construct): string {
+  return c.cards ? ' cardSchemas={cards}' : '';
+}
+
+/** Settle a turn's tool calls into cards, called once after the read
+ *  resolves and before `stream.done()`/`stream.abort()`. `AssistantStream`
+ *  has no getter of its own, so the just-written parts are read back off
+ *  `chat.messages()` by the stream's own id — the same pattern the kit's own
+ *  `cardFromToolCall` doc comment (schemas/from-tool-call.ts) shows for a
+ *  tool loop. A `kai_`-prefixed call becomes a card; anything else is the
+ *  construct's own tool and is left as a plain `tool` part. */
+function emitApplyCardTools(c: Construct): string {
+  if (!c.cards) return '';
+  return `
+  for (const part of chat.messages().find((m) => m.id === stream.id)?.parts ?? []) {
+    if (part.type !== 'tool' || part.tool.state !== 'input-available') continue;
+    const card = cardFromToolCall(part.tool.type, part.tool.input, { id: part.tool.toolCallId ?? crypto.randomUUID() });
+    if (card) stream.addCard(card);
+  }`;
+}
+
+/** The endpoint fetch body's `tools` field — the projected tool defs for
+ *  every declared card, matching the construct's own wire. No cards, no
+ *  field: the format rule (undeclared capability's affordance is OFF) holds
+ *  for tools the same way it holds for suggestions/attach/reasoning above. */
+function emitToolsField(c: Construct): string {
+  if (!c.cards || c.provider.mode !== 'endpoint') return '';
+  const toolsFn = c.provider.wire === 'openai' ? 'toOpenAITools' : 'toAnthropicTools';
+  return `, tools: ${toolsFn}(cards)`;
 }
 
 function emitPackageJson(c: Construct, uiSpec: string): string {
@@ -346,6 +427,7 @@ function emitApp(c: Construct): string {
   return `${emitSolidJsImport(c)}import { ChatThread, Dock, createKaiChat } from '@kitn.ai/ui/solid';
 import type { AttachmentData${emitHistoryTypeImport(c)} } from '@kitn.ai/ui/solid';
 ${emitProviderImports(c)}
+${emitCardsImport(c)}
 
 ${emitProviderSetup(c)}
 ${emitHistorySetup(c)}
@@ -402,7 +484,7 @@ ${emitHistorySetup(c)}
 //     an opt-in affordance like the paperclip or a starter chip.
 export function App() {
   return (
-${emitLayoutOpen(c)}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)} />
+${emitLayoutOpen(c)}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitCardSchemasProp(c)} />
 ${emitLayoutClose(c)}  );
 }
 `;
@@ -596,9 +678,15 @@ function emitProviderSetup(c: Construct): string {
   // the value directly, so there's no PromptInput-specific signal-reading
   // workaround to carry here any more.
   if (c.provider.mode === 'mock') {
+    const cardsNote = c.cards
+      ? `
+// Cards demo keylessly: createMockResponder() can already SCRIPT a tool call
+// (\`replies: [{ toolCalls: [...] }]\`, F-35), so a scripted turn calling
+// \`kai_<card name>\` renders exactly like a live model's would, below.`
+      : '';
     return `// Provider seam: mock — keyless, streams locally, announces itself once.
 // Swap for provider.mode "endpoint" in the construct and re-run kai dev; the
-// generated fetch keeps this exact shape (the seam is the point).
+// generated fetch keeps this exact shape (the seam is the point).${cardsNote}
 const respond = createMockResponder();
 const chat = createKaiChat();
 
@@ -614,7 +702,7 @@ async function submit(detail: { value: string; attachments: AttachmentData[] }) 
   });
   const stream = chat.streamAssistant();
   try {
-    await readOpenAIStream(respond(detail.value), stream);
+    await readOpenAIStream(respond(detail.value), stream);${emitApplyCardTools(c)}
     stream.done();
   } catch (err) {
     stream.abort(err instanceof Error ? err.message : String(err));
@@ -656,10 +744,10 @@ async function submit(detail: { value: string; attachments: AttachmentData[] }) 
     const response = await fetch(${JSON.stringify(url)}, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ messages: ${encode}(chat.messages()) }),
+      body: JSON.stringify({ messages: ${encode}(chat.messages())${emitToolsField(c)} }),
     });
     if (!response.ok) throw new Error(\`endpoint responded \${response.status}\`);
-    await ${read}(response, stream);
+    await ${read}(response, stream);${emitApplyCardTools(c)}
     stream.done();
   } catch (err) {
     stream.abort(err instanceof Error ? err.message : String(err));
