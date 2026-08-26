@@ -1,7 +1,7 @@
-import { createSignal, onCleanup, onMount } from 'solid-js';
+import { Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
-import { ChevronDown } from 'lucide-solid';
+import { ArrowDown } from 'lucide-solid';
 import { defineWebComponent } from './define';
 
 interface Props extends Record<string, unknown> {
@@ -14,6 +14,14 @@ interface Props extends Record<string, unknown> {
   variant?: 'outline' | 'ghost' | 'default';
   /** Button size token. Defaults to `'icon'` (square). */
   size?: 'sm' | 'md' | 'lg' | 'icon' | 'icon-sm';
+  /** The button's accessible name. It is announced whether or not the label is
+   *  visible, so the text is always localisable. Defaults to
+   *  `'Scroll to bottom'`. */
+  label?: string;
+  /** Also render `label` visibly beside the icon. Defaults to `false`, which
+   *  is the icon-only button. When the text is visible it IS the accessible
+   *  name, so nothing gets announced twice. */
+  showLabel?: boolean;
 }
 
 /** Events fired by `<kai-scroll-button>`. */
@@ -25,6 +33,27 @@ interface Events {
 }
 
 const SCROLL_THRESHOLD = 50;
+
+/** The accessible name used when the consumer does not supply one. */
+const DEFAULT_LABEL = 'Scroll to bottom';
+
+/**
+ * The floating chip surface. Mirrors `surfaceClasses` in
+ * `components/scroll-button.tsx`: the shared `outline` button variant is
+ * `bg-muted/50`, half-transparent, so message text showed through a control
+ * floating over scrolling content and its edge measured about 1.05:1 against
+ * the thread behind it (SC 1.4.11 wants 3:1). `bg-card` is the opaque surface
+ * popovers and dropdowns already use, `border-input` is the kit's control edge
+ * and clears 3:1 in both themes, and `kai-elevation` is the shared themeable
+ * float shadow that keeps an opaque button reading as ABOVE the content.
+ * `ghost` and `default` are explicit consumer choices about the fill, so they
+ * keep theirs.
+ */
+function surfaceClasses(variant: Props['variant']) {
+  return (variant ?? 'outline') === 'outline'
+    ? 'border border-input bg-card text-card-foreground kai-elevation'
+    : 'kai-elevation';
+}
 
 /** Walk the composed tree upwards from `startEl` (outside shadow roots) to
  *  find the nearest scrollable ancestor. */
@@ -63,7 +92,9 @@ defineWebComponent<Props, Events>('kai-scroll-button', {
   for: undefined,
   variant: 'outline',
   size: 'icon',
-}, (props, { element, dispatch }) => {
+  label: undefined,
+  showLabel: undefined,
+}, (props, { element, dispatch, flag }) => {
   const [isAtBottom, setIsAtBottom] = createSignal(true);
   let containerEl: HTMLElement | null = null;
   let cleanupFns: (() => void)[] = [];
@@ -104,18 +135,25 @@ defineWebComponent<Props, Events>('kai-scroll-button', {
 
   onCleanup(detach);
 
+  const label = () => (props.label as string | undefined) ?? DEFAULT_LABEL;
+  const showLabel = () => flag('showLabel');
+
   return (
     <Button
       variant={props.variant ?? 'outline'}
       size={props.size ?? 'icon'}
-      aria-label="Scroll to bottom"
+      // When the label is visible it IS the accessible name; an aria-label on
+      // top of it would override the visible text and the two could disagree.
+      aria-label={showLabel() ? undefined : label()}
       // While at the bottom this button is fully transparent and pointer-inert,
       // but it stayed in the tab order — a keyboard user landed on a control
       // they could not see. Mirrors ScrollButton in components/scroll-button.tsx.
       tabindex={isAtBottom() ? -1 : 0}
       aria-hidden={isAtBottom() ? 'true' : undefined}
       class={cn(
-        'rounded-full transition-all duration-150 ease-out',
+        'rounded-lg transition-all duration-150 ease-out',
+        surfaceClasses(props.variant),
+        showLabel() ? 'h-9 w-auto gap-1.5 px-3 text-sm' : '',
         !isAtBottom()
           ? 'translate-y-0 scale-100 opacity-100'
           : 'pointer-events-none translate-y-4 scale-95 opacity-0',
@@ -125,7 +163,17 @@ defineWebComponent<Props, Events>('kai-scroll-button', {
         dispatch('kai-scroll');
       }}
     >
-      <ChevronDown class="h-5 w-5" />
+      {/* h-4, not the h-5 the chevron used, and the same reasoning as
+          components/scroll-button.tsx: a ChevronDown only inks the lower part of
+          its 24px viewBox, so at a 20px box its visible mass is small, while
+          ArrowDown inks the full height (stem + head) and at 20px crowded the
+          padding. Re-checked here because this button box is 36px (size="icon")
+          rather than the Solid component's 40px, and 16px balances both. It is
+          also the size lucide pairs with text-sm, which the label renders at. */}
+      <ArrowDown class="h-4 w-4 shrink-0" aria-hidden="true" />
+      <Show when={showLabel()}>
+        <span>{label()}</span>
+      </Show>
     </Button>
   );
 });

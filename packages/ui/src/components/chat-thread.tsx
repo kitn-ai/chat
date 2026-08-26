@@ -414,7 +414,10 @@ export function ChatThread(props: ChatThreadProps) {
               </ChatContainerContent>
               <Show when={showScrollButton()}>
                 <div class="absolute bottom-4 left-1/2 flex w-full max-w-3xl -translate-x-1/2 justify-center px-5">
-                  <ScrollButton class="shadow-sm" />
+                  {/* The button now owns its elevation (kai-elevation); a `shadow-sm`
+                      here would set box-shadow a second time and the winner would
+                      be stylesheet order, not this call site. */}
+                  <ScrollButton />
                 </div>
               </Show>
             </ChatContainer>

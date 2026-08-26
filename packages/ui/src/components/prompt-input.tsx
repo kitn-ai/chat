@@ -115,9 +115,15 @@ function PromptInputTextarea(props: PromptInputTextareaProps) {
   // the contenteditable composer is visually identical. The frame (PromptInput
   // root) still owns radius/bg/padding/focus-ring; auto-grow is native to a
   // contenteditable block (capped via max-height on the editable).
+  // `text-start` is a PIN, not a style choice: `text-align` inherits, so any
+  // centered ancestor (`Empty`'s root did exactly this) reached in and centered
+  // the placeholder AND the typed text. An input control's text alignment is a
+  // fact about the control, so it states it rather than inheriting it. LOGICAL
+  // (`start`), not `text-left` — in RTL the correct edge is the right one, and
+  // pinning the physical value would be a worse bug than the one it fixes.
   const editableClass = () =>
     cn(
-      'text-foreground min-h-[44px] w-full bg-transparent shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 overflow-y-auto whitespace-pre-wrap break-words',
+      'text-foreground min-h-[44px] w-full bg-transparent text-start shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 overflow-y-auto whitespace-pre-wrap break-words',
       textClass(config.proseSize()),
       local.class,
     );

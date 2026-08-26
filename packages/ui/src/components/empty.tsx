@@ -26,9 +26,16 @@ function Empty(props: EmptyProps) {
   const [local, rest] = splitProps(props, ['class', 'children']);
   return (
     <div
+      // NO `text-center` / `text-balance` on the root. Both INHERIT, and
+      // `EmptyContent` is an arbitrary-content slot — a `PromptInput` dropped in
+      // it picked the centering up and rendered its placeholder and its typed
+      // text centred (owner report). Centering is a fact about the empty state's
+      // OWN title/description, so it lives on `EmptyTitle`/`EmptyDescription`
+      // (and `EmptyHeader`, which wraps only those). The root still centres its
+      // children as BOXES via `items-center`, which is what it actually wants.
       data-slot="empty"
       class={cn(
-        'flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg p-6 text-center text-balance',
+        'flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg p-6',
         local.class,
       )}
       {...rest}
@@ -103,7 +110,9 @@ function EmptyTitle(props: EmptyTitleProps) {
   return (
     <div
       data-slot="empty-title"
-      class={cn('text-lg font-medium tracking-tight', local.class)}
+      // Carries its own centering + balance (the root no longer broadcasts them
+      // to every slotted child), so a title is centred wherever it is placed.
+      class={cn('text-title font-medium tracking-tight text-center text-balance', local.class)}
       {...rest}
     >
       {local.children}
@@ -123,7 +132,9 @@ function EmptyDescription(props: EmptyDescriptionProps) {
     <p
       data-slot="empty-description"
       class={cn(
-        'text-muted-foreground text-sm/relaxed [&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-primary',
+        // Same as EmptyTitle: own the centering + balance rather than inheriting
+        // it from a root that also reaches arbitrary slotted content.
+        'text-muted-foreground text-body text-center text-balance [&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-primary',
         local.class,
       )}
       {...rest}
