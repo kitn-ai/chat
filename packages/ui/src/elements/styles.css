@@ -1,5 +1,18 @@
-/* Element-bundle stylesheet. Compiled to compiled.css and injected into each
-   custom element's shadow root. Mirrors .storybook/styles.css but scans src/. */
+/* Element-bundle stylesheet, and the SOURCE OF TRUTH for element CSS. Compiled to
+   compiled.css and injected into each custom element's shadow root;
+   .storybook/styles.css @imports this file rather than restating it, so a rule
+   added here reaches the shadow roots AND the light-DOM Solid stories at once.
+
+   It used to be the other way round — Storybook hand-copied a few of these rules
+   under "Mirror the shipped ..." comments. Nothing enforced the copy, so
+   .kai-radio, .kai-checkbox, .kai-range and .kai-focus-inset were simply missing
+   there: three form controls rendered as raw OS chrome in every story while the
+   shipped element rendered them fully designed, and an agent and the owner each
+   concluded the kit had unstyled controls. Never copy a rule from here into the
+   Storybook sheet; add it here.
+
+   The one thing that cannot cross is :host, which selects nothing in the light
+   DOM. Its defaults are re-stated on `body` in the Storybook sheet's shim. */
 @import "tailwindcss";
 /* tw-animate-css supplies the animate-in/animate-out + slide/fade/zoom utilities
    the kit uses for every overlay enter/exit (toast, popover, tooltip, dropdown,
