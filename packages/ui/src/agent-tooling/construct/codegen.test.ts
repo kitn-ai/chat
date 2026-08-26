@@ -925,14 +925,15 @@ describe('cards', () => {
     expect(app).toMatch(/Object\.keys\(cards\)\.map\(\s*\(name\)\s*=>\s*\[name,\s*BUILTIN_CARD_COMPONENTS\.form\]/);
   });
 
-  it('a card tool call renders with the DECLARED schema as its data, not the model\'s raw call arguments', () => {
-    // The construct author's fields are the vocabulary the form draws — not
-    // whatever shape a model's tool-call arguments happened to take.
+  it('a card tool call renders with the DECLARED schema (with the model\'s args merged onto field defaults, CD-1/Task 19g) as its data, never the raw call arguments verbatim', () => {
+    // The construct author's fields are still the vocabulary the form draws —
+    // the model's tool-call args only ever seed FormField.default, never
+    // replace the schema itself.
     const app = file(
       generateProject(construct({ cards: [{ name: 'refund_approval', schema: { type: 'object' } }] })),
       'src/App.tsx',
     );
-    expect(app).toContain('data: cards[card.type');
+    expect(app).toContain('cards[card.type as keyof typeof cards]');
     expect(app).not.toContain('stream.addCard(card)');
   });
 
@@ -986,6 +987,38 @@ describe('cards', () => {
     const doneIdx = app.indexOf('stream.done();');
     expect(cardIdx).toBeGreaterThan(-1);
     expect(doneIdx).toBeGreaterThan(cardIdx);
+  });
+});
+
+describe('CD-1: model tool-call args merge into FormField defaults (Task 19g)', () => {
+  const cardConstruct = () =>
+    construct({
+      cards: [
+        {
+          name: 'refund_approval',
+          schema: {
+            type: 'object',
+            properties: {
+              amount: { type: 'number', title: 'Amount' },
+              reason: { type: 'string', title: 'Reason' },
+            },
+          },
+        },
+      ],
+    });
+
+  it('emits a shallow-merge helper and applies it before addCard', () => {
+    const app = file(generateProject(cardConstruct()), 'src/App.tsx');
+    expect(app).toContain('function mergeToolArgsIntoFormDefaults');
+    expect(app).toMatch(/stream\.addCard\(\{ \.\.\.card, data: merge/);
+    // The wholesale replacement this task removes must be GONE, not just
+    // supplemented — leaving both would silently re-introduce the drop.
+    expect(app).not.toContain('data: cards[card.type as keyof typeof cards] }');
+  });
+
+  it('only top-level keys present in the model args get a default; declared field shape (title/type) is untouched', () => {
+    const app = file(generateProject(cardConstruct()), 'src/App.tsx');
+    expect(app).toContain('properties: { ...schema.properties');
   });
 });
 

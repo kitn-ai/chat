@@ -126,6 +126,42 @@ export function resolveContrastForeground(accent: string): '#000000' | '#ffffff'
 }
 
 /**
+ * Shallow-merge a model's card tool-call args onto a DECLARED form schema's
+ * field defaults — "model proposes, user confirms" (CD-1, owner ruling
+ * 2026-08-26). Only top-level keys the args and the schema BOTH name are
+ * touched; the schema's own field shape (title/type/widget/validation) is
+ * never altered, and a key the model sent that isn't a declared field is
+ * ignored (the construct's vocabulary wins, not the model's). One level deep
+ * only — a nested object field's own defaults are not recursed into; no
+ * evidence of need yet (vocabulary-on-evidence).
+ *
+ * This is the real, module-level version used by this file's own tests
+ * (imported directly — see codegen-cards.render.test.tsx). `emitCardsImport`
+ * below emits an equivalent function VERBATIM as a string into the
+ * construct's own generated App.tsx: that copy is construct-glue code the
+ * eject artifact must own standalone (same as every other piece of logic
+ * emitCardsImport/emitApplyCardTools already emit inline), not an import
+ * from the kit — so the two are kept in sync by hand, not by import. Keep
+ * them behaviorally identical if you change one.
+ */
+export function mergeToolArgsIntoFormDefaults(
+  schema: Record<string, unknown>,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  const declared = schema.properties;
+  if (!declared || typeof declared !== 'object') return schema;
+  const patched: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (!(key in (declared as Record<string, unknown>))) continue;
+    patched[key] = {
+      ...((declared as Record<string, unknown>)[key] as Record<string, unknown>),
+      default: value,
+    };
+  }
+  return { ...schema, properties: { ...(declared as Record<string, unknown>), ...patched } };
+}
+
+/**
  * Neutralize characters that could break out of a comment before embedding
  * untrusted text in one. Two contexts reuse this: the CLI/dev notice line
  * (plain terminal text — newlines just garble it) and the CSS NOTICE comment
@@ -233,6 +269,16 @@ function emitCardsImport(c: Construct): string {
 // with the DECLARED card schema (not the model's call arguments) — the fields
 // on screen are the construct's own vocabulary, not whatever shape a model
 // happened to send.
+//
+// UPDATE (CD-1, owner ruling 2026-08-26, Task 19g): the field SHAPE (title/
+// type/widget/validation) still comes from the construct's own declared
+// schema, never the model's — that part is unchanged. But discarding the
+// model's call arguments wholesale also threw away any VALUE it wanted to
+// pre-fill, breaking "model proposes, user confirms" (kai_refund_approval
+// {amount:50} rendered an empty form). So the model's args are now
+// shallow-merged onto the declared schema's field \`default\`s below
+// (mergeToolArgsIntoFormDefaults) before the card is added — see
+// emitApplyCardTools.
 import { cardFromToolCall${toolsImport} } from '@kitn.ai/ui/schemas';
 
 // Every declared card name routes to the SAME form renderer — cardFromToolCall
@@ -251,7 +297,29 @@ import { cardFromToolCall${toolsImport} } from '@kitn.ai/ui/schemas';
 // failure before this comment existed). The construct's own schema.ts
 // already checks \`cards\` structurally at validate time; there is nothing
 // left for a second, self-referential check here to catch.
-const cardTypes = Object.fromEntries(Object.keys(cards).map((name) => [name, BUILTIN_CARD_COMPONENTS.form] as const));`;
+const cardTypes = Object.fromEntries(Object.keys(cards).map((name) => [name, BUILTIN_CARD_COMPONENTS.form] as const));
+
+// CD-1 (owner ruling 2026-08-26, Task 19g): shallow-merge a model's card
+// tool-call args onto a DECLARED form schema's field defaults — "model
+// proposes, user confirms". Only top-level keys the args AND the schema both
+// name are touched; the schema's own field shape (title/type/widget/
+// validation) is never altered, and a key the model sent that isn't a
+// declared field is ignored (the construct's vocabulary wins, not the
+// model's). One level deep only — a nested object field's own defaults are
+// not recursed into; no evidence of need yet (vocabulary-on-evidence).
+function mergeToolArgsIntoFormDefaults(
+  schema: Record<string, unknown> & { properties?: Record<string, unknown> },
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  const declared = schema.properties;
+  if (!declared || typeof declared !== 'object') return schema;
+  const patched: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (!(key in declared)) continue;
+    patched[key] = { ...(declared[key] as Record<string, unknown>), default: value };
+  }
+  return { ...schema, properties: { ...schema.properties, ...patched } };
+}`;
 }
 
 /** `cardTypes={cardTypes}` on ChatThread — which component draws each
@@ -271,22 +339,34 @@ function emitCardTypesProp(c: Construct): string {
  *  tool loop. A `kai_`-prefixed call becomes a card; anything else is the
  *  construct's own tool and is left as a plain `tool` part.
  *
- *  `cardFromToolCall` supplies the envelope's `type`/`id` (and the reuse — no
- *  second `kai_` parser here); its `data` is then REPLACED with the card's own
- *  DECLARED schema off the registry (`cards[card.type]`), not the model's call
- *  arguments — the form renders the construct author's fields, matching the
- *  supervisor ruling that every declared card is a schema-driven form in v1.
- *  The `card.type in cards` guard only fires for a `kai_` call this construct
- *  never declared (an off-vocabulary call slipping through); it is silently
- *  dropped rather than rendered, matching cardFromToolCall's own "not every
- *  kai_ call is renderable" boundary (see its module header). */
+ *  `cardFromToolCall` supplies the envelope's `type`/`id` and `data` (the
+ *  model's raw tool-call `input`, verbatim). `data` is then set to the card's
+ *  own DECLARED schema off the registry (`cards[card.type]`) — the form
+ *  renders the construct author's fields, matching the supervisor ruling
+ *  that every declared card is a schema-driven form in v1 — with the
+ *  model's args (`card.data`, read before this replaces it) shallow-merged
+ *  onto that schema's field `default`s (CD-1, owner ruling 2026-08-26,
+ *  Task 19g: `mergeToolArgsIntoFormDefaults`, emitted above by
+ *  emitCardsImport) so "model proposes, user confirms" pre-fills the form
+ *  instead of discarding the model's values outright. The `card.type in
+ *  cards` guard only fires for a `kai_` call this construct never declared
+ *  (an off-vocabulary call slipping through); it is silently dropped rather
+ *  than rendered, matching cardFromToolCall's own "not every kai_ call is
+ *  renderable" boundary (see its module header). */
 function emitApplyCardTools(c: Construct): string {
   if (!c.cards) return '';
   return `
   for (const part of chat.messages().find((m) => m.id === stream.id)?.parts ?? []) {
     if (part.type !== 'tool' || part.tool.state !== 'input-available') continue;
     const card = cardFromToolCall(part.tool.type, part.tool.input, { id: part.tool.toolCallId ?? crypto.randomUUID() });
-    if (card && card.type in cards) stream.addCard({ ...card, data: cards[card.type as keyof typeof cards] });
+    if (card && card.type in cards) {
+      const declared = cards[card.type as keyof typeof cards];
+      const args = card.data as Record<string, unknown> | undefined;
+      const merged = args && typeof args === 'object'
+        ? mergeToolArgsIntoFormDefaults(declared, args)
+        : declared;
+      stream.addCard({ ...card, data: merged });
+    }
   }`;
 }
 
