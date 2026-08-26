@@ -29,6 +29,10 @@ const meta = {
     name: { control: 'text', description: 'Form-control name. With `value`, this is what a native form submits.' },
     value: { control: 'text', description: 'Submitted value when checked. Defaults to `on`.' },
     class: { control: 'text', description: 'Extra classes, merged with the kit rule rather than replacing it.' },
+    'aria-label': {
+      control: 'text',
+      description: 'Accessible name. A checkbox with no visible label needs one, or it announces as an unnamed control. A wrapping `<label>` is the better answer when there is text to wrap -- see "In a label row".',
+    },
     onChange: { action: 'change', description: 'Native change event. Read `e.currentTarget.checked`.', table: { category: 'Events' } },
   },
   args: {
@@ -38,6 +42,10 @@ const meta = {
     required: false,
     name: 'notify',
     value: 'on',
+    // Every prop the component does not own is forwarded, and `aria-label` is the one a
+    // bare checkbox genuinely needs: axe flags an unnamed form control, and a demo that
+    // ships the violation teaches the violation. The label-row story shows the better form.
+    'aria-label': 'Notify me',
     onChange: fn(),
   },
   render: (args: CheckboxProps) => <Checkbox {...args} />,

@@ -119,14 +119,14 @@ export const Controlled: Story = {
     const [v, setV] = createSignal(35);
     return (
       <div style={row}>
-        <Slider min={0} max={100} step={1} value={v()} onInput={(e) => setV(e.currentTarget.valueAsNumber)} />
+        <Slider min={0} max={100} step={1} value={v()} onInput={(e) => setV(e.currentTarget.valueAsNumber)} aria-label="Temperature" />
         <output style={bubble}>{v()}</output>
       </div>
     );
   },
   ...src(`const [v, setV] = createSignal(35);
 
-<Slider min={0} max={100} step={1} value={v()} onInput={(e) => setV(e.currentTarget.valueAsNumber)} />
+<Slider min={0} max={100} step={1} value={v()} onInput={(e) => setV(e.currentTarget.valueAsNumber)} aria-label="Temperature" />
 <output>{v()}</output>`),
 };
 
@@ -143,23 +143,23 @@ export const Ranges: Story = {
     return (
       <div style={{ display: 'flex', 'flex-direction': 'column', gap: '1rem' }}>
         <div style={row}>
-          <Slider min={0} max={1} step={0.05} value={temp()} onInput={(e) => setTemp(e.currentTarget.valueAsNumber)} />
+          <Slider min={0} max={1} step={0.05} value={temp()} onInput={(e) => setTemp(e.currentTarget.valueAsNumber)} aria-label="Temperature" />
           <output style={bubble}>{temp().toFixed(2)}</output>
         </div>
         <div style={row}>
-          <Slider min={1} max={8} step={1} value={n()} onInput={(e) => setN(e.currentTarget.valueAsNumber)} />
+          <Slider min={1} max={8} step={1} value={n()} onInput={(e) => setN(e.currentTarget.valueAsNumber)} aria-label="Responses" />
           <output style={bubble}>{n()}</output>
         </div>
         <div style={row}>
-          <Slider min={0} max={100} step="any" value={free()} onInput={(e) => setFree(e.currentTarget.valueAsNumber)} />
+          <Slider min={0} max={100} step="any" value={free()} onInput={(e) => setFree(e.currentTarget.valueAsNumber)} aria-label="Continuous range" />
           <output style={bubble}>{free().toFixed(1)}</output>
         </div>
       </div>
     );
   },
-  ...src(`<Slider min={0} max={1} step={0.05} value={temp()} onInput={…} />
-<Slider min={1} max={8} step={1} value={n()} onInput={…} />
-<Slider min={0} max={100} step="any" value={free()} onInput={…} />`),
+  ...src(`<Slider min={0} max={1} step={0.05} value={temp()} onInput={…} aria-label="Temperature" />
+<Slider min={1} max={8} step={1} value={n()} onInput={…} aria-label="Responses" />
+<Slider min={0} max={100} step="any" value={free()} onInput={…} aria-label="Continuous range" />`),
 };
 
 /**
@@ -170,14 +170,14 @@ export const Ranges: Story = {
 export const Uncontrolled: Story = {
   render: () => (
     <div style={{ display: 'flex', 'flex-direction': 'column', gap: '1rem', 'max-width': '22rem' }}>
-      <Slider min={0} max={100} defaultValue={20} />
-      <Slider min={0} max={100} defaultValue={80} />
+      <Slider min={0} max={100} defaultValue={20} aria-label="Seeded low" />
+      <Slider min={0} max={100} defaultValue={80} aria-label="Seeded high" />
       {/* No value at all: HTML's own rule puts the thumb at the midpoint. */}
-      <Slider min={0} max={100} />
+      <Slider min={0} max={100} aria-label="Unseeded" />
     </div>
   ),
-  ...src(`<Slider min={0} max={100} defaultValue={20} />
-<Slider min={0} max={100} />   {/* no value: the thumb sits at the midpoint */}`),
+  ...src(`<Slider min={0} max={100} defaultValue={20} aria-label="Seeded low" />
+<Slider min={0} max={100} aria-label="Unseeded" />   {/* no value: the thumb sits at the midpoint */}`),
 };
 
 /**
@@ -217,10 +217,10 @@ export const ValueLabel: Story = {
 export const Disabled: Story = {
   render: () => (
     <div style={{ 'max-width': '22rem' }}>
-      <Slider min={0} max={100} value={60} disabled />
+      <Slider min={0} max={100} value={60} disabled aria-label="Temperature" />
     </div>
   ),
-  ...src(`<Slider min={0} max={100} value={60} disabled />`),
+  ...src(`<Slider min={0} max={100} value={60} disabled aria-label="Temperature" />`),
 };
 
 /**

@@ -58,6 +58,12 @@ function Feed(props: {
     <div style={{ position: 'relative', width: '22rem' }}>
       <div
         id={props.id}
+        // Mirrors ChatContainer's own scroll region (src/components/chat-container.tsx):
+        // a scrollable box whose content carries no focusable control has to be a tab
+        // stop itself, or a keyboard user cannot scroll it at all (WCAG 2.1.1 -- axe
+        // `scrollable-region-focusable`). A demo feed is no exception.
+        role="log"
+        tabindex={0}
         style={{
           height: '15rem',
           'overflow-y': 'auto',
@@ -159,7 +165,7 @@ export const IconOnly: StoryObj = {
       </Feed>
     </Panel>
   ),
-  parameters: src(`<div id="my-feed" style="height:400px; overflow-y:auto"></div>
+  parameters: src(`<div id="my-feed" role="log" tabindex="0" style="height:400px; overflow-y:auto"></div>
 <kai-scroll-button for="my-feed"></kai-scroll-button>`),
 };
 
@@ -281,7 +287,7 @@ export const FloatingOverContent: StoryObj = {
 <div style="position:relative; height:400px">
 
   <!-- 2. the scroll container fills it -->
-  <div id="my-feed" style="height:100%; overflow-y:auto">
+  <div id="my-feed" role="log" tabindex="0" style="height:100%; overflow-y:auto">
     <!-- messages -->
   </div>
 
