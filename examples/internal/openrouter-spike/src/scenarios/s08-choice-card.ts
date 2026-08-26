@@ -16,12 +16,32 @@ export const s08ChoiceCard: Scenario = {
     await seesAtLeast(page, options, 2, 'choice options');
 
     const first = options.first();
-    // The option's LABEL only — `textContent()` on the row would concatenate the
-    // label with its description, and the resolved view echoes the label alone.
-    const label = ((await first.locator('span.truncate').first().textContent()) ?? '').trim();
+    // The option's ROW — the clickable surface a user aims at — is the radio's
+    // own parent, whatever element the kit builds it from. It used to BE the
+    // `[role="radio"]` node (a `<div role="radio">` with the label inside it);
+    // it is now a `<label>` wrapping a real `<input type="radio">`, so the label
+    // text is the radio's SIBLING rather than its descendant. Selecting the row
+    // relationally survives both shapes, and a third one.
+    const row = first.locator('xpath=..');
+
+    // The option's LABEL only — the row's full text would concatenate the label
+    // with its description and meta, and the resolved view echoes the label
+    // alone. `innerText` is laid-out text, so the row's label/description column
+    // (a flex column) hands back one line per line a user sees, and the label is
+    // the first of them.
+    const label = ((await row.innerText()) ?? '')
+      .split('\n')
+      .map((line) => line.trim())
+      .find((line) => line.length > 0) ?? '';
     if (label.length === 0) fail('the first choice option rendered with no label');
 
-    await first.click();
+    // Click the ROW, not the control: "anywhere on the row selects it" is the
+    // behaviour, and the control is a 16px target inside it.
+    await row.click();
+    if ((await first.getAttribute('aria-checked')) !== 'true') {
+      fail(`clicking the "${label}" row did not select it: the option is still not aria-checked`);
+    }
+
     await seesRole(page, 'button', 'Choose', { because: 'the submit action is enabled once an option is picked' });
     await page.getByRole('button', { name: 'Choose' }).first().click();
 
