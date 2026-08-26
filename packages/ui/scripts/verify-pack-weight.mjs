@@ -66,6 +66,14 @@ const ALLOWED_LARGE_FILES = new Map([
   ['src/elements/element-types.d.ts', 'source copy of the JSX intrinsics; consumers reference it'],
   ['llms-full.txt', 'shipped LLM context, listed explicitly in `files`'],
   ['src/agent-tooling/mcp/tools/scaffold.ts', 'source of the `kai` MCP scaffolder'],
+  [
+    'src/agent-tooling/construct/codegen.ts',
+    'source of the construct CLI: cli.ts and dev.ts import generateProject/writeProject/' +
+      'emitTypes/accentContrastNotice from here, and cli-entry.ts (the entry vite.config.' +
+      'construct-cli.ts compiles to dist/construct-cli.es.js) pulls it in transitively; ' +
+      'bin/mcp.js runs that dist bundle for `kai dev/compile/eject/validate` — same class ' +
+      'as scaffold.ts above, source someone reads for the CLI it compiles into.',
+  ],
   ['frameworks/react/index.tsx', 'source of the generated React wrappers'],
   ['src/elements/compiled.css', 'the shadow-DOM stylesheet the elements adopt'],
 ]);
