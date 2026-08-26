@@ -49,6 +49,16 @@ export const ConstructSchema = z
       })
       .strict()
       .optional(),
+    // Capability vocabulary, widened one field at a time by later tasks.
+    capabilities: z
+      .object({
+        /** Starter prompts shown on the empty thread; clicking one sends it.
+         *  1-6 non-empty strings — construct-authored text, escaped like
+         *  `theme.accent`/`provider.url` at every emit interpolation site. */
+        starters: z.array(z.string().min(1)).min(1).max(6).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 

@@ -214,6 +214,41 @@ describe('generateProject (widget + mock core)', () => {
   });
 });
 
+describe('capabilities.starters', () => {
+  it('starters thread into ChatThread\'s own suggestions prop, which already submits on click', () => {
+    // ChatThread (chat-thread.tsx) already owns starter-prompt rendering AND
+    // submission end to end: its `suggestions` prop renders the chips, hides
+    // them once `messages` is non-empty, and (default suggestionMode
+    // "submit") calls onSubmit with the clicked text. So there is nothing to
+    // hand-compose here — the construct's starters thread straight into that
+    // existing prop.
+    const app = file(
+      generateProject(construct({ capabilities: { starters: ['Track my order', 'Request a refund'] } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('suggestions={["Track my order","Request a refund"]}');
+    expect(app).toContain('<ChatThread messages={chat.messages()}');
+    // No hand-rolled chip list — that would be restating layout ChatThread
+    // already owns (the same lesson the ratchet test above pins).
+    expect(app).not.toContain('<For each={chat.suggestions');
+  });
+
+  it('no starters, no suggestions prop at all (spine declares deviations only)', () => {
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    expect(app).not.toMatch(/\bsuggestions=\{/);
+  });
+
+  it('a hostile starter cannot break out of the emitted array literal', () => {
+    const hostile = "'}); alert(1); ({x:'";
+    const app = file(
+      generateProject(construct({ capabilities: { starters: [hostile] } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain(`suggestions={${JSON.stringify([hostile])}}`);
+    expect(app).not.toContain(`suggestions={['${hostile}']}`);
+  });
+});
+
 describe('accent contrast (paired --kai-color-primary-foreground)', () => {
   it('resolveContrastForeground: a light accent (yellow) picks black; #e91e63 picks white', () => {
     // Worked numbers (see the doc comment on resolveContrastForeground for

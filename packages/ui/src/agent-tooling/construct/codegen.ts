@@ -360,26 +360,47 @@ ${emitProviderSetup(c)}
 // leaves NOTHING here to restate it with.
 //
 // Capability gating (format rule: an undeclared capability's affordance must
-// be OFF). The construct schema carries NO capability vocabulary yet (lands
-// Task 9) — every affordance below is gated to "off" unconditionally, not
-// per-construct, until there's a field to gate ON.
+// be OFF). The construct schema carries ONE capability field so far
+// (capabilities.starters, Task 8) — every other affordance below is gated to
+// "off" unconditionally, not per-construct, until there's a field to gate ON.
 //   - webSearch / voice: real ChatThreadProps booleans, default OFF when
 //     omitted — set to \`false\` explicitly rather than left implicit, so the
 //     gating decision is visible in the emitted source, not just inferred
 //     from an absent prop.
-//   - suggestions / models: omitted (undefined), same effect — no starter
-//     prompts, no model switcher.
+//   - suggestions: ChatThread ALREADY owns starter prompts end to end — its
+//     own \`suggestions\` prop renders the chips, hides them once
+//     \`messages\` is non-empty, and (default \`suggestionMode="submit"\`)
+//     calls \`onSubmit\` with the clicked text exactly like a typed submit.
+//     So capabilities.starters threads straight into that prop; there is
+//     nothing to hand-compose. Omitted (undefined) when no starters are
+//     declared, same off-by-default effect as the booleans above.
+//   - models: omitted (undefined) — no model switcher; no capabilities field yet.
 //   - attachments (the paperclip): gated via ChatThread's \`attach\` prop
 //     (kit gap closed — ChatThread now forwards it to DefaultPromptInput,
 //     mirroring webSearch/voice). \`attach={false}\` here since the construct
-//     schema has no capabilities.attachments field yet; Task 9 flips this to
-//     \`attach={c.capabilities?.attachments === true}\` once that field lands.
+//     schema has no capabilities.attachments field yet; a later task flips
+//     this to \`attach={c.capabilities?.attachments === true}\` once that
+//     field lands.
 export function App() {
   return (
-${emitLayoutOpen(c)}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false} attach={false} />
+${emitLayoutOpen(c)}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false} attach={false}${emitStartersProp(c)} />
 ${emitLayoutClose(c)}  );
 }
 `;
+}
+
+/** capabilities.starters -> ChatThread's own \`suggestions\` prop. Starter
+ *  strings are construct-authored (untrusted the same way theme.accent and
+ *  provider.url are) — JSON.stringify produces a real JS array-of-string-
+ *  literals expression, the same safe-interpolation convention used for the
+ *  accent (element.tsx) and the endpoint url (fetch() above): no quote,
+ *  backslash or line-separator payload can break out of it. Omitted
+ *  entirely (not even the prop) when no starters are declared, matching the
+ *  off-by-default gating for every other capability. */
+function emitStartersProp(c: Construct): string {
+  const starters = c.capabilities?.starters;
+  if (!starters || starters.length === 0) return '';
+  return ` suggestions={${JSON.stringify(starters)}}`;
 }
 
 function emitProviderImports(c: Construct): string {

@@ -50,4 +50,19 @@ describe('validateConstruct', () => {
     expect(out.ok).toBe(false);
     if (!out.ok) expect(out.problems.some((p) => p.path.startsWith('provider'))).toBe(true);
   });
+
+  it('accepts starters and rejects an empty list', () => {
+    expect(validateConstruct({ ...minimal, capabilities: { starters: ["Where's my order?"] } }).ok).toBe(true);
+    expect(validateConstruct({ ...minimal, capabilities: { starters: [] } }).ok).toBe(false);
+  });
+
+  it('rejects more than 6 starters and an unknown capabilities key', () => {
+    const tooMany = validateConstruct({
+      ...minimal,
+      capabilities: { starters: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] },
+    });
+    expect(tooMany.ok).toBe(false);
+    const unknown = validateConstruct({ ...minimal, capabilities: { voice: true } });
+    expect(unknown.ok).toBe(false);
+  });
 });
