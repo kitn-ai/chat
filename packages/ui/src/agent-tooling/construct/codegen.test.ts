@@ -328,6 +328,66 @@ describe('capabilities.history', () => {
     expect(file(generateProject(construct()), 'src/App.tsx')).not.toContain('localStorage');
   });
 
+  it('history local: a stored value that parses but is not an array is ignored, not handed to setMessages', () => {
+    const app = file(
+      generateProject(construct({ capabilities: { history: { persistence: 'local' } } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('Array.isArray(parsed)');
+    // The isArray gate must sit BETWEEN the parse and setMessages, not after.
+    const parseIdx = app.indexOf('JSON.parse(saved)');
+    const isArrayIdx = app.indexOf('Array.isArray(parsed)');
+    const setMessagesIdx = app.indexOf('chat.setMessages(() => parsed');
+    expect(parseIdx).toBeGreaterThan(-1);
+    expect(isArrayIdx).toBeGreaterThan(parseIdx);
+    expect(setMessagesIdx).toBeGreaterThan(isArrayIdx);
+  });
+
+  it('history endpoint: the GET hydrate is try/catch\'d, decides loudly, and flips hydrated on BOTH success and failure (a failed load must not permanently disable future PUTs)', () => {
+    const app = file(
+      generateProject(
+        construct({ capabilities: { history: { persistence: 'endpoint', url: '/api/thread' } } }),
+      ),
+      'src/App.tsx',
+    );
+    // The GET chain is wrapped, not fire-and-forget like the old version.
+    expect(app).toMatch(/try\s*{[^}]*fetch\(/s);
+    expect(app).toContain('console.error');
+    // hydrated is set in a `finally` (or equivalent unconditional path) so a
+    // rejected fetch / non-OK response still unblocks the write-back effect —
+    // "start fresh, keep saving", not "never save again".
+    expect(app).toContain('finally');
+    expect(app).toContain('hydrated = true;');
+    // Only ONE `hydrated = true` assignment inside the async load IIFE would
+    // leave the failure path unhandled if it lived only in the try branch —
+    // pin that the assignment is inside `finally`, not `try`.
+    const finallyIdx = app.indexOf('finally');
+    const hydratedTrueAfterFinally = app.indexOf('hydrated = true;', finallyIdx);
+    expect(hydratedTrueAfterFinally).toBeGreaterThan(finallyIdx);
+  });
+
+  it('history endpoint: a well-formed non-array GET body is rejected before reaching setMessages', () => {
+    const app = file(
+      generateProject(
+        construct({ capabilities: { history: { persistence: 'endpoint', url: '/api/thread' } } }),
+      ),
+      'src/App.tsx',
+    );
+    expect(app).toContain('Array.isArray(saved)');
+    expect(app).toContain('console.warn');
+  });
+
+  it('history endpoint: the PUT write-back is guarded with .catch and decides loudly on failure (fire-and-forget is not silent)', () => {
+    const app = file(
+      generateProject(
+        construct({ capabilities: { history: { persistence: 'endpoint', url: '/api/thread' } } }),
+      ),
+      'src/App.tsx',
+    );
+    expect(app).toMatch(/method: 'PUT'[\s\S]*\.catch\(/);
+    expect(app).toMatch(/\.catch\([\s\S]*console\.error/);
+  });
+
   it('a hostile endpoint url cannot break out of the emitted string literal (JSON.stringify, not string concatenation)', () => {
     const hostile = "'); alert(1); ('";
     const app = file(

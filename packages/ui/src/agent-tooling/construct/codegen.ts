@@ -458,7 +458,12 @@ function emitHistoryTypeImport(c: Construct): string {
  *  `local`: keyed by the construct's own tag (one thread per construct, no
  *  cross-construct collision) — restoring on mount MUST hand createKaiChat's
  *  setMessages a NEW array reference (the kit's reactivity contract; see
- *  CLAUDE.md), which the updater-returns-parsed-array form does for free.
+ *  CLAUDE.md), which the updater-returns-parsed-array form does for free. A
+ *  parsed value that is well-formed JSON but the WRONG SHAPE (an object, a
+ *  number, ...) is just as dangerous as a storage exception — handing it to
+ *  `chat.setMessages` would crash ChatThread's render — so it gets the same
+ *  `Array.isArray` gate as the endpoint variant below, not just a try/catch
+ *  around the parse.
  *  localStorage access is wrapped: it can throw in private mode or over
  *  quota, and a corrupt/foreign value under the key must not white-screen —
  *  neither failure is guessed at silently, both fall back to running
@@ -468,14 +473,23 @@ function emitHistoryTypeImport(c: Construct): string {
  *  construct's to make.
  *
  *  `endpoint`: the CONSUMER's own thread route — GET on mount (kit parses
- *  the response as ChatMessage[]; a non-OK response falls back to an empty
- *  thread rather than throwing), fire-and-forget PUT on every change. The
- *  `hydrated` flag guards against the mount-load's own setMessages call
- *  immediately re-triggering a PUT that writes back exactly what was just
- *  read. url is construct-authored/untrusted like theme.accent and
- *  provider.url, so it is JSON.stringify'd at both fetch call sites — never
- *  string-concatenated (see the endpoint-provider comment on this same class
- *  of bug). */
+ *  the response as ChatMessage[]; a non-OK response, a rejected fetch, or a
+ *  non-array body all fall back to an empty thread rather than throwing or
+ *  crashing render — matching the shape-check discipline above), PUT on
+ *  every change. Both fetches are wrapped (try/catch around the GET chain,
+ *  `.catch` on the PUT) and decide loudly on failure (`console.error`) —
+ *  mirroring the adjacent provider-endpoint fetch's own try/catch +
+ *  `stream.abort` pattern, not a silent swallow. The `hydrated` flag guards
+ *  against the mount-load's own setMessages call immediately re-triggering a
+ *  PUT that writes back exactly what was just read — but a FAILED GET must
+ *  still flip it, in `finally`: a transient GET failure (offline/CORS/DNS)
+ *  degrading to "start fresh, keep saving" is the recoverable failure mode;
+ *  leaving `hydrated` false forever would permanently disable every future
+ *  PUT for the tab's life over one blip. No retry/backoff — that belongs to
+ *  the app, not this construct (component-scope-boundary). url is
+ *  construct-authored/untrusted like theme.accent and provider.url, so it is
+ *  JSON.stringify'd at both fetch call sites — never string-concatenated
+ *  (see the endpoint-provider comment on this same class of bug). */
 function emitHistorySetup(c: Construct): string {
   const history = c.capabilities?.history;
   if (!history || history.persistence === 'none') return '';
@@ -488,8 +502,15 @@ function emitHistorySetup(c: Construct): string {
 const THREAD_KEY = ${key};
 try {
   const saved = localStorage.getItem(THREAD_KEY);
-  if (saved) chat.setMessages(() => JSON.parse(saved) as ChatMessage[]);
-} catch { /* storage unavailable: run in-memory */ }
+  if (saved) {
+    const parsed: unknown = JSON.parse(saved);
+    if (Array.isArray(parsed)) {
+      chat.setMessages(() => parsed as ChatMessage[]);
+    } else {
+      console.warn(\`[\${THREAD_KEY}] stored history was not an array; ignoring and starting fresh\`);
+    }
+  }
+} catch { /* storage unavailable or corrupt: run in-memory */ }
 createEffect(() => {
   try {
     localStorage.setItem(THREAD_KEY, JSON.stringify(chat.messages()));
@@ -503,21 +524,34 @@ createEffect(() => {
 // History: persisted to your endpoint (GET on mount, PUT on every change) —
 // the kit PARSES, this app FETCHES; your route owns the storage and what to
 // retain and for how long. \`hydrated\` guards the mount-load from immediately
-// PUTting back what it just loaded.
+// PUTting back what it just loaded, but still flips on a FAILED load — one
+// offline/CORS/DNS blip degrades to "start fresh, keep saving", not
+// "never save again".
 let hydrated = false;
-fetch(${url})
-  .then((r) => (r.ok ? (r.json() as Promise<ChatMessage[]>) : []))
-  .then((saved) => {
-    chat.setMessages(() => saved);
+(async () => {
+  try {
+    const r = await fetch(${url});
+    const saved: unknown = r.ok ? await r.json() : [];
+    if (Array.isArray(saved)) {
+      chat.setMessages(() => saved as ChatMessage[]);
+    } else {
+      console.warn('history endpoint returned a non-array body; ignoring and starting fresh');
+    }
+  } catch (err) {
+    console.error('history endpoint GET failed; starting fresh (will keep saving)', err);
+  } finally {
     hydrated = true;
-  });
+  }
+})();
 createEffect(() => {
   const snapshot = chat.messages();
   if (!hydrated) return;
-  void fetch(${url}, {
+  fetch(${url}, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(snapshot),
+  }).catch((err) => {
+    console.error('history endpoint PUT failed; this change was not persisted', err);
   });
 });
 `;
