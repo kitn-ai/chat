@@ -166,6 +166,19 @@ describe('validateConstruct', () => {
     expect(validateConstruct({ ...minimal, slots: nine }).ok).toBe(false);
     expect(validateConstruct({ ...minimal, slots: nine.slice(0, 8) }).ok).toBe(true);
   });
+
+  it('slots: rejects "pane" on layout: split — collides with split\'s own fixed <slot name="pane">', () => {
+    const out = validateConstruct({ ...minimal, layout: 'split', slots: ['pane'] });
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.problems.some((p) => p.path === 'slots.0')).toBe(true);
+  });
+
+  it('slots: "pane" is fine on every other layout', () => {
+    for (const layout of ['widget', 'fullscreen', 'aside']) {
+      expect(validateConstruct({ ...minimal, layout, slots: ['pane'] }).ok).toBe(true);
+    }
+    expect(validateConstruct({ ...minimal, layout: 'custom', slots: ['pane'] }).ok).toBe(true);
+  });
 });
 
 describe('widget (layout-scoped FAB chrome)', () => {

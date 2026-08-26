@@ -356,18 +356,18 @@ function emitCardTypesProp(c: Construct): string {
 function emitApplyCardTools(c: Construct): string {
   if (!c.cards) return '';
   return `
-  for (const part of chat.messages().find((m) => m.id === stream.id)?.parts ?? []) {
-    if (part.type !== 'tool' || part.tool.state !== 'input-available') continue;
-    const card = cardFromToolCall(part.tool.type, part.tool.input, { id: part.tool.toolCallId ?? crypto.randomUUID() });
-    if (card && card.type in cards) {
-      const declared = cards[card.type as keyof typeof cards];
-      const args = card.data as Record<string, unknown> | undefined;
-      const merged = args && typeof args === 'object'
-        ? mergeToolArgsIntoFormDefaults(declared, args)
-        : declared;
-      stream.addCard({ ...card, data: merged });
-    }
-  }`;
+    for (const part of chat.messages().find((m) => m.id === stream.id)?.parts ?? []) {
+      if (part.type !== 'tool' || part.tool.state !== 'input-available') continue;
+      const card = cardFromToolCall(part.tool.type, part.tool.input, { id: part.tool.toolCallId ?? crypto.randomUUID() });
+      if (card && card.type in cards) {
+        const declared = cards[card.type as keyof typeof cards];
+        const args = card.data as Record<string, unknown> | undefined;
+        const merged = args && typeof args === 'object'
+          ? mergeToolArgsIntoFormDefaults(declared, args)
+          : declared;
+        stream.addCard({ ...card, data: merged });
+      }
+    }`;
 }
 
 /** The endpoint fetch body's `tools` field — the projected tool defs for
@@ -688,10 +688,10 @@ ${emitHistorySetup(c)}
 // layout: custom — minimal chrome, no ChatThread/Dock/PaneGroup. The bare
 // spine (Thread + PromptInput) plus the declared slots, positioned by hand so
 // YOU own the surrounding DOM. Capabilities beyond the spine (starters,
-// attachments, reasoning display-mode) are NOT wired here in v1 — this file
-// is the eject artifact; add them the way ChatThread composes them
-// (components/chat-thread.tsx in the kit's own source) if this construct
-// needs them on a custom layout.
+// attachments, reasoning display-mode, reasoningOpen, header.title) are NOT
+// wired here in v1 — this file is the eject artifact; add them the way
+// ChatThread composes them (components/chat-thread.tsx in the kit's own
+// source) if this construct needs them on a custom layout.
 export function App() {
   const [value, setValue] = createSignal('');
 

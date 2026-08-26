@@ -248,6 +248,17 @@ export const ConstructSchema = z
         message: '"custom" layout requires at least one declared slot — custom IS the slots grain',
       });
     }
+    if (construct.layout === 'split' && construct.slots) {
+      const i = construct.slots.indexOf('pane');
+      if (i !== -1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['slots', i],
+          message:
+            '"pane" collides with the "split" layout\'s own fixed <slot name="pane"> — choose a different slot name',
+        });
+      }
+    }
     if (construct.widget && construct.layout !== 'widget') {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

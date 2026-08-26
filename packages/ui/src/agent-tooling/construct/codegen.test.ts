@@ -556,6 +556,44 @@ describe('capabilities.reasoning', () => {
     const app = file(generateProject(construct()), 'src/App.tsx');
     expect(app).not.toContain('reasoningOpen');
   });
+
+  it('custom layout: reasoningOpen is NOT wired (Thread has no reasoningOpen prop) — declared loudly, matching CU-1\'s precedent for undeclared capabilities on custom', () => {
+    const app = file(
+      generateProject(construct({ layout: 'custom', slots: ['header'], capabilities: { reasoningOpen: true } })),
+      'src/App.tsx',
+    );
+    // The exclusion-disclosure comment (CU-1, below) names "reasoningOpen" in
+    // prose, so a plain `.not.toContain` would false-fail on that comment —
+    // assert no PROP usage (`reasoningOpen=`) instead.
+    expect(app).not.toMatch(/\breasoningOpen=/);
+  });
+});
+
+// CU-1: pin the emitted exclusion-disclosure comment itself, so a refactor of
+// emitCustomApp can't silently drop the loud-declaration this format commits
+// to for `custom` layout. The list below is a literal restatement of the
+// capabilities emitCustomApp deliberately leaves unwired (starters,
+// attachments, reasoning display-mode, reasoningOpen, header.title) — it
+// must be kept in sync BY HAND with that function's own comment (and with
+// the "not wired" tests above/below that each capability carries) whenever
+// the custom-layout exclusion list changes.
+describe('CU-1: custom layout exclusion disclosure', () => {
+  it('the emitted comment names every capability NOT wired on custom, so a silent drop cannot ship unnoticed', () => {
+    const app = file(
+      generateProject(construct({ layout: 'custom', slots: ['header'] })),
+      'src/App.tsx',
+    );
+    const excludedCapabilities = [
+      'starters',
+      'attachments',
+      'reasoning display-mode',
+      'reasoningOpen',
+      'header.title',
+    ];
+    for (const capability of excludedCapabilities) {
+      expect(app).toContain(capability);
+    }
+  });
 });
 
 describe('capabilities.attachments', () => {
