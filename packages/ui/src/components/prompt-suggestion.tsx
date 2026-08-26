@@ -136,7 +136,10 @@ function renderHighlighted(text: string, highlight: string) {
       <Show when={before}>
         <span class="text-foreground/70 whitespace-pre-wrap">{before}</span>
       </Show>
-      <span class="text-primary font-medium whitespace-pre-wrap">{matched}</span>
+      {/* Matched-substring highlight is CONTENT, not a control — was the BRAND
+          token. Full-strength `text-foreground` against the `/70`-opacity
+          siblings above/below is what actually carries the highlight. */}
+      <span class="text-foreground font-medium whitespace-pre-wrap">{matched}</span>
       <Show when={after}>
         <span class="text-foreground/70 whitespace-pre-wrap">{after}</span>
       </Show>

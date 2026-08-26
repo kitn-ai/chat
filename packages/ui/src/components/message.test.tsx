@@ -118,6 +118,38 @@ describe('groupMessageParts', () => {
   });
 });
 
+// ─── User bubble text token ──────────────────────────────────────────────────
+//
+// Content token, not the brand token: `text-primary` on the user-message
+// bubble toked the message's own words to `--color-primary`, the documented
+// consumer BRAND override (`theme.css` `--kai-color-primary`). Any consumer
+// that brands primary got brand-colored message text. This is a CHEAP jsdom
+// pin on the class list only — jsdom cannot compute the real Tailwind cascade
+// (see the "compiled.css trap" notes in `vitest.config.ts` and
+// `focus-ring-paints.spec.ts`'s header), so it cannot prove the class doesn't
+// resolve to the branded color. That proof lives in
+// `tests/e2e/message-text-token.spec.ts`, a real-Chromium guard against the
+// built bundle. This test exists only so a `text-primary` regression on this
+// specific line is caught by the fast unit suite, not just the slower e2e one.
+describe('MessageBody user bubble text token', () => {
+  it('never emits text-primary on the user message bubble content', () => {
+    const { container } = render(() => (
+      <MessageBody
+        parts={[{ type: 'text', text: 'hello' }]}
+        isUser={true}
+        markdown={false}
+      />
+    ));
+    const bubble = container.querySelector('[part="bubble content"]');
+    expect(bubble).toBeTruthy();
+    const classes = (bubble!.getAttribute('class') ?? '').split(/\s+/);
+    expect(classes).not.toContain('text-primary');
+    // And it's not simply missing a color entirely — the base class still
+    // carries the correct neutral content token.
+    expect(classes).toContain('text-foreground');
+  });
+});
+
 // ─── Streaming identity ──────────────────────────────────────────────────────
 //
 // A live message is re-rendered once per stream delta with a BRAND-NEW `parts`
@@ -260,21 +292,33 @@ describe('MessageBody streaming identity', () => {
   });
 });
 
-// ─── F-21: reasoning auto-open while streaming ───────────────────────────────
+// ─── F-21 / Task 19f: reasoning auto-open while streaming ────────────────────
 //
-// `reasoning.tsx` has always gated auto-open-while-streaming on an `isStreaming`
-// prop, and `message.tsx` never passed it — so a user watched a static collapsed
-// "Reasoning ⌄" label for the whole thinking window (the reproduced defect from
-// .superpowers/sdd/2026-08-20-rung-3/latency-debug/report.md). These tests pin
-// the plumb through MessageBody.
-describe('MessageBody reasoning auto-open while streaming (F-21)', () => {
+// `reasoning.tsx` originally gated auto-open-while-streaming on an `isStreaming`
+// prop alone, and `message.tsx` never passed it — so a user watched a static
+// collapsed "Reasoning ⌄" label for the whole thinking window (the reproduced
+// defect from .superpowers/sdd/2026-08-20-rung-3/latency-debug/report.md).
+//
+// Task 19f (owner ruling, 2026-08-26) REVERSED the default: auto-open is no
+// longer the no-op default plumb — it's opt-in via `reasoningDefaultOpen`. The
+// tests below that used to assert "streaming alone opens the panel" are UPDATED
+// (not deleted) to assert the new default stays closed, with a parallel case
+// proving `reasoningDefaultOpen={true}` reproduces the old F-21 behavior
+// losslessly.
+describe('MessageBody reasoning auto-open while streaming (F-21 / Task 19f)', () => {
   const reasoningParts = () => appendReasoningPart([], 'Considering', { index: 0, streamId: 's1' });
 
-  const renderStreaming = (initialStreaming: boolean) => {
+  const renderStreaming = (initialStreaming: boolean, reasoningDefaultOpen?: boolean) => {
     const [parts, setParts] = createSignal<MessagePart[]>(reasoningParts());
     const [streaming, setStreaming] = createSignal(initialStreaming);
     const rendered = render(() => (
-      <MessageBody parts={parts()} isUser={false} markdown={false} isStreaming={streaming()} />
+      <MessageBody
+        parts={parts()}
+        isUser={false}
+        markdown={false}
+        isStreaming={streaming()}
+        reasoningDefaultOpen={reasoningDefaultOpen}
+      />
     ));
     return {
       ...rendered,
@@ -283,14 +327,21 @@ describe('MessageBody reasoning auto-open while streaming (F-21)', () => {
     };
   };
 
-  it('opens the reasoning disclosure while the message is streaming (the reproduced defect)', () => {
-    // Before the fix MessageBody accepted no `isStreaming` at all, so this
-    // rendered the exact collapsed-while-streaming state the latency report
-    // photographed: text arriving, panel shut.
+  it('WAS: opened the reasoning disclosure by default while streaming. NOW (Task 19f): stays closed — default is the "Thinking" chip, expand-on-click only', () => {
     const { container, delta } = renderStreaming(true);
+    expect(reasoningOpen(container)).toBe(false);
+
+    // …and it stays closed as the reasoning text keeps streaming in — the
+    // trigger's shimmer is the only streaming feedback now, independent of open state.
+    delta((p) => appendReasoningPart(p, ' the options.', { index: 0, streamId: 's1' }));
+    expect(reasoningOpen(container)).toBe(false);
+    expect(container.textContent).toContain('Considering the options.');
+  });
+
+  it('reasoningDefaultOpen={true} reproduces the old F-21 auto-open behavior losslessly', () => {
+    const { container, delta } = renderStreaming(true, true);
     expect(reasoningOpen(container)).toBe(true);
 
-    // …and it stays open as the reasoning text keeps streaming in.
     delta((p) => appendReasoningPart(p, ' the options.', { index: 0, streamId: 's1' }));
     expect(reasoningOpen(container)).toBe(true);
     expect(container.textContent).toContain('Considering the options.');
@@ -301,8 +352,8 @@ describe('MessageBody reasoning auto-open while streaming (F-21)', () => {
     expect(reasoningOpen(container)).toBe(false);
   });
 
-  it('keeps the state the user toggled once streaming ends', () => {
-    const { container, setStreaming } = renderStreaming(true);
+  it('keeps the state the user toggled once streaming ends (reasoningDefaultOpen={true})', () => {
+    const { container, setStreaming } = renderStreaming(true, true);
     expect(reasoningOpen(container)).toBe(true);
 
     // The user shuts the panel mid-stream; the end of the stream must not
@@ -312,6 +363,64 @@ describe('MessageBody reasoning auto-open while streaming (F-21)', () => {
 
     setStreaming(false);
     expect(reasoningOpen(container)).toBe(false);
+  });
+});
+
+// ─── Task 10b: reasoningMode ─────────────────────────────────────────────────
+//
+// `reasoningMode` controls how a `reasoning` part renders: 'full' (default) is
+// the collapsible disclosure pinned above; 'compact' drops the disclosure and
+// shows only a shimmer loader while the part streams; 'off' renders nothing.
+// The default MUST be a no-op — every test above this block passes no
+// `reasoningMode` at all and pins the 'full' disclosure, so this block only
+// adds the 'compact'/'off' cases plus one explicit-'full' parity check.
+describe('MessageBody reasoningMode (Task 10b)', () => {
+  const reasoningParts = () => appendReasoningPart([], 'Considering the options.', { index: 0, streamId: 's1' });
+
+  const renderMode = (mode: 'full' | 'compact' | 'off' | undefined, streaming: boolean) =>
+    render(() => (
+      <MessageBody parts={reasoningParts()} isUser={false} markdown={false} isStreaming={streaming} reasoningMode={mode} />
+    ));
+
+  it('defaults to the full disclosure when reasoningMode is unset (no-op)', () => {
+    // Task 19f (owner ruling 2026-08-26): the DISPLAY MODE default ('full') is
+    // still a no-op, but the OPEN default flipped — a streaming 'full'
+    // disclosure with no reasoningDefaultOpen now starts closed (the "Thinking"
+    // shimmer chip), not auto-open. See the F-21 / Task 19f block above.
+    const { container } = renderMode(undefined, true);
+    expect(reasoningTrigger(container)).toBeTruthy();
+    expect(reasoningOpen(container)).toBe(false);
+  });
+
+  it('explicit "full" renders the same disclosure as the default', () => {
+    const { container } = renderMode('full', true);
+    expect(reasoningTrigger(container)).toBeTruthy();
+    expect(container.textContent).toContain('Considering the options.');
+  });
+
+  it('"compact" renders a loader, not the disclosure, while streaming', () => {
+    const { container } = renderMode('compact', true);
+    expect(reasoningTrigger(container)).toBeUndefined();
+    // The loader shows the part's label as its shimmer text (default 'Reasoning').
+    expect(container.textContent).toContain('Reasoning');
+    // No expandable detail: the reasoning TEXT itself is not rendered.
+    expect(container.textContent).not.toContain('Considering the options.');
+  });
+
+  it('"compact" renders nothing once the part has settled (not streaming)', () => {
+    const { container } = renderMode('compact', false);
+    expect(reasoningTrigger(container)).toBeUndefined();
+    expect(container.textContent).not.toContain('Reasoning');
+    expect(container.textContent).not.toContain('Considering the options.');
+  });
+
+  it('"off" renders nothing at all, streaming or not', () => {
+    const streamingCase = renderMode('off', true);
+    expect(streamingCase.container.textContent).toBe('');
+    cleanup();
+
+    const settledCase = renderMode('off', false);
+    expect(settledCase.container.textContent).toBe('');
   });
 });
 

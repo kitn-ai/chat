@@ -1,11 +1,13 @@
 /**
- * F-21 end to end, at the element level: while `<kai-chat loading>` streams a
- * reasoning part into the LAST assistant message, the Reasoning disclosure is
- * OPEN (the user watches the thinking arrive), and once loading clears it
- * settles closed. This is the exact path that regressed in the field
- * (.superpowers/sdd/2026-08-20-rung-3/latency-debug/report.md): reasoning.tsx
- * always gated auto-open on `isStreaming`, and nothing on the kai-chat path
- * ever passed it.
+ * F-21 end to end, at the element level. Task 19f (c088fdc9, owner-ruled
+ * 2026-08-26) reversed the default: `<kai-chat loading>` streaming a reasoning
+ * part into the LAST assistant message no longer auto-opens the disclosure —
+ * it stays a CLOSED shimmering chip, matching "closed chip, expand on click."
+ * The pre-19f auto-open/auto-close behavior (the exact path that regressed in
+ * the field: .superpowers/sdd/2026-08-20-rung-3/latency-debug/report.md) is
+ * now opt-in via `reasoningOpen` on `<kai-chat>`, forwarded to ChatThread's
+ * `reasoningOpen` -> message.tsx's `reasoningDefaultOpen` -> Reasoning's
+ * `defaultOpen`/`openOnStream` (src/components/message.tsx, src/elements/chat.tsx).
  */
 import '../../src/elements/chat';
 import type { ChatMessage } from '../../src/elements/chat-types';
@@ -37,21 +39,61 @@ const reasoningTrigger = (el: HTMLElement) =>
 const reasoningOpen = (el: HTMLElement) =>
   reasoningTrigger(el)?.getAttribute('aria-expanded') === 'true';
 
+// TextShimmer renders with this animation class; the disclosure trigger swaps
+// its plain label for a shimmering one while `isStreaming` (see
+// src/components/reasoning.tsx / text-shimmer.tsx).
+const reasoningShimmering = (el: HTMLElement) =>
+  !!reasoningTrigger(el)?.querySelector('[class*="animate-"]');
+
 const streamingThread = (reasoningText: string): ChatMessage[] => [
   { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Why is the sky blue?' }] },
   { id: 'a1', role: 'assistant', parts: [{ type: 'reasoning', text: reasoningText }] },
 ];
 
-function mountChat(messages: ChatMessage[], loading: boolean) {
+function mountChat(messages: ChatMessage[], loading: boolean, reasoningOpenAttr = false) {
   const el = document.createElement('kai-chat') as HTMLElement & { messages: ChatMessage[] };
   el.messages = messages;
   if (loading) el.setAttribute('loading', '');
+  if (reasoningOpenAttr) el.setAttribute('reasoning-open', '');
   document.body.appendChild(el);
   return el;
 }
 
-test('the reasoning panel is OPEN while the last assistant message streams', async () => {
+test('default: the reasoning chip stays CLOSED while the last assistant message streams, but shimmers', async () => {
   const el = mountChat(streamingThread('Considering'), true);
+  await flush();
+
+  expect(reasoningTrigger(el)).toBeTruthy();
+  expect(reasoningOpen(el)).toBe(false);
+  expect(reasoningShimmering(el)).toBe(true);
+
+  // The next delta (new array + new part object, per the reactivity contract)
+  // keeps it closed and keeps the text flowing underneath.
+  const next = streamingThread('Considering Rayleigh scattering');
+  el.messages = next;
+  await flush();
+  expect(reasoningOpen(el)).toBe(false);
+  expect(el.shadowRoot!.textContent).toContain('Rayleigh scattering');
+
+  el.remove();
+});
+
+test('default: the chip stays closed and stops shimmering once loading clears', async () => {
+  const el = mountChat(streamingThread('Considering the question.'), true);
+  await flush();
+  expect(reasoningOpen(el)).toBe(false);
+  expect(reasoningShimmering(el)).toBe(true);
+
+  el.removeAttribute('loading');
+  await flush();
+  expect(reasoningOpen(el)).toBe(false);
+  expect(reasoningShimmering(el)).toBe(false);
+
+  el.remove();
+});
+
+test('opt-in via reasoningOpen: the panel is OPEN while the last assistant message streams', async () => {
+  const el = mountChat(streamingThread('Considering'), true, true);
   await flush();
 
   expect(reasoningTrigger(el)).toBeTruthy();
@@ -68,8 +110,8 @@ test('the reasoning panel is OPEN while the last assistant message streams', asy
   el.remove();
 });
 
-test('the panel settles closed once loading clears', async () => {
-  const el = mountChat(streamingThread('Considering the question.'), true);
+test('opt-in via reasoningOpen: the panel settles closed once loading clears', async () => {
+  const el = mountChat(streamingThread('Considering the question.'), true, true);
   await flush();
   expect(reasoningOpen(el)).toBe(true);
 

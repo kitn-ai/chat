@@ -15,7 +15,19 @@ import type { ModelOption } from '../types';
 type Props = Omit<ChatThreadProps,
   'class' | 'onValueChange' | 'onSubmit' | 'onAttachmentsChange' | 'onSuggestionClick' | 'onModelChange'
   | 'onMessageAction' | 'onWebSearch' | 'onVoice' | 'controllerRef' | 'cardTypes' | 'cardSchemas' | 'cardHostElement' | 'messages'
-  | 'accept' | 'onAttachmentsRejected'> & Record<string, unknown> & {
+  | 'accept' | 'onAttachmentsRejected'
+  // `headerEndContent`/`emptyContent` are JSX.Element escape hatches for a caller
+  // composing `ChatThread` directly as a Solid component (see their doc comments in
+  // chat-thread.tsx — the construct-engine's emitted App is the motivating case).
+  // `<kai-chat>` is the OPPOSITE shape: a custom element crossing the shadow-DOM
+  // boundary, where a `JSX.Element` value cannot exist for a consumer to construct
+  // (React/Vue/plain HTML have no such type) and the facade already has its own
+  // working mechanism for both regions — `slot="header-end"` and `slot="empty"`.
+  // Omitted here rather than left to flow through `Omit`'s default pass-through:
+  // without this, `gen-element-api.mjs` picked them up and put a JSX.Element type
+  // (which it stringifies as Solid's internal array-like union — meaningless to a
+  // web-component consumer) into `<kai-chat>`'s public prop surface and docs.
+  | 'headerEndContent' | 'emptyContent'> & Record<string, unknown> & {
     /** Which attachment media types the user may stage, in HTML `accept` syntax:
      *  `<kai-chat accept="image/*,application/pdf">`. A plain string, so unlike
      *  `messages` it DOES work as an attribute. Omitted means no filter.
@@ -97,8 +109,9 @@ defineWebComponent<Props, Events>('kai-chat', {
   suggestions: undefined, suggestionMode: 'submit', persistSuggestions: false, proseSize: 'sm',
   codeTheme: 'github-dark-dimmed', codeHighlight: true, chatTitle: undefined,
   models: undefined, currentModel: undefined, context: undefined, scrollButton: true,
-  webSearch: false, voice: false, triggers: undefined, kindIcons: undefined,
+  attach: true, webSearch: false, voice: false, triggers: undefined, kindIcons: undefined,
   actionsReveal: 'always', cardTypes: undefined, cardSchemas: undefined, accept: undefined,
+  reasoning: undefined, reasoningOpen: undefined,
 }, (props, { dispatch, flag, reflectFlag, element, expose }) => {
   // `messages` is an untyped boundary: a consumer can hand it anything at
   // runtime (a pre-0.20.0 `{ id, role, content }` array, in particular). Skip
@@ -164,7 +177,9 @@ defineWebComponent<Props, Events>('kai-chat', {
     codeTheme={props.codeTheme as string} codeHighlight={flag('codeHighlight')}
     chatTitle={props.chatTitle as string | undefined} models={props.models as ModelOption[] | undefined}
     currentModel={props.currentModel as string | undefined} context={props.context as ChatThreadContextUsage | undefined}
-    scrollButton={props.scrollButton !== false} webSearch={flag('webSearch')} voice={flag('voice')}
+    scrollButton={props.scrollButton !== false} attach={flag('attach')} webSearch={flag('webSearch')} voice={flag('voice')}
+    reasoning={props.reasoning as 'full' | 'compact' | 'off' | undefined}
+    reasoningOpen={flag('reasoningOpen')}
     triggers={props.triggers as TriggerDef[] | undefined}
     kindIcons={props.kindIcons as Record<string, string> | undefined}
     actionsReveal={props.actionsReveal as 'always' | 'hover'}

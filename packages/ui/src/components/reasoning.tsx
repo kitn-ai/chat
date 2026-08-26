@@ -3,6 +3,7 @@ import { cn } from '../utils/cn';
 import { ChevronDown } from 'lucide-solid';
 import { Markdown } from './markdown';
 import { observeContentHeight } from '../primitives/use-resize-observer';
+import { TextShimmer } from './text-shimmer';
 
 interface ReasoningContextValue {
   isOpen: () => boolean;
@@ -18,6 +19,11 @@ interface ReasoningContextValue {
   /** The registered trigger. Deliberately a plain getter over a mutable
    *  variable, NOT a signal — registration must not re-run the content effect. */
   trigger: () => HTMLElement | undefined;
+  /** Whether the reasoning is currently streaming — read by `ReasoningTrigger`
+   *  to decide how its own label renders (shimmer while streaming, plain
+   *  neutral text once settled). Kit-decides-HOW: every consumer gets the same
+   *  "Thinking…" shimmer behavior for free, with no prop of their own. */
+  isStreaming: () => boolean;
 }
 
 /** Imperative open controller, handed to a parent (the kai-reasoning facade) via
@@ -49,10 +55,16 @@ export interface ReasoningProps {
   disabled?: boolean;
   /** Receive the open controller (open accessor + setOpen) once mounted. */
   controllerRef?: (api: ReasoningController) => void;
+  /** Keep auto-opening while streaming and auto-closing when it settles (the
+   *  pre-Task-19f `full` behavior). Default false: the panel starts per
+   *  `defaultOpen` and stays exactly where the user leaves it — streaming only
+   *  changes the trigger's label (shimmer), never the open state, matching the
+   *  "closed chip, expand on click" default (owner ruling, 2026-08-26). */
+  openOnStream?: boolean;
 }
 
 function Reasoning(props: ReasoningProps) {
-  const [local] = splitProps(props, ['children', 'class', 'open', 'defaultOpen', 'onOpenChange', 'isStreaming', 'disabled', 'controllerRef']);
+  const [local] = splitProps(props, ['children', 'class', 'open', 'defaultOpen', 'onOpenChange', 'isStreaming', 'disabled', 'controllerRef', 'openOnStream']);
   const [internalOpen, setInternalOpen] = createSignal(local.defaultOpen ?? false);
   const [wasAutoOpened, setWasAutoOpened] = createSignal(false);
 
@@ -72,6 +84,7 @@ function Reasoning(props: ReasoningProps) {
   };
 
   createEffect(() => {
+    if (!local.openOnStream) return;
     const streaming = local.isStreaming;
     if (streaming && !wasAutoOpened()) {
       if (!isControlled()) setInternalOpen(true);
@@ -104,6 +117,7 @@ function Reasoning(props: ReasoningProps) {
         contentId,
         registerTrigger: (el) => { triggerEl = el; },
         trigger: () => triggerEl,
+        isStreaming: () => !!local.isStreaming,
       }}
     >
       <div class={local.class}>{local.children}</div>
@@ -122,7 +136,7 @@ function ReasoningTrigger(props: ReasoningTriggerProps) {
   // to register as the panel's focus-return target, and a spread `ref` would
   // silently replace it. The consumer's ref is forwarded below instead.
   const [local, rest] = splitProps(props, ['children', 'class', 'ref']);
-  const { isOpen, onOpenChange, disabled, contentId, registerTrigger } = useReasoningContext();
+  const { isOpen, onOpenChange, disabled, contentId, registerTrigger, isStreaming } = useReasoningContext();
 
   return (
     // The same disclosure contract as CollapsibleTrigger: an explicit
@@ -149,7 +163,20 @@ function ReasoningTrigger(props: ReasoningTriggerProps) {
       onClick={() => { if (!disabled()) onOpenChange(!isOpen()); }}
       {...rest}
     >
-      <span class="text-primary">{local.children}</span>
+      {/* Content/chrome, not a control: was `text-primary`, the BRAND token, so
+          a consumer's branded --kai-color-primary bled onto the "Thinking"
+          label. `text-foreground` matches the sibling `<Tool>` disclosure
+          trigger's label (rendered via `Button variant="ghost"`, itself
+          `text-foreground`) — the established neutral for a disclosure
+          trigger's own label text in this codebase.
+          Kit-decides-HOW: while streaming, the label renders with the kit's
+          own `TextShimmer` (the common "Thinking…" shimmer, already used by
+          `Loader`'s `text-shimmer` variant) instead of static text; once
+          settled it's the plain neutral span above. Every consumer gets this
+          for free — no prop of their own. */}
+      <Show when={isStreaming()} fallback={<span class="text-foreground">{local.children}</span>}>
+        <TextShimmer class="font-medium">{local.children}</TextShimmer>
+      </Show>
       <div
         class={cn(
           'transform transition-transform',

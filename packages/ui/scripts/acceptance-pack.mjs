@@ -310,6 +310,7 @@ const EXPORT_NOTES = {
   './solid': { agent: true, what: 'The SolidJS entry with the server build wired up.' },
   './state': { agent: true, what: 'I/O-free helpers over `ChatMessage[]`: `createAssistantStream`, `appendTextPart`, `upsertToolPart`.' },
   './wire': { agent: true, what: 'The model-stream adapter: `readOpenAIStream` / `readAnthropicStream` / `readModelStream` parse provider SSE; `toOpenAIMessages` / `toAnthropicMessages` encode the thread back.' },
+  './define': { agent: true, what: 'The compiled facade-definition seam: `defineWebComponent` + `WebComponentContext`. Used by construct-engine-generated projects (and any consumer wrapping a pure-Solid interior) to register one self-registering element without pulling in the full `./elements` bundle.' },
   './diagnostics': {
     agent: true,
     what: 'Browser-only devtools surface: `installKaiDevtoolsHook()` (idempotent, SSR-safe, and already called for you by anything that registers the elements), `subscribeWireDiagnostics` to observe the wire, and `reportRequest` for the app to disclose what it actually sent. Subscription and types only — the producer side stays internal, so a consumer cannot forge events or switch on payload capture.',

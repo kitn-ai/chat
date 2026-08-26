@@ -19,6 +19,7 @@ import type { ProseSize } from '../primitives/chat-config';
 import type { ModelOption } from '../types';
 import type { CardComponentMap } from '../primitives/card-registry';
 import type { CardSchemaMap } from './card-renderer';
+import type { JSX } from 'solid-js';
 
 export interface ChatThreadContextUsage {
   usedTokens: number;
@@ -78,6 +79,19 @@ export interface ChatThreadProps {
   /** Enable Shiki syntax highlighting in code blocks. Turn off to render plain
    *  `<pre>` blocks (lighter, no highlighter load). Default true. */
   codeHighlight?: boolean;
+  /** How `reasoning` parts render across the thread. `'full'` (default) is the
+   *  current collapsible-disclosure behavior; `'compact'` shows only a shimmer
+   *  loader while a reasoning part streams and nothing once it settles (no
+   *  expandable detail); `'off'` renders reasoning parts not at all. Forwarded
+   *  to every `MessageBody` as `reasoningMode`. */
+  reasoning?: 'full' | 'compact' | 'off';
+  /** Seeds the reasoning disclosure open AND keeps it tracking the stream
+   *  (open while streaming, closes when it settles): the pre-Task-19f `full`
+   *  behavior. Default false/absent: the panel starts closed (just the
+   *  "Thinking" shimmer chip) and only opens on click, the current default
+   *  (owner ruling, 2026-08-26). Meaningless when `reasoning` is `'compact'`
+   *  or `'off'`. Forwarded to every `MessageBody` as `reasoningDefaultOpen`. */
+  reasoningOpen?: boolean;
   /** Optional header title shown on the left of the header. */
   chatTitle?: string;
   /** Optional model list. When set (>1 model) a ModelSwitcher is shown in the
@@ -95,6 +109,17 @@ export interface ChatThreadProps {
   headerStart?: boolean;
   /** Whether the host has `slot="header-end"` content (right of the controls). */
   headerEnd?: boolean;
+  /** Extra content rendered in the header-end region, AFTER `slot="header-end"`.
+   *  This is a JSX escape hatch for a caller composing `ChatThread` directly as a
+   *  Solid component (no shadow-DOM host, so there is no light-DOM node to slot) —
+   *  the `kai-dock`-docked construct widget is the motivating case: it needs its
+   *  own close affordance to sit IN the header row, sharing it with the title
+   *  instead of floating as a second control with no visible relationship to the
+   *  chat surface. Renders alongside the named slot rather than replacing it, so a
+   *  real `slot="header-end"` consumer and this prop can both be present. Counts
+   *  toward `showHeader()` the same as `headerEnd`, so a construct with no title
+   *  and only this content still gets a header row to sit in. */
+  headerEndContent?: JSX.Element;
   // ── Composition slots ─────────────────────────────────────────────────────
   // Each flag below is set by the `<kai-chat>` facade when matching light-DOM
   // `slot="…"` content is projected, and gates one composition slot. Two kinds:
@@ -111,6 +136,17 @@ export interface ChatThreadProps {
   sidebar?: boolean;
   /** REPLACE: custom zero-state rendered in the message area while the thread is empty (replaces the empty message list only; the composer and its suggestions still render). */
   empty?: boolean;
+  /** REPLACE, JSX form: the empty-state content itself, for a caller composing
+   *  `ChatThread` directly as a Solid component rather than through the `<kai-chat>`
+   *  shadow-DOM boundary that `empty`/`slot="empty"` targets. Renders INSIDE this
+   *  component's own tree — so a caller passing the kit's own `<Empty>` composition
+   *  (`components/empty.tsx`) gets it fully styled by the adopted stylesheet, unlike
+   *  `slot="empty"`: that slot only ever receives LIGHT-DOM children of the shadow
+   *  HOST, and light-DOM nodes are outside the shadow root's adopted stylesheets, so
+   *  Tailwind-utility-class content projected there renders bare. Takes priority
+   *  over `empty`/`slot="empty"` when both are set — the two are alternate delivery
+   *  mechanisms for the same region, not additive like `headerEndContent`. */
+  emptyContent?: JSX.Element;
   /** REPLACE: full custom composer in place of the built-in prompt input. The
    *  projected content wires its own submit (the data-flow boundary). */
   composer?: boolean;
@@ -125,6 +161,10 @@ export interface ChatThreadProps {
   accept?: MediaTypeFilter;
   /** Files the composer refused because `accept` excluded them. */
   onAttachmentsRejected?: (rejected: RejectedAttachment[]) => void;
+  /** When `false`, hides the built-in paperclip attach button. Defaults to
+   *  `true` (undeclared keeps today's behavior: attach visible), matching
+   *  `DefaultPromptInput`'s own default: only an explicit `false` hides it. */
+  attach?: boolean;
   /** Show a web-search (Globe) button in the input toolbar; calls `onWebSearch`. */
   webSearch?: boolean;
   /** Show a Voice (Mic) button in the input toolbar; fires a `voice` event. */
@@ -257,7 +297,7 @@ export function ChatThread(props: ChatThreadProps) {
     if ((props.suggestionMode ?? 'submit') === 'fill') { handleChange(v); props.onSuggestionClick?.(v); }
     else { props.onSubmit?.({ value: v, attachments: attachments() }); afterSubmit(); }
   };
-  const showHeader = () => !!(props.chatTitle || props.models || props.context || props.headerStart || props.headerEnd);
+  const showHeader = () => !!(props.chatTitle || props.models || props.context || props.headerStart || props.headerEnd || props.headerEndContent);
   // Suggestions are conversation starters: show only on an empty thread unless
   // the host opts into persisting them.
   const visibleSuggestions = () =>
@@ -333,6 +373,11 @@ export function ChatThread(props: ChatThreadProps) {
                     {/* Consumer-injected trailing controls (share, settings, …).
                         Projects light-DOM `slot="header-end"` children of <kai-chat>. */}
                     <slot name="header-end" />
+                    {/* JSX escape hatch for a Solid-composed caller with no shadow-DOM
+                        host to slot into (see the prop doc) — a docked widget's own
+                        close affordance is the motivating case, sharing this row with
+                        the title instead of floating as an unrelated second control. */}
+                    {props.headerEndContent}
                   </div>
                 </header>
               </Show>
@@ -343,11 +388,15 @@ export function ChatThread(props: ChatThreadProps) {
           <div class="relative flex-1 overflow-hidden">
             <ChatContainer class="h-full px-4 py-3">
               <ChatContainerContent class="mx-auto w-full max-w-3xl space-y-4">
-                {/* REPLACE — custom empty-state slot, shown only while the thread is
+                {/* REPLACE — custom empty-state content, shown only while the thread is
                     empty. The component still owns WHEN it shows (data state); the
-                    consumer owns WHAT it looks like. */}
-                <Show when={props.empty && props.messages.length === 0}>
-                  <slot name="empty" />
+                    consumer owns WHAT it looks like. `emptyContent` (JSX, rendered
+                    in-tree and fully styled) wins over `empty`/`slot="empty"`
+                    (light-DOM projection) when both are set — see the prop doc. */}
+                <Show when={(props.empty || props.emptyContent) && props.messages.length === 0}>
+                  <Show when={props.emptyContent} fallback={<slot name="empty" />}>
+                    {props.emptyContent}
+                  </Show>
                 </Show>
                 {/* Keyed by message id (see the note above this component), so a
                     streaming delta updates the row instead of replacing it. */}
@@ -366,9 +415,14 @@ export function ChatThread(props: ChatThreadProps) {
                             parts={m().parts}
                             /* F-21: streaming-ness = the thread's ONE existing
                                loading signal + being the last message and an
-                               assistant turn. No second streaming source; the
-                               reasoning disclosure auto-opens on it. */
+                               assistant turn. No second streaming source. The
+                               reasoning disclosure no longer auto-opens on it
+                               by default (Task 19f, owner ruling 2026-08-26) —
+                               only the trigger's shimmer reflects streaming
+                               unless `reasoningOpen` opts back in. */
                             isStreaming={props.loading === true && m().role === 'assistant' && i() === props.messages.length - 1}
+                            reasoningMode={props.reasoning}
+                            reasoningDefaultOpen={props.reasoningOpen}
                             cardTypes={props.cardTypes}
                             cardSchemas={props.cardSchemas}
                             cardHostElement={props.cardHostElement}
@@ -439,7 +493,7 @@ export function ChatThread(props: ChatThreadProps) {
                     value={current()} placeholder={props.placeholder} loading={props.loading === true}
                     suggestions={visibleSuggestions()} attachments={attachments()}
                     accept={props.accept} onAttachmentsRejected={props.onAttachmentsRejected}
-                    webSearch={props.webSearch === true} voice={props.voice === true}
+                    attach={props.attach} webSearch={props.webSearch === true} voice={props.voice === true}
                     triggers={props.triggers} kindIcons={props.kindIcons}
                     onValueChange={handleChange} onSubmit={handleSubmit} onSuggestionClick={handleSuggestionClick}
                     onAttachmentsChange={(a) => { setAttachments(a); props.onAttachmentsChange?.(a); }}

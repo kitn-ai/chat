@@ -152,7 +152,12 @@ function SourceContent(props: SourceContentProps) {
               width={16}
               height={16}
             />
-            <div class="text-primary truncate text-sm">
+            {/* Citation title/domain is CONTENT, not a control — was the BRAND
+                token. `text-foreground/80` matches how `SourceTrigger` above
+                already renders this same domain text (inherited from its `<a
+                class="... text-foreground/80 ...">`), so the hover-card header
+                and the trigger chip agree on the same domain's color. */}
+            <div class="text-foreground/80 truncate text-sm">
               {ctx.domain.replace('www.', '')}
             </div>
           </div>

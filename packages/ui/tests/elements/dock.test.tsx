@@ -62,6 +62,7 @@ const shadow = (el: Dock) => el.shadowRoot!;
 const launcher = (el: Dock) => shadow(el).querySelector('[part="launcher"]') as HTMLButtonElement;
 const panel = (el: Dock) => shadow(el).querySelector('[part="panel"]') as HTMLElement;
 const badge = (el: Dock) => shadow(el).querySelector('[part="badge"]');
+const closeBtn = (el: Dock) => shadow(el).querySelector('[part="close"]') as HTMLButtonElement;
 /** The element's own answer to "am I open", read the way a consumer would see it. */
 const expanded = (el: Dock) => launcher(el).getAttribute('aria-expanded') === 'true';
 
@@ -983,5 +984,197 @@ describe('geometry is CSS tokens, and every prop is a scalar', () => {
 
     expect(found, 'the defineWebComponent call must be found (the scan is not vacuous)').toBe(true);
     expect(offenders, 'kai-dock is scalars-only by design — see the spec §2').toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Mobile close X — owner feedback: a full-bleed panel with only a floating
+// launcher over it as the close route felt wrong. The panel gets its own
+// [part="close"] X, CSS-gated by the SAME <=480px query that takes the panel
+// full-bleed, with the launcher hidden by that same query while the panel is
+// open. jsdom evaluates neither media queries nor `:has()` selection, so — same
+// convention as the two IVP-defect tests above — this pins the DOM structure and
+// the CSS rule text the browser acts on, plus the button's real behaviour
+// (present, labelled, functional, reachable) which jsdom CAN exercise directly.
+// ---------------------------------------------------------------------------
+
+describe('mobile close X (<=480px full-bleed)', () => {
+  test('the close button exists, is a real labelled <button>, and lives inside the panel', async () => {
+    const el = await mount('<div slot="panel">body</div>');
+    const btn = closeBtn(el);
+    expect(btn.tagName).toBe('BUTTON');
+    expect(btn.getAttribute('type')).toBe('button');
+    expect(panel(el).contains(btn)).toBe(true);
+    expect(btn.getAttribute('aria-label')).toBeTruthy();
+  });
+
+  test('its aria-label is the dock\'s derived CLOSE name, and follows `label`/`close-label`', async () => {
+    const el = await mount('<div slot="panel">body</div>');
+    el.setAttribute('label', 'Aurora support');
+    el.show();
+    await flush();
+    expect(closeBtn(el).getAttribute('aria-label')).toBe('Close Aurora support');
+
+    el.setAttribute('close-label', 'Fermer le support');
+    await flush();
+    expect(closeBtn(el).getAttribute('aria-label')).toBe('Fermer le support');
+  });
+
+  test('clicking it closes the dock and returns focus to the launcher', async () => {
+    const el = await mount('<div slot="panel">body</div>');
+    el.show();
+    await flush();
+    expect(expanded(el)).toBe(true);
+
+    closeBtn(el).click();
+    await flush();
+    expect(expanded(el)).toBe(false);
+    expect(shadow(el).activeElement).toBe(launcher(el));
+  });
+
+  test('it is unreachable while closed, and reachable while open — same inert/visibility rule as the rest of the panel', async () => {
+    const el = await mount('<div slot="panel">body</div>');
+    expect(tabReachable(closeBtn(el))).toBe(false);
+
+    el.show();
+    await flush();
+    expect(tabReachable(closeBtn(el))).toBe(true);
+  });
+
+  test('it does not steal the D-B focus-on-open target — the first slotted element still wins', async () => {
+    const el = await mount('<div slot="panel" tabindex="0" id="content">body</div>');
+    el.show();
+    await flush();
+    expect(document.activeElement).toBe(el.querySelector('#content'));
+  });
+
+  test('Escape still closes with the X present (D-C untouched)', async () => {
+    const el = await mount('<div slot="panel">body</div>');
+    el.show();
+    await flush();
+    escapeFrom(launcher(el));
+    await flush();
+    expect(expanded(el)).toBe(false);
+  });
+
+  test('CSS: the close part is display:none by default, i.e. desktop never shows it', async () => {
+    const el = await mount();
+    const css = Array.from(shadow(el).querySelectorAll('style')).map((s) => s.textContent).join('\n');
+    const baseRule = css.match(/\[data-kai-dock\] \[part="close"\] \{([^}]*)\}/)?.[1] ?? '';
+    expect(baseRule, 'the base [part="close"] rule must be found').not.toBe('');
+    expect(baseRule).toMatch(/display:\s*none/);
+    expect(baseRule).toMatch(/position:\s*absolute/);
+  });
+
+  // -------------------------------------------------------------------------
+  // Fix round 1 (post-review): the X is an ABSOLUTE overlay, and the dock is
+  // content-agnostic — it never reads what is slotted into the panel. Verified by
+  // rendering a real ChatThread `header-end` slot (a couple of trailing icon
+  // buttons, the documented "share, settings, ..." case) at a 375px viewport in
+  // Playwright: BEFORE this fix the X painted directly over both icons (`anyOverlap:
+  // true`, the settings icon fully hidden under the X). The fix has two parts, both
+  // covered here structurally (jsdom evaluates neither media queries nor `:has()`):
+  // consumer-overridable inset tokens for the rare case the X should overlap
+  // deliberately, PLUS a reserved padding band — derived from those SAME tokens, not
+  // a second hand-typed number — so nothing slotted renders under the X by default,
+  // regardless of what the content is. Re-rendered the same header-end fixture after
+  // the fix: `anyOverlap: false`, both icons now sit below the reserved band.
+  // -------------------------------------------------------------------------
+
+  test('CSS: the close button\'s inset is a consumer-overridable token, not a hardcoded value', async () => {
+    const el = await mount();
+    const css = Array.from(shadow(el).querySelectorAll('style')).map((s) => s.textContent).join('\n');
+    const baseRule = css.match(/\[data-kai-dock\] \[part="close"\] \{([^}]*)\}/)?.[1] ?? '';
+    expect(baseRule, 'the base [part="close"] rule must be found').not.toBe('');
+    expect(baseRule, 'inset-block-start must resolve through a --kai-dock-close-inset-block token').toMatch(
+      /inset-block-start:\s*var\(--kai-dock-close-inset-block,\s*0\.75rem\)/,
+    );
+    expect(baseRule, 'inset-inline-end must resolve through a --kai-dock-close-inset-inline token').toMatch(
+      /inset-inline-end:\s*var\(--kai-dock-close-inset-inline,\s*0\.75rem\)/,
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // Fix round 2 (owner feedback against the live construct-engine widget): for a
+  // construct whose header carries only a title, the reserved padding band read
+  // as a dead empty strip with a lone X floating in it — "why is the X button on
+  // its own row instead of shared with the title... that doesn't look
+  // intentional." The composing fix: `ChatThread` gained its own
+  // `headerEndContent` escape hatch so a caller puts the close control INSIDE
+  // the header row, and `hideClose` here suppresses this built-in X for that
+  // case, band included (nothing left for it to protect).
+  //
+  // ROUND 2 REVIEW FINDING (fix round 1 of round 2): the band was first removed
+  // UNCONDITIONALLY, which silently reopened the exact collision round 1 fixed
+  // for every consumer who never opted into `hideClose` — a hand-authored
+  // `<kai-dock>` with real `slot="header-end"` content and default `hideClose`
+  // (false/absent) has no escape hatch of its own and got the floating X painted
+  // back over its icons. Fix: the band's CSS selector is scoped to
+  // `:not([data-hide-close])`, and the dock root carries `data-hide-close` only
+  // when `hideClose` is true — so the band (and the X it protects) come off
+  // TOGETHER, only for the case that supplies its own control, and stay on by
+  // default for everyone else. Round 1's own coverage of this was an ephemeral,
+  // never-committed Playwright fixture — the pair below is the committed
+  // regression pin that was missing.
+  // -------------------------------------------------------------------------
+
+  test('CSS: the reserved padding band is scoped to :not([data-hide-close]), not removed unconditionally', async () => {
+    const el = await mount();
+    const css = Array.from(shadow(el).querySelectorAll('style')).map((s) => s.textContent).join('\n');
+    const mediaBlock = css.match(/@media \(max-width: 480px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
+    expect(mediaBlock, 'the <=480px block must be found').not.toBe('');
+    // The UNSCOPED [part="panel"] rule (the one every consumer's panel matches
+    // regardless of hideClose) must NOT itself carry the band — it has to live
+    // behind the :not([data-hide-close]) selector, or it would apply even when
+    // hideClose is true.
+    const baseRule = mediaBlock.match(/\[data-kai-dock\] \[part="panel"\] \{([\s\S]*?)\}/)?.[1] ?? '';
+    expect(baseRule, 'the base mobile panel rule must be found').not.toBe('');
+    expect(baseRule).not.toMatch(/padding-block-start/);
+    // The SCOPED rule is where the band actually lives, derived from the same
+    // tokens as the close button's own inset + footprint, not a bare number.
+    const scopedRule = mediaBlock.match(
+      /\[data-kai-dock\]:not\(\[data-hide-close\]\) \[part="panel"\] \{([\s\S]*?)\}/,
+    )?.[1] ?? '';
+    expect(scopedRule, 'the :not([data-hide-close]) scoped panel rule must be found').not.toBe('');
+    expect(scopedRule, 'padding-block-start must be derived from --kai-dock-close-inset-block, not a bare number').toMatch(
+      /padding-block-start:\s*calc\(2 \* var\(--kai-dock-close-inset-block,\s*0\.75rem\)\s*\+\s*2\.25rem\)/,
+    );
+  });
+
+  // The committed regression pair: state (a) is the default every existing
+  // consumer gets today (band scoped ON, X present); state (b) is the
+  // header-integrated case (band scoped OFF via data-hide-close, X absent).
+  // Structural, not a real media-query/`:not()` cascade evaluation — same
+  // jsdom limitation noted throughout this file — but pins the DOM state the
+  // browser's cascade actually keys off in both directions at once.
+
+  test('(a) default (hideClose absent): the dock root carries NO data-hide-close, so the band-scoping selector applies — X is present in the tree', async () => {
+    const el = await mount('<div slot="panel">body</div>');
+    const root = shadow(el).querySelector('[data-kai-dock]')!;
+    expect(root.hasAttribute('data-hide-close'), 'no data-hide-close by default — the band stays scoped ON').toBe(false);
+    expect(closeBtn(el), 'the built-in close button still renders by default').not.toBeNull();
+  });
+
+  test('(b) hideClose true: the dock root carries data-hide-close, taking the band OUT of scope — X is absent from the tree entirely', async () => {
+    const el = await mount('<div slot="panel">body</div>');
+    el.setAttribute('hide-close', '');
+    await flush();
+    const root = shadow(el).querySelector('[data-kai-dock]')!;
+    expect(root.hasAttribute('data-hide-close'), 'data-hide-close present — the band goes out of scope').toBe(true);
+    expect(closeBtn(el), 'the built-in close button is dropped from the render tree, not just hidden').toBeNull();
+  });
+
+  test('CSS: the <=480px block switches the close part on and hides the launcher only while the panel is expanded', async () => {
+    const el = await mount();
+    const css = Array.from(shadow(el).querySelectorAll('style')).map((s) => s.textContent).join('\n');
+    const mediaBlock = css.match(/@media \(max-width: 480px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
+    expect(mediaBlock, 'the <=480px block must be found').not.toBe('');
+    expect(mediaBlock, 'the close X switches on at this width').toMatch(
+      /\[part="close"\]\s*\{\s*display:\s*inline-flex/,
+    );
+    expect(
+      mediaBlock,
+      'the launcher hides only when the panel carries [data-expanded], not unconditionally',
+    ).toMatch(/:has\(\[part="panel"\]\[data-expanded\]\)\s*\[part="launcher"\]\s*\{\s*display:\s*none/);
   });
 });

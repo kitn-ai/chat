@@ -593,6 +593,17 @@ jobs:
       - name: Scaffolder output compiles (tsc --strict over emitted code)
         run: pnpm --filter @kitn.ai/ui run verify:scaffold
 
+      # The construct engine's real emit chain: node bin/mcp.js eject (the CLI,
+      # not the library) -> a real npm install -> tsc --noEmit under the cell's
+      # OWN emitted tsconfig -> npm run build -> for one cell per layout, a real
+      # Vite 8 consumer bundle asserting the registration survives. Axes (layout,
+      # capability) are derived from the drift-guarded construct.v1.schema.json
+      # artifact, never typed here -- the script prints what it actually ran.
+      # --self-test runs first and proves the harness detects a spliced type
+      # error and a hand-stripped registration before the real cells are trusted.
+      - name: Construct engine emit chain (real eject + install + tsc + build + consumer bundle)
+        run: pnpm --filter @kitn.ai/ui run verify:construct
+
       # Cache the npm side of the starters. Six of the eight are pnpm workspace
       # members already installed by the step above; the other two (nextjs,
       # tanstack-start) are deliberately STANDALONE `file:` consumers, so they
@@ -827,6 +838,27 @@ jobs:
       # ~1min, no network.
       - name: Focus-indicator paint guard (shadow-root rings, built bundle)
         run: pnpm --filter @kitn.ai/ui run test:focus-ring
+
+      # A branded --kai-color-primary must color CONTROLS, never message
+      # CONTENT ("accent brands controls, never content" — owner-ruled). The
+      # user-message bubble used to set text-primary on the text part, so any
+      # consumer that branded primary got brand-colored message text on every
+      # thread surface. Same shape as the two guards above: bare harness, no
+      # document Tailwind, drives the BUILT bundle, because only the real
+      # cascade proves what a branded custom property resolves to inside a
+      # shadow root. Carries a positive control (a default kai-button DOES take
+      # the brand) so the negative assertion can't pass by nothing being wired.
+      - name: Message text-token guard (brand must not color content, built bundle)
+        run: pnpm --filter @kitn.ai/ui run test:message-text-token
+
+      # Same class of defect, found a third time (a live owner demo branded
+      # purple): reasoning.tsx's "Thinking" label, loader.tsx's terminal caret
+      # and loading-dots text, prompt-suggestion.tsx's matched-highlight, and
+      # file-tree.tsx's folder icon all hardcoded text-primary (BRAND) on
+      # content/chrome. Same bare, Tailwind-free, built-bundle harness; same
+      # positive-control shape.
+      - name: Content brand-bleed guard (accent must not color content/chrome, built bundle)
+        run: pnpm --filter @kitn.ai/ui run test:content-brand-bleed
 
       # Keyboard tab-stop behaviour for the hover-card, same shape as above:
       # Storybook-free, own port, drives the BUILT bundle. Added by PR #284;

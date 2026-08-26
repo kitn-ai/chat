@@ -7,6 +7,7 @@
 // fatal-error / exit handling here (a .js file, outside tsc's typed src/), so the
 // stdio entry source stays free of Node globals.
 import { fileURLToPath } from 'node:url';
+import { decideEntry } from './route.js';
 
 // stdout is the JSON-RPC channel; diagnostics must go to stderr.
 function fatal(err) {
@@ -16,7 +17,19 @@ function fatal(err) {
 process.on('unhandledRejection', fatal);
 process.on('uncaughtException', fatal);
 
-// Resolve against this file's own URL so the import works regardless of the cwd
-// or how the bin was invoked (npx, global install, symlink).
-const entry = fileURLToPath(new URL('../dist/mcp.es.js', import.meta.url));
+// Subcommand dispatch. `npx @kitn.ai/ui <cmd>`: `mcp` (or nothing) starts the
+// MCP server — the historical behavior, byte-compatible and unchanged.
+// dev/compile/eject/validate load the construct CLI. Anything else is a typo
+// (e.g. `frobnicate`, `validat`) — it errors loudly to stderr and exits 2
+// rather than silently falling through to the server (decideEntry, tested in
+// route.test.js, owns that decision so it stays testable without spawning).
+const [, , command] = process.argv;
+const decision = decideEntry(command);
+if (decision.kind === 'error') {
+  console.error(`[kitn-ui-mcp] ${decision.message}`);
+  process.exit(2);
+}
+const entry = fileURLToPath(
+  new URL(decision.kind === 'construct' ? '../dist/construct-cli.es.js' : '../dist/mcp.es.js', import.meta.url),
+);
 import(entry).catch(fatal);

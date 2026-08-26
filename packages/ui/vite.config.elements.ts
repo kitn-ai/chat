@@ -1,6 +1,20 @@
-// Per-element elements build. Emits, into dist/elements/, with code-splitting so
-// shared code (Solid runtime, defineWebComponent, compiled CSS, marked, …) lands
-// in dist/elements/chunks/ and is shared across entries:
+// Per-element elements build. Entries land in dist/elements/ (one self-registering
+// module per element + the autoloader); shared code (Solid runtime,
+// defineWebComponent, compiled CSS, marked, …) code-splits into lazy chunks written
+// to dist/ itself — NOT dist/elements/chunks/ — deliberately, and is shared across
+// entries. outDir is `dist` (not `dist/elements`) precisely so chunkFileNames can
+// place those lazy chunks at the SAME level as the earlier lib builds' own dist/
+// output: this build runs last in `build` (see package.json), and Rollup names a
+// chunk from a hash of its rendered code (computed before our post-pass minifier
+// runs), so the on-demand highlighter's grammar/theme chunks — shiki's
+// typescript/tsx/javascript/html/css/json/bash/svelte/vue grammars, the github-*
+// themes, engine-javascript — hash identically here and in the barrel/solid builds
+// that also pull the highlighter in. Same hash + same directory means the file this
+// build writes lands on the exact path an earlier build already wrote, so npm packs
+// one copy instead of two (this is what verify-pack-weight.mjs's 2026-08-26 dedupe
+// fix relies on — see its ceiling-history comment). Chunks unique to this build
+// (per-element Solid modules) get unique hashes and just live in dist/ alongside
+// everything else; nothing about their content or count changes, only their path.
 //   - index.js      — registers ALL elements (the SSR-safe register.ts; the
 //                     default @kitn.ai/ui/elements behavior, unchanged)
 //   - <file>.js     — one self-registering module per element (@kitn.ai/ui/elements/<file>)
@@ -60,18 +74,20 @@ export default defineConfig({
   plugins: [solidPlugin(), libMinifyPlugin()],
   build: {
     // The per-element + autoloader SPLIT build → dist/elements/ (one self-registering
-    // module per element + the autoloader, with shared chunks in dist/elements/chunks/).
+    // module per element + the autoloader, with shared chunks deduped into dist/ —
+    // see the file-header comment for why outDir is `dist` and not `dist/elements`).
     // Runs AFTER the coarse register-all build (vite.config.ts) AND the barrel build,
     // which emits type declarations for ALL of src/** — including dist/elements/*.d.ts
     // (e.g. dist/elements/chat-types.d.ts, referenced by dist/index.d.ts and
     // dist/state/*.d.ts). emptyOutDir MUST stay false so this JS-only build does not
-    // wipe those barrel-emitted declarations out from under the published type graph
-    // (dist is already cleared once at the very start by vite.config.ts).
-    outDir: 'dist/elements',
+    // wipe those barrel-emitted declarations (or the earlier builds' own dist/*.js)
+    // out from under the published type graph (dist is already cleared once at the
+    // very start by vite.config.ts).
+    outDir: 'dist',
     emptyOutDir: false,
     lib: { entry, formats: ['es'] },
     rollupOptions: {
-      output: { entryFileNames: '[name].js', chunkFileNames: 'chunks/[name]-[hash].js' },
+      output: { entryFileNames: 'elements/[name].js', chunkFileNames: '[name]-[hash].js' },
     },
   },
 });

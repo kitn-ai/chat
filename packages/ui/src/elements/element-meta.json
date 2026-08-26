@@ -1434,6 +1434,22 @@
         "displayType": "undefined | false | true"
       },
       {
+        "name": "reasoning",
+        "type": "undefined | \"full\" | \"compact\" | \"off\"",
+        "optional": true,
+        "scalar": true,
+        "description": "How `reasoning` parts render across the thread. `'full'` (default) is the current collapsible-disclosure behavior; `'compact'` shows only a shimmer loader while a reasoning part streams and nothing once it settles (no expandable detail); `'off'` renders reasoning parts not at all. Forwarded to every `MessageBody` as `reasoningMode`.",
+        "displayType": "undefined | \"full\" | \"compact\" | \"off\""
+      },
+      {
+        "name": "reasoningOpen",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Seeds the reasoning disclosure open AND keeps it tracking the stream (open while streaming, closes when it settles): the pre-Task-19f `full` behavior. Default false/absent: the panel starts closed (just the \"Thinking\" shimmer chip) and only opens on click, the current default (owner ruling, 2026-08-26). Meaningless when `reasoning` is `'compact'` or `'off'`. Forwarded to every `MessageBody` as `reasoningDefaultOpen`.",
+        "displayType": "undefined | false | true"
+      },
+      {
         "name": "chatTitle",
         "type": "undefined | string",
         "optional": true,
@@ -1542,6 +1558,15 @@
         "optional": true,
         "scalar": true,
         "description": "INJECT: footer row below the composer (disclaimers, token meter, …).",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "attach",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "When `false`, hides the built-in paperclip attach button. Defaults to `true` (undeclared keeps today's behavior: attach visible), matching `DefaultPromptInput`'s own default: only an explicit `false` hides it.",
+        "default": "true",
         "displayType": "undefined | false | true"
       },
       {
@@ -3573,6 +3598,14 @@
         "optional": true,
         "scalar": true,
         "description": "Disable the launcher; `show()` and `toggle()` are gated on it.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "hideClose",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Suppress the dock's own built-in mobile close X. Set this when your slotted panel content supplies its own close affordance (e.g. a `<kai-chat slot=\"header-end\">` close button), otherwise the two stack. TRADEOFF: the mobile panel reserves a padding band above its content so the built-in X never paints over slotted content; that band stays reserved unless you set this true, so only set it once your own control is actually in place. Attribute: `hide-close`.",
         "displayType": "undefined | false | true"
       },
       {

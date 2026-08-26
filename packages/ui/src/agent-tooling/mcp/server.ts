@@ -9,10 +9,11 @@ import { reference } from './tools/reference';
 import { scaffold } from './tools/scaffold';
 import { theme } from './tools/theme';
 import { debug } from './tools/debug';
+import { constructTool } from './tools/construct';
 import type { Tool } from './tools/types';
 import { validateToolArgs } from './validate-args';
 
-const tools: Tool[] = [reference, scaffold, theme, debug];
+const tools: Tool[] = [reference, scaffold, theme, debug, constructTool];
 
 const PACKAGE_NAME = '@kitn.ai/ui';
 

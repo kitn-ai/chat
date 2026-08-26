@@ -250,7 +250,11 @@ export function TerminalLoader(props: TerminalLoaderProps) {
   const containerSizes = { sm: 'h-4', md: 'h-5', lg: 'h-6' };
   return (
     <div class={cn('flex items-center space-x-1', containerSizes[size()], props.class)}>
-      <span class={cn('text-primary font-mono', textSizes[size()])}>{'>'}</span>
+      {/* Decorative status chrome, not a control — was the BRAND token
+          (text-primary). The sibling TextShimmerLoader below already renders
+          its "Thinking" text purely in --color-foreground/--color-muted-foreground,
+          with no brand color at all; matches that precedent. */}
+      <span class={cn('text-foreground font-mono', textSizes[size()])}>{'>'}</span>
       <div class={cn('bg-primary animate-[blink_1s_step-end_infinite]', cursorSizes[size()])} />
       <span class="sr-only">Loading</span>
     </div>
@@ -302,13 +306,16 @@ export function TextDotsLoader(props: TextDotsLoaderProps) {
   const textSizes = { sm: 'text-xs', md: 'text-sm', lg: 'text-base' };
   return (
     <div class={cn('inline-flex items-center', props.class)}>
-      <span class={cn('text-primary font-medium', textSizes[size()])}>
+      {/* Content/chrome, not a control — was `text-primary` on the label AND
+          the dots (both must match: one phrase, "Thinking..."). Matches
+          TextShimmerLoader's neutral precedent above. */}
+      <span class={cn('text-foreground font-medium', textSizes[size()])}>
         {props.text ?? 'Thinking'}
       </span>
       <span class="inline-flex">
-        <span class="text-primary animate-[loading-dots_1.4s_infinite_0.2s]">.</span>
-        <span class="text-primary animate-[loading-dots_1.4s_infinite_0.4s]">.</span>
-        <span class="text-primary animate-[loading-dots_1.4s_infinite_0.6s]">.</span>
+        <span class="text-foreground animate-[loading-dots_1.4s_infinite_0.2s]">.</span>
+        <span class="text-foreground animate-[loading-dots_1.4s_infinite_0.4s]">.</span>
+        <span class="text-foreground animate-[loading-dots_1.4s_infinite_0.6s]">.</span>
       </span>
     </div>
   );

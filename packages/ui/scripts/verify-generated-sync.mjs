@@ -138,6 +138,13 @@ const GENERATED = [
   { file: 'packages/ui/llms.txt', probe: 'overwrite' },
   { file: 'packages/ui/llms-full.txt', probe: 'overwrite' },
   { file: 'packages/ui/src/agent-tooling/catalog/derived.json', probe: 'overwrite' },
+  // The construct format's published JSON Schema (Task 14), two addresses of
+  // the same artifact: the checked-in copy scripts/gen-construct-schema.mjs
+  // writes beside its Zod source, and the docs-site copy served at
+  // https://ui.kitn.ai/schemas/construct/v1.json. Both are written by that one
+  // generator, which build:api already runs.
+  { file: 'packages/ui/src/agent-tooling/construct/construct.v1.schema.json', probe: 'overwrite' },
+  { file: 'apps/docs/public/schemas/construct/v1.json', probe: 'overwrite' },
   { file: 'docs/web-components.md', probe: 'in-block' },
 ];
 

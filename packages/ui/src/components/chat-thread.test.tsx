@@ -20,6 +20,17 @@ vi.mock('../primitives/toast-store', () => {
 // jsdom doesn't implement Element.scrollTo; the auto-scroll container calls it.
 if (!Element.prototype.scrollTo) (Element.prototype as unknown as { scrollTo: () => void }).scrollTo = () => {};
 
+// jsdom has no ResizeObserver; ReasoningContent wires one when it mounts (same
+// stub as reasoning.test.tsx / message.test.tsx) — needed for the new
+// reasoningOpen forwarding tests below, which render a real reasoning part.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
+
 // jsdom has no clipboard; stub a writeText spy we can assert against.
 const writeText = vi.fn();
 Object.assign(navigator, { clipboard: { writeText } });
@@ -50,6 +61,81 @@ describe('ChatThread header composition', () => {
     const { container, getByText } = render(() => <ChatThread messages={[]} chatTitle="Assistant" />);
     expect(container.querySelector('header')).toBeTruthy();
     expect(getByText('Assistant')).toBeInTheDocument();
+  });
+
+  // headerEndContent: a Solid-composed caller's JSX escape hatch for the header-end
+  // region (a docked widget's own close control being the motivating case — see
+  // ui/dock.tsx's hideClose doc). Renders ALONGSIDE the named slot, not instead of
+  // it, and counts toward showHeader() on its own.
+  it('shows the header for headerEndContent alone, with no title/models/context/slots', () => {
+    const { container } = render(() => <ChatThread messages={[]} headerEndContent={<button>Close</button>} />);
+    expect(container.querySelector('header')).toBeTruthy();
+  });
+
+  it('renders headerEndContent in the header, alongside (not instead of) the header-end slot', () => {
+    const { container, getByText } = render(() => (
+      <ChatThread messages={[]} headerEnd headerEndContent={<button>Close</button>} />
+    ));
+    const header = container.querySelector('header');
+    expect(header).toBeTruthy();
+    expect(header!.querySelector('slot[name="header-end"]')).toBeTruthy();
+    expect(getByText('Close')).toBeInTheDocument();
+  });
+});
+
+// emptyContent: a Solid-composed caller's JSX escape hatch for the empty-state
+// region, rendered in-tree (fully styled by the adopted stylesheet) rather than
+// through the light-DOM `slot="empty"` boundary `empty` targets. Wins over
+// `empty`/`slot="empty"` when both are set.
+describe('ChatThread emptyContent (JSX empty-state escape hatch)', () => {
+  it('renders emptyContent while the thread is empty', () => {
+    const { getByText } = render(() => <ChatThread messages={[]} emptyContent={<div>Welcome!</div>} />);
+    expect(getByText('Welcome!')).toBeInTheDocument();
+  });
+
+  it('does not render emptyContent once the thread has messages', () => {
+    const messages: ChatMessage[] = [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }];
+    const { queryByText } = render(() => <ChatThread messages={messages} emptyContent={<div>Welcome!</div>} />);
+    expect(queryByText('Welcome!')).toBeNull();
+  });
+
+  it('emptyContent wins over the empty/slot="empty" boundary when both are set', () => {
+    const { container, getByText, queryByText } = render(() => (
+      <ChatThread messages={[]} empty emptyContent={<div>Welcome!</div>} />
+    ));
+    expect(getByText('Welcome!')).toBeInTheDocument();
+    expect(container.querySelector('slot[name="empty"]')).toBeNull();
+    expect(queryByText('Welcome!')).not.toBeNull();
+  });
+
+  it('empty alone (no emptyContent) still falls back to the slot', () => {
+    const { container } = render(() => <ChatThread messages={[]} empty />);
+    expect(container.querySelector('slot[name="empty"]')).toBeTruthy();
+  });
+});
+
+// `attach` passthrough: mirrors the existing webSearch/voice pattern (ChatThreadProps
+// -> the composer fallback branch -> DefaultPromptInput), but with the OPPOSITE
+// default direction. webSearch/voice default OFF when undeclared (`props.webSearch
+// === true`); attach must default ON when undeclared, so kit consumers who never
+// heard of this prop keep today's behavior (attach visible) and only an explicit
+// `attach={false}` hides it — forwarded as `props.attach` unchanged, not coerced.
+describe('ChatThread attach passthrough', () => {
+  const attachButton = (container: HTMLElement) => container.querySelector('button[aria-label="Attach files"]');
+
+  it('shows the attach button when attach is undeclared (default)', () => {
+    const { container } = render(() => <ChatThread messages={[]} />);
+    expect(attachButton(container)).toBeTruthy();
+  });
+
+  it('shows the attach button when attach is explicitly true', () => {
+    const { container } = render(() => <ChatThread messages={[]} attach={true} />);
+    expect(attachButton(container)).toBeTruthy();
+  });
+
+  it('removes the attach button when attach is explicitly false', () => {
+    const { container } = render(() => <ChatThread messages={[]} attach={false} />);
+    expect(attachButton(container)).toBeNull();
   });
 });
 
@@ -207,5 +293,28 @@ describe('ChatThread composer reset on submit', () => {
     fireEvent.keyDown(el, { key: 'Enter' });
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ value: 'locked' }));
     expect(el.textContent).toContain('locked'); // controlled — unchanged until the host clears it
+  });
+});
+
+// Task 19f (owner ruling 2026-08-26): `reasoningOpen` forwards to every
+// MessageBody as `reasoningDefaultOpen`, which seeds the Reasoning disclosure
+// open AND (via openOnStream) keeps it tracking the stream — reproducing the
+// pre-19f auto-open default losslessly for a consumer who opts back in.
+describe('ChatThread reasoningOpen forwarding (Task 19f)', () => {
+  const reasoningTrigger = (c: HTMLElement) =>
+    Array.from(c.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes('Reasoning')) as HTMLButtonElement;
+
+  const streamingMessages: ChatMessage[] = [
+    { id: 'a1', role: 'assistant', parts: [{ type: 'reasoning', text: 'Considering the options.' }] },
+  ];
+
+  it('default (reasoningOpen absent): a streaming reasoning disclosure starts closed', () => {
+    const { container } = render(() => <ChatThread messages={streamingMessages} loading={true} />);
+    expect(reasoningTrigger(container)).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('reasoningOpen={true} reaches MessageBody: a streaming reasoning disclosure starts open', () => {
+    const { container } = render(() => <ChatThread messages={streamingMessages} loading={true} reasoningOpen={true} />);
+    expect(reasoningTrigger(container)).toHaveAttribute('aria-expanded', 'true');
   });
 });

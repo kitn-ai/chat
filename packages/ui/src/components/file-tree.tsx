@@ -492,7 +492,11 @@ function TreeNode(props: TreeNodeProps): JSX.Element {
           />
           {(() => {
             const Icon = open() ? FolderOpen : Folder;
-            return <Icon size={14} class="shrink-0 text-primary/80" aria-hidden="true" />;
+            // Decorative folder icon, not a control (the row is the click
+            // target) — was the BRAND token. `text-foreground/80` matches the
+            // row's own `text-foreground` and the chevron's neutral opacity
+            // treatment two lines above.
+            return <Icon size={14} class="shrink-0 text-foreground/80" aria-hidden="true" />;
           })()}
           <span class="truncate font-medium">{node().name}</span>
         </div>

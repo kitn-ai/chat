@@ -1,0 +1,1353 @@
+/**
+ * construct → generated Solid mini-project. THE single generation path:
+ * kai dev, kai compile and kai eject all call generateProject — the preview IS
+ * the artifact (owner-picked option B; no interpreter to drift).
+ *
+ * Quality bar: the output is the EJECT artifact. Deterministic (no dates, no
+ * randomness, object keys emitted in fixed order), idiomatic, readable.
+ * Interior is pure Solid composing @kitn.ai/ui/solid; provider glue imports
+ * @kitn.ai/ui/state + /wire (never a hand-rolled SSE reader); the one
+ * defineWebComponent facade carries the tag, theme default and slots.
+ * Styling: kit components + inline styles only — defineWebComponent injects
+ * the compiled kit CSS into the shadow root, so the generated project needs no
+ * Tailwind, no CSS build, nothing.
+ */
+import { createRequire } from 'node:module';
+import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import type { Construct } from './schema';
+
+export interface GeneratedFile {
+  path: string;
+  code: string;
+}
+
+export interface GenerateOptions {
+  /** Dependency spec for @kitn.ai/ui in the generated package.json.
+   *  Default: `^<this package's version>` (self-name resolution, mcp/server.ts pattern).
+   *  The gates pass a local tarball path here. */
+  uiSpec?: string;
+}
+
+function kitVersion(): string {
+  const require = createRequire(import.meta.url);
+  const pkg = require('@kitn.ai/ui/package.json') as { version: string };
+  return pkg.version;
+}
+
+const themeMode = (c: Construct): 'light' | 'dark' | 'auto' =>
+  c.theme?.mode === 'light' ? 'light' : c.theme?.mode === 'dark' ? 'dark' : 'auto';
+
+// ── accent contrast (codegen-time, static) ─────────────────────────────────
+// A light accent (e.g. yellow) paired with the kit's default near-white
+// foreground is unreadable, so the construct's accent needs a matching
+// --kai-color-primary-foreground computed at generation time (the accent is
+// static per construct — no reason to compute this at runtime for every
+// browser that can't do it natively). Parses only the numeric CSS color forms
+// (#rgb/#rrggbb/#rrggbbaa, rgb()/rgba(), hsl()/hsla()) — named colors, var(),
+// and anything else exotic are NOT guessed at; see resolveContrastForeground.
+
+/** sRGB channel (0-255) -> linear-light value, per the WCAG relative
+ *  luminance formula. */
+function srgbChannelToLinear(c: number): number {
+  const cs = c / 255;
+  return cs <= 0.03928 ? cs / 12.92 : Math.pow((cs + 0.055) / 1.055, 2.4);
+}
+
+/** WCAG relative luminance, 0 (black) to 1 (white). */
+function relativeLuminance(r: number, g: number, b: number): number {
+  return 0.2126 * srgbChannelToLinear(r) + 0.7152 * srgbChannelToLinear(g) + 0.0722 * srgbChannelToLinear(b);
+}
+
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  const hue = ((h % 360) + 360) % 360;
+  const chroma = (1 - Math.abs(2 * l - 1)) * s;
+  const x = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const m = l - chroma / 2;
+  const [r1, g1, b1] =
+    hue < 60 ? [chroma, x, 0]
+    : hue < 120 ? [x, chroma, 0]
+    : hue < 180 ? [0, chroma, x]
+    : hue < 240 ? [0, x, chroma]
+    : hue < 300 ? [x, 0, chroma]
+    : [chroma, 0, x];
+  return [Math.round((r1 + m) * 255), Math.round((g1 + m) * 255), Math.round((b1 + m) * 255)];
+}
+
+/** Parse the numeric CSS color forms only. Returns null for anything this
+ *  can't resolve to concrete RGB without guessing (named colors, var(),
+ *  color-mix(), oklch(), etc.) — the caller must decide loudly rather than
+ *  silently picking a default for those. */
+function parseAccentRgb(accent: string): [number, number, number] | null {
+  const s = accent.trim();
+  const hex3 = /^#([0-9a-fA-F]{3})$/.exec(s);
+  if (hex3) {
+    const [r, g, b] = hex3[1].split('').map((ch) => parseInt(ch + ch, 16));
+    return [r, g, b];
+  }
+  const hex6 = /^#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?$/.exec(s);
+  if (hex6) {
+    const hex = hex6[1];
+    return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
+  }
+  const rgbFn = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*[\d.]+\s*)?\)$/.exec(s);
+  if (rgbFn) {
+    const [r, g, b] = [rgbFn[1], rgbFn[2], rgbFn[3]].map(Number);
+    return [r, g, b].every((v) => v >= 0 && v <= 255) ? [r, g, b] : null;
+  }
+  const hslFn = /^hsla?\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*(?:,\s*[\d.]+\s*)?\)$/.exec(s);
+  if (hslFn) {
+    return hslToRgb(Number(hslFn[1]), Number(hslFn[2]) / 100, Number(hslFn[3]) / 100);
+  }
+  return null;
+}
+
+/**
+ * The paired --kai-color-primary-foreground for a parseable accent, or null
+ * when the accent can't be resolved to concrete RGB without guessing.
+ *
+ * Threshold: white when it sits closer to white than to black on the WCAG
+ * relative-luminance scale (L <= 0.5), else black — equivalently "contrast
+ * against white (1 - L) >= contrast against black (L)". This is a deliberately
+ * simpler comparison than the full WCAG *contrast-ratio* formula (which adds
+ * a 0.05 offset to both sides): the ratio formula's asymmetric offset flips
+ * the choice for at least one real accent this codegen ships in its own demo
+ * fixture (#e91e63, L≈0.1915 — contrast-ratio picks black at 4.83:1 over
+ * white's 4.35:1, but a straight luminance-distance comparison, and every
+ * reference brand palette pairing that color with white text, picks white).
+ * Verified by direct computation, not assumed — see the "accent contrast"
+ * describe block in codegen.test.ts for the worked numbers.
+ */
+export function resolveContrastForeground(accent: string): '#000000' | '#ffffff' | null {
+  const rgb = parseAccentRgb(accent);
+  if (!rgb) return null;
+  const luminance = relativeLuminance(...rgb);
+  return luminance <= 0.5 ? '#ffffff' : '#000000';
+}
+
+/**
+ * Shallow-merge a model's card tool-call args onto a DECLARED form schema's
+ * field defaults — "model proposes, user confirms" (CD-1, owner ruling
+ * 2026-08-26). Only top-level keys the args and the schema BOTH name are
+ * touched; the schema's own field shape (title/type/widget/validation) is
+ * never altered, and a key the model sent that isn't a declared field is
+ * ignored (the construct's vocabulary wins, not the model's). One level deep
+ * only — a nested object field's own defaults are not recursed into; no
+ * evidence of need yet (vocabulary-on-evidence).
+ *
+ * This is the real, module-level version used by this file's own tests
+ * (imported directly — see codegen-cards.render.test.tsx). `emitCardsImport`
+ * below emits an equivalent function VERBATIM as a string into the
+ * construct's own generated App.tsx: that copy is construct-glue code the
+ * eject artifact must own standalone (same as every other piece of logic
+ * emitCardsImport/emitApplyCardTools already emit inline), not an import
+ * from the kit — so the two are kept in sync by hand, not by import. Keep
+ * them behaviorally identical if you change one.
+ */
+export function mergeToolArgsIntoFormDefaults(
+  schema: Record<string, unknown>,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  const declared = schema.properties;
+  if (!declared || typeof declared !== 'object') return schema;
+  const patched: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (!(key in (declared as Record<string, unknown>))) continue;
+    patched[key] = {
+      ...((declared as Record<string, unknown>)[key] as Record<string, unknown>),
+      default: value,
+    };
+  }
+  return { ...schema, properties: { ...(declared as Record<string, unknown>), ...patched } };
+}
+
+/**
+ * Neutralize characters that could break out of a comment before embedding
+ * untrusted text in one. Two contexts reuse this: the CLI/dev notice line
+ * (plain terminal text — newlines just garble it) and the CSS NOTICE comment
+ * emitted into element.tsx, where the two-character close-comment sequence in
+ * the accent would otherwise end the comment early and let the rest of the
+ * accent's text land as live CSS inside the generated stylesheet.
+ */
+function commentSafe(text: string): string {
+  return text.replace(/[\r\n]/g, ' ').replace(/\*\//g, '* /');
+}
+
+const CONTRAST_COLOR_SUPPORTS = '@supports (color: contrast-color(red))';
+
+/**
+ * One line for whichever host decides loudly about generation-time notices
+ * (the CLI today; `dev`'s watch loop reuses it on every regen). Null when
+ * there's nothing to say — no accent, or the accent parsed fine.
+ */
+export function accentContrastNotice(construct: Construct): string | null {
+  const accent = construct.theme?.accent;
+  if (!accent || resolveContrastForeground(accent) !== null) return null;
+  return `accent '${commentSafe(accent)}' not parseable for contrast; foreground left at theme default in browsers without CSS contrast-color() support`;
+}
+
+export function generateProject(construct: Construct, opts: GenerateOptions = {}): GeneratedFile[] {
+  const uiSpec = opts.uiSpec ?? `^${kitVersion()}`;
+  const files: GeneratedFile[] = [
+    { path: 'package.json', code: emitPackageJson(construct, uiSpec) },
+    { path: 'tsconfig.json', code: emitTsconfig() },
+    { path: 'vite.config.ts', code: emitViteDev() },
+    { path: 'vite.config.lib.ts', code: emitViteLib(construct) },
+    { path: 'index.html', code: emitIndexHtml(construct) },
+    { path: 'src/element.tsx', code: emitElement(construct) },
+    { path: 'src/App.tsx', code: emitApp(construct) },
+  ];
+  if (construct.cards) files.push({ path: 'src/cards.ts', code: emitCardsRegistry(construct.cards) });
+  return files;
+}
+
+// ── cards ────────────────────────────────────────────────────────────────
+// Named generative-UI card definitions the model can emit as tool calls.
+// Registration only — the projection into provider tool definitions is the
+// kit's OWN `cardTools`/`toOpenAITools`/`toAnthropicTools` (@kitn.ai/ui/schemas,
+// src/schemas/tool-defs.ts), never a second one authored here.
+
+/** `src/cards.ts` — the construct's card registry, verbatim from the
+ *  construct. Each schema is `JSON.stringify(schema, null, 2)`'d and reindented
+ *  under its key — deterministic because the construct's own key order (and
+ *  each schema's own JSON key order) is preserved; nothing here re-sorts. */
+function emitCardsRegistry(cards: NonNullable<Construct['cards']>): string {
+  const entries = cards
+    .map((card) => `  ${card.name}: ${JSON.stringify(card.schema, null, 2).split('\n').join('\n  ')},`)
+    .join('\n');
+  return `// src/cards.ts — the construct's card registry, verbatim from the construct.
+// Tool definitions for YOUR backend derive from this same object via
+// @kitn.ai/ui/schemas (cardTools / toOpenAITools / toAnthropicTools) — one
+// projection, shared with the kit.
+export const cards = {
+${entries}
+} as const;
+`;
+}
+
+/** `, BUILTIN_CARD_COMPONENTS` spliced onto the `@kitn.ai/ui/solid` named-import
+ *  list at the top of App.tsx (below) when cards are declared — the built-in
+ *  `.form` renderer every declared card routes to. Empty otherwise. */
+function emitCardComponentImport(c: Construct): string {
+  return c.cards ? ', BUILTIN_CARD_COMPONENTS' : '';
+}
+
+/** The `import`s cards need in App.tsx: the registry itself, `BUILTIN_CARD_COMPONENTS`
+ *  (@kitn.ai/ui/solid re-exports it from the root entry) so every declared card can
+ *  route to the kit's own schema-driven form renderer, `cardFromToolCall` (turns a
+ *  settled tool-call ToolPart into a renderable `card` MessagePart — see
+ *  emitApplyCardTools) and, for an endpoint construct, the wire-matching tool
+ *  projection for the fetch body. Empty when the construct declares no cards at all
+ *  (format rule: undeclared -> no affordance, no import).
+ *
+ *  RULING (supervisor, this task): v1 renders EVERY declared card as the kit's own
+ *  `form` card (`BUILTIN_CARD_COMPONENTS.form`, components/form.tsx) — it walks a
+ *  JSON-Schema-shaped `data` into real input fields and honors `x-kai-format`/
+ *  `x-kai-mask`/`x-kai-mask-guide` hints itself (field-mask.ts); no engine work is
+ *  needed for masks specifically. This is deliberately NOT the same precedent as
+ *  examples/apps/ops-console/shared/cards.ts's `createCardRegistry` (which maps
+ *  several DISTINCT built-in kinds — confirm/form/choice/tasks — onto an app's own
+ *  tool names): a construct's `cards` field carries only a `schema`, no `kind`, so
+ *  there is no vocabulary yet to route on. Adding a `kind`/`type` field to pick
+ *  confirm/choice/tasks is explicitly deferred to vocabulary-on-evidence, not done
+ *  here — every construct card is a form until a later task adds that field. */
+function emitCardsImport(c: Construct): string {
+  if (!c.cards) return '';
+  const toolsImport =
+    c.provider.mode === 'endpoint' ? (c.provider.wire === 'openai' ? ', toOpenAITools' : ', toAnthropicTools') : '';
+  return `import { cards } from './cards';
+// Generative-UI cards, v1: every declared card renders as the kit's own
+// schema-driven FORM (BUILTIN_CARD_COMPONENTS.form, components/form.tsx) — it
+// walks the card's JSON Schema into real input fields, honoring
+// x-kai-format/x-kai-mask/x-kai-mask-guide hints itself. ChatThread's own
+// MessageBody already matches \`part.type === 'card'\` in its part rendering and
+// draws it with the kit's own \`CardRenderer\` (components/card-renderer.tsx),
+// which picks the component from \`cardTypes\` (below) by envelope.type — so
+// there is nothing to hand-compose beyond that one map. Turning a model's tool
+// call into that renderable part is \`cardFromToolCall\` (the inverse of
+// \`cardTools\`), applied once per settled turn below; its data is then replaced
+// with the DECLARED card schema (not the model's call arguments) — the fields
+// on screen are the construct's own vocabulary, not whatever shape a model
+// happened to send.
+//
+// UPDATE (CD-1, owner ruling 2026-08-26, Task 19g): the field SHAPE (title/
+// type/widget/validation) still comes from the construct's own declared
+// schema, never the model's — that part is unchanged. But discarding the
+// model's call arguments wholesale also threw away any VALUE it wanted to
+// pre-fill, breaking "model proposes, user confirms" (kai_refund_approval
+// {amount:50} rendered an empty form). So the model's args are now
+// shallow-merged onto the declared schema's field \`default\`s below
+// (mergeToolArgsIntoFormDefaults) before the card is added — see
+// emitApplyCardTools.
+import { cardFromToolCall${toolsImport} } from '@kitn.ai/ui/schemas';
+
+// Every declared card name routes to the SAME form renderer — cardFromToolCall
+// makes envelope.type equal the card's own name (kai_refund_approval ->
+// 'refund_approval'), and CardRenderer resolves a type's component from this
+// map.
+//
+// Deliberately NOT also wiring ChatThread's \`cardSchemas\` prop to this
+// registry below. That prop validates envelope.data AGAINST the named schema,
+// and this card's data IS \`cards[name]\` itself (see emitApplyCardTools) — the
+// construct's declared field schema, not values shaped like it. Wiring it as
+// its own validator asks "does this FormDefinition itself have an \`amount\`
+// key" and a well-formed FormDefinition never does, so every card would
+// render the HARD validation-failure fallback instead of the form (caught
+// live: eject + kai dev showed exactly that "(root).amount: required"
+// failure before this comment existed). The construct's own schema.ts
+// already checks \`cards\` structurally at validate time; there is nothing
+// left for a second, self-referential check here to catch.
+const cardTypes = Object.fromEntries(Object.keys(cards).map((name) => [name, BUILTIN_CARD_COMPONENTS.form] as const));
+
+// CD-1 (owner ruling 2026-08-26, Task 19g): shallow-merge a model's card
+// tool-call args onto a DECLARED form schema's field defaults — "model
+// proposes, user confirms". Only top-level keys the args AND the schema both
+// name are touched; the schema's own field shape (title/type/widget/
+// validation) is never altered, and a key the model sent that isn't a
+// declared field is ignored (the construct's vocabulary wins, not the
+// model's). One level deep only — a nested object field's own defaults are
+// not recursed into; no evidence of need yet (vocabulary-on-evidence).
+function mergeToolArgsIntoFormDefaults(
+  schema: Record<string, unknown> & { properties?: Record<string, unknown> },
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  const declared = schema.properties;
+  if (!declared || typeof declared !== 'object') return schema;
+  const patched: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (!(key in declared)) continue;
+    patched[key] = { ...(declared[key] as Record<string, unknown>), default: value };
+  }
+  return { ...schema, properties: { ...schema.properties, ...patched } };
+}`;
+}
+
+/** `cardTypes={cardTypes}` on ChatThread — which component draws each
+ *  declared card name (see emitCardsImport for why `cardSchemas` is
+ *  deliberately NOT also registered). The host to emit card events off is
+ *  already supplied by the ChatThread/kai-chat path (F-26); nothing else to
+ *  thread through here. */
+function emitCardTypesProp(c: Construct): string {
+  return c.cards ? ' cardTypes={cardTypes}' : '';
+}
+
+/** Settle a turn's tool calls into cards, called once after the read
+ *  resolves and before `stream.done()`/`stream.abort()`. `AssistantStream`
+ *  has no getter of its own, so the just-written parts are read back off
+ *  `chat.messages()` by the stream's own id — the same pattern the kit's own
+ *  `cardFromToolCall` doc comment (schemas/from-tool-call.ts) shows for a
+ *  tool loop. A `kai_`-prefixed call becomes a card; anything else is the
+ *  construct's own tool and is left as a plain `tool` part.
+ *
+ *  `cardFromToolCall` supplies the envelope's `type`/`id` and `data` (the
+ *  model's raw tool-call `input`, verbatim). `data` is then set to the card's
+ *  own DECLARED schema off the registry (`cards[card.type]`) — the form
+ *  renders the construct author's fields, matching the supervisor ruling
+ *  that every declared card is a schema-driven form in v1 — with the
+ *  model's args (`card.data`, read before this replaces it) shallow-merged
+ *  onto that schema's field `default`s (CD-1, owner ruling 2026-08-26,
+ *  Task 19g: `mergeToolArgsIntoFormDefaults`, emitted above by
+ *  emitCardsImport) so "model proposes, user confirms" pre-fills the form
+ *  instead of discarding the model's values outright. The `card.type in
+ *  cards` guard only fires for a `kai_` call this construct never declared
+ *  (an off-vocabulary call slipping through); it is silently dropped rather
+ *  than rendered, matching cardFromToolCall's own "not every kai_ call is
+ *  renderable" boundary (see its module header). */
+function emitApplyCardTools(c: Construct): string {
+  if (!c.cards) return '';
+  return `
+    for (const part of chat.messages().find((m) => m.id === stream.id)?.parts ?? []) {
+      if (part.type !== 'tool' || part.tool.state !== 'input-available') continue;
+      const card = cardFromToolCall(part.tool.type, part.tool.input, { id: part.tool.toolCallId ?? crypto.randomUUID() });
+      if (card && card.type in cards) {
+        const declared = cards[card.type as keyof typeof cards];
+        const args = card.data as Record<string, unknown> | undefined;
+        const merged = args && typeof args === 'object'
+          ? mergeToolArgsIntoFormDefaults(declared, args)
+          : declared;
+        stream.addCard({ ...card, data: merged });
+      }
+    }`;
+}
+
+/** The endpoint fetch body's `tools` field — the projected tool defs for
+ *  every declared card, matching the construct's own wire. No cards, no
+ *  field: the format rule (undeclared capability's affordance is OFF) holds
+ *  for tools the same way it holds for suggestions/attach/reasoning above. */
+function emitToolsField(c: Construct): string {
+  if (!c.cards || c.provider.mode !== 'endpoint') return '';
+  const toolsFn = c.provider.wire === 'openai' ? 'toOpenAITools' : 'toAnthropicTools';
+  return `, tools: ${toolsFn}(cards)`;
+}
+
+function emitPackageJson(c: Construct, uiSpec: string): string {
+  return `${JSON.stringify(
+    {
+      name: c.name,
+      private: true,
+      type: 'module',
+      scripts: {
+        dev: 'vite',
+        build: 'vite build --config vite.config.lib.ts',
+        typecheck: 'tsc --noEmit',
+      },
+      dependencies: {
+        '@kitn.ai/ui': uiSpec,
+        'solid-js': '^1.9.0',
+      },
+      devDependencies: {
+        typescript: '^5.6.0',
+        vite: '^6.0.0',
+        'vite-plugin-solid': '^2.11.0',
+      },
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+function emitTsconfig(): string {
+  return `${JSON.stringify(
+    {
+      compilerOptions: {
+        target: 'ES2022',
+        module: 'ESNext',
+        moduleResolution: 'bundler',
+        jsx: 'preserve',
+        jsxImportSource: 'solid-js',
+        strict: true,
+        noUnusedLocals: true,
+        skipLibCheck: true,
+        types: ['vite/client'],
+      },
+      include: ['src'],
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+function emitViteDev(): string {
+  return `import { defineConfig } from 'vite';
+import solid from 'vite-plugin-solid';
+
+export default defineConfig({ plugins: [solid()] });
+`;
+}
+
+function emitViteLib(c: Construct): string {
+  return `import { defineConfig } from 'vite';
+import solid from 'vite-plugin-solid';
+
+// kai compile: ONE self-registering .js. Everything is inlined (no externals):
+// the consumer installs nothing but this output.
+export default defineConfig({
+  plugins: [solid()],
+  build: {
+    lib: { entry: 'src/element.tsx', formats: ['es'], fileName: () => '${c.name}.js' },
+  },
+});
+`;
+}
+
+function emitIndexHtml(c: Construct): string {
+  // A demo host page, not the emitted widget: purely so a first-time preview
+  // isn't a mystery blank tab with one small launcher in the corner. Outside
+  // the custom element entirely (a sibling in <body>), inline-styled, and
+  // worded so nobody mistakes it for the construct's own output. Keyed off
+  // `layout`: the "bottom-right corner" wording is only true for `widget` (a
+  // floating launcher) — `fullscreen`/`aside`/`split` (Task 12) fill or dock
+  // the page themselves, so they get no hint at all rather than a wrong one.
+  // Decide loudly by omission, not by a stale claim.
+  const hint =
+    c.layout === 'widget'
+      ? `\n    <p style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); margin: 0; color: #94a3b8; font: 14px system-ui, sans-serif; text-align: center; max-width: 28rem; padding: 0 1rem;">This blank page stands in for your site. The chat widget is in the bottom-right corner.</p>`
+      : '';
+  // Task 13: when slots are declared, project real demo content into each one
+  // in the copy's own <${c.name}> tag — so the preview shows the escape hatch
+  // WORKING (light-DOM children of a custom element project into its shadow
+  // <slot> natively) rather than a mystery about how to use it. Slot names are
+  // already schema-validated to `^[a-z][a-z0-9-]*$` (schema.ts) — no
+  // quote/backslash payload possible, so no HTML-escaping is needed here,
+  // unlike a free-text construct-authored field.
+  const slotDemo = (c.slots ?? [])
+    .map(
+      (name) =>
+        `\n      <div slot="${name}" style="padding: 0.5rem 1rem; font: 13px system-ui, sans-serif; color: #64748b;">Projected into slot "${name}" — replace with your own markup.</div>`,
+    )
+    .join('');
+  const body = slotDemo ? `\n    <${c.name}>${slotDemo}\n    </${c.name}>` : `\n    <${c.name}></${c.name}>`;
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${c.name} — construct preview</title>
+  </head>
+  <body style="margin: 0;">${hint}${body}
+    <script type="module" src="/src/element.tsx"></script>
+  </body>
+</html>
+`;
+}
+
+function emitElement(c: Construct): string {
+  const accent = c.theme?.accent;
+  if (!accent) {
+    // `empty` (Task 14) composes straight into ChatThread's own `emptyContent`
+    // prop now (see emitEmptyContentProp's doc) — a plain JSX value passed down
+    // through App, not a Portal onto the host — so the facade needs no `ctx` and
+    // every construct, `empty` declared or not, keeps this line byte-for-byte
+    // unchanged.
+    const facade = '() => <App />';
+    return `import { defineWebComponent } from '@kitn.ai/ui/define';
+import { App } from './App';
+
+// The one facade. Interior stays pure Solid (no nested element registrations);
+// the kit CSS is injected into the shadow root by defineWebComponent itself.
+defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' | 'auto' }, ${facade});
+`;
+  }
+
+  // The accent has to land on the HOST element, not anywhere inside this
+  // shadow root. The kit's --color-primary token is resolved ONCE, by a rule
+  // scoped to `:root, :host` (`@layer theme { :root, :host { --color-primary:
+  // var(--kai-color-primary, <fallback>) } }`) — so --kai-color-primary has to
+  // be set AT the host for that rule to see it; a descendant inside the
+  // shadow tree can set --kai-color-primary on itself all day and it will
+  // never flow back up into a value the :host rule already resolved. This is
+  // why the theme accent rendered nowhere in the T5 demo despite being
+  // "wired": an earlier version set it on a div INSIDE App's own render.
+  //
+  // `ctx.element` (the facade's second argument) IS the host, so this sets it
+  // from the one place inside the shadow root that has a handle to it.
+  // `style.setProperty` is also the safe way to carry the accent, distinct
+  // from string-interpolating it into CSS text: a custom property's value is
+  // an opaque token substituted via var(), so it can never break out into a
+  // new declaration or rule the way raw CSS/JS text interpolation could.
+  //
+  // The PAIRED --kai-color-primary-foreground is a separate concern: a light
+  // accent (yellow) next to the kit's default near-white foreground is
+  // unreadable. That pairing DOES need to live in a CSS block rather than a
+  // second setProperty call, because it has two layers that must be able to
+  // override each other in order: (1) a black/white value computed HERE, at
+  // generation time (the accent is static per construct), as the floor for
+  // browsers without CSS contrast-color() (Baseline Newly Available April
+  // 2026 — Chrome/Edge 147, Firefox 146, Safari 26; Widely Available is not
+  // until ~2028, and this widget embeds in arbitrary sites), and (2) inside
+  // `@supports (color: contrast-color(red))`, the NATIVE answer
+  // (contrast-color(var(--kai-color-primary))), which wins where supported —
+  // including for an accent this codegen couldn't parse. An inline
+  // `style.setProperty` always beats a stylesheet rule (short of
+  // `!important`), so achieving "the native answer wins where present" needs
+  // both layers to be plain `:host {}` declarations in one stylesheet, base
+  // rule first, @supports override after — ordinary cascade order, no
+  // `!important` required.
+  const foreground = resolveContrastForeground(accent);
+  const foregroundCss =
+    foreground !== null
+      ? `:host { --kai-color-primary-foreground: ${foreground}; }\n`
+      : // Not guessed at: an unparseable accent (var(), a named color, a
+        // color-mix()/oklch() call, …) leaves NO base declaration, so the
+        // kit's own theme default stands — except in a browser new enough to
+        // resolve contrast-color() itself, where the @supports block below
+        // still gets it right natively.
+        `/* NOTICE: accent '${commentSafe(accent)}' not parseable for contrast at generation time; the paired foreground falls back to the theme default in browsers without CSS contrast-color() support. */\n`;
+  const styleText =
+    foregroundCss + `${CONTRAST_COLOR_SUPPORTS} {\n  :host { --kai-color-primary-foreground: contrast-color(var(--kai-color-primary)); }\n}`;
+
+  const facade = `(_props, ctx) => {
+  ctx.element.style.setProperty('--kai-color-primary', ${JSON.stringify(accent)});
+  return (
+    <>
+      <style>{${JSON.stringify(styleText)}}</style>
+      <App />
+    </>
+  );
+}`;
+  return `import { defineWebComponent } from '@kitn.ai/ui/define';
+import { App } from './App';
+
+// The one facade. Interior stays pure Solid (no nested element registrations);
+// the kit CSS is injected into the shadow root by defineWebComponent itself.
+defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' | 'auto' }, ${facade});
+`;
+}
+
+// ── App interior ─────────────────────────────────────────────────────────────
+// The chat spine is IMPLIED: thread + input + streaming are always emitted and
+// wired; the construct declares deviations and additions only. Seams below are
+// where later tasks splice capability code; each is a pure string join, so the
+// determinism test keeps holding.
+
+function emitApp(c: Construct): string {
+  if (c.layout === 'custom') return emitCustomApp(c);
+  return `${emitSolidJsImport(c)}import { ChatThread, createKaiChat${emitLayoutImport(c)}${emitCardComponentImport(c)}${emitEmptyComponentImport(c)}${emitHeaderCloseImport(c)} } from '@kitn.ai/ui/solid';
+import type { AttachmentData${emitHistoryTypeImport(c)} } from '@kitn.ai/ui/solid';
+${emitProviderImports(c)}
+${emitCardsImport(c)}
+
+${emitProviderSetup(c)}
+${emitHistorySetup(c)}
+
+// ChatThread is the kit's own MOST-INTEGRATED chat surface — the same
+// composition <kai-chat>'s facade renders (src/elements/chat.tsx). It owns
+// the message list, the composer (padding, focus ring, the send button) and
+// their layout AS ONE UNIT, so nothing here re-derives spacing, alignment or
+// focus styling by hand: every prior version of this file that hand-composed
+// Thread + PromptInput + Button was restating layout the kit already owns,
+// and every visual defect the owner hit (flush composer, a clipped focus
+// ring) traced back to that restatement. Composing ChatThread directly
+// leaves NOTHING here to restate it with.
+//
+// Capability gating (format rule: an undeclared capability's affordance must
+// be OFF). The construct schema carries ONE capability field so far
+// (capabilities.starters, Task 8) — every other affordance below is gated to
+// "off" unconditionally, not per-construct, until there's a field to gate ON.
+//   - webSearch / voice: real ChatThreadProps booleans, default OFF when
+//     omitted — set to \`false\` explicitly rather than left implicit, so the
+//     gating decision is visible in the emitted source, not just inferred
+//     from an absent prop.
+//   - suggestions: ChatThread ALREADY owns starter prompts end to end — its
+//     own \`suggestions\` prop renders the chips, hides them once
+//     \`messages\` is non-empty, and (default \`suggestionMode="submit"\`)
+//     calls \`onSubmit\` with the clicked text exactly like a typed submit.
+//     So capabilities.starters threads straight into that prop; there is
+//     nothing to hand-compose. Omitted (undefined) when no starters are
+//     declared, same off-by-default effect as the booleans above.
+//   - models: omitted (undefined) — no model switcher; no capabilities field yet.
+//   - attachments (the paperclip): gated via ChatThread's \`attach\`/\`accept\`
+//     props (kit gap closed — ChatThread forwards both to DefaultPromptInput,
+//     mirroring webSearch/voice). ChatThread ALREADY owns the whole
+//     round-trip end to end — the paperclip button, staged previews, staging
+//     each file as a data URI (never a blob object URL; see
+//     AttachmentData.url's doc in components/attachment-types.ts), and
+//     handing the staged list back via onSubmit's \`attachments\` — and its
+//     Message component ALREADY groups consecutive file parts into one
+//     attachment row (message.tsx). So there is nothing to hand-compose
+//     here, same lesson as suggestions above: hand-rolling a second picker or
+//     a second file-part renderer would restate what ChatThread/Message
+//     already own. capabilities.attachments threads straight into
+//     attach/accept; the only App.tsx-owned piece is folding the picked
+//     attachments into the outgoing message's parts at the submit site
+//     (see emitProviderSetup) since createKaiChat's own append/streamAssistant
+//     ops don't do that folding themselves.
+//   - reasoning: gated via ChatThread's own \`reasoning\` prop (kit gap closed
+//     — ChatThread forwards it to every MessageBody as \`reasoningMode\`,
+//     mirroring attach/accept). \`'full'\` is both the schema default and
+//     ChatThread's own default, so it and an absent field emit no prop at
+//     all — the SAME off-by-default convention as every other capability
+//     here, just anchored on the medium's existing default instead of an
+//     "off" value, since a reasoning disclosure is normal chat behavior, not
+//     an opt-in affordance like the paperclip or a starter chip.
+//   - empty (the welcome-screen greeting, Task 14): gated via ChatThread's
+//     own \`emptyContent\` prop, plain JSX rendered in the SAME shadow tree
+//     this file's App already composes ChatThread inside of (see
+//     emitEmptyContentProp's own doc for why that boundary needs no Portal
+//     at all). \`capabilities.starters\`' chips and the composer still render
+//     underneath it: ChatThread's own doc comment on \`emptyContent\` is
+//     explicit that it replaces only the empty MESSAGE LIST.
+//   - the widget close control (owner feedback on the live demo): a declared
+//     \`header.title\` on a \`widget\` layout gets its close button threaded
+//     into ChatThread's own header row via \`headerEndContent\`, wired back to
+//     Dock's \`controllerRef\` seam through a local closure — see
+//     emitDockCloseVar/emitHeaderEndContentProp's docs. No header means no
+//     row for it to sit in, so that case is untouched and Dock's own built-in
+//     mobile X keeps covering it.
+export function App() {
+${emitDockCloseVar(c, '  ')}  return (
+${emitLayoutOpen(c)}${emitSlots(c.slots, '      ')}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitHeaderProp(c)}${emitHeaderEndContentProp(c)}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitReasoningOpenProp(c)}${emitEmptyContentProp(c)}${emitCardTypesProp(c)} />
+${emitLayoutClose(c)}  );
+}
+`;
+}
+
+/**
+ * `layout: 'custom'` — the escape hatch's own layout: minimal/no chrome, just
+ * the bare chat spine plus the declared `slots` positioned by the consumer.
+ * Composed from `Thread` (the message-list primitive, no composer/header/
+ * suggestions of its own — components/thread.tsx) + the `PromptInput`
+ * compound primitive, NOT `ChatThread`: `ChatThread` bundles its composer
+ * INSIDE itself (`DefaultPromptInput`, internal-only), which leaves no seam to
+ * splice a slot between the thread and the input the way this layout's
+ * placement rule needs. This is the one layout where hand-composing the spine
+ * is correct rather than a restatement — every other layout in this file
+ * wraps `ChatThread` precisely to avoid this hand-composition (see emitApp's
+ * doc comment above).
+ *
+ * Slot placement is a fixed, deterministic rule, spelled out in the emitted
+ * comment: the FIRST declared slot sits above the thread, every other
+ * declared slot sits below the composer, in declaration order. There is no
+ * vocabulary for a different arrangement (a `position` per slot, an
+ * interleaved grain) — reordering means ejecting and rearranging the JSX by
+ * hand, which this format's own rule already commits to (no code-in-JSON).
+ *
+ * Capability gating: only cards are wired here (`Thread` accepts `cardTypes`
+ * natively, same as `ChatThread`). starters/attachments/reasoning are NOT
+ * wired for `custom` in v1 — `Thread`/`PromptInput` don't carry the kit's own
+ * plumbing for those (they live inside `ChatThread`'s composer), and
+ * hand-rolling a second copy here is exactly the restatement this file
+ * avoids everywhere else. Decided loudly in the emitted comment below, not
+ * silently: this is the eject artifact, so a construct author who needs one
+ * of them on `custom` adds it directly to the plain Solid file they now own.
+ */
+function emitCustomApp(c: Construct): string {
+  const slots = c.slots ?? [];
+  const [headerSlot, ...restSlots] = slots;
+  const history = c.capabilities?.history;
+  const solidJsNames = ['createSignal', ...(history && history.persistence !== 'none' ? ['createEffect'] : [])];
+  return `import { ${solidJsNames.join(', ')} } from 'solid-js';
+import { Thread, PromptInput, PromptInputTextarea, PromptInputActions, Button, createKaiChat${emitCardComponentImport(c)} } from '@kitn.ai/ui/solid';
+import type { AttachmentData${emitHistoryTypeImport(c)} } from '@kitn.ai/ui/solid';
+${emitProviderImports(c)}
+${emitCardsImport(c)}
+
+${emitProviderSetup(c)}
+${emitHistorySetup(c)}
+
+// layout: custom — minimal chrome, no ChatThread/Dock/PaneGroup. The bare
+// spine (Thread + PromptInput) plus the declared slots, positioned by hand so
+// YOU own the surrounding DOM. Capabilities beyond the spine (starters,
+// attachments, reasoning display-mode, reasoningOpen, header.title, empty)
+// are NOT wired here in v1 — this file is the eject artifact; add them the
+// way ChatThread composes them (components/chat-thread.tsx in the kit's own
+// source) if this construct needs them on a custom layout.
+export function App() {
+  const [value, setValue] = createSignal('');
+
+  const handleSubmit = () => {
+    const text = value();
+    if (!text.trim() || chat.loading()) return;
+    setValue('');
+    void submit({ value: text, attachments: [] });
+  };
+
+  return (
+    <div style={{ height: '100dvh', display: 'flex', 'flex-direction': 'column' }}>
+${emitSlots(headerSlot ? [headerSlot] : undefined, '      ')}      <Thread messages={chat.messages()} loading={chat.loading()} class="min-h-0 flex-1"${emitCardTypesProp(c)} />
+      {/* Slot placement rule: first declared slot above the thread, every other
+          declared slot below the composer, in declaration order. Reorder by
+          ejecting — this is the whole grain dimmer. */}
+      <PromptInput value={value()} onValueChange={setValue} isLoading={chat.loading()} onSubmit={handleSubmit}>
+        <PromptInputTextarea placeholder="Ask anything" />
+        <PromptInputActions>
+          <Button onClick={handleSubmit}>Send</Button>
+        </PromptInputActions>
+      </PromptInput>
+${emitSlots(restSlots, '      ')}    </div>
+  );
+}
+`;
+}
+
+/** header.title -> ChatThread's own \`chatTitle\` prop. Construct-authored/
+ *  untrusted text like starters/theme.accent/provider.url, so JSON.stringify'd
+ *  into a real JS string-literal expression. Omitted entirely (not even the
+ *  prop) when no header is declared — the same off-by-default gating as every
+ *  capability in this file, even though \`header\` isn't itself a capability. */
+function emitHeaderProp(c: Construct): string {
+  const title = c.header?.title;
+  if (!title) return '';
+  return ` chatTitle={${JSON.stringify(title)}}`;
+}
+
+/** `empty` -> ChatThread's own `emptyContent` prop (chat-thread.tsx), a plain
+ *  JSX value rendered INSIDE ChatThread's own tree — fully covered by the
+ *  shadow root's adopted stylesheet, unlike the `empty`/`slot="empty"` boolean
+ *  pairing this used to go through. That boundary was LIGHT-DOM: `<Portal
+ *  mount={element}>` manufactured a real child of the host element tagged
+ *  `slot="empty"` so ChatThread's `<slot name="empty">` could redistribute it
+ *  — a detour needed only because a shadow `<slot>` redistributes light-DOM
+ *  children of the HOST, never a Solid sibling's own JSX. It worked, but light
+ *  DOM sits outside the shadow root's adopted stylesheet, so the Tailwind
+ *  utility classes the kit's own `Empty` composition is built from resolved to
+ *  nothing — the greeting rendered, unstyled (owner report against the live
+ *  widget: "doesn't look like the empty component"). `App` already composes
+ *  `ChatThread` directly as a plain Solid component in the SAME shadow tree
+ *  `defineWebComponent` attaches, so there is no boundary to cross here at
+ *  all — `emptyContent` just hands the JSX straight down, and it inherits the
+ *  same styling as the rest of `App`. No Portal, no host-element param on
+ *  `App`, no light-DOM indirection.
+ *
+ *  `capabilities.starters`' chips and the composer still render underneath
+ *  it: ChatThread's own doc comment on `empty`/`emptyContent` is explicit
+ *  that this REPLACES only the empty MESSAGE LIST.
+ *
+ *  Uses the kit's own `Empty`/`EmptyHeader`/`EmptyMedia`/`EmptyTitle`/
+ *  `EmptyDescription` composition (components/empty.tsx) rather than hand-
+ *  rolled markup — the same "don't restate the kit's own layout" rule
+ *  `emitApp`'s header comment states for ChatThread itself. `title`/
+ *  `description` are construct-authored/untrusted text, JSON.stringify'd into
+ *  real JS string-literal expressions like every other free-text field in
+ *  this file; `icon` is schema-validated by `isSafeUrl` (schema.ts) before
+ *  codegen ever sees it, the same policy `widget.launcherIcon` uses. */
+function emitEmptyContentProp(c: Construct): string {
+  const empty = c.empty;
+  if (!empty) return '';
+  const title = `<EmptyTitle>{${JSON.stringify(empty.title)}}</EmptyTitle>`;
+  const icon = empty.icon
+    ? `<EmptyMedia><img src={${JSON.stringify(empty.icon)}} alt="" style={{ width: '40px', height: '40px', 'border-radius': '9999px' }} /></EmptyMedia>`
+    : '';
+  const description = empty.description
+    ? `<EmptyDescription>{${JSON.stringify(empty.description)}}</EmptyDescription>`
+    : '';
+  return ` emptyContent={<Empty><EmptyHeader>${icon}${title}${description}</EmptyHeader></Empty>}`;
+}
+
+/** The `Empty` composition components `emitEmptyContentProp` needs, appended
+ *  onto the same `@kitn.ai/ui/solid` import ChatThread/createKaiChat already
+ *  use — never a second import statement for the same module. `EmptyMedia`/
+ *  `EmptyDescription` are named only when `icon`/`description` are actually
+ *  declared: `verify:scaffold` compiles emitted output with `tsc --strict
+ *  --noUnusedLocals`, so an always-imported-but-sometimes-unused name would
+ *  fail that gate the moment a construct omits one. */
+function emitEmptyComponentImport(c: Construct): string {
+  if (!c.empty) return '';
+  let names = ', Empty, EmptyHeader, EmptyTitle';
+  if (c.empty.icon) names += ', EmptyMedia';
+  if (c.empty.description) names += ', EmptyDescription';
+  return names;
+}
+
+/** `widget` layout with a declared `header.title` gets its own close control
+ *  integrated INTO ChatThread's header row instead of relying solely on
+ *  Dock's own floating mobile X (see `dock.tsx`'s `hideClose` doc for the
+ *  "why": a header-row X and a floating X over that same row read as
+ *  unintentional together — owner feedback against the live widget). No
+ *  header means no row for a close control to sit in at all, so this stays
+ *  false and Dock's built-in fallback X keeps covering that case unchanged. */
+function widgetHasHeaderClose(c: Construct): boolean {
+  return c.layout === 'widget' && !!c.header?.title;
+}
+
+/** The local closure `emitHeaderEndContentProp`/`emitDockControllerRef` share:
+ *  Dock's `controllerRef` hands back `{ open, setOpen }` (ui/dock.tsx) — the
+ *  existing imperative seam, not a new one — and this captures `setOpen`
+ *  behind a plain function so ChatThread's `headerEndContent` button (which
+ *  renders as a sibling, not a Dock descendant) can call it. Declared inside
+ *  `App()`, not at module scope: `App()` runs once per widget instance, and a
+ *  module-level variable would let one instance's close button reach into
+ *  another's Dock if two ever rendered on the same page. */
+function emitDockCloseVar(c: Construct, indent: string): string {
+  return widgetHasHeaderClose(c) ? `${indent}let dockClose: (() => void) | undefined;\n` : '';
+}
+
+/** Threads `emitDockCloseVar`'s closure onto `<Dock controllerRef>`. */
+function emitDockControllerRef(c: Construct): string {
+  return widgetHasHeaderClose(c) ? ' controllerRef={(api) => (dockClose = () => api.setOpen(false))}' : '';
+}
+
+/** Suppresses Dock's own built-in mobile close X (see its `hideClose` doc)
+ *  when ChatThread's header row is carrying an equivalent control instead —
+ *  otherwise the two stack, one floating over the other's row. */
+function emitDockHideClose(c: Construct): string {
+  return widgetHasHeaderClose(c) ? ' hideClose={true}' : '';
+}
+
+/** ChatThread's `headerEndContent` prop (chat-thread.tsx): the close button
+ *  itself, sharing the header row with the title instead of floating as a
+ *  second, visually unrelated control — the owner's stated preference over
+ *  Dock's previous "reserved dead-row band" fix. Reuses the kit's own
+ *  `DockCloseGlyph` (the same X Dock's built-in button draws) and `Button`
+ *  (ghost/icon-sm, the same weight ChatThread's own header controls use —
+ *  see `ModelSwitcher`'s trigger) rather than hand-rolling either, and calls
+ *  back into `emitDockCloseVar`'s closure to actually close the panel —
+ *  Dock's own `controllerRef` seam, not a new one. */
+function emitHeaderEndContentProp(c: Construct): string {
+  if (!widgetHasHeaderClose(c)) return '';
+  return ` headerEndContent={<Button variant="ghost" size="icon-sm" aria-label="Close ${c.name}" onClick={() => dockClose?.()}><DockCloseGlyph /></Button>}`;
+}
+
+/** `Button`/`DockCloseGlyph`, needed only by `emitHeaderEndContentProp` above
+ *  — appended onto the same `@kitn.ai/ui/solid` import as `emitEmptyComponentImport`,
+ *  never a second import statement for the module. */
+function emitHeaderCloseImport(c: Construct): string {
+  return widgetHasHeaderClose(c) ? ', Button, DockCloseGlyph' : '';
+}
+
+/** capabilities.attachments -> ChatThread's own \`attach\`/\`accept\` props.
+ *  Undeclared keeps the explicit off-by-default gating (\`attach={false}\`,
+ *  matching webSearch/voice above). Declared flips \`attach={true}\` and
+ *  threads the accept list through — construct-authored/untrusted like
+ *  \`starters\`/\`theme.accent\`/\`provider.url\`, so JSON.stringify'd into a
+ *  real JS string-literal expression rather than a raw JSX attribute
+ *  string (JSX attribute strings don't interpret escapes the way JS string
+ *  literals do, so a raw \`accept="..."\` would be a breakout surface for a
+ *  hostile media-type entry containing a \`"\`). */
+function emitAttachProps(c: Construct): string {
+  const attachments = c.capabilities?.attachments;
+  if (!attachments) return ' attach={false}';
+  return ` attach={true} accept={${JSON.stringify(attachments.accept.join(','))}}`;
+}
+
+/** capabilities.starters -> ChatThread's own \`suggestions\` prop. Starter
+ *  strings are construct-authored (untrusted the same way theme.accent and
+ *  provider.url are) — JSON.stringify produces a real JS array-of-string-
+ *  literals expression, the same safe-interpolation convention used for the
+ *  accent (element.tsx) and the endpoint url (fetch() above): no quote,
+ *  backslash or line-separator payload can break out of it. Omitted
+ *  entirely (not even the prop) when no starters are declared, matching the
+ *  off-by-default gating for every other capability. */
+function emitStartersProp(c: Construct): string {
+  const starters = c.capabilities?.starters;
+  if (!starters || starters.length === 0) return '';
+  return ` suggestions={${JSON.stringify(starters)}}`;
+}
+
+/** capabilities.reasoning -> ChatThread's own `reasoning` prop. `'full'`
+ *  and absent are the SAME thing (the schema default, matching ChatThread's
+ *  own default) so both emit nothing at all — the off-by-default gating
+ *  convention every other capability in this file follows: only a value that
+ *  DEVIATES from the medium's default costs a byte in the emitted source.
+ *  `'compact'`/`'off'` are plain string literals, not JSON.stringify'd like
+ *  starters/accept/url — the schema already constrains this to one of three
+ *  fixed enum members (schema.ts), so unlike those fields there is no
+ *  construct-authored free text here to escape. */
+function emitReasoningProp(c: Construct): string {
+  const reasoning = c.capabilities?.reasoning;
+  if (!reasoning || reasoning === 'full') return '';
+  return ` reasoning="${reasoning}"`;
+}
+
+/** capabilities.reasoningOpen -> ChatThread's own `reasoningOpen` prop. Only
+ *  `true` costs a byte (off-by-default, matching every capability here);
+ *  false/absent matches the kit's own new default (closed chip). */
+function emitReasoningOpenProp(c: Construct): string {
+  return c.capabilities?.reasoningOpen === true ? ' reasoningOpen={true}' : '';
+}
+
+/** capabilities.history -> whether the App module needs `createEffect`
+ *  (both persisted variants react to `chat.messages()` changing; `none`/
+ *  absent needs no extra Solid import at all, matching the off-by-default
+ *  gating everywhere else in this file). */
+function emitSolidJsImport(c: Construct): string {
+  const history = c.capabilities?.history;
+  if (!history || history.persistence === 'none') return '';
+  return `import { createEffect } from 'solid-js';\n`;
+}
+
+/** capabilities.history -> whether the AttachmentData type import also needs
+ *  ChatMessage (only the persisted variants read/write full ChatMessage[]
+ *  arrays). */
+function emitHistoryTypeImport(c: Construct): string {
+  const history = c.capabilities?.history;
+  if (!history || history.persistence === 'none') return '';
+  // The enclosing statement is already `import type { ... }` (AttachmentData),
+  // so this must NOT repeat the `type` modifier inside the braces — `import
+  // type { AttachmentData, type ChatMessage }` is a TS syntax error.
+  return ', ChatMessage';
+}
+
+/** capabilities.history -> the persistence block spliced after
+ *  createKaiChat/submit (emitProviderSetup). `none`/absent emits nothing at
+ *  all — the format rule (undeclared capability's affordance is OFF).
+ *
+ *  `local`: keyed by the construct's own tag (one thread per construct, no
+ *  cross-construct collision) — restoring on mount MUST hand createKaiChat's
+ *  setMessages a NEW array reference (the kit's reactivity contract; see
+ *  CLAUDE.md), which the updater-returns-parsed-array form does for free. A
+ *  parsed value that is well-formed JSON but the WRONG SHAPE (an object, a
+ *  number, ...) is just as dangerous as a storage exception — handing it to
+ *  `chat.setMessages` would crash ChatThread's render — so it gets the same
+ *  `Array.isArray` gate as the endpoint variant below, not just a try/catch
+ *  around the parse.
+ *  localStorage access is wrapped: it can throw in private mode or over
+ *  quota, and a corrupt/foreign value under the key must not white-screen —
+ *  neither failure is guessed at silently, both fall back to running
+ *  in-memory (decide loudly: see the comment emitted alongside).
+ *  Retention/eviction (how much, how long) is deliberately absent — an
+ *  application-layer decision (component-scope-boundary), not this
+ *  construct's to make.
+ *
+ *  `endpoint`: the CONSUMER's own thread route — GET on mount (kit parses
+ *  the response as ChatMessage[]; a non-OK response, a rejected fetch, or a
+ *  non-array body all fall back to an empty thread rather than throwing or
+ *  crashing render — matching the shape-check discipline above), PUT on
+ *  every change. Both fetches are wrapped (try/catch around the GET chain,
+ *  `.catch` on the PUT) and decide loudly on failure (`console.error`) —
+ *  mirroring the adjacent provider-endpoint fetch's own try/catch +
+ *  `stream.abort` pattern, not a silent swallow. The `hydrated` flag guards
+ *  against the mount-load's own setMessages call immediately re-triggering a
+ *  PUT that writes back exactly what was just read — but a FAILED GET must
+ *  still flip it, in `finally`: a transient GET failure (offline/CORS/DNS)
+ *  degrading to "start fresh, keep saving" is the recoverable failure mode;
+ *  leaving `hydrated` false forever would permanently disable every future
+ *  PUT for the tab's life over one blip. No retry/backoff — that belongs to
+ *  the app, not this construct (component-scope-boundary). url is
+ *  construct-authored/untrusted like theme.accent and provider.url, so it is
+ *  JSON.stringify'd at both fetch call sites — never string-concatenated
+ *  (see the endpoint-provider comment on this same class of bug). */
+/** Top-level userId -> the `x-kai-user-id` header on every emitted fetch that
+ *  talks to the consumer's own backend (the endpoint provider's chat POST, and
+ *  history's endpoint GET/PUT) — so a route can tell which user's thread this
+ *  is. `local` persistence folds it into THREAD_KEY instead (see
+ *  emitHistorySetup) — no network call to header there. userId is
+ *  construct-authored data (like theme.accent/provider.url), so it is
+ *  JSON.stringify'd wherever it is interpolated — never string-concatenated. */
+function emitUserIdHeaderEntry(c: Construct): string {
+  return c.userId ? `, 'x-kai-user-id': ${JSON.stringify(c.userId)}` : '';
+}
+
+function emitHistorySetup(c: Construct): string {
+  const history = c.capabilities?.history;
+  if (!history || history.persistence === 'none') return '';
+
+  if (history.persistence === 'local') {
+    const key = JSON.stringify(c.userId ? `kai:${c.name}:${c.userId}:thread` : `kai:${c.name}:thread`);
+    return `
+// History: persisted locally in this browser, keyed by the element tag. What to
+// retain and for how long is an app decision — clear the key to reset.
+const THREAD_KEY = ${key};
+try {
+  const saved = localStorage.getItem(THREAD_KEY);
+  if (saved) {
+    const parsed: unknown = JSON.parse(saved);
+    if (Array.isArray(parsed)) {
+      chat.setMessages(() => parsed as ChatMessage[]);
+    } else {
+      console.warn(\`[\${THREAD_KEY}] stored history was not an array; ignoring and starting fresh\`);
+    }
+  }
+} catch { /* storage unavailable or corrupt: run in-memory */ }
+createEffect(() => {
+  try {
+    localStorage.setItem(THREAD_KEY, JSON.stringify(chat.messages()));
+  } catch { /* storage unavailable: run in-memory */ }
+});
+`;
+  }
+
+  const url = JSON.stringify(history.url);
+  return `
+// History: persisted to your endpoint (GET on mount, PUT on every change) —
+// the kit PARSES, this app FETCHES; your route owns the storage and what to
+// retain and for how long. \`hydrated\` guards the mount-load from immediately
+// PUTting back what it just loaded, but still flips on a FAILED load — one
+// offline/CORS/DNS blip degrades to "start fresh, keep saving", not
+// "never save again".
+let hydrated = false;
+(async () => {
+  try {
+    const r = await fetch(${url}${c.userId ? `, { headers: { 'x-kai-user-id': ${JSON.stringify(c.userId)} } }` : ''});
+    const saved: unknown = r.ok ? await r.json() : [];
+    if (Array.isArray(saved)) {
+      chat.setMessages(() => saved as ChatMessage[]);
+    } else {
+      console.warn('history endpoint returned a non-array body; ignoring and starting fresh');
+    }
+  } catch (err) {
+    console.error('history endpoint GET failed; starting fresh (will keep saving)', err);
+  } finally {
+    hydrated = true;
+  }
+})();
+createEffect(() => {
+  const snapshot = chat.messages();
+  if (!hydrated) return;
+  fetch(${url}, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json'${emitUserIdHeaderEntry(c)} },
+    body: JSON.stringify(snapshot),
+  }).catch((err) => {
+    console.error('history endpoint PUT failed; this change was not persisted', err);
+  });
+});
+`;
+}
+
+function emitProviderImports(c: Construct): string {
+  if (c.provider.mode === 'mock') {
+    return `import { createMockResponder } from '@kitn.ai/ui/state';
+import { readOpenAIStream } from '@kitn.ai/ui/wire';`;
+  }
+  const read = c.provider.wire === 'openai' ? 'readOpenAIStream' : 'readAnthropicStream';
+  const encode = c.provider.wire === 'openai' ? 'toOpenAIMessages' : 'toAnthropicMessages';
+  return `import { ${read}, ${encode} } from '@kitn.ai/ui/wire';`;
+}
+
+function emitProviderSetup(c: Construct): string {
+  // ChatThread owns its own composer draft (uncontrolled — no `value` prop
+  // passed below) and clears it after submit itself; `onSubmit` hands back
+  // the value directly, so there's no PromptInput-specific signal-reading
+  // workaround to carry here any more.
+  if (c.provider.mode === 'mock') {
+    const cardsNote = c.cards
+      ? `
+// Cards demo keylessly: createMockResponder() can already SCRIPT a tool call
+// (\`replies: [{ toolCalls: [...] }]\`, F-35), so a scripted turn calling
+// \`kai_<card name>\` renders exactly like a live model's would, below.`
+      : '';
+    return `// Provider seam: mock — keyless, streams locally, announces itself once.
+// Swap for provider.mode "endpoint" in the construct and re-run kai dev; the
+// generated fetch keeps this exact shape (the seam is the point).${cardsNote}
+const respond = createMockResponder();
+const chat = createKaiChat();
+
+async function submit(detail: { value: string; attachments: AttachmentData[] }) {
+  if (!detail.value.trim() || chat.loading()) return;
+  chat.append({
+    id: crypto.randomUUID(),
+    role: 'user',
+    parts: [
+      { type: 'text', text: detail.value },
+      ...detail.attachments.map((attachment) => ({ type: 'file' as const, attachment })),
+    ],
+  });
+  const stream = chat.streamAssistant();
+  try {
+    await readOpenAIStream(respond(detail.value), stream);${emitApplyCardTools(c)}
+    stream.done();
+  } catch (err) {
+    stream.abort(err instanceof Error ? err.message : String(err));
+  }
+}`;
+  }
+
+  const { url, wire } = c.provider;
+  const read = wire === 'openai' ? 'readOpenAIStream' : 'readAnthropicStream';
+  const encode = wire === 'openai' ? 'toOpenAIMessages' : 'toAnthropicMessages';
+  // provider.url is an UNCONSTRAINED z.string() (schema.ts). It is NEVER
+  // embedded in this comment — a `//` line comment is ended by a raw
+  // U+2028/U+2029 line separator (a valid JS line terminator that
+  // commentSafe's \r\n strip does not catch), so a url containing one of
+  // those code points could close the comment early and let the rest of the
+  // url execute as JS. commentSafe is a comment-escaping tool and this is a
+  // hand-rolled-escaping trap for untrusted input by construction, so the
+  // fix is to never hand-roll it here: the url appears ONLY on the fetch()
+  // line below, via JSON.stringify, which is a real JS string literal (not a
+  // comment) and immune to this class of bug.
+  return `// Provider seam: YOUR endpoint (${wire} wire, see the fetch call below
+// for the URL). The kit PARSES, this component FETCHES — no key, no
+// provider SDK, no client in here. Your route holds the key and re-frames to
+// the provider; the kai MCP scaffold tool emits one for your framework.
+const chat = createKaiChat();
+
+async function submit(detail: { value: string; attachments: AttachmentData[] }) {
+  if (!detail.value.trim() || chat.loading()) return;
+  chat.append({
+    id: crypto.randomUUID(),
+    role: 'user',
+    parts: [
+      { type: 'text', text: detail.value },
+      ...detail.attachments.map((attachment) => ({ type: 'file' as const, attachment })),
+    ],
+  });
+  const stream = chat.streamAssistant();
+  try {
+    const response = await fetch(${JSON.stringify(url)}, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json'${emitUserIdHeaderEntry(c)} },
+      body: JSON.stringify({ messages: ${encode}(chat.messages())${emitToolsField(c)} }),
+    });
+    if (!response.ok) throw new Error(\`endpoint responded \${response.status}\`);
+    await ${read}(response, stream);${emitApplyCardTools(c)}
+    stream.done();
+  } catch (err) {
+    stream.abort(err instanceof Error ? err.message : String(err));
+  }
+}`;
+}
+
+/** The layout-conditional named import spliced onto the `@kitn.ai/ui/solid`
+ *  import list in App.tsx: `Dock` only for `widget`, `PaneGroup` only for
+ *  `split` — nothing for `fullscreen`/`aside`, which are plain styled
+ *  containers (the kit has no dedicated fullscreen/docked-aside component;
+ *  see the emitLayoutOpen doc for why that's the honest choice here rather
+ *  than a hand-rolled component of our own). Gated so the generated
+ *  project's own `noUnusedLocals` never trips on an import used by a layout
+ *  that isn't this construct's. */
+function emitLayoutImport(c: Construct): string {
+  switch (c.layout) {
+    case 'widget':
+      return ', Dock';
+    case 'split':
+      return ', WorkspaceShell';
+    case 'fullscreen':
+    case 'aside':
+      return '';
+    case 'custom':
+      // Unreachable: emitApp special-cases 'custom' into emitCustomApp before
+      // this is ever called (custom's spine is Thread + PromptInput, not
+      // ChatThread, so there is no shared import line to splice onto). Kept
+      // only so this switch stays exhaustive over the widened layout enum.
+      return '';
+  }
+}
+
+/** Declared `slots`, one `<slot name="...">` per entry in declaration order.
+ *  Slot names are already schema-validated to `^[a-z][a-z0-9-]*$` (schema.ts)
+ *  — a closed character set with no quote/backslash, so they're interpolated
+ *  directly into the attribute rather than JSON.stringify'd like the
+ *  free-text construct-authored fields (starters, theme.accent, provider.url)
+ *  elsewhere in this file. `indent` matches the surrounding JSX depth. */
+function emitSlots(slots: readonly string[] | undefined, indent: string): string {
+  if (!slots || slots.length === 0) return '';
+  return slots.map((name) => `${indent}<slot name="${name}" />\n`).join('');
+}
+
+/**
+ * The layout shell wrapping ChatThread — one pair (open above, close below)
+ * per `layout`, composing the kit's own layout primitives over a hand-rolled
+ * div wherever the kit ships one:
+ *
+ *  - `widget`: the kit's Dock (launcher + panel + focus contract) — unchanged
+ *    from before Task 12. No theming wrapper needed here — the accent lands
+ *    on the HOST element from element.tsx's facade (see emitElement), which
+ *    reaches both the launcher (a DOM sibling of this panel content, outside
+ *    Dock's own `children`) and everything below via normal custom-property
+ *    inheritance from :host down through the whole shadow tree.
+ *  - `fullscreen`: the kit has no dedicated "fill the viewport" component —
+ *    this genuinely is just sizing, not chrome — so a minimally-styled
+ *    `<div>` (100dvh, column flex) IS the honest composition, not a
+ *    restatement of something the kit already owns.
+ *  - `aside`: same reasoning — a persistent, single-edge docked panel is a
+ *    styled container (fixed inline-end column, the kit's own
+ *    `--kai-color-border` token for the divider), not a kit component. `dvh`/
+ *    logical properties (`inset-inline-end`, `border-inline-start`) keep it
+ *    correct under RTL and mobile viewport chrome the same way `100dvh` does
+ *    for fullscreen.
+ *  - `split`: composes the kit's real `WorkspaceShell` (components/
+ *    workspace-shell.tsx) for its frame -- chat in `children` (the main
+ *    region), the end pane's `<slot name="pane">` seam projected via `end`.
+ *    Superseded from Task 12's `PaneGroup` (recorded decision 2): `PaneGroup`
+ *    is an editor GROUP contract (src/ui/pane-group.tsx) -- a tab strip over
+ *    ONE content area -- so getting two SIMULTANEOUS panes out of it meant a
+ *    single always-active tab whose one body was a hand-rolled flex row doing
+ *    the actual two-column math; the "kit component" was supplying a frame
+ *    the composition didn't use for its defining feature (a resizable split)
+ *    at all. `WorkspaceShell` already IS a two-region layout with a REAL
+ *    draggable splitter between them (it composes `ResizablePanelGroup`
+ *    internally) -- start/end aside width props and collapse are left at
+ *    their defaults here (this construct wants exactly one fixed end pane,
+ *    not a full workspace chrome); `drawerBelow={480}` IS wired (Task 19d) so
+ *    split gets the kit's own mobile takeover at the same breakpoint every
+ *    other layout uses, so the split's math is the kit's
+ *    own, not a restatement.
+ *
+ * `custom` is handled entirely by `emitCustomApp` instead (its spine is
+ * Thread + PromptInput composed by hand, not ChatThread, so there's no shared
+ * chrome to open/close here) — `emitApp` special-cases it before either of
+ * these is called. Both switches still carry a `case 'custom'` so they stay
+ * exhaustive over the widened layout enum: TypeScript is what caught this
+ * exact gap when Task 13 added the enum member, and a `default` would have
+ * hidden it again for the next one.
+ */
+/** widget.position -> Dock's own `position` prop. A closed DockPosition enum
+ *  (schema-constrained), so plain string interpolation is safe — no
+ *  construct-authored free text here, unlike launcherIcon below. */
+function emitDockPosition(c: Construct): string {
+  const w = c.layout === 'widget' ? c.widget : undefined;
+  return w?.position ? ` position="${w.position}"` : '';
+}
+
+/** widget.launcherIcon -> Dock's `launcher` prop, replacing the built-in
+ *  closed-state glyph with an <img>. launcherIcon is construct-authored/
+ *  untrusted text (like theme.accent/provider.url elsewhere in this file),
+ *  so it is JSON.stringify'd into a real JS string-literal expression, never
+ *  interpolated into a raw JSX attribute string. */
+function emitDockLauncher(c: Construct): string {
+  const w = c.layout === 'widget' ? c.widget : undefined;
+  if (!w?.launcherIcon) return '';
+  return ` launcher={<img src={${JSON.stringify(w.launcherIcon)}} alt="" style={{ width: '24px', height: '24px', 'border-radius': '9999px' }} />}`;
+}
+
+/** widget.defaultOpen -> Dock's own `defaultOpen` prop. Only `true` costs a
+ *  byte — `false`/absent matches Dock's own default (closed), same
+ *  off-by-default convention as every other capability in this file. */
+function emitDockDefaultOpen(c: Construct): string {
+  const w = c.layout === 'widget' ? c.widget : undefined;
+  return w?.defaultOpen === true ? ' defaultOpen={true}' : '';
+}
+
+function emitLayoutOpen(c: Construct): string {
+  switch (c.layout) {
+    case 'widget':
+      return `    <Dock label="${c.name}"${emitDockPosition(c)}${emitDockLauncher(c)}${emitDockDefaultOpen(c)}${emitDockHideClose(c)}${emitDockControllerRef(c)}>\n`;
+    case 'fullscreen':
+      return `    <div style={{ height: '100dvh', display: 'flex', 'flex-direction': 'column' }}>\n`;
+    case 'aside':
+      return `    <aside data-kai-layout="aside" style={{ position: 'fixed', 'inset-block': '0', 'inset-inline-end': '0', width: '380px', display: 'flex', 'flex-direction': 'column', 'border-inline-start': '1px solid var(--kai-color-border)' }}>
+      {/* Mirrors Dock's own narrow-viewport full-bleed rule (ui/dock.tsx:229-240)
+          — aside has no dedicated kit component (see the emitLayoutOpen doc
+          comment above), so this is the honest hand-rolled equivalent, not a
+          new responsive strategy. */}
+      <style>{\`@media (max-width: 480px) { [data-kai-layout="aside"] { inset: 0; width: auto; height: auto; border-inline-start: 0; } }\`}</style>
+`;
+    case 'split':
+      // drawerBelow: split's mobile takeover is the kit's OWN WorkspaceShell
+      // capability (components/workspace-shell.tsx), not hand-rolled CSS — wiring
+      // it here is composition-over-reauthoring, not a media-query duplicate. 480
+      // matches Dock's own breakpoint (ui/dock.tsx:229) so every layout takes over
+      // at the same viewport width.
+      return `    <div style={{ height: '100dvh' }}>\n      <WorkspaceShell class="h-full" drawerBelow={480} end={\n        <div style={{ height: '100%', overflow: 'auto' }}>\n          <slot name="pane" />\n        </div>\n      }>\n`;
+    case 'custom':
+      return ''; // unreachable — see the block comment above
+  }
+}
+
+function emitLayoutClose(c: Construct): string {
+  switch (c.layout) {
+    case 'widget':
+      return `    </Dock>\n`;
+    case 'fullscreen':
+      return `    </div>\n`;
+    case 'aside':
+      return `    </aside>\n`;
+    case 'split':
+      // The end pane (WorkspaceShell's `end`, opened above) is a fixed,
+      // always-present projection point for `split` specifically (Task 12) —
+      // orthogonal to Task 13's generic `slots` field, which still emits
+      // above the chat pane the same as every other non-custom layout (see
+      // emitApp). WorkspaceShell supplies its own real draggable splitter
+      // between the two, so there is no hand-rolled two-column math left to
+      // close here.
+      return `      </WorkspaceShell>\n    </div>\n`;
+    case 'custom':
+      return ''; // unreachable — see the block comment above
+  }
+}
+
+// ── kai compile: the d.ts alongside the single .js ─────────────────────────
+
+/** The declaration file `kai compile` writes beside the emitted .js — just
+ *  enough for a consumer's TS to know the tag and its one settable prop. */
+export function emitTypes(c: Construct): string {
+  return `declare global {
+  interface HTMLElementTagNameMap {
+    '${c.name}': HTMLElement & { theme: 'light' | 'dark' | 'auto' };
+  }
+}
+export {};
+`;
+}
+
+// ── writing ──────────────────────────────────────────────────────────────────
+
+const MANIFEST = '.kai-manifest.json';
+
+/**
+ * Write files; prune anything the PREVIOUS generation wrote that this one
+ * didn't. Returns the paths that already existed on disk before this write
+ * (i.e. were overwritten) — callers that decide loudly (the CLI's `eject`)
+ * use it to say so instead of silently clobbering a file the caller may have
+ * hand-edited.
+ */
+export function writeProject(files: GeneratedFile[], dir: string): string[] {
+  const manifestPath = join(dir, MANIFEST);
+  const previous: string[] = existsSync(manifestPath)
+    ? (JSON.parse(readFileSync(manifestPath, 'utf8')) as string[])
+    : [];
+  const current = new Set(files.map((f) => f.path));
+  for (const stale of previous) {
+    if (!current.has(stale)) rmSync(join(dir, stale), { force: true });
+  }
+  const overwritten: string[] = [];
+  for (const f of files) {
+    const abs = join(dir, f.path);
+    if (existsSync(abs)) overwritten.push(f.path);
+    mkdirSync(dirname(abs), { recursive: true });
+    writeFileSync(abs, f.code);
+  }
+  writeFileSync(manifestPath, `${JSON.stringify([...current].sort(), null, 2)}\n`);
+  return overwritten;
+}

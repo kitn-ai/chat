@@ -779,6 +779,18 @@
           "fn": false
         },
         {
+          "name": "reasoning",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "reasoningOpen",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
           "name": "chatTitle",
           "scalar": true,
           "optional": true,
@@ -852,6 +864,12 @@
         },
         {
           "name": "footer",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "attach",
           "scalar": true,
           "optional": true,
           "fn": false
@@ -1833,6 +1851,12 @@
         },
         {
           "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "hideClose",
           "scalar": true,
           "optional": true,
           "fn": false
