@@ -1,0 +1,189 @@
+{
+  "$id": "https://ui.kitn.ai/schemas/construct/v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*-[a-z0-9-]+$"
+    },
+    "layout": {
+      "type": "string",
+      "enum": [
+        "widget",
+        "fullscreen",
+        "aside",
+        "split",
+        "custom"
+      ]
+    },
+    "provider": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "const": "mock"
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "const": "endpoint"
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1
+            },
+            "wire": {
+              "type": "string",
+              "enum": [
+                "openai",
+                "anthropic"
+              ]
+            }
+          },
+          "required": [
+            "mode",
+            "url",
+            "wire"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "theme": {
+      "type": "object",
+      "properties": {
+        "accent": {
+          "type": "string"
+        },
+        "mode": {
+          "default": "system",
+          "type": "string",
+          "enum": [
+            "light",
+            "dark",
+            "system"
+          ]
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "additionalProperties": false
+    },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "starters": {
+          "minItems": 1,
+          "maxItems": 6,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "attachments": {
+          "type": "object",
+          "properties": {
+            "accept": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "required": [
+            "accept"
+          ],
+          "additionalProperties": false
+        },
+        "history": {
+          "type": "object",
+          "properties": {
+            "persistence": {
+              "type": "string",
+              "enum": [
+                "none",
+                "local",
+                "endpoint"
+              ]
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "persistence"
+          ],
+          "additionalProperties": false
+        },
+        "reasoning": {
+          "type": "string",
+          "enum": [
+            "full",
+            "compact",
+            "off"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "cards": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "schema": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "name",
+          "schema"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "slots": {
+      "minItems": 1,
+      "maxItems": 8,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*$"
+      }
+    }
+  },
+  "required": [
+    "name",
+    "layout",
+    "provider"
+  ],
+  "additionalProperties": false
+}
