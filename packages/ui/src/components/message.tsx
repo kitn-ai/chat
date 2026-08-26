@@ -370,9 +370,9 @@ export interface MessageBodyProps {
    *  toggle, so it applies uniformly to every reasoning part in the body. */
   reasoningMode?: 'full' | 'compact' | 'off';
   /** Seeds the reasoning disclosure open AND keeps it tracking the stream
-   *  (open while streaming, closes when it settles) — the pre-Task-19f `full`
+   *  (open while streaming, closes when it settles): the pre-Task-19f `full`
    *  behavior. Default false/absent: the panel starts closed (just the
-   *  "Thinking" shimmer chip) and only opens on click — the current default
+   *  "Thinking" shimmer chip) and only opens on click, the current default
    *  (owner ruling, 2026-08-26). Meaningless when `reasoningMode` is
    *  `'compact'`/`'off'` (no disclosure exists to open). */
   reasoningDefaultOpen?: boolean;

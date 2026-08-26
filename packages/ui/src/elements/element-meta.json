@@ -1446,7 +1446,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "Seeds the reasoning disclosure open AND keeps it tracking the stream (open while streaming, closes when it settles) — the pre-Task-19f `full` behavior. Default false/absent: the panel starts closed (just the \"Thinking\" shimmer chip) and only opens on click — the current default (owner ruling, 2026-08-26). Meaningless when `reasoning` is `'compact'` or `'off'`. Forwarded to every `MessageBody` as `reasoningDefaultOpen`.",
+        "description": "Seeds the reasoning disclosure open AND keeps it tracking the stream (open while streaming, closes when it settles): the pre-Task-19f `full` behavior. Default false/absent: the panel starts closed (just the \"Thinking\" shimmer chip) and only opens on click, the current default (owner ruling, 2026-08-26). Meaningless when `reasoning` is `'compact'` or `'off'`. Forwarded to every `MessageBody` as `reasoningDefaultOpen`.",
         "displayType": "undefined | false | true"
       },
       {
@@ -1565,7 +1565,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "When `false`, hides the built-in paperclip attach button. Defaults to `true` (undeclared keeps today's behavior: attach visible), matching `DefaultPromptInput`'s own default — only an explicit `false` hides it.",
+        "description": "When `false`, hides the built-in paperclip attach button. Defaults to `true` (undeclared keeps today's behavior: attach visible), matching `DefaultPromptInput`'s own default: only an explicit `false` hides it.",
         "default": "true",
         "displayType": "undefined | false | true"
       },

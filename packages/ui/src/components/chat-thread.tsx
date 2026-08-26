@@ -85,9 +85,9 @@ export interface ChatThreadProps {
    *  to every `MessageBody` as `reasoningMode`. */
   reasoning?: 'full' | 'compact' | 'off';
   /** Seeds the reasoning disclosure open AND keeps it tracking the stream
-   *  (open while streaming, closes when it settles) — the pre-Task-19f `full`
+   *  (open while streaming, closes when it settles): the pre-Task-19f `full`
    *  behavior. Default false/absent: the panel starts closed (just the
-   *  "Thinking" shimmer chip) and only opens on click — the current default
+   *  "Thinking" shimmer chip) and only opens on click, the current default
    *  (owner ruling, 2026-08-26). Meaningless when `reasoning` is `'compact'`
    *  or `'off'`. Forwarded to every `MessageBody` as `reasoningDefaultOpen`. */
   reasoningOpen?: boolean;
@@ -140,7 +140,7 @@ export interface ChatThreadProps {
   onAttachmentsRejected?: (rejected: RejectedAttachment[]) => void;
   /** When `false`, hides the built-in paperclip attach button. Defaults to
    *  `true` (undeclared keeps today's behavior: attach visible), matching
-   *  `DefaultPromptInput`'s own default — only an explicit `false` hides it. */
+   *  `DefaultPromptInput`'s own default: only an explicit `false` hides it. */
   attach?: boolean;
   /** Show a web-search (Globe) button in the input toolbar; calls `onWebSearch`. */
   webSearch?: boolean;
