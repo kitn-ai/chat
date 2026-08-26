@@ -74,8 +74,45 @@
      added at the bottom. */
   --color-hover: var(--kai-color-hover, color-mix(in oklab, var(--color-muted) 60%, var(--color-background)));
   --color-selected: var(--kai-color-selected, color-mix(in oklab, var(--color-primary) 8%, var(--color-background)));
+  /* MARKED text — the fill behind a keyword the app has flagged (the composer's
+     `highlights` rules, decorated through the CSS Custom Highlight API). This is
+     `<mark>`, not a selection and not a status: a warm yellow, the convention
+     every browser already ships for <mark> and every reader already reads as
+     "someone marked this". Deliberately NOT derived from --color-primary — that
+     token is a NEUTRAL near-black in light and near-white in dark, so any tint of
+     it is grey, which is why the highlight used to be invisible. Also not blue
+     (the browser's own ::selection is blue — a highlight must not read as a
+     selection), not red (error) and not the skill/agent pill hues (blue/violet).
+     OPAQUE, so it composites predictably over whichever field it lands on.
+     Override via --kai-color-highlight. Light: near-black text over it is 15.6:1;
+     dark: near-white text over it is 6.7:1 — both well clear of WCAG AA. */
+  --color-highlight: var(--kai-color-highlight, hsl(45 96% 78%));
+  /* SELECTED text — the kit's own ::selection fill, applied inside every kai-*
+     shadow root (see src/elements/styles.css for the scoping rationale). The kit
+     owns this because leaving it to the UA meant the browser's blue outranked the
+     kit's own deliberate emphasis: a marked keyword was LESS prominent than an
+     incidental drag-select. Stays in the cool/blue family the UA trained everyone
+     to read as "selected", so it can never be confused with the warm --color-highlight
+     mark above; OPAQUE, so a selection over a mark composites cleanly (selection
+     paints on top of a custom highlight) instead of muddying into a third colour.
+     The FOREGROUND is set too, and that is not cosmetic: without it the selected
+     glyph keeps its own colour, and the kit's coloured text — muted text (3.8:1),
+     the skill/agent pill hues (3.6:1 / 4.0:1), inline code (4.7:1) — lands at or
+     under WCAG AA on this fill. Forcing the foreground token makes the guarantee
+     hold for every glyph regardless of what colour it had. Light 13.99:1,
+     dark 8.87:1. Override via --kai-color-selection(-foreground). */
+  --color-selection: var(--kai-color-selection, hsl(213 94% 87%));
+  --color-selection-foreground: var(--kai-color-selection-foreground, hsl(240 10% 3.9%));
   --color-border: var(--kai-color-border, hsl(240 5.9% 90%));
-  --color-input: var(--kai-color-input, hsl(240 5.9% 90%));
+  /* CONTROL boundary — the visible edge of an interactive form control (text
+     input, textarea, select, the radio/checkbox ring). WCAG 2.1 SC 1.4.11
+     Non-text Contrast requires >=3:1 against the adjacent surface for exactly
+     this: a control whose boundary you cannot see is not perceivable. That is
+     why this is NOT --color-border: a divider or a card outline is decorative
+     and may sit below 3:1, a control's edge may not. Do NOT use border-input
+     for list wrappers or panel outlines — use border-border there.
+     Contrast is the requirement; a thicker border does not satisfy 1.4.11. */
+  --color-input: var(--kai-color-input, hsl(240 5% 53%));
   /* Focus ring — a deliberate blue (not a neutral) so keyboard focus is always
      obvious and on-brand in both modes. Light uses a strong blue; dark uses a
      brighter one for contrast on dark surfaces. Both clear WCAG 2.1 non-text
@@ -204,8 +241,18 @@
   --color-destructive-soft: var(--kai-color-destructive-soft, color-mix(in oklab, var(--color-destructive) 14%, var(--color-background)));
   --color-hover: var(--kai-color-hover, color-mix(in oklab, var(--color-muted) 60%, var(--color-background)));
   --color-selected: var(--kai-color-selected, color-mix(in oklab, var(--color-primary) 8%, var(--color-background)));
+  /* Marked text — dark. A deep warm amber rather than the light yellow: a pale
+     highlighter on a near-black field would blow out and force the text to flip
+     colour. See the light block for the full note. */
+  --color-highlight: var(--kai-color-highlight, hsl(40 75% 26%));
+  /* Selected text — dark. A deep blue rather than the light one, for the same
+     reason the mark darkens. See the light block for the full note. */
+  --color-selection: var(--kai-color-selection, hsl(217 60% 32%));
+  --color-selection-foreground: var(--kai-color-selection-foreground, hsl(0 0% 98%));
   --color-border: var(--kai-color-border, hsl(45 4% 17%));
-  --color-input: var(--kai-color-input, hsl(45 4% 17%));
+  /* Control boundary — see the light block. Lifted to clear 3:1 (SC 1.4.11)
+     against the dark background and card surfaces. */
+  --color-input: var(--kai-color-input, hsl(45 4% 48%));
   --color-ring: var(--kai-color-ring, hsl(217 91% 68%));
   --color-scrollbar-thumb: var(--kai-color-scrollbar-thumb, hsl(45 3% 30%));
   --color-scrollbar-thumb-hover: var(--kai-color-scrollbar-thumb-hover, hsl(45 3% 42%));

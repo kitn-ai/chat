@@ -967,6 +967,7 @@ interface FieldRowProps {
 
 function FieldRow(props: FieldRowProps): JSX.Element {
   const id = `f-${props.fieldKey}-${Math.random().toString(36).slice(2, 8)}`;
+  const labelId = `${id}-label`;
   const errorId = `${id}-err`;
   const descId = `${id}-desc`;
   const formatId = `${id}-fmt`;
@@ -992,17 +993,33 @@ function FieldRow(props: FieldRowProps): JSX.Element {
       .filter(Boolean)
       .join(' ') || undefined;
 
-  const common = fieldCommon(props, id, placeholder, label, describedBy, maskHint);
+  // `fieldset` and `repeater` render a REAL <fieldset><legend> holding this same text,
+  // so the row's own label would print it twice. They are the only two kinds that
+  // supply their own VISIBLE grouping label.
+  //
+  // The other four kinds this list used to hold — radio, checkbox-group, multiselect,
+  // taglist — supplied an `aria-label` and nothing else, which is a name only a screen
+  // reader can reach: "Severity", "Environments" and "Tags" were announced and INVISIBLE
+  // on screen. The row now always renders the text for them and hands `labelId` to the
+  // widget, which points its group at it with `aria-labelledby`. One string, visible,
+  // correctly associated.
+  const ownLegend = () => ['fieldset', 'repeater'].includes(widget());
 
-  // A nested fieldset / repeater / checkbox-group provide their own grouping
-  // label, so the row's <label> is only rendered for simple single controls.
-  const isGrouped = () =>
-    ['fieldset', 'repeater', 'checkbox-group', 'multiselect', 'radio', 'taglist'].includes(widget());
+  // Which kinds have no single labelable control for `<label for>` to name. Their label
+  // is still an element with an id, which is what `aria-labelledby` needs; `taglist` is
+  // deliberately NOT here, because its draft <input> carries the row id and a real
+  // `for` association is strictly better than an ARIA one.
+  const groupOnly = () => ['radio', 'checkbox-group', 'multiselect'].includes(widget());
+
+  const common = fieldCommon(props, id, placeholder, label, describedBy, maskHint, () =>
+    ownLegend() ? undefined : labelId,
+  );
+
 
   return (
     <div class="flex flex-col gap-2 rounded-xl bg-surface p-3.5" data-field={props.fieldKey}>
-      <Show when={!isGrouped()}>
-        <label for={id} class="text-sm font-medium text-foreground">
+      <Show when={!ownLegend()}>
+        <label id={labelId} for={groupOnly() ? undefined : id} class="text-sm font-medium text-foreground">
           {label()}
           <Show when={props.required}>
             <span class="text-destructive dark:text-red-400" aria-hidden="true">{' *'}</span>
@@ -1060,6 +1077,7 @@ export function fieldCommon(
   label: () => string,
   describedBy: () => string | undefined = () => undefined,
   mask: () => FieldMaskHint = () => EMPTY_MASK_HINT,
+  labelledBy: () => string | undefined = () => undefined,
 ): ReturnType<FieldRowCommon> {
   return {
     id,
@@ -1076,6 +1094,7 @@ export function fieldCommon(
     get invalid() { return Boolean(props.error()); },
     get describedBy() { return describedBy(); },
     get label() { return label(); },
+    get labelledBy() { return labelledBy(); },
     onInput: (v) => props.onInput(v),
     onBlur: () => props.onBlur(),
   };
@@ -1097,6 +1116,8 @@ type FieldRowCommon = () => {
   invalid: boolean;
   describedBy?: string;
   label: string;
+  /** The id of the row's visible <label>, for widgets that name a GROUP. */
+  labelledBy?: string;
   onInput: (v: unknown) => void;
   onBlur: () => void;
 };

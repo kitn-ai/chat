@@ -846,12 +846,24 @@ export function Composer(props: ComposerProps): JSX.Element {
         .kai-composer-pill[data-kind="agent"] { color: var(--kai-pill-agent, #7c3aed); }
         /* Brighter hues on dark so they don't muddy against a dark field. The
            consumer's --kai-pill-* override still wins (it's the var value); only
-           the FALLBACK shifts per scheme. */
-        @media (prefers-color-scheme: dark) {
-          .kai-composer-pill[data-kind="skill"] { color: var(--kai-pill-skill, #6ea8fe); }
-          .kai-composer-pill[data-kind="agent"] { color: var(--kai-pill-agent, #c4a7fc); }
-        }
-        .kai-composer-pill-sigil { opacity: 0.6; font-weight: 600; }
+           the FALLBACK shifts per scheme.
+
+           Keyed on the kit's RESOLVED theme (the \`.dark\` wrapper an element
+           facade puts inside its shadow root, and the \`.dark\` class the docs /
+           Storybook put on <html>) — NOT \`prefers-color-scheme\`. Those are
+           different questions: \`theme="light"\` on a machine whose OS is dark is
+           an ordinary, common configuration, and the media query answered the OS
+           while the surface under the pill answered the attribute. That painted
+           the DARK hue (#6ea8fe) on the LIGHT field: 2.33:1, under both the
+           4.5:1 text floor (SC 1.4.3) and even 3:1. Matched pairs looked fine,
+           which is why it survived — never scheme-match a colour whose backdrop
+           is chosen by the theme attribute. */
+        .dark .kai-composer-pill[data-kind="skill"] { color: var(--kai-pill-skill, #6ea8fe); }
+        .dark .kai-composer-pill[data-kind="agent"] { color: var(--kai-pill-agent, #c4a7fc); }
+        /* Dimmer than the label, but the sigil is what makes a pill read as
+           \`/skill\` vs \`@agent\`, so it is a meaningful glyph and owes 3:1
+           (SC 1.4.11). At 0.6 the light-mode composite was 2.52:1. */
+        .kai-composer-pill-sigil { opacity: 0.8; font-weight: 600; }
         /* Plugins (and any other/unknown kind): the richer CHIP — background +
            icon — so a composite bundle reads differently at a glance. */
         .kai-composer-pill:not([data-kind="skill"]):not([data-kind="agent"]) {
