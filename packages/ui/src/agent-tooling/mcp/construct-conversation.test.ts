@@ -105,7 +105,12 @@ describe('four-sentence conversational construction', () => {
       'defaultOpen={true}',
       JSON.stringify(finalConstruct.widget.launcherIcon),
       JSON.stringify(finalConstruct.header.title),
-      'empty={true}',
+      // empty wires through ChatThread's own `emptyContent` prop as a plain
+      // JSX Empty/EmptyHeader/EmptyTitle/EmptyDescription composition, not a
+      // boolean `empty` prop or a slot/Portal (emitEmptyContentProp in
+      // codegen.ts) — assert the real emission site.
+      'emptyContent={<Empty><EmptyHeader>',
+      '<EmptyTitle>',
       JSON.stringify(finalConstruct.empty.title),
       JSON.stringify(finalConstruct.empty.description),
     ]) {

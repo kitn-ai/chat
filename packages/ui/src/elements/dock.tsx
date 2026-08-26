@@ -30,7 +30,7 @@ interface Props extends Record<string, unknown> {
   disabled?: boolean;
   /** Suppress the dock's own built-in mobile close X. Set this when your slotted
    *  panel content supplies its own close affordance (e.g. a `<kai-chat
-   *  slot="header-end">` close button) — otherwise the two stack. TRADEOFF: the
+   *  slot="header-end">` close button), otherwise the two stack. TRADEOFF: the
    *  mobile panel reserves a padding band above its content so the built-in X
    *  never paints over slotted content; that band stays reserved unless you set
    *  this true, so only set it once your own control is actually in place.
