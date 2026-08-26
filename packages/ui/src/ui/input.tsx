@@ -25,7 +25,7 @@ export interface InputProps extends Omit<JSX.InputHTMLAttributes<HTMLInputElemen
   /** Trailing affix (icon, inline button). Rendered inside the field row, after the input. */
   trailing?: JSX.Element;
   /** Fires per keystroke with the current value — the CANONICAL value when a mask is
-   *  active (spec §4: digits for `tel`/`ssn`/`credit-card`, the formatted text for
+   *  active (digits for `tel`/`ssn`/`credit-card`, the formatted text for
    *  `custom`), and the raw text of the field otherwise. */
   onValueInput?: (value: string) => void;
   /** Fires on commit (blur) with the current value; canonical when a mask is active. */

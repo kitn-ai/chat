@@ -2,7 +2,7 @@
  * Composition slots for `kai-*` elements. A slot is a named region a consumer
  * fills with their own markup. This registry is the SINGLE SOURCE OF TRUTH:
  * the facade derives its detection from it (and, later, docs are generated
- * from it). See docs/superpowers/specs/2026-06-23-kai-chat-composition-seams-design.md.
+ * from it).
  */
 
 /** `inject` = additive (the built-in region still renders, your markup is added

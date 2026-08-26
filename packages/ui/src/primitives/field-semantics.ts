@@ -14,7 +14,7 @@ import { formatRaw, rawFromFormatted, type MaskPattern } from './field-mask';
 export const FIELD_SEMANTIC_TYPES = ['tel', 'ssn', 'credit-card', 'custom'] as const;
 export type FieldSemanticType = (typeof FIELD_SEMANTIC_TYPES)[number];
 
-/** The tier-1 attribute bag for one semantic type (spec §2 tier 1 table). */
+/** The tier-1 attribute bag for one semantic type. */
 export interface FieldSemantics {
   readonly inputmode?: 'tel' | 'numeric';
   readonly autocomplete?: string; // `ssn` sends 'off' -- no standard token, so this is a
@@ -26,7 +26,7 @@ export interface FieldSemantics {
    *  (`mask="default"` / the form card's `x-kai-format`) -- NOT applied automatically
    *  by a bare semantic type (decision 1). */
   readonly defaultFormat?: string;
-  /** What the field submits (spec §4): digit-only types strip separators, `custom`
+  /** What the field submits: digit-only types strip separators, `custom`
    *  keeps its formatted/literal value, `as-typed` is the unmasked fallback. */
   readonly canonical: 'digits' | 'formatted' | 'as-typed';
 }
@@ -43,7 +43,7 @@ const UNMASKED_FALLBACK: FieldSemantics = {
  *  Passing anything outside `FIELD_SEMANTIC_TYPES` is a TypeScript error at a typed call
  *  site; a value crossing an untyped boundary (JSON Schema, model output) that turns out
  *  not to be one of the four falls back to plain unmasked-text behavior at runtime, loudly
- *  -- `console.warn`, never a silent guess (CLAUDE.md "decide loudly", spec §7.3). */
+ *  -- `console.warn`, never a silent guess. */
 export function fieldSemantics(type: FieldSemanticType): FieldSemantics {
   switch (type) {
     case 'tel':
@@ -99,7 +99,7 @@ export function fieldSemantics(type: FieldSemanticType): FieldSemantics {
 }
 
 /** The canonical (submitted) value for a field, given its compiled mask, the current
- *  FORMATTED text (`input.value`), and its semantic type (spec §4).
+ *  FORMATTED text (`input.value`), and its semantic type.
  *
  *  Reads the raw value back out of `formatted` by position first -- an empty field is
  *  always `''`, never the bare guide. From there the two canonical shapes are read, not

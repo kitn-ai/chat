@@ -50,7 +50,7 @@ import {
 import { canonicalize, type FieldSemanticType } from './field-semantics';
 
 /** What a copy or cut puts on the clipboard. A stated policy the consumer selects, NOT a
- *  consequence of `obscure` (spec §5.10): copying bullets is not a security control -- the
+ *  consequence of `obscure`: copying bullets is not a security control -- the
  *  value is in the page -- and whether a card number may be copied at all is an app-layer
  *  decision (CLAUDE.md: the kit decides HOW, the app decides WHETHER). */
 export type CopyPolicy = 'formatted' | 'canonical' | 'obscured' | 'blocked';

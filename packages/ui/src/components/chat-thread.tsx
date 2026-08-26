@@ -46,7 +46,7 @@ export interface ChatThreadProps {
    *  unvalidated. A schema here WINS over a built-in of the same name. */
   cardSchemas?: CardSchemaMap;
   /** The custom-element host node to emit card events off when no `CardProvider`
-   *  is present, forwarded through `MessageBody` to `CardRenderer` (F-26). The
+   *  is present, forwarded through `MessageBody` to `CardRenderer`. The
    *  element facades pass their own host element so card events leave as the
    *  bubbling `kai-card` CustomEvent. */
   cardHostElement?: HTMLElement;

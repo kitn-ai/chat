@@ -42,14 +42,14 @@ export function readConversationItemId(el: Element): string {
 }
 
 /** Whether a `<kai-conversation-item>` is STANDALONE — outside the management
- *  of a `<kai-conversations>` container — and therefore activates ITSELF
- *  (F-45 tier 2, owner-ruled 2026-08-25): the facade makes its row body a
+ *  of a `<kai-conversations>` container — and therefore activates ITSELF:
+ *  the facade makes its row body a
  *  tabbable button and fires `kai-select` on click / Enter / Space. Derived
  *  from the container's own membership rule, not from mere ancestry: item mode
  *  queries `:scope > kai-conversation-item` (direct children only), so an item
  *  wrapped in another element inside a container is standalone too — the
  *  container's controller never stamps or activates it. Inside a container
- *  (a direct child), the ratified parent-item contract is the ONLY activation
+ *  (a direct child), the parent-item contract is the ONLY activation
  *  path: the container dispatches `kai-conversation-select` and owns roving
  *  tabindex, and the item fires nothing of its own. */
 export function isStandaloneConversationItem(el: Element): boolean {
@@ -78,7 +78,7 @@ export interface ConversationItemsController {
 }
 
 /**
- * The parent-item contract of item mode (spec 2026-08-20 § 2a), as a pure-DOM
+ * The parent-item contract of item mode, as a pure-DOM
  * controller so it is host-agnostic: the `kai-conversations` facade wires it over
  * its slotted `kai-conversation-item` children, and the jsdom contract tests
  * drive it over plain nodes. Solid context cannot cross the element boundary
@@ -93,8 +93,8 @@ export interface ConversationItemsController {
  *   left alone);
  * - roving tabindex — exactly one body node `tabindex="0"` (the active
  *   item's, else the first's), the rest `-1`, re-derived on every `sync()`;
- *   menu content keeps its natural tab order (it is the body's SIBLING, per
- *   the ratified 2026-08-20 sibling restructure);
+ *   menu content keeps its natural tab order (it is the body's SIBLING, not a
+ *   descendant);
  * - activation (click / Enter / Space) calls `onSelect` with the item's id, and
  *   is SUPPRESSED when the composed path crosses the item's `menu` region
  *   (light-DOM `slot="menu"` content or the shadow `data-kai-item-menu`
@@ -111,7 +111,7 @@ export function createConversationItemsController(
   };
   /** The item's ACTIVATION node — the target of role/aria-current/tabindex/
    *  focus. For a `kai-conversation-item` host that is its shadow body (the
-   *  sibling restructure, ratified 2026-08-20: the host is the row listitem
+   *  sibling restructure: the host is the row listitem
    *  wrapping the body AND the consumer's tabbable menu, so the control
    *  semantics must sit below it). A bare node with no such body is its own
    *  control. */
@@ -220,8 +220,8 @@ export interface ConversationListProps {
   /** Receive the imperative controller once mounted. The `kai-conversations`
    *  facade uses it to focus / clear the internal search input. */
   controllerRef?: (controller: ConversationListController) => void;
-  /** Item mode (spec 2026-08-20 § 2a): the consumer's OWN rows, rendered inside
-   *  a list region in place of the data rows. When set, the built-in search
+  /** Item mode: your OWN rows, rendered inside a list region in place of the
+   *  data rows. When set, the built-in search
    *  filter, grouping and empty/no-match states do not apply — the consumer's
    *  loop owns them — while the chrome (header, search box, new-chat, footer)
    *  still renders and `onSearchChange` still reports queries. The

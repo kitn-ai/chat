@@ -176,9 +176,9 @@ export function widgetFor(field: FormField, inlineMax: number): WidgetKind {
 /**
  * What one field's `x-kai-*` format hints resolve to.
  *
- * The three props on the left are `Input`'s masking surface verbatim (spec §7.2);
+ * The three props on the left are `Input`'s masking surface verbatim;
  * `hint` is the TEXT statement of the expected format, which `FieldRow` renders and
- * links through its EXISTING `aria-describedby` chain (spec §6 — no third channel).
+ * links through its EXISTING `aria-describedby` chain (no third channel).
  * Every field is `undefined` when the field carries no hints, which is what "byte for
  * byte the behavior of today" means here.
  */
@@ -367,7 +367,7 @@ export function resolveFieldMask(field: FormField, fieldKey = ''): FieldMaskHint
 /**
  * The text a masked control SHOWS for a stored (canonical) value.
  *
- * The store holds one value per field and it is the canonical one (spec §4): digits for
+ * The store holds one value per field and it is the canonical one: digits for
  * `tel`/`ssn`/`credit-card`. That value is also what flows back into the control as its
  * `value` prop — and writing `5550101234` over a field the masker just wrote
  * `555-010-1234` into un-formats it one keystroke behind the user, with the caret
@@ -855,6 +855,13 @@ export function Form(props: FormProps): JSX.Element {
             >
               <div class="flex w-full flex-wrap items-center justify-between gap-2">
                 <Show when={dismissible()}>
+                  {/* The contract `dismiss` verb — a footer ACTION (it emits
+                      `{kind:'dismiss'}` and collapses the card to a re-openable
+                      stub), not the chrome close in `Card`'s own `dismissible`
+                      prop, which the contract cards deliberately never set.
+                      confirm/choice/tasks were unlabelled ghost ✕ icons and now
+                      match this one, so all four dismiss controls are the same
+                      labelled ghost button. */}
                   <Button
                     type="button"
                     variant="ghost"
