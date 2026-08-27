@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.28.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.27.0...@kitn.ai/ui-v0.28.0) (2026-08-27)
+
+
+### Features
+
+* **conversations:** multi-conversation chat widget — adapter stores, list view, unread indicators ([6bfad4c](https://github.com/kitn-ai/ui/commit/6bfad4c88d824167ebd500725cc021a1a25d2ff0))
+* **home:** Intercom-style widget home screen behind Home/Messages bottom tabs ([bf77a89](https://github.com/kitn-ai/ui/commit/bf77a890f460d3c9b42b0753a67b9866e358263f))
+
 ## [0.27.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.26.0...@kitn.ai/ui-v0.27.0) (2026-08-26)
 
 
