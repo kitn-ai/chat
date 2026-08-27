@@ -336,7 +336,15 @@ Two builds of the same tokens; the condition is whether **Tailwind processes the
 
 ## For AI agents / LLMs
 
-The package ships [llmstxt.org](https://llmstxt.org)-style files so coding agents (Claude Code, Copilot, Cursor, Codex) can wire up the components correctly:
+The package ships a stdio MCP server too — `npx @kitn.ai/ui mcp` gives any MCP harness tools to look up the real `kai-*` API, scaffold a wired chat surface, theme it, and catch the classic mistakes:
+
+```bash
+claude mcp add kai -- npx -y @kitn.ai/ui mcp
+```
+
+Config for other harnesses (Codex, OpenCode, VS Code, GitHub Copilot, Cursor, Windsurf, Cline, Zed, Gemini CLI, Pi, dsh): [For AI agents](https://ui.kitn.ai/guides/for-ai-agents/).
+
+The package also ships [llmstxt.org](https://llmstxt.org)-style files so coding agents (Claude Code, Copilot, Cursor, Codex) can wire up the components correctly:
 
 - **[`llms.txt`](./llms.txt)** — dense orientation: install, the property-vs-attribute rule, the two-layer architecture, theming, and framework wiring.
 - **[`llms-full.txt`](./llms-full.txt)** — the above plus a generated props/events reference for every `kai-*` element, a streaming recipe, and a build runbook.

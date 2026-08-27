@@ -70,13 +70,54 @@ In `opencode.json`:
 ```
 
 </TabItem>
-<TabItem label="GitHub Copilot">
+<TabItem label="VS Code">
 
-In `.vscode/mcp.json`:
+VS Code's native MCP support — the same config GitHub Copilot Chat's chat panel reads inside the editor. Add it to `.vscode/mcp.json` (workspace), or run **MCP: Open User Configuration** from the Command Palette for the user-level file:
 
 ```json
 {
   "servers": {
+    "kai": {
+      "command": "npx",
+      "args": ["-y", "@kitn.ai/ui", "mcp"]
+    }
+  }
+}
+```
+
+The top-level key is `servers`, not `mcpServers` — the most common mistake when copying a config from another tool.
+
+</TabItem>
+<TabItem label="GitHub Copilot CLI">
+
+The standalone `copilot` terminal tool reads a different file than VS Code's Copilot Chat. Either run:
+
+```bash
+copilot mcp add kai -- npx -y @kitn.ai/ui mcp
+```
+
+or edit `~/.copilot/mcp-config.json` (user scope) or `.mcp.json` / `.github/mcp.json` at your project root (repo scope) by hand:
+
+```json
+{
+  "mcpServers": {
+    "kai": {
+      "type": "local",
+      "command": "npx",
+      "args": ["-y", "@kitn.ai/ui", "mcp"]
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem label="Cursor">
+
+In `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (global):
+
+```json
+{
+  "mcpServers": {
     "kai": {
       "type": "stdio",
       "command": "npx",
@@ -85,6 +126,77 @@ In `.vscode/mcp.json`:
   }
 }
 ```
+
+</TabItem>
+<TabItem label="Windsurf">
+
+In `~/.codeium/windsurf/mcp_config.json` — Windsurf doesn't create this file on first launch, so add it yourself, or use Settings → Advanced Settings → Cascade → Add Server, which edits the same file:
+
+```json
+{
+  "mcpServers": {
+    "kai": {
+      "command": "npx",
+      "args": ["-y", "@kitn.ai/ui", "mcp"]
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem label="Cline">
+
+Open the MCP Servers panel → **Configure MCP Servers**, which opens `cline_mcp_settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "kai": {
+      "command": "npx",
+      "args": ["-y", "@kitn.ai/ui", "mcp"]
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem label="Zed">
+
+In `settings.json` (Command Palette → `zed: open settings`):
+
+```json
+{
+  "context_servers": {
+    "kai": {
+      "command": "npx",
+      "args": ["-y", "@kitn.ai/ui", "mcp"]
+    }
+  }
+}
+```
+
+Zed's top-level key is `context_servers`, not `mcpServers`.
+
+</TabItem>
+<TabItem label="Gemini CLI">
+
+In `~/.gemini/settings.json` (user) or `.gemini/settings.json` (project):
+
+```json
+{
+  "mcpServers": {
+    "kai": {
+      "command": "npx",
+      "args": ["-y", "@kitn.ai/ui", "mcp"]
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem label="dsh (DeepSeek Harness)">
+
+dsh takes MCP servers as a cordis plugin — `@deepseek-ai/dsh-mcp-client`, one plugin instance per server, wired through a `cordis.patch.yml` patch with a `transport: stdio` config. dsh is still in developer preview and its plugin config keys are moving, so rather than paste a snippet that might already be stale, check dsh's own MCP docs (Settings → MCP in the app, or its `docs/` tree) for the current format. Whatever the surrounding config looks like, the server underneath is unchanged: a stdio process launched as `npx -y @kitn.ai/ui mcp`.
 
 </TabItem>
 <TabItem label="Pi">
