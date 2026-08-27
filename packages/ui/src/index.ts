@@ -22,7 +22,7 @@
 // Type-only exports are free (fully erased by the build) and may live in either.
 
 // Shared types (folded in from @tab-zen/shared)
-export type { ModelOption, SearchFilters, ConversationScope, ConversationSummary, ConversationGroup } from './types';
+export type { ModelOption, SearchFilters, ConversationScope, ConversationSummary, ConversationGroup, HomeConfig, HomeLinkEntry } from './types';
 
 // Utilities
 export { cn } from './utils/cn';
@@ -42,7 +42,7 @@ export { configureCodeHighlighting, isCodeHighlightingEnabled } from './primitiv
 export type { CodeHighlightingOptions } from './primitives/highlighter';
 export { configurePdfPreview, isPdfPreviewEnabled } from './primitives/pdf-preview';
 export type { PdfPreviewOptions } from './primitives/pdf-preview';
-export { localStorageStore, fetchStore, LEGACY_THREAD_MIGRATED_TITLE } from './primitives/conversation-store';
+export { localStorageStore, fetchStore, byRecency, LEGACY_THREAD_MIGRATED_TITLE } from './primitives/conversation-store';
 export type { ConversationStore } from './primitives/conversation-store';
 
 // Toasts: imperative `toast()` API + the reactive store behind <kai-toast-region>

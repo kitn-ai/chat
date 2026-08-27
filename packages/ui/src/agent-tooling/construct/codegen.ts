@@ -704,7 +704,7 @@ ${emitHistorySetup(c)}
 //     for \`widget\`, the one layout with something that closes/reopens at all.
 export function App() {
 ${emitDockCloseVar(c, '  ')}${emitChatControllerVar(c, '  ')}${emitConversationsSignalsVar(c, '  ')}  return (
-${emitLayoutOpen(c)}${emitSlots(c.slots, '      ')}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitHeaderProp(c)}${emitHeaderEndContentProp(c)}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitReasoningOpenProp(c)}${emitEmptyContentProp(c)}${emitCardTypesProp(c)}${emitConversationsProps(c)}${emitChatControllerRefProp(c)}${emitChatThreadUnreadProps(c)} />
+${emitLayoutOpen(c)}${emitSlots(c.slots, '      ')}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitHeaderProp(c)}${emitHeaderEndContentProp(c)}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitReasoningOpenProp(c)}${emitEmptyContentProp(c)}${emitCardTypesProp(c)}${emitHomeProp(c)}${emitConversationsProps(c)}${emitChatControllerRefProp(c)}${emitChatThreadUnreadProps(c)} />
 ${emitLayoutClose(c)}  );
 }
 `;
@@ -886,9 +886,15 @@ function widgetHasHeaderClose(c: Construct): boolean {
  *  unread` badge and `ChatThread`'s own `hostOpen` prop both need the exact
  *  same `dockOpen` tracking this reset wiring already needs, and both need
  *  the same "is there even a Dock to reflect this on" condition — one gate,
- *  reused, rather than two nearly-identical predicates drifting apart. */
+ *  reused, rather than two nearly-identical predicates drifting apart.
+ *
+ *  Widened (Task 5) to also fire on `home` alone, with no `conversations`
+ *  capability: closing the widget must return the view to Home exactly like
+ *  it must return to the default chat screen — same regression class, same
+ *  reset wiring, and `closeConversationsList()` is a safe no-op when there
+ *  never was a conversations list to close. */
 function widgetHasConversationsChrome(c: Construct): boolean {
-  return c.layout === 'widget' && !!c.capabilities?.conversations;
+  return c.layout === 'widget' && (!!c.capabilities?.conversations || !!c.home);
 }
 
 /** Declares the closure `emitChatControllerRefProp`/`emitDockOnOpenChangeProp`
@@ -1109,6 +1115,21 @@ function emitReasoningOpenProp(c: Construct): string {
  *  reactivity contract (CLAUDE.md) requires and is what emitHistorySetup's
  *  own hand-rolled local/endpoint restore already did before conversations
  *  subsumed it. */
+/** `home` -> ChatThread's own `home` prop (chat-thread.tsx, Task 1-4), plain
+ *  data threaded straight through as ONE JSON.stringify'd object literal —
+ *  vocabulary-never-logic (this format's binding rule): the construct only
+ *  ever DECLARES the home screen's content, never wires a handler for it.
+ *  `<kai-chat>`'s own `kai-home-link` CustomEvent (Task 2-3) is how a
+ *  consumer of the EMITTED app would react to a link click; codegen never
+ *  emits an `onHomeLink` listener here for the same reason it never emits
+ *  handlers for any other capability in this file. Omitted entirely when no
+ *  `home` is declared — the same off-by-default gating as `emitHeaderProp`/
+ *  `emitEmptyContentProp` above. */
+function emitHomeProp(c: Construct): string {
+  if (!c.home) return '';
+  return ` home={${JSON.stringify(c.home)}}`;
+}
+
 function emitConversationsProps(c: Construct): string {
   if (!c.capabilities?.conversations) return '';
   const history = c.capabilities.history;

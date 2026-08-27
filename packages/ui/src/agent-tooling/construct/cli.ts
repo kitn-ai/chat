@@ -25,6 +25,20 @@ const USAGE = `usage: kai <command>
   kai compile <construct.json> [outDir]  one self-registering .js (Task 6)
 `;
 
+/** H-3, decide loudly: `home.recentConversation` renders nothing without
+ *  `capabilities.conversations` to draw the card from — never fatal (the
+ *  schema explicitly does NOT require conversations for `home`, see
+ *  schema.ts's own doc on `home`), just a non-blocking heads-up at validate
+ *  time, the same idiom `validate`'s success line already uses (io.log, not
+ *  a bare console call). Extracted so it can be unit-tested without going
+ *  through the CLI's stdout wiring. */
+export function homeRecentConversationWarning(construct: Construct): string | null {
+  if (construct.home?.recentConversation && !construct.capabilities?.conversations) {
+    return 'warning: home.recentConversation is set but capabilities.conversations is not — the recent-conversation card will render nothing without it.';
+  }
+  return null;
+}
+
 export function loadConstruct(path: string, io: CliIo): Construct | null {
   const abs = resolve(path);
   let raw: string;
@@ -66,6 +80,8 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       const construct = loadConstruct(rest[0] ?? '', io);
       if (!construct) return 1;
       io.log(`valid construct: <${construct.name}> (layout: ${construct.layout}, provider: ${construct.provider.mode})`);
+      const warning = homeRecentConversationWarning(construct);
+      if (warning) io.log(warning);
       return 0;
     }
     case 'eject': {

@@ -1,4 +1,4 @@
-import { createSignal, createEffect, createMemo, For, Show, onMount, untrack } from 'solid-js';
+import { createSignal, createEffect, createComputed, createMemo, For, Show, Switch, Match, onMount, untrack } from 'solid-js';
 import { ChatConfig, useChatConfig } from '../primitives/chat-config';
 import { type ComposerDoc, normalizeValue, serializeToText } from '../primitives/composer-model';
 import { ChatContainer, ChatContainerContent, ChatContainerScrollAnchor } from './chat-container';
@@ -21,11 +21,15 @@ import type { CardComponentMap } from '../primitives/card-registry';
 import type { CardSchemaMap } from './card-renderer';
 import type { JSX } from 'solid-js';
 import type { ConversationStore } from '../primitives/conversation-store';
+import { byRecency } from '../primitives/conversation-store';
 import { ConversationPanel } from './conversation-panel';
 import { isConversationUnread } from './conversation-item';
 import type { ConversationSummary } from '../types';
 import { MessagesSquare, ArrowLeft } from 'lucide-solid';
 import { Button } from '../ui/button';
+import { HomePanel } from './home-panel';
+import { WidgetTabBar } from './widget-tab-bar';
+import type { HomeConfig, HomeLinkEntry } from '../types';
 
 export interface ChatThreadContextUsage {
   usedTokens: number;
@@ -186,6 +190,19 @@ export interface ChatThreadProps {
    *  `unread` prop, say) can mirror it. Only meaningful with `conversations`
    *  on; never fires otherwise. */
   onUnreadChange?: (unread: boolean) => void;
+  /** Turns on the widget home screen (Intercom-pattern, H-1/H-2): the panel
+   *  boots into a `home` view — greeting, most-recent-conversation card, a
+   *  "new conversation" CTA, and host-defined links — with a Home/Messages
+   *  tab bar beneath the content area. The prior-conversations list moves
+   *  from the header toggle onto the Messages tab (H-2); a drilled-into chat
+   *  (from a list row, the recent card, or "new conversation") hides the tab
+   *  bar and shows a back arrow in the header instead. Off by default: unset,
+   *  the widget renders byte-for-byte as it does today. */
+  home?: HomeConfig;
+  /** Fires when a `home.links` entry with no `href` is activated (an
+   *  `href`-bearing entry navigates as a real anchor instead — see
+   *  `HomePanelProps.onLink`). Meaningful only when `home` is set. */
+  onHomeLink?: (entry: HomeLinkEntry) => void;
   // ── Composition slots ─────────────────────────────────────────────────────
   // Each flag below is set by the `<kai-chat>` facade when matching light-DOM
   // `slot="…"` content is projected, and gates one composition slot. Two kinds:
@@ -265,8 +282,9 @@ export interface ChatThreadController {
   clear(): void;
   send(): void;
   scrollToBottom(behavior?: ScrollBehavior): void;
-  /** Force the conversations view back to `'chat'` (a no-op if it's already
-   *  there, or if `conversations` isn't on). ChatThread has no knowledge of
+  /** Force the widget back to its default landing view — `'home'` when the
+   *  `home` prop is set (H-5), `'chat'` otherwise (a no-op if already there,
+   *  or if neither `home` nor `conversations` is on). ChatThread has no knowledge of
    *  whatever chrome hosts it — a `Dock`, a plain page, anything — so it
    *  cannot know when that host closes. The seam is this one imperative
    *  call: a host that can go from visible to hidden and back (the `kai-dock`
@@ -358,7 +376,57 @@ export function ChatThread(props: ChatThreadProps) {
   const [internal, setInternal] = createSignal<string | ComposerDoc>(props.value ?? '');
   const [attachments, setAttachments] = createSignal<AttachmentData[]>([]);
   // ── Conversations (C-1..C-9) ────────────────────────────────────────────
-  const [view, setView] = createSignal<'chat' | 'list'>('chat');
+  // ── Home screen (H-1..H-6, Task 3) ──────────────────────────────────────
+  // `home` set adds a THIRD view (the list moves from the header toggle onto
+  // the Messages tab — H-2) and boots into it instead of 'chat'. `chatEntry`
+  // tracks whether the current 'chat' view is a DRILLED chat (entered from
+  // home/list — hides the tab bar, shows a back arrow) or a ROOT chat (the
+  // Messages tab with conversations off — tab bar stays, no back arrow).
+  const homeEnabled = () => props.home != null;
+  type WidgetView = 'home' | 'chat' | 'list';
+  const [view, setView] = createSignal<WidgetView>(props.home != null ? 'home' : 'chat');
+  const [chatEntry, setChatEntry] = createSignal<'home' | 'list' | null>(null);
+  const tabBarVisible = () => homeEnabled() && (view() !== 'chat' || chatEntry() === null);
+  const activeTab = (): 'home' | 'messages' => (view() === 'home' ? 'home' : 'messages');
+  // The initial `view` signal value freezes the home-landing decision at
+  // MOUNT — but the `kai-` contract has consumers set object props (like
+  // `home`) as JS properties AFTER the element is appended/upgraded (the
+  // React wrapper's `useLayoutEffect` runs post-mount by construction), so
+  // `props.home` is routinely still `undefined` on this component's first
+  // render. Without this, `<kai-chat>` then `el.home = {...}` renders a
+  // tab bar (props.home is set by the time JSX reads it reactively) but
+  // stays on `view() === 'chat'` forever — H-5 violated on a primary
+  // consumer path. React to the RISING edge instead of relying on the
+  // initial value: `home` turning on from off lands on 'home', but only
+  // from the untouched default ('chat' with no drilled entry) — a late
+  // toggle must never yank a visitor OUT of a chat they're already in
+  // (root or drilled). `{ defer: true }` skips the run this effect's own
+  // creation would otherwise trigger.
+  // Falling edge (symmetric): `home` turning OFF while sitting on the
+  // 'home' view leaves a default-configured HomePanel with no tab bar to
+  // navigate away from — reset to 'chat', the only view a home-less widget
+  // has.
+  //
+  // NOT `on(homeEnabled, fn, { defer: true })`: Solid's `on()` skips calling
+  // `fn` on its first real invocation but does NOT capture the deferred
+  // read as `prevInput` — the first non-deferred call always sees `prev ===
+  // undefined` (confirmed against `solid-js/dist/solid.js`'s `on()`, not
+  // just inferred), so `!isOn && wasOn` can never be true and the falling
+  // edge silently never fires. Track the previous value by hand instead: a
+  // closure variable seeded with `homeEnabled()`'s value BEFORE the
+  // computed exists (so the computed's own first run sees `isOn === wasOn`
+  // and no-ops, the same "skip the initial run" behavior `defer` was for)
+  // and updated at the end of every run.
+  let wasHomeEnabled = untrack(homeEnabled);
+  createComputed(() => {
+    const isOn = homeEnabled();
+    const wasOn = wasHomeEnabled;
+    if (isOn !== wasOn) {
+      if (isOn && view() === 'chat' && chatEntry() === null) setView('home');
+      else if (!isOn && view() === 'home') setView('chat');
+    }
+    wasHomeEnabled = isOn;
+  });
   const [conversationSummaries, setConversationSummaries] = createSignal<ConversationSummary[]>([]);
   const [activeConversationId, setActiveConversationId] = createSignal<string | undefined>(undefined);
   const conversationsReady = () => props.conversations === true && props.store != null && props.onConversationLoad != null;
@@ -388,17 +456,29 @@ export function ChatThread(props: ChatThreadProps) {
     } catch (err) {
       // Note this can run in the BACKGROUND, not just from `openList()`: the
       // save effect below calls this after every save() to keep the badge
-      // cache fresh, so a transient list() failure here — even while the
-      // visitor is happily mid-conversation, list view never opened — still
-      // snaps `view` back to 'chat'. Harmless when already there; worth
-      // knowing if a future caller ever renders anything conditioned on
-      // `view()` outside this component.
+      // cache fresh. Only bail OUT of the list view here — a transient
+      // list() blip mid-drilled-chat (or on the root/home views) must stay a
+      // harmless no-op, not teleport the visitor off whatever they're doing;
+      // the list view itself has nothing to show without a summaries array,
+      // so THAT is the one view this failure has to evacuate.
       console.warn('ChatThread: conversations list() failed; staying in chat-only mode.', err);
-      setView('chat');
+      if (view() === 'list') {
+        setChatEntry(null);
+        setView(homeEnabled() ? 'home' : 'chat');
+      }
     }
   };
 
   const openList = () => { setView('list'); void refreshConversations(); };
+  // Messages-tab entry point (H-2): the list moved off the header toggle onto
+  // this tab, so it routes through 'list' when the store is wired and 'chat'
+  // (the root chat, ambiguity 1 — no back arrow, `chatEntry` stays null)
+  // otherwise.
+  const openMessagesTab = () => {
+    setChatEntry(null);
+    if (conversationsReady()) { setView('list'); void refreshConversations(); }
+    else setView('chat');
+  };
 
   const selectConversation = async (id: string) => {
     if (!conversationsReady()) return;
@@ -421,6 +501,9 @@ export function ChatThread(props: ChatThreadProps) {
       props.onConversationLoad?.([...messages], id);
     } catch (err) {
       console.warn(`ChatThread: conversations load(${id}) failed.`, err);
+      // Defensive: a failed load must not leave a stale drilled-chat
+      // back-target around from whatever set it before calling this.
+      setChatEntry(null);
     }
   };
 
@@ -570,11 +653,7 @@ export function ChatThread(props: ChatThreadProps) {
       // contract (`localStorageStore` returns insertion order, not recency),
       // so sort defensively by `updatedAt` rather than trusting index [0];
       // an unparsable/missing date sorts last rather than throwing.
-      const newest = [...summaries].sort((a, b) => {
-        const at = Date.parse(a.updatedAt ?? '');
-        const bt = Date.parse(b.updatedAt ?? '');
-        return (Number.isNaN(bt) ? -Infinity : bt) - (Number.isNaN(at) ? -Infinity : at);
-      })[0];
+      const newest = [...summaries].sort(byRecency)[0];
       await selectConversation(newest.id);
     })();
   });
@@ -597,7 +676,23 @@ export function ChatThread(props: ChatThreadProps) {
     if ((props.suggestionMode ?? 'submit') === 'fill') { handleChange(v); props.onSuggestionClick?.(v); }
     else { props.onSubmit?.({ value: v, attachments: attachments() }); afterSubmit(); }
   };
-  const showHeader = () => !!(props.chatTitle || props.models || props.context || props.headerStart || props.headerEnd || props.headerEndContent || conversationsReady());
+  const showHeader = () => !!(
+    props.chatTitle || props.models || props.context || props.headerStart || props.headerEnd
+    || props.headerEndContent || conversationsReady()
+    // The back arrow on a drilled chat needs the header row even with no
+    // title/models/context/store — a home-only construct (no `conversations`)
+    // whose "new conversation" card drills into chat still needs somewhere
+    // to put it.
+    || (homeEnabled() && view() === 'chat' && chatEntry() !== null)
+  );
+  // Recent-conversation card (H-1): only when explicitly opted into
+  // (`home.recentConversation === true`), summaries are actually hydrated,
+  // and at least one exists — the newest by the shared recency rule (#335).
+  const recentSummary = createMemo(() => {
+    if (!homeEnabled() || props.home?.recentConversation !== true || !conversationsReady()) return undefined;
+    const summaries = conversationSummaries();
+    return summaries.length ? [...summaries].sort(byRecency)[0] : undefined;
+  });
   // Suggestions are conversation starters: show only on an empty thread unless
   // the host opts into persisting them.
   const visibleSuggestions = () =>
@@ -617,7 +712,7 @@ export function ChatThread(props: ChatThreadProps) {
         const vp = rootEl?.querySelector<HTMLElement>('.overflow-y-auto');
         vp?.scrollTo({ top: vp.scrollHeight, behavior: behavior ?? 'smooth' });
       },
-      closeConversationsList: () => setView('chat'),
+      closeConversationsList: () => { setChatEntry(null); setView(homeEnabled() ? 'home' : 'chat'); },
     });
   });
 
@@ -679,7 +774,24 @@ export function ChatThread(props: ChatThreadProps) {
                         which renders `DockCloseGlyph` = `<X size={24} />`) — identical
                         hit-area and optical weight, so the two read as siblings.
                         Swaps to a back arrow while the list is open, returning to chat. */}
-                    <Show when={props.conversations && props.store}>
+                    {/* Back arrow for a DRILLED chat (H-5): entered from home, the
+                        recent card, or a list row/new-conversation pill while `home`
+                        is set. Returns to whichever surface it was entered from. */}
+                    <Show when={homeEnabled() && view() === 'chat' && chatEntry() !== null}>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        data-kai-home-back
+                        aria-label="Back"
+                        onClick={() => { const target = chatEntry()!; setChatEntry(null); setView(target); }}
+                      >
+                        <ArrowLeft size={24} aria-hidden="true" />
+                      </Button>
+                    </Show>
+                    {/* H-2: with `home` set, the prior-conversations list moved off this
+                        header toggle onto the Messages tab — the toggle no longer renders
+                        at all (H-3). */}
+                    <Show when={props.conversations && props.store && !homeEnabled()}>
                       <Button
                         variant="ghost"
                         size="icon-sm"
@@ -727,8 +839,7 @@ export function ChatThread(props: ChatThreadProps) {
             <header part="header" class="shrink-0"><slot name="header" /></header>
           </Show>
           <div class="relative flex-1 overflow-hidden">
-            <Show
-              when={view() === 'list' && conversationsReady()}
+            <Switch
               fallback={
                 <ChatContainer class="h-full px-4 py-3">
               <ChatContainerContent class="mx-auto w-full max-w-3xl space-y-4">
@@ -821,13 +932,26 @@ export function ChatThread(props: ChatThreadProps) {
                 </ChatContainer>
               }
             >
-              <ConversationPanel
-                conversations={conversationSummaries()}
-                activeId={activeConversationId()}
-                onSelect={(id) => void selectConversation(id)}
-                onNewChat={startNewConversation}
-              />
-            </Show>
+              <Match when={view() === 'home'}>
+                <HomePanel
+                  greeting={props.home?.greeting}
+                  recent={recentSummary()}
+                  newChatLabel={props.home?.newConversation?.label}
+                  links={props.home?.links}
+                  onSelectRecent={(id) => { setChatEntry('home'); void selectConversation(id); }}
+                  onNewChat={() => { setChatEntry('home'); startNewConversation(); }}
+                  onLink={(entry) => props.onHomeLink?.(entry)}
+                />
+              </Match>
+              <Match when={view() === 'list' && conversationsReady()}>
+                <ConversationPanel
+                  conversations={conversationSummaries()}
+                  activeId={activeConversationId()}
+                  onSelect={(id) => { setChatEntry(homeEnabled() ? 'list' : null); void selectConversation(id); }}
+                  onNewChat={() => { setChatEntry(homeEnabled() ? 'list' : null); startNewConversation(); }}
+                />
+              </Match>
+            </Switch>
           </div>
           {/* The list view TAKES OVER the full content area (owner: "if we are
               looking at the conversations, i don't think i would see the
@@ -835,7 +959,7 @@ export function ChatThread(props: ChatThreadProps) {
               over the full content area"). The retrofit only swapped the thread;
               this hides the composer-actions row, the composer itself and the
               footer too — nothing below the header renders except the panel. */}
-          <Show when={view() !== 'list'}>
+          <Show when={view() === 'chat'}>
             {/* INJECT — accessory row above the composer (extra actions/toolbar). */}
             <Show when={props.composerActions}>
               <div class="shrink-0 px-4">
@@ -871,6 +995,17 @@ export function ChatThread(props: ChatThreadProps) {
                 <div class="mx-auto max-w-3xl text-center text-xs text-muted-foreground"><slot name="footer" /></div>
               </div>
             </Show>
+          </Show>
+          {/* Home/Messages tab bar (H-2/H-6): shown on the 'home' and 'list'
+              views and on the ROOT chat (Messages tab, conversations off —
+              ambiguity 1), hidden on a DRILLED chat so the back arrow above
+              is the only way back. */}
+          <Show when={tabBarVisible()}>
+            <WidgetTabBar
+              active={activeTab()}
+              onChange={(tab) => (tab === 'home' ? setView('home') : openMessagesTab())}
+              unread={anyUnread()}
+            />
           </Show>
         </div>
       </div>

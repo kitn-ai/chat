@@ -1577,3 +1577,36 @@ describe('CU-1: custom layout exclusion disclosure — conversations added', () 
     expect(app).toContain('conversations');
   });
 });
+
+describe('home (Task 5)', () => {
+  it('home threads through to ChatThread as one JSON.stringify\'d prop; onHomeLink wiring is NOT emitted (vocabulary-never-logic)', () => {
+    const homeInput = { greeting: { title: 'Hi "there"' }, links: [{ label: 'Docs', href: 'https://ui.kitn.ai' }] };
+    const c = construct({ home: homeInput });
+    const app = file(generateProject(c), 'src/App.tsx');
+    // Compute the expected literal from the SAME parsed construct's home
+    // value the generator actually sees, not a hand-ordered literal — key
+    // order drift in a hand-typed comparison would make this fragile.
+    expect(app).toContain(` home={${JSON.stringify(c.home)}}`);
+    expect(app).not.toContain('onHomeLink');
+  });
+
+  it('no home in the construct → no home prop emitted', () => {
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    expect(app).not.toContain(' home=');
+  });
+
+  it('layout custom does not wire home (pinned, matches header/empty/conversations)', () => {
+    const app = file(
+      generateProject(construct({ layout: 'custom', slots: ['header'], home: {} })),
+      'src/App.tsx',
+    );
+    expect(app).not.toContain(' home=');
+  });
+
+  it('widget close-reset gate includes home (close returns the view to Home)', () => {
+    // No conversations capability — home alone must still trigger the
+    // widget's close-reset wiring (widgetHasConversationsChrome's gate).
+    const app = file(generateProject(construct({ home: {} })), 'src/App.tsx');
+    expect(app).toContain('closeConversationsList');
+  });
+});

@@ -939,12 +939,19 @@
           "scalar": false,
           "optional": true,
           "fn": false
+        },
+        {
+          "name": "home",
+          "scalar": false,
+          "optional": true,
+          "fn": false
         }
       ],
       "events": [
         "kai-attachments-change",
         "kai-attachments-rejected",
         "kai-conversation-load",
+        "kai-home-link",
         "kai-message-action",
         "kai-model-change",
         "kai-submit",

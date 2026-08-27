@@ -10,6 +10,14 @@
     "title": "Hi, we're Acme Support",
     "description": "Ask us about orders, refunds, and more."
   },
+  "home": {
+    "greeting": { "title": "Hi from Acme 👋", "subtitle": "Orders, refunds, anything." },
+    "recentConversation": true,
+    "links": [
+      { "label": "Help center", "href": "https://ui.kitn.ai", "description": "Guides and FAQs", "icon": "book-open" },
+      { "label": "Talk to sales", "description": "We reply fast", "icon": "message-circle" }
+    ]
+  },
   "widget": {
     "position": "top-start",
     "defaultOpen": true

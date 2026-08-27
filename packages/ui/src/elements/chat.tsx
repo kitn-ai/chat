@@ -10,7 +10,7 @@ import type { ChatMessage } from './chat-types';
 import type { TriggerDef } from '../components/composer';
 import type { ComposerDoc } from '../primitives/composer-model';
 import type { ProseSize } from '../primitives/chat-config';
-import type { ModelOption } from '../types';
+import type { ModelOption, HomeConfig, HomeLinkEntry } from '../types';
 import type { ConversationStore } from '../primitives/conversation-store';
 
 type Props = Omit<ChatThreadProps,
@@ -25,6 +25,13 @@ type Props = Omit<ChatThreadProps,
   // one below) and `gen-element-api.mjs` concatenates both JSDoc comments into
   // one duplicated, em-dash-laden description.
   | 'conversations' | 'store'
+  // `home` is re-declared below for the same reason as `conversations`/`store`
+  // above (own element-facing doc comment rather than the ChatThread-level one
+  // flowing through `Omit`'s pass-through). `onHomeLink` is wired internally
+  // (JSX prop on `<ChatThread>` below) as a dispatched `kai-home-link` event,
+  // matching every other ChatThread callback on this element — same reasoning
+  // as `onConversationLoad` just below.
+  | 'home' | 'onHomeLink'
   // `onConversationLoad` is wired internally (below, JSX prop on
   // `<ChatThread>`) as a dispatched `kai-conversation-load` event — matching
   // every other ChatThread callback on this element — rather than left as a
@@ -130,6 +137,17 @@ type Props = Omit<ChatThreadProps,
      *  array/object props are JS properties, never attributes). Two built-ins
      *  ship: `localStorageStore(name, userId?)` and `fetchStore(url, userId?)`. */
     store?: ConversationStore;
+    /** Turns on the widget home screen (Intercom-pattern): the panel boots into
+     *  a `home` view, with a greeting, most-recent-conversation card, a "new
+     *  conversation" CTA, and host-defined links, plus a Home/Messages tab bar
+     *  for switching back to the thread. An OBJECT, so it is a JS property only:
+     *  `el.home = { greeting: { title: 'Hey' }, links: [...] }`, never an
+     *  attribute (the kai- contract: array/object props are JS properties).
+     *  A `links` entry with no `href` fires `kai-home-link` with that entry when
+     *  tapped, rather than navigating; one WITH `href` opens it directly
+     *  (only when the URL passes the kit's own scheme allowlist). Omit for the
+     *  no-home widget (chat view only, unchanged). */
+    home?: HomeConfig;
   };
 
 interface Events {
@@ -167,6 +185,9 @@ interface Events {
    *  you; `messages` stays your own state like everywhere else on this
    *  element. */
   'kai-conversation-load': { id: string | undefined; messages: ChatMessage[] };
+  /** A `home.links` entry with no `href` was activated (tapped/clicked/Enter).
+   *  Meaningful only when `home` is set. */
+  'kai-home-link': { entry: HomeLinkEntry };
 }
 
 defineWebComponent<Props, Events>('kai-chat', {
@@ -177,6 +198,7 @@ defineWebComponent<Props, Events>('kai-chat', {
   attach: true, webSearch: false, voice: false, triggers: undefined, kindIcons: undefined,
   actionsReveal: 'always', cardTypes: undefined, cardSchemas: undefined, accept: undefined,
   reasoning: undefined, reasoningOpen: undefined, conversations: false, store: undefined,
+  home: undefined,
 }, (props, { dispatch, flag, reflectFlag, element, expose }) => {
   // `messages` is an untyped boundary: a consumer can hand it anything at
   // runtime (a pre-0.20.0 `{ id, role, content }` array, in particular). Skip
@@ -253,6 +275,8 @@ defineWebComponent<Props, Events>('kai-chat', {
     conversations={flag('conversations')}
     store={props.store as ConversationStore | undefined}
     onConversationLoad={(messages, id) => dispatch('kai-conversation-load', { id, messages })}
+    home={props.home as HomeConfig | undefined}
+    onHomeLink={(entry) => dispatch('kai-home-link', { entry })}
     /* F-26: card parts emit off THIS element as the bubbling `kai-card` event,
        so `listenForCardEvents(el)` / addEventListener('kai-card') work. */
     cardHostElement={element}

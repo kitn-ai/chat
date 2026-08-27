@@ -874,6 +874,7 @@ Append a test to the CLI/validate test file if one exists (search `cli.test`); i
 
 Then inside `packages/ui`: `npm run build:api` (regenerates `construct.v1.schema.json` + the docs-site schema copy), and run:
 
+<!-- gate-list: partial -- task-scoped smoke checks for Task 5 only; the full gate set runs in Task 6 -->
 ```
 pnpm --filter @kitn.ai/ui exec vitest run --project=unit -- src/agent-tooling/construct
 pnpm --filter @kitn.ai/ui run verify:construct
@@ -897,6 +898,7 @@ git commit -m "feat(construct): home vocabulary — schema, codegen threading, f
 
 - [ ] **Step 1: Full gates, foreground, in this order**
 
+<!-- gate-list: partial -- the gates this feature can move; the merge verdict is the required CI `test` job (44 gates), not this list -->
 ```bash
 nx build ui   # fresh build for the emitted/scaffold gates (use --skip-nx-cache if artifacts look stale)
 pnpm --filter @kitn.ai/ui exec vitest run --project=unit

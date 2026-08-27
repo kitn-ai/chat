@@ -888,3 +888,322 @@ describe('conversations — unread indicators (owner round, 2026-08-26)', () => 
     });
   });
 });
+
+// Task 3: the home|chat|list view machine. `home` set switches the widget
+// into the Home/Messages tab-bar shape (H-2/H-3/H-5); unset it must render
+// byte-for-byte today's chat-only or conversations widget (contract 2 —
+// a regression on any pre-existing test in this file means this change is
+// wrong, not the test).
+describe('home screen (H-2, H-3, H-5) — spec 2026-08-27', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('1. home set: initial view is home — HomePanel + tab bar render, composer/thread absent', async () => {
+    const store = localStorageStore('t-1');
+    const { container } = render(() => (
+      <ChatThread messages={[]} home={{}} conversations={true} store={store} onSubmit={() => {}} onConversationLoad={() => {}} />
+    ));
+    await tick();
+    expect(container.querySelector('[data-kai-home-panel]')).toBeTruthy();
+    expect(container.querySelector('[role="tablist"]')).toBeTruthy();
+    expect(container.querySelector('textarea, [contenteditable]')).toBeNull();
+  });
+
+  it('2. home unset: today\'s widget exactly — initial chat, no tab bar, header list button present when conversations ready', () => {
+    const store = localStorageStore('t-2');
+    const { container } = render(() => (
+      <ChatThread messages={[]} conversations={true} store={store} onSubmit={() => {}} onConversationLoad={() => {}} />
+    ));
+    expect(container.querySelector('textarea, [contenteditable]')).toBeTruthy();
+    expect(container.querySelector('[role="tablist"]')).toBeNull();
+    expect(container.querySelector('[data-kai-conversations-toggle]')).toBeTruthy();
+  });
+
+  it('3. home set: header list-toggle button is NOT rendered', async () => {
+    const store = localStorageStore('t-3');
+    const { container } = render(() => (
+      <ChatThread messages={[]} home={{}} conversations={true} store={store} onSubmit={() => {}} onConversationLoad={() => {}} />
+    ));
+    await tick();
+    expect(container.querySelector('[data-kai-conversations-toggle]')).toBeNull();
+  });
+
+  it('4a. Messages tab, conversations ready: view is list, with tab bar', async () => {
+    const store = localStorageStore('t-4a');
+    await store.save('c1', [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }]);
+    const { container } = render(() => (
+      <ChatThread messages={[]} home={{}} conversations={true} store={store} onSubmit={() => {}} onConversationLoad={() => {}} />
+    ));
+    await tick();
+    fireEvent.click(container.querySelector('[data-kai-tab-messages]')!);
+    await tick();
+    expect(container.querySelector('[data-conversation-id]')).toBeTruthy();
+    expect(container.querySelector('[role="tablist"]')).toBeTruthy();
+  });
+
+  it('4b. Messages tab, conversations off: view is chat (root chat, no back arrow), with tab bar', async () => {
+    const { container } = render(() => (
+      <ChatThread messages={[]} home={{}} onSubmit={() => {}} />
+    ));
+    await tick();
+    fireEvent.click(container.querySelector('[data-kai-tab-messages]')!);
+    await tick();
+    expect(container.querySelector('textarea, [contenteditable]')).toBeTruthy();
+    expect(container.querySelector('[role="tablist"]')).toBeTruthy();
+    expect(container.querySelector('[data-kai-home-back]')).toBeNull();
+  });
+
+  it('5. list row tap: chat view with tab bar HIDDEN and a back arrow; back returns to the list', async () => {
+    const store = localStorageStore('t-5');
+    await store.save('c1', [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }]);
+    const { container } = render(() => (
+      <ChatThread messages={[]} home={{}} conversations={true} store={store} onSubmit={() => {}} onConversationLoad={() => {}} />
+    ));
+    await tick();
+    fireEvent.click(container.querySelector('[data-kai-tab-messages]')!);
+    await tick();
+    fireEvent.click(container.querySelector('[data-conversation-id]')!);
+    await tick();
+    expect(container.querySelector('[role="tablist"]')).toBeNull();
+    expect(container.querySelector('[data-kai-home-back]')).toBeTruthy();
+    fireEvent.click(container.querySelector('[data-kai-home-back]')!);
+    await tick();
+    expect(container.querySelector('[data-kai-new-conversation]')).toBeTruthy(); // the list again
+  });
+
+  it('5b. recent-card tap: chat view with tab bar HIDDEN and a back arrow; back returns to home', async () => {
+    const store = localStorageStore('t-5b');
+    await store.save('c1', [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }]);
+    const { container } = render(() => (
+      <ChatThread
+        messages={[]}
+        home={{ recentConversation: true }}
+        conversations={true}
+        store={store}
+        onSubmit={() => {}}
+        onConversationLoad={() => {}}
+      />
+    ));
+    await tick();
+    fireEvent.click(container.querySelector('[data-kai-home-recent]')!);
+    // The view flip is driven solely by selectConversation's own setView
+    // AFTER store.load() resolves (matching the list-row path) — no
+    // synchronous setView('chat') at the call site — so immediately after
+    // the click, before the load's microtask settles, we're still on home.
+    expect(container.querySelector('[data-kai-home-panel]')).toBeTruthy();
+    await tick();
+    expect(container.querySelector('[role="tablist"]')).toBeNull();
+    expect(container.querySelector('[data-kai-home-back]')).toBeTruthy();
+    fireEvent.click(container.querySelector('[data-kai-home-back]')!);
+    await tick();
+    expect(container.querySelector('[data-kai-home-panel]')).toBeTruthy();
+  });
+
+  it('6. new-conversation (home card): drilled chat, back target is home', async () => {
+    const store = localStorageStore('t-6');
+    const { container } = render(() => (
+      <ChatThread messages={[]} home={{}} conversations={true} store={store} onSubmit={() => {}} onConversationLoad={() => {}} />
+    ));
+    await tick();
+    fireEvent.click(container.querySelector('[data-kai-home-new]')!);
+    await tick();
+    expect(container.querySelector('[role="tablist"]')).toBeNull();
+    expect(container.querySelector('[data-kai-home-back]')).toBeTruthy();
+    fireEvent.click(container.querySelector('[data-kai-home-back]')!);
+    await tick();
+    expect(container.querySelector('[data-kai-home-panel]')).toBeTruthy();
+  });
+
+  it('7. close-reset: closeConversationsList() resets to home when home is set', async () => {
+    const store = localStorageStore('t-7');
+    let controller: ChatThreadController | undefined;
+    const { container } = render(() => (
+      <ChatThread
+        messages={[]}
+        home={{}}
+        conversations={true}
+        store={store}
+        onSubmit={() => {}}
+        onConversationLoad={() => {}}
+        controllerRef={(c) => (controller = c)}
+      />
+    ));
+    await tick();
+    fireEvent.click(container.querySelector('[data-kai-tab-messages]')!);
+    await tick();
+    expect(container.querySelector('[data-kai-home-panel]')).toBeNull();
+    controller!.closeConversationsList();
+    await tick();
+    expect(container.querySelector('[data-kai-home-panel]')).toBeTruthy();
+  });
+
+  it('8a. mount with home + conversations ready: summaries refresh but no auto-select into chat', async () => {
+    const store = localStorageStore('t-8a');
+    await store.save('c1', [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }]);
+    const loadSpy = vi.spyOn(store, 'load');
+    const { container } = render(() => (
+      <ChatThread
+        messages={[]}
+        home={{ recentConversation: true }}
+        conversations={true}
+        store={store}
+        onSubmit={() => {}}
+        onConversationLoad={() => {}}
+      />
+    ));
+    await tick();
+    expect(loadSpy).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-kai-home-panel]')).toBeTruthy();
+    // Summaries hydrated: the recent card renders.
+    expect(container.querySelector('[data-kai-home-recent]')).toBeTruthy();
+  });
+
+  it('8b. mount without home: auto-restore is unchanged (regression guard)', async () => {
+    const store = localStorageStore('t-8b');
+    await store.save('c1', [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }]);
+    const loadSpy = vi.spyOn(store, 'load');
+    const onMessagesChange = vi.fn();
+    render(() => (
+      <ChatThread messages={[]} conversations={true} store={store} onSubmit={() => {}} onConversationLoad={onMessagesChange} />
+    ));
+    await tick();
+    expect(loadSpy).toHaveBeenCalledTimes(1);
+    expect(loadSpy).toHaveBeenCalledWith('c1');
+  });
+
+  it('9a. recent card absent when home.recentConversation is not true', async () => {
+    const store = localStorageStore('t-9a');
+    await store.save('c1', [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }]);
+    const { container } = render(() => (
+      <ChatThread messages={[]} home={{}} conversations={true} store={store} onSubmit={() => {}} onConversationLoad={() => {}} />
+    ));
+    await tick();
+    expect(container.querySelector('[data-kai-home-recent]')).toBeNull();
+  });
+
+  it('9b. recent card absent when no conversations exist yet', async () => {
+    const store = localStorageStore('t-9b');
+    const { container } = render(() => (
+      <ChatThread
+        messages={[]}
+        home={{ recentConversation: true }}
+        conversations={true}
+        store={store}
+        onSubmit={() => {}}
+        onConversationLoad={() => {}}
+      />
+    ));
+    await tick();
+    expect(container.querySelector('[data-kai-home-recent]')).toBeNull();
+  });
+
+  it('9c. recent card shows the byRecency-newest summary', async () => {
+    const store = localStorageStore('t-9c');
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+      await store.save('older', [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'older msg' }] }]);
+      vi.setSystemTime(new Date('2026-01-02T00:00:00.000Z'));
+      await store.save('newer', [{ id: 'm2', role: 'user', parts: [{ type: 'text', text: 'newer msg' }] }]);
+    } finally {
+      vi.useRealTimers();
+    }
+    const { container } = render(() => (
+      <ChatThread
+        messages={[]}
+        home={{ recentConversation: true }}
+        conversations={true}
+        store={store}
+        onSubmit={() => {}}
+        onConversationLoad={() => {}}
+      />
+    ));
+    await tick();
+    const recent = container.querySelector('[data-kai-home-recent]');
+    expect(recent).toBeTruthy();
+    expect(recent!.textContent).toMatch(/newer msg|newer/i);
+  });
+
+  const seedUnreadConversation = async (store: ReturnType<typeof localStorageStore>) => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-08-26T12:00:00.000Z'));
+      await store.save('c2', [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }]);
+      await store.markRead!('c2');
+      vi.setSystemTime(new Date('2026-08-26T12:05:00.000Z'));
+      await store.save('c2', [
+        { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] },
+        { id: 'm2', role: 'assistant', parts: [{ type: 'text', text: 'a new reply' }] },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  };
+
+  it('10a. unread dot on the Messages tab tracks anyUnread()', async () => {
+    const store = localStorageStore('t-10a');
+    await seedUnreadConversation(store);
+    const { container } = render(() => (
+      <ChatThread messages={[]} home={{}} conversations={true} store={store} onSubmit={() => {}} onConversationLoad={() => {}} />
+    ));
+    await tick();
+    expect(container.querySelector('[data-kai-tab-unread]')).toBeTruthy();
+  });
+
+  it('10b. onUnreadChange fires unchanged with home set', async () => {
+    const store = localStorageStore('t-10b');
+    await seedUnreadConversation(store);
+    const onUnreadChange = vi.fn();
+    render(() => (
+      <ChatThread
+        messages={[]}
+        home={{}}
+        conversations={true}
+        store={store}
+        onUnreadChange={onUnreadChange}
+        onSubmit={() => {}}
+        onConversationLoad={() => {}}
+      />
+    ));
+    await tick();
+    expect(onUnreadChange).toHaveBeenCalledWith(true);
+  });
+
+  // Review round 2 fix: `refreshConversations` runs after EVERY save, not
+  // just from opening the list, so a transient `list()` failure used to
+  // unconditionally reset `view` — teleporting a visitor out of a drilled
+  // chat (or the root/home views) to 'home'/'chat' for no reason connected
+  // to what they were doing. It must only evacuate the 'list' view, which is
+  // the one view that actually has nothing to show without a summaries array.
+  it('a list() rejection mid-drilled-chat does not teleport the visitor off the chat they are in', async () => {
+    const store = localStorageStore('t-list-fail-drilled');
+    let shouldFail = false;
+    const flaky = { ...store, list: () => (shouldFail ? Promise.reject(new Error('offline')) : store.list()) };
+    const [messages, setMessages] = createSignal<ChatMessage[]>([]);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { container } = render(() => (
+      <ChatThread
+        messages={messages()}
+        home={{}}
+        conversations={true}
+        store={flaky}
+        onSubmit={() => {}}
+        onConversationLoad={(msgs) => setMessages(msgs)}
+      />
+    ));
+    await tick();
+    fireEvent.click(container.querySelector('[data-kai-home-new]')!);
+    await tick();
+    // Confirmed drilled: back arrow present, tab bar hidden.
+    expect(container.querySelector('[data-kai-home-back]')).toBeTruthy();
+    expect(container.querySelector('[role="tablist"]')).toBeNull();
+
+    shouldFail = true;
+    setMessages([{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }]);
+    await tick();
+    expect(warn).toHaveBeenCalled();
+    // Still the drilled chat — not bounced to 'home'.
+    expect(container.querySelector('[data-kai-home-panel]')).toBeNull();
+    expect(container.querySelector('[data-kai-home-back]')).toBeTruthy();
+    warn.mockRestore();
+  });
+});

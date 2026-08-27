@@ -2,6 +2,7 @@ import { For, Show, createMemo } from 'solid-js';
 import { cn } from '../utils/cn';
 import { ScrollArea } from '../ui/scroll-area';
 import { relativeTimeShort, isConversationUnread } from './conversation-item';
+import { byRecency } from '../primitives/conversation-store';
 import type { ConversationSummary } from '../types';
 
 export interface ConversationPanelProps {
@@ -36,11 +37,7 @@ export function ConversationPanel(props: ConversationPanelProps) {
   // Most-recently-updated first — the same defensive sort ChatThread's own
   // auto-restore uses (an unparsable/missing date sorts last, never throws).
   const ordered = createMemo(() =>
-    [...props.conversations].sort((a, b) => {
-      const at = Date.parse(a.updatedAt ?? '');
-      const bt = Date.parse(b.updatedAt ?? '');
-      return (Number.isNaN(bt) ? -Infinity : bt) - (Number.isNaN(at) ? -Infinity : at);
-    }),
+    [...props.conversations].sort(byRecency),
   );
 
   return (

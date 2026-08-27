@@ -30,6 +30,21 @@ describe('four-sentence conversational construction', () => {
       title: "Hi, we're Acme Support",
       description: 'Ask us about orders, refunds, and more.',
     },
+    // Task 5: the Home/Messages landing screen — a greeting, the
+    // most-recent-conversation card (subsumed by `capabilities.conversations`,
+    // already on by this turn), and two quick links. Lands in the same
+    // closing turn as `empty`/`header`/`widget`/`reasoningOpen`/
+    // `conversations` below (FIX-1 precedent): the owner's welcome-greeting
+    // ask and the home-screen ask are both natural extensions of an
+    // already-settled widget, not earlier-turn concerns.
+    home: {
+      greeting: { title: 'Hi from Acme 👋', subtitle: 'Orders, refunds, anything.' },
+      recentConversation: true,
+      links: [
+        { label: 'Help center', href: 'https://ui.kitn.ai', description: 'Guides and FAQs', icon: 'book-open' },
+        { label: 'Talk to sales', description: 'We reply fast', icon: 'message-circle' },
+      ],
+    },
     // NOTE (deviation from the original fixture, 2026-08-26 owner finding):
     // `launcherIcon` used to pin `https://example.com/logo.png` — a
     // placeholder that never resolves, so the live `kai dev` FAB rendered a
@@ -69,17 +84,18 @@ describe('four-sentence conversational construction', () => {
     // rest of the widget is settled, so earlier turns explicitly hold it
     // back the same way they hold back reasoningOpen.
     const turns = [
-      { ...finalConstruct, userId: undefined, header: undefined, theme: undefined, empty: undefined, widget: undefined, capabilities: { attachments: finalConstruct.capabilities.attachments, reasoningOpen: undefined, conversations: undefined } },
-      { ...finalConstruct, userId: undefined, header: undefined, theme: undefined, empty: undefined, widget: undefined, capabilities: { attachments: finalConstruct.capabilities.attachments, history: finalConstruct.capabilities.history, reasoningOpen: undefined, conversations: undefined } },
-      { ...finalConstruct, userId: undefined, header: undefined, theme: undefined, empty: undefined, widget: undefined, capabilities: { ...finalConstruct.capabilities, reasoningOpen: undefined, conversations: undefined } },
-      { ...finalConstruct, header: undefined, theme: undefined, empty: undefined, widget: undefined, capabilities: { ...finalConstruct.capabilities, reasoningOpen: undefined, conversations: undefined } },
-      // Turn 6: the owner asks for a welcome greeting on top of everything
-      // else — the natural extension point (FIX-1 precedent), landing
-      // alongside header/widget/reasoningOpen/conversations in the same
-      // closing turn. `theme.unreadColor` (unread-indicator round, owner
-      // ruling 2026-08-26) lands here too, same precedent: the owner's
-      // customization request is a natural extension of an already-settled
-      // widget, not an earlier turn's concern.
+      { ...finalConstruct, userId: undefined, header: undefined, theme: undefined, empty: undefined, home: undefined, widget: undefined, capabilities: { attachments: finalConstruct.capabilities.attachments, reasoningOpen: undefined, conversations: undefined } },
+      { ...finalConstruct, userId: undefined, header: undefined, theme: undefined, empty: undefined, home: undefined, widget: undefined, capabilities: { attachments: finalConstruct.capabilities.attachments, history: finalConstruct.capabilities.history, reasoningOpen: undefined, conversations: undefined } },
+      { ...finalConstruct, userId: undefined, header: undefined, theme: undefined, empty: undefined, home: undefined, widget: undefined, capabilities: { ...finalConstruct.capabilities, reasoningOpen: undefined, conversations: undefined } },
+      { ...finalConstruct, header: undefined, theme: undefined, empty: undefined, home: undefined, widget: undefined, capabilities: { ...finalConstruct.capabilities, reasoningOpen: undefined, conversations: undefined } },
+      // Turn 6: the owner asks for a welcome greeting AND the home screen on
+      // top of everything else — the natural extension point (FIX-1
+      // precedent), landing alongside header/widget/reasoningOpen/
+      // conversations in the same closing turn. `theme.unreadColor`
+      // (unread-indicator round, owner ruling 2026-08-26) and `home` (Task 5)
+      // land here too, same precedent: the owner's customization/home-screen
+      // requests are natural extensions of an already-settled widget, not
+      // earlier-turn concerns.
       finalConstruct,
     ].map((c) => JSON.parse(JSON.stringify(c)));
     for (const construct of turns) {
@@ -148,6 +164,8 @@ describe('four-sentence conversational construction', () => {
       '<EmptyTitle>',
       JSON.stringify(finalConstruct.empty.title),
       JSON.stringify(finalConstruct.empty.description),
+      // Task 5: home threads through as one JSON.stringify'd prop.
+      ` home={${JSON.stringify(finalConstruct.home)}}`,
     ]) {
       expect(app).toContain(marker);
     }

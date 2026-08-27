@@ -70,3 +70,26 @@ export interface ConversationGroup {
   sortOrder: number;
   createdAt: string;
 }
+
+/** One row in a `HomeConfig.links` list — a "docs" / "talk to sales" style
+ *  entry. `href` is optional: with it, the row renders as a link (subject to
+ *  `isSafeUrl`); without it, the row is a button that emits itself via
+ *  `HomePanelProps.onLink`. `icon` is either a `renderIcon` name or a safe
+ *  URL, same resolution `renderIcon` already does for every other icon prop
+ *  in the kit. */
+export interface HomeLinkEntry {
+  label: string;
+  href?: string;
+  description?: string;
+  icon?: string;
+}
+
+/** The widget home screen's JSON-shaped config (Intercom-pattern home tab).
+ *  Consumed by `ChatThread`'s `home` prop, which wires it into `HomePanel`/
+ *  `WidgetTabBar` and, from there, into `<kai-chat>`'s own `home` property. */
+export interface HomeConfig {
+  greeting?: { title?: string; subtitle?: string };
+  recentConversation?: boolean;
+  newConversation?: { label?: string };
+  links?: HomeLinkEntry[];
+}

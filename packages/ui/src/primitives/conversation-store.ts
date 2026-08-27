@@ -50,6 +50,19 @@ export interface ConversationStore {
 
 export const LEGACY_THREAD_MIGRATED_TITLE = 'Conversation 1';
 
+/** Newest-first ordering over `updatedAt`; rows with a missing or unparsable
+ *  timestamp sort last (stable, so ties keep declaration order). The ONE
+ *  recency rule — the list panel, ChatThread's restore pick, and the home
+ *  screen's recent card all sort with this (issue #335). */
+export function byRecency(
+  a: Pick<ConversationSummary, 'updatedAt'>,
+  b: Pick<ConversationSummary, 'updatedAt'>,
+): number {
+  const at = Date.parse(a.updatedAt ?? '');
+  const bt = Date.parse(b.updatedAt ?? '');
+  return (Number.isNaN(bt) ? -Infinity : bt) - (Number.isNaN(at) ? -Infinity : at);
+}
+
 function threadKey(name: string, userId: string | undefined, id: string): string {
   return userId ? `kai:${name}:${userId}:thread:${id}` : `kai:${name}:thread:${id}`;
 }

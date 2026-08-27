@@ -409,3 +409,65 @@ describe('capabilities.conversations (C-4)', () => {
     expect(out.ok).toBe(false);
   });
 });
+
+describe('home (Intercom-style landing, H-1..H-5)', () => {
+  const base = { name: 'acme-support', layout: 'widget', provider: { mode: 'mock' } } as const;
+
+  it('home: {} is valid and every sub-key is optional (H-1, H-4)', () => {
+    expect(validateConstruct({ ...base, home: {} }).ok).toBe(true);
+    expect(
+      validateConstruct({
+        ...base,
+        home: {
+          greeting: { title: 'Hi', subtitle: 'There' },
+          recentConversation: true,
+          newConversation: { label: 'Message us' },
+          links: [{ label: 'Docs', href: 'https://ui.kitn.ai', description: 'Guides', icon: 'book-open' }],
+        },
+      }).ok,
+    ).toBe(true);
+  });
+
+  it('home.links[].href rejects javascript: (untrusted construct author)', () => {
+    const out = validateConstruct({ ...base, home: { links: [{ label: 'x', href: 'javascript:alert(1)' }] } });
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(JSON.stringify(out.problems)).toContain('links');
+  });
+
+  it('home.links[].icon: URL-shaped values go through isSafeUrl; names pass untouched', () => {
+    expect(validateConstruct({ ...base, home: { links: [{ label: 'x', icon: 'book-open' }] } }).ok).toBe(true);
+    expect(validateConstruct({ ...base, home: { links: [{ label: 'x', icon: 'javascript:alert(1)' }] } }).ok).toBe(
+      false,
+    );
+  });
+
+  it('home does NOT require conversations (H-3) — home without any capability parses', () => {
+    expect(validateConstruct({ ...base, home: { recentConversation: true } }).ok).toBe(true);
+  });
+
+  it('unknown home keys are rejected (strict)', () => {
+    expect(validateConstruct({ ...base, home: { search: true } }).ok).toBe(false);
+  });
+
+  it('rejects an empty greeting.title/subtitle and newConversation.label (min length 1)', () => {
+    expect(validateConstruct({ ...base, home: { greeting: { title: '' } } }).ok).toBe(false);
+    expect(validateConstruct({ ...base, home: { greeting: { subtitle: '' } } }).ok).toBe(false);
+    expect(validateConstruct({ ...base, home: { newConversation: { label: '' } } }).ok).toBe(false);
+  });
+
+  it('rejects recentConversation: false — presence-only, matching capabilities.conversations', () => {
+    expect(validateConstruct({ ...base, home: { recentConversation: false } }).ok).toBe(false);
+  });
+
+  it('links[].label is required; empty href is rejected (min length 1)', () => {
+    expect(validateConstruct({ ...base, home: { links: [{ href: 'https://ui.kitn.ai' }] } }).ok).toBe(false);
+    expect(validateConstruct({ ...base, home: { links: [{ label: 'x', href: '' }] } }).ok).toBe(false);
+  });
+
+  it('accepts an https icon and a relative icon URL (isSafeUrl resolves relative against a base)', () => {
+    expect(validateConstruct({ ...base, home: { links: [{ label: 'x', icon: 'https://example.com/a.png' }] } }).ok).toBe(
+      true,
+    );
+    expect(validateConstruct({ ...base, home: { links: [{ label: 'x', icon: '/a.png' }] } }).ok).toBe(true);
+  });
+});

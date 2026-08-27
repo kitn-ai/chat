@@ -140,6 +140,37 @@ export const ConstructSchema = z
       })
       .strict()
       .optional(),
+    /** Home screen (spec 2026-08-27, H-1..H-5): Intercom-style landing view behind
+     *  a Home/Messages tab bar. PRESENCE of `home` enables the tab chrome (H-4) —
+     *  no `enabled` boolean, like `header`/`empty`. Every sub-key optional;
+     *  `home: {}` still means "tabs on, defaults". Never requires another
+     *  capability (H-3): the recent card simply renders nothing without
+     *  `capabilities.conversations` (the CLI warns — see cli.ts). All strings are
+     *  construct-authored/untrusted: JSON.stringify'd at every emit site; hrefs
+     *  and URL-shaped icons through isSafeUrl in superRefine below. */
+    home: z
+      .object({
+        greeting: z.object({ title: z.string().min(1).optional(), subtitle: z.string().min(1).optional() }).strict().optional(),
+        recentConversation: z.literal(true).optional(),
+        newConversation: z.object({ label: z.string().min(1).optional() }).strict().optional(),
+        links: z
+          .array(
+            z
+              .object({
+                label: z.string().min(1),
+                href: z.string().min(1).optional(),
+                description: z.string().min(1).optional(),
+                /** renderIcon name (e.g. 'book-open') or a safe URL — the icon NAME
+                 *  list is renderIcon's own vocabulary, never restated here; unknown
+                 *  names warn loudly at DEV runtime. */
+                icon: z.string().min(1).optional(),
+              })
+              .strict(),
+          )
+          .optional(),
+      })
+      .strict()
+      .optional(),
     // Capability vocabulary, widened one field at a time by later tasks.
     capabilities: z
       .object({
@@ -344,6 +375,23 @@ export const ConstructSchema = z
         path: ['capabilities', 'conversations'],
         message: '"conversations" requires capabilities.history.persistence to be "local" or "endpoint" — a conversation list needs somewhere to persist conversations',
       });
+    }
+    const URL_SHAPED = /^[a-zA-Z][a-zA-Z0-9+.-]*:|^\/\//;
+    for (const [i, link] of (construct.home?.links ?? []).entries()) {
+      if (link.href && !isSafeUrl(link.href)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['home', 'links', i, 'href'],
+          message: 'href must be an http(s)/mailto or relative URL — no javascript:/data: schemes',
+        });
+      }
+      if (link.icon && URL_SHAPED.test(link.icon) && !isSafeUrl(link.icon)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['home', 'links', i, 'icon'],
+          message: 'icon must be a kit icon name or an http(s)/relative URL — no javascript:/data: schemes',
+        });
+      }
     }
     if (!history) return;
     if (history.persistence === 'endpoint' && !history.url) {

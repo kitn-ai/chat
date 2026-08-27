@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { localStorageStore, fetchStore } from './conversation-store';
+import { localStorageStore, fetchStore, byRecency } from './conversation-store';
 import { isConversationUnread } from '../components/conversation-item';
 import type { ChatMessage } from '../elements/chat-types';
 
@@ -235,5 +235,17 @@ describe('fetchStore', () => {
       expect.objectContaining({ method: 'PUT', body: JSON.stringify({ messages: [msg('u1', 'hi')] }) }),
     );
     vi.unstubAllGlobals();
+  });
+});
+
+describe('byRecency (shared comparator, issue #335)', () => {
+  it('sorts newest first and pushes invalid/missing updatedAt to the end', () => {
+    const rows = [
+      { id: 'a', updatedAt: '2026-08-01T00:00:00Z' },
+      { id: 'b', updatedAt: 'not-a-date' },
+      { id: 'c', updatedAt: '2026-08-27T00:00:00Z' },
+      { id: 'd', updatedAt: undefined as unknown as string },
+    ];
+    expect([...rows].sort(byRecency).map((r) => r.id)).toEqual(['c', 'a', 'b', 'd']);
   });
 });

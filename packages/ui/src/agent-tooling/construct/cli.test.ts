@@ -14,7 +14,8 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { runCli } from './cli';
+import { runCli, homeRecentConversationWarning } from './cli';
+import { validateConstruct } from './schema';
 
 const good = { name: 'acme-support', layout: 'widget', provider: { mode: 'mock' } };
 
@@ -204,6 +205,53 @@ describe('kai CLI', () => {
 
     const after = distFingerprint(dir);
     expect(after).not.toBe(before);
+  });
+
+  it('validate: warns (non-fatal, exit 0) when home.recentConversation is set without capabilities.conversations (H-3)', async () => {
+    const { io, lines } = collect();
+    const construct = { ...good, home: { recentConversation: true } };
+    const code = await runCli(['validate', tmpConstruct(construct)], io);
+    expect(code).toBe(0);
+    expect(lines.join('\n')).toContain('warning:');
+    expect(lines.join('\n')).toContain('home.recentConversation');
+  });
+
+  it('validate: no warning when home.recentConversation pairs with capabilities.conversations', async () => {
+    const { io, lines } = collect();
+    const construct = {
+      ...good,
+      capabilities: { conversations: true, history: { persistence: 'local' } },
+      home: { recentConversation: true },
+    };
+    const code = await runCli(['validate', tmpConstruct(construct)], io);
+    expect(code).toBe(0);
+    expect(lines.join('\n')).not.toContain('warning:');
+  });
+
+  it('validate: no warning when home has no recentConversation at all', async () => {
+    const { io, lines } = collect();
+    const construct = { ...good, home: {} };
+    const code = await runCli(['validate', tmpConstruct(construct)], io);
+    expect(code).toBe(0);
+    expect(lines.join('\n')).not.toContain('warning:');
+  });
+
+  it('homeRecentConversationWarning: unit-level parity with the CLI wiring above', () => {
+    const withoutConversations = validateConstruct({ ...good, home: { recentConversation: true } });
+    if (!withoutConversations.ok) throw new Error('expected valid construct');
+    expect(homeRecentConversationWarning(withoutConversations.construct)).toContain('warning:');
+
+    const withConversations = validateConstruct({
+      ...good,
+      capabilities: { conversations: true, history: { persistence: 'local' } },
+      home: { recentConversation: true },
+    });
+    if (!withConversations.ok) throw new Error('expected valid construct');
+    expect(homeRecentConversationWarning(withConversations.construct)).toBeNull();
+
+    const noHome = validateConstruct(good);
+    if (!noHome.ok) throw new Error('expected valid construct');
+    expect(homeRecentConversationWarning(noHome.construct)).toBeNull();
   });
 
   it('compile: missing path prints usage and exits 2', async () => {

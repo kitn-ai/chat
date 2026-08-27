@@ -146,6 +146,14 @@ export { ChatThread } from './components/chat-thread';
 export type { ChatThreadProps, ChatThreadController, ChatThreadContextUsage } from './components/chat-thread';
 export { Screen } from './components/screen';
 export type { ScreenProps, ScreenController } from './components/screen';
+// HomePanel / WidgetTabBar — the widget home screen (Intercom-pattern).
+// Wired into ChatThread itself behind the `home` prop (and from there into
+// `<kai-chat>`'s own `home`/`onHomeLink`); exported here too for a Solid
+// consumer composing either piece directly.
+export { HomePanel } from './components/home-panel';
+export type { HomePanelProps } from './components/home-panel';
+export { WidgetTabBar } from './components/widget-tab-bar';
+export type { WidgetTabBarProps } from './components/widget-tab-bar';
 export { Coachmark } from './components/coachmark';
 export type { CoachmarkProps, CoachmarkController } from './components/coachmark';
 export { Composer } from './components/composer';
