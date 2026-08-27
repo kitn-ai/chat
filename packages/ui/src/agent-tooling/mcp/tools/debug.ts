@@ -182,12 +182,15 @@ const RULES: Rule[] = [
       ),
     title: 'tsc errors inside node_modules/@kitn.ai/ui/src (SolidJS source compiled under React)',
     cause:
-      'The package currently ships TypeScript/TSX source, and a type entry value-re-exports ' +
-      'from it, so the consumer\'s `tsc` resolves and compiles the library\'s SolidJS internals ' +
-      '(`src/ui/*.tsx`) under the app\'s React JSX config — `Show`/`Portal`/`Dynamic` aren\'t ' +
-      'React components, causing TS2786 / "cannot be used as a JSX component" errors. ' +
-      '`vite`/esbuild build fine (they strip types); only `tsc` breaks. ' +
-      '`skipLibCheck` does not help (these are `.tsx` source, not `.d.ts`).',
+      'On versions <=0.27.x, the package shipped TypeScript/TSX source, and a type entry ' +
+      'value-re-exports from it, so the consumer\'s `tsc` resolves and compiles the library\'s ' +
+      'SolidJS internals (`src/ui/*.tsx`) under the app\'s React JSX config — `Show`/`Portal`/' +
+      '`Dynamic` aren\'t React components, causing TS2786 / "cannot be used as a JSX component" ' +
+      'errors. `vite`/esbuild build fine (they strip types); only `tsc` breaks. `skipLibCheck` ' +
+      'does not help (these are `.tsx` source, not `.d.ts`). Fixed for newer releases: the ' +
+      'package no longer ships that source tree (`files` in package.json narrowed to `dist/` plus ' +
+      'two reachable JSON exports) — if you\'re still hitting this, check your installed version ' +
+      'first (`npm ls @kitn.ai/ui`) and upgrade before reaching for the workaround below.',
     fix:
       'Redirect the type resolution for that subpath in your tsconfig ' +
       '(Vite ignores tsconfig `paths`, so runtime is unaffected):\n\n' +

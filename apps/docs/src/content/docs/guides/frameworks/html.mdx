@@ -224,14 +224,14 @@ For the full API of any element — all properties, events, and their types — 
 
 ## Theming
 
-By default each element is styled inside its own Shadow DOM and needs no external CSS. To override design tokens (colors, radii, spacing), load `theme.css`:
+By default each element is styled inside its own Shadow DOM and needs no external CSS. To override design tokens (colors, radii, spacing), load `theme.tokens.css` — the compiled plain-CSS build. A raw `<link>` can't use `theme.css` itself: that file is Tailwind v4 *source* (its tokens live in an `@theme` block a plain stylesheet load discards whole), so it only works when a bundler runs Tailwind over it.
 
 ```html
-<!-- bundler -->
-<link rel="stylesheet" href="./node_modules/@kitn.ai/ui/theme.css" />
+<!-- local install -->
+<link rel="stylesheet" href="./node_modules/@kitn.ai/ui/dist/theme.tokens.css" />
 
 <!-- CDN -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@kitn.ai/ui/theme.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@kitn.ai/ui/dist/theme.tokens.css" />
 ```
 
 Then override any `--color-*` or `--radius-*` custom properties on `:root` or a scoping selector.

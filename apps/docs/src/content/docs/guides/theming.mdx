@@ -44,11 +44,13 @@ import '@kitn.ai/ui/theme.css';
 Or via CDN:
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@kitn.ai/ui/theme.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@kitn.ai/ui/dist/theme.tokens.css">
 ```
 
+`theme.css` is Tailwind v4 *source* — its tokens live in an `@theme` block a plain `<link>` discards whole, so it only works when Tailwind processes your CSS. `theme.tokens.css` is the compiled plain-CSS build meant for exactly this CDN case.
+
 <Aside type="caution" title="Tailwind v4: theme.css can override your own tokens">
-The components need no CSS import - they are shadow-isolated. Import `theme.css` only for the shadcn-style unprefixed `--color-*` path. In a Tailwind v4 app those generic names merge into your `@theme` and can override your own `bg-primary`, `bg-card`, and friends (last import wins) - and the same is true of the [type scale](#typography), which re-points `text-xs` / `text-sm` / `text-base` / `text-lg`. Prefer the namespaced `--kai-color-*` tokens below (no import), or - if you do import `theme.css` - import it **before** your own token overrides.
+The components need no CSS import - they are shadow-isolated. Import `theme.css` (via a bundler whose build runs Tailwind over it) only for the shadcn-style unprefixed `--color-*` path. In a Tailwind v4 app those generic names merge into your `@theme` and can override your own `bg-primary`, `bg-card`, and friends (last import wins) - and the same is true of the [type scale](#typography), which re-points `text-xs` / `text-sm` / `text-base` / `text-lg`. Prefer the namespaced `--kai-color-*` tokens below (no import), or - if you do import `theme.css` - import it **before** your own token overrides.
 </Aside>
 
 ## Override tokens

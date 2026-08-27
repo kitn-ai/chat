@@ -23,11 +23,28 @@
 //      than rule 1 and it names nothing, but it is the backstop for growth that
 //      rule 1 cannot see: many small files, or bundle bloat inside `dist/`.
 //
+//   3. ROOTS — every packed file must live under an allowed root
+//      (ALLOWED_ROOT_PREFIXES) or be one of a short list of exact paths
+//      (ALLOWED_EXACT_FILES — mostly top-level, but two are the nested
+//      `src/elements/*.json` files the `./element-meta.json` and
+//      `./icon-names.json` exports resolve into). This is what pins `files`
+//      in package.json
+//      shut: the whole point of the 2026-08-27 trim was that `files: ["dist",
+//      "src", "bin", ...]` shipped ~3.83 MiB of `src/` no `exports` subpath
+//      could reach (only `element-meta.json` and `icon-names.json` are
+//      reachable). Rules 1 and 2 would not have caught that regression coming
+//      back — rule 1 only fires on files over MAX_FILE_BYTES, and a `src/`
+//      re-creep of many small files could stay under MAX_UNPACKED_BYTES for a
+//      while. Rule 3 fires the moment ANY file outside the allowed roots is
+//      packed, named or not, large or not.
+//
 // Run it AFTER a build. Without `dist/` the tarball is a fraction of its real
 // size and both rules would pass vacuously, so a missing `dist/` is a failure,
 // not a skip.
 //
-// Usage: node scripts/verify-pack-weight.mjs
+// Usage:
+//   node scripts/verify-pack-weight.mjs               # the real check
+//   node scripts/verify-pack-weight.mjs --self-test    # proves rule 3 can fail
 
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -37,6 +54,8 @@ import { fileURLToPath } from 'node:url';
 import { readPackEntry } from '../../../scripts/pack-listing.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const argv = process.argv.slice(2);
+const SELF_TEST = argv.includes('--self-test');
 
 /**
  * The npm this runs under, which is NOT always the one on PATH.
@@ -63,20 +82,95 @@ const MAX_FILE_BYTES = 64 * 1024;
  */
 const ALLOWED_LARGE_FILES = new Map([
   ['src/elements/element-meta.json', 'exported as the `./element-meta.json` subpath'],
-  ['src/elements/element-types.d.ts', 'source copy of the JSX intrinsics; consumers reference it'],
   ['llms-full.txt', 'shipped LLM context, listed explicitly in `files`'],
-  ['src/agent-tooling/mcp/tools/scaffold.ts', 'source of the `kai` MCP scaffolder'],
-  [
-    'src/agent-tooling/construct/codegen.ts',
-    'source of the construct CLI: cli.ts and dev.ts import generateProject/writeProject/' +
-      'emitTypes/accentContrastNotice from here, and cli-entry.ts (the entry vite.config.' +
-      'construct-cli.ts compiles to dist/construct-cli.es.js) pulls it in transitively; ' +
-      'bin/mcp.js runs that dist bundle for `kai dev/compile/eject/validate` — same class ' +
-      'as scaffold.ts above, source someone reads for the CLI it compiles into.',
-  ],
   ['frameworks/react/index.tsx', 'source of the generated React wrappers'],
-  ['src/elements/compiled.css', 'the shadow-DOM stylesheet the elements adopt'],
 ]);
+
+/**
+ * Rule 3 roots. Every packed path must start with one of these prefixes...
+ */
+const ALLOWED_ROOT_PREFIXES = ['dist/', 'bin/', 'frameworks/'];
+
+/**
+ * ...or be exactly one of these paths. Mostly top-level (package.json,
+ * README.md, ...); `src/elements/element-meta.json` and
+ * `src/elements/icon-names.json` are the two exceptions — nested paths, not
+ * top-level, kept here because they're the only `src/` files any `exports`
+ * subpath resolves into (see the 2026-08-27 `files` trim history below).
+ */
+const ALLOWED_EXACT_FILES = new Set([
+  'package.json',
+  'README.md',
+  'LICENSE',
+  'NOTICE',
+  'theme.css',
+  'llms.txt',
+  'llms-full.txt',
+  'src/elements/element-meta.json',
+  'src/elements/icon-names.json',
+]);
+
+/**
+ * Pure so the self-test below can drive it with synthetic file lists instead
+ * of a real `npm pack`. Returns the packed paths that match neither an
+ * allowed prefix nor an exact allowlist entry.
+ */
+function findRootViolations(paths, prefixes = ALLOWED_ROOT_PREFIXES, exact = ALLOWED_EXACT_FILES) {
+  return paths.filter((p) => !prefixes.some((prefix) => p.startsWith(prefix)) && !exact.has(p));
+}
+
+if (SELF_TEST) {
+  const cases = [
+    {
+      name: 'a clean pack (dist/bin/frameworks + the two src JSON exports + top-level docs) passes',
+      paths: [
+        'dist/index.js',
+        'dist/custom-elements.json',
+        'bin/mcp.js',
+        'bin/route.js',
+        'frameworks/react/index.tsx',
+        'src/elements/element-meta.json',
+        'src/elements/icon-names.json',
+        'package.json',
+        'README.md',
+        'NOTICE',
+        'theme.css',
+        'llms.txt',
+        'llms-full.txt',
+      ],
+      expectViolations: [],
+    },
+    {
+      name: 'a src/ file outside the two JSON exports is caught (the 2026-08-27 regression class)',
+      paths: ['dist/index.js', 'src/components/chat-thread.tsx'],
+      expectViolations: ['src/components/chat-thread.tsx'],
+    },
+    {
+      name: 'a stray test file outside bin/dist/frameworks is caught',
+      paths: ['dist/index.js', 'bin/mcp.js', 'scripts/some-dev-script.mjs'],
+      expectViolations: ['scripts/some-dev-script.mjs'],
+    },
+  ];
+
+  let failedCases = 0;
+  for (const c of cases) {
+    const got = findRootViolations(c.paths);
+    const ok = JSON.stringify(got.sort()) === JSON.stringify([...c.expectViolations].sort());
+    if (!ok) {
+      failedCases++;
+      console.error(
+        `✗ verify-pack-weight self-test: "${c.name}"\n  expected violations: ${JSON.stringify(c.expectViolations)}\n  got: ${JSON.stringify(got)}`,
+      );
+    }
+  }
+
+  if (failedCases > 0) {
+    console.error(`\n✗ verify-pack-weight self-test: ${failedCases}/${cases.length} case(s) failed.\n`);
+    process.exit(1);
+  }
+  console.log(`✓ verify-pack-weight self-test: ${cases.length} case(s) behave as specified.`);
+  process.exit(0);
+}
 
 /**
  * Backstop ceiling on total unpacked size. Headroom over the current figure is
@@ -194,8 +288,71 @@ const ALLOWED_LARGE_FILES = new Map([
  * wrappers all grew a few KB each because they re-describe the same facade
  * per generated artifact, same as the five-form-control note above. Margin
  * rule unchanged: 13.20 + 0.29 MiB of headroom -> 13.49 MiB.
+ *
+ * 13.49 -> 9.49 MiB, LOWERED (2026-08-27, the pack-diet round: the `files`
+ * trim + the shiki chunk dedupe, consolidated onto one branch). This
+ * SUPERSEDES the 13.49 MiB entry immediately above, which raised the ceiling
+ * for honest feature growth the same day, hours earlier, on commit b1c71c07 —
+ * that growth is untouched here, this is a different axis. Two independent
+ * fixes landed together:
+ *
+ * (1) The `files` trim. An audit (`npm pack --dry-run` diffed file-by-file
+ * against the `exports` map) found `files` in package.json shipped the
+ * ENTIRE `src/` tree (367 files, 4.270 MiB) when only two paths in it are
+ * reachable by any consumer: `./element-meta.json` and `./icon-names.json`,
+ * the sole `exports` subpaths that resolve into `src/`. Every other
+ * `.ts`/`.tsx` file under `src/` -- including
+ * `src/agent-tooling/mcp/tools/scaffold.ts` (326.9 KiB) and
+ * `src/elements/element-types.d.ts` (311.9 KiB), both individually over
+ * MAX_FILE_BYTES -- had no import path a bundler or `require`/`import` could
+ * reach; `dist/mcp.es.js` was grepped for `src/` references and every hit was
+ * a doc-string inside emitted scaffold text, never a runtime read of the
+ * shipped tree. Fixed by narrowing `files` to `dist`, the two reachable
+ * `src/` JSON files by exact path, `bin` (with its `.test.js` sibling
+ * excluded), `frameworks`, and the top-level docs/theme/llms files -- no
+ * exports were repointed, since nothing outside the MCP's own dev-time
+ * tooling (which builds `derived.json` etc. into `dist/mcp.es.js` at build
+ * time, not by reading `src/` post-install) depends on the shipped-`src/`
+ * path existing. Also dropped two trivial leaks the old `files` globs didn't
+ * cover: `bin/route.test.js` and the three construct fixture JSONs under
+ * `src/agent-tooling/construct/fixtures/` (both fell away as a side effect
+ * of the `src/` narrowing; `bin/route.test.js` additionally needed its own
+ * negation in `files` since `bin/` itself stays there). ALLOWED_LARGE_FILES
+ * was pruned to match: every entry that named a now-unpacked `src/` file
+ * (element-types.d.ts, scaffold.ts, construct/codegen.ts,
+ * elements/compiled.css) was removed, since `npm pack` no longer reports
+ * them at all. Rule 3 (the root allowlist, added this same round) is the
+ * guard that keeps this shut -- it fails on ANY packed file outside
+ * dist/bin/frameworks/the two src JSON exports/top-level docs, not just ones
+ * over MAX_FILE_BYTES, so a `src/` re-creep of many small files (which rules
+ * 1 and 2 might not catch for a while) trips immediately. Measured
+ * 9,819,432 bytes / 9.3645 MiB / 581 files after this fix alone (down from
+ * 13,838,986 bytes / 947 files, a drop of ~3.83 MiB matching the audit's
+ * estimate almost exactly).
+ *
+ * (2) The shiki chunk dedupe (cherry-picked from a sibling worktree,
+ * commit 3d516188). The elements build and the barrel/index/solid builds
+ * each render shiki's createHighlighterCore chunk and JS regex-engine chunk
+ * in their own separate Rollup process; they never render byte-identical
+ * (each build's whole-module-graph scope differs), so two ~99.1%-similar,
+ * non-identical ~60-116KB files shipped where content-hash dedupe (already
+ * in place from an earlier round) could not collapse them -- only minifier-
+ * local variable renaming differed. A new post-build step (`dedupe:shiki`,
+ * wired into `build` right after `build:elements`) finds these near-
+ * duplicate chunk families and rewrites the one with fewer importers into a
+ * same-directory `export *` re-export shim; importers keep their original
+ * hashed filenames, so no static or dynamic import site changes. Verified
+ * this round: a fresh `nx build ui --skip-nx-cache` produces the shims
+ * automatically (`dist/core-C8fzo39E.js` is now a 36-byte re-export of
+ * `dist/core-AYMC6_lb.js`; `dist/engine-javascript-C1x7zo1_.js` a 49-byte
+ * re-export of `dist/engine-javascript-vq0WuIJl.js`).
+ *
+ * Combined measured: 9,642,416 bytes / 9.1957 MiB / 581 files (the file
+ * count is unchanged from fix (1) alone -- the dedupe shrinks two files in
+ * place, it doesn't remove or add any). Margin rule unchanged: 9.1957 +
+ * ~0.29 MiB of headroom -> 9.49 MiB.
  */
-const MAX_UNPACKED_BYTES = 13.49 * 1024 * 1024;
+const MAX_UNPACKED_BYTES = 9.49 * 1024 * 1024;
 
 const kib = (n) => `${(n / 1024).toFixed(1)} KiB`;
 const mib = (n) => `${(n / 1024 / 1024).toFixed(2)} MiB`;
@@ -269,6 +426,23 @@ if (report.unpackedSize > MAX_UNPACKED_BYTES) {
       '    Find what grew:  npm pack --dry-run --ignore-scripts --json | ...\n' +
       '    Then either drop it from `files`, or raise MAX_UNPACKED_BYTES in\n' +
       '    scripts/verify-pack-weight.mjs with a note on what grew and why.',
+  );
+}
+
+// --- Rule 3: every packed file lives under an allowed root ------------------
+const rootViolations = findRootViolations(files.map((f) => f.path)).sort();
+if (rootViolations.length > 0) {
+  failures.push(
+    `${rootViolations.length} packed file(s) outside the allowed roots ` +
+      `(${ALLOWED_ROOT_PREFIXES.join(', ')}) and not in the exact allowlist ` +
+      `(${[...ALLOWED_EXACT_FILES].join(', ')}):\n` +
+      rootViolations.map((p) => `      ${p}`).join('\n') +
+      '\n\n' +
+      '    This is the check that pins the 2026-08-27 `files` trim shut: `src/`\n' +
+      '    (minus the two JSON exports) must never ship again. If a new file is\n' +
+      '    genuinely reachable via `exports`, add it to ALLOWED_EXACT_FILES in\n' +
+      '    scripts/verify-pack-weight.mjs and to `files` in package.json. Otherwise\n' +
+      '    exclude it from `files`.',
   );
 }
 
