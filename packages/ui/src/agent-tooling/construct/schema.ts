@@ -84,6 +84,21 @@ export const ConstructSchema = z
       .object({
         /** Any CSS color; becomes --kai-color-primary on the host. */
         accent: z.string().optional(),
+        /** Any CSS color; becomes --kai-color-unread on the host (owner
+         *  ruling, 2026-08-26 — the unread-indicator round). Same treatment
+         *  as `accent` in every way that matters for safety: construct-
+         *  authored/untrusted text, carried to the emitted facade via
+         *  `ctx.element.style.setProperty('--kai-color-unread',
+         *  JSON.stringify(...))` — never string-interpolated into CSS
+         *  text — so it can never break out into a new declaration or rule
+         *  (see emitElement's doc on why `accent` uses setProperty at all).
+         *  Unlike `accent`, this has no paired -foreground to compute: the
+         *  three surfaces that read --color-unread (the conversation-list
+         *  row dot, the header toggle's badge, Dock's own closed-launcher
+         *  badge) are all small filled dots with no text sitting ON them, so
+         *  there is nothing to contrast-pair — the value is set and used
+         *  as-is. */
+        unreadColor: z.string().optional(),
         mode: z.enum(['light', 'dark', 'system']).default('system'),
       })
       .strict()
@@ -186,6 +201,17 @@ export const ConstructSchema = z
          *  content exists) or `'off'` (nothing renders); rejected on both,
          *  loudly, below. */
         reasoningOpen: z.boolean().optional(),
+        /** Turns on the prior-conversations list (C-1..C-9 of the
+         *  conversations design). `true` only — there is no `false` form,
+         *  matching this schema's other presence-only capability flags.
+         *  Requires `capabilities.history.persistence` to be `local` or
+         *  `endpoint` (superRefine below, loud): a conversation list with
+         *  nowhere to persist conversations is not a coherent construct.
+         *  WHAT persists (this field, plus history) stays construct
+         *  vocabulary; HOW it persists (the ConversationStore adapter,
+         *  localStorage vs. a fetch endpoint) is codegen's call, never
+         *  vocabulary here (C-3 — no transport-layer vocabulary). */
+        conversations: z.literal(true).optional(),
       })
       .strict()
       .optional(),
@@ -312,6 +338,13 @@ export const ConstructSchema = z
       });
     }
     const history = construct.capabilities?.history;
+    if (construct.capabilities?.conversations && (!history || history.persistence === 'none')) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['capabilities', 'conversations'],
+        message: '"conversations" requires capabilities.history.persistence to be "local" or "endpoint" — a conversation list needs somewhere to persist conversations',
+      });
+    }
     if (!history) return;
     if (history.persistence === 'endpoint' && !history.url) {
       ctx.addIssue({

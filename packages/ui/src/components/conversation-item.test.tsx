@@ -10,9 +10,33 @@ import { describe, it, expect, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup } from '@solidjs/testing-library';
 import { createSignal } from 'solid-js';
-import { SlottedConversationItem } from './conversation-item';
+import { SlottedConversationItem, isConversationUnread } from './conversation-item';
 
 afterEach(cleanup);
+
+// Unread indicators (owner round, 2026-08-26). Both list surfaces
+// (ConversationItem here and ConversationPanel) read this one function
+// rather than each restating "updatedAt > lastReadAt" — pinning it here
+// covers both by construction.
+describe('isConversationUnread', () => {
+  it('unread: updatedAt is later than lastReadAt', () => {
+    expect(isConversationUnread({ updatedAt: '2026-08-26T12:00:00Z', lastReadAt: '2026-08-26T11:00:00Z' })).toBe(true);
+  });
+
+  it('not unread: lastReadAt is later than or equal to updatedAt (freshly marked read)', () => {
+    expect(isConversationUnread({ updatedAt: '2026-08-26T11:00:00Z', lastReadAt: '2026-08-26T12:00:00Z' })).toBe(false);
+    expect(isConversationUnread({ updatedAt: '2026-08-26T12:00:00Z', lastReadAt: '2026-08-26T12:00:00Z' })).toBe(false);
+  });
+
+  it('decide-loudly default: no lastReadAt at all reads as NOT unread, never a guess', () => {
+    expect(isConversationUnread({ updatedAt: '2026-08-26T12:00:00Z' })).toBe(false);
+  });
+
+  it('defensive: an unparsable date on either side reads as not unread rather than throwing', () => {
+    expect(isConversationUnread({ updatedAt: 'not-a-date', lastReadAt: '2026-08-26T11:00:00Z' })).toBe(false);
+    expect(isConversationUnread({ updatedAt: '2026-08-26T12:00:00Z', lastReadAt: 'not-a-date' })).toBe(false);
+  });
+});
 
 describe('SlottedConversationItem', () => {
   it('renders the default slot (title) inside part="title"', () => {

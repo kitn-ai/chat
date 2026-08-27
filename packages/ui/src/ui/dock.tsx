@@ -92,6 +92,52 @@ export function DockCloseGlyph(): JSX.Element {
   return <X size={24} />;
 }
 
+export interface DockLauncherImageProps {
+  /** The icon URL. */
+  src: string;
+  /** Alt text — usually left empty: the launcher BUTTON already carries the
+   *  accessible name (Dock derives it from `label`/`openLabel`/`closeLabel`),
+   *  so a second name on the icon inside it would be redundant, not missing. */
+  alt?: string;
+}
+
+/**
+ * A branded launcher icon with a built-in fallback to {@link DockLauncherGlyph}
+ * on load failure — a dead link, or a placeholder URL nobody swapped for a
+ * real asset yet (exactly what shipped in `kai dev`'s own `owner-widget`
+ * fixture: `launcherIcon: "https://example.com/logo.png"`, which never
+ * resolves, so the FAB rendered a permanently broken image). Decides loudly
+ * with one `console.warn` naming the failing URL, then swaps — never a
+ * silent broken-image icon sitting in the corner of someone's page.
+ *
+ * Lives here, not on {@link Dock} itself: `Dock`'s `launcher` prop is
+ * deliberately ANY content (an emoji, a "Support" text pill, this image,
+ * whatever a consumer slots in) and the dock never inspects what it's
+ * holding — teaching it to specifically understand "this might be an
+ * `<img>` that can 404" would be the one prop where that boundary breaks.
+ * This is a plain sibling component a `launcher` value can be built FROM,
+ * same relationship `DockLauncherGlyph`/`DockCloseGlyph` already have to
+ * `Dock`. The construct engine's `emitDockLauncher` (codegen.ts) renders
+ * `<DockLauncherImage src={...} />` for a construct-authored `launcherIcon`
+ * rather than hand-rolling the same onError dance in emitted output.
+ */
+export function DockLauncherImage(props: DockLauncherImageProps) {
+  const [failed, setFailed] = createSignal(false);
+  return (
+    <Show when={!failed()} fallback={<DockLauncherGlyph />}>
+      <img
+        src={props.src}
+        alt={props.alt ?? ''}
+        style={{ width: '24px', height: '24px', 'border-radius': '9999px' }}
+        onError={() => {
+          console.warn(`[kai] Dock launcher icon failed to load (${props.src}); falling back to the default glyph.`);
+          setFailed(true);
+        }}
+      />
+    </Show>
+  );
+}
+
 /**
  * The dock's own stylesheet, scoped to its shadow root.
  *
@@ -245,7 +291,7 @@ const DOCK_CSS = `
   inline-size: 0.75rem;
   block-size: 0.75rem;
   border-radius: 9999px;
-  background: var(--color-destructive);
+  background: var(--color-unread);
   box-shadow: 0 0 0 2px var(--color-primary);
 }
 

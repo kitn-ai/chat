@@ -927,11 +927,24 @@
           "scalar": false,
           "optional": true,
           "fn": false
+        },
+        {
+          "name": "conversations",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "store",
+          "scalar": false,
+          "optional": true,
+          "fn": false
         }
       ],
       "events": [
         "kai-attachments-change",
         "kai-attachments-rejected",
+        "kai-conversation-load",
         "kai-message-action",
         "kai-model-change",
         "kai-submit",
@@ -5505,6 +5518,7 @@
     "--kai-color-tool-blue",
     "--kai-color-tool-green",
     "--kai-color-tool-red",
+    "--kai-color-unread",
     "--kai-color-warning",
     "--kai-color-warning-foreground",
     "--kai-color-warning-soft",

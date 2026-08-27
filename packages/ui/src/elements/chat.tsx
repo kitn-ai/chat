@@ -11,11 +11,43 @@ import type { TriggerDef } from '../components/composer';
 import type { ComposerDoc } from '../primitives/composer-model';
 import type { ProseSize } from '../primitives/chat-config';
 import type { ModelOption } from '../types';
+import type { ConversationStore } from '../primitives/conversation-store';
 
 type Props = Omit<ChatThreadProps,
   'class' | 'onValueChange' | 'onSubmit' | 'onAttachmentsChange' | 'onSuggestionClick' | 'onModelChange'
   | 'onMessageAction' | 'onWebSearch' | 'onVoice' | 'controllerRef' | 'cardTypes' | 'cardSchemas' | 'cardHostElement' | 'messages'
   | 'accept' | 'onAttachmentsRejected'
+  // `conversations`/`store` are re-declared below (own doc comments, matching
+  // this element's own attribute/property conventions) rather than left to
+  // flow through `Omit`'s pass-through — same reason `messages` is excluded
+  // above. Left unexcluded, the intersection carries TWO declarations of the
+  // same property (the inherited `ChatThreadProps` one plus the re-declared
+  // one below) and `gen-element-api.mjs` concatenates both JSDoc comments into
+  // one duplicated, em-dash-laden description.
+  | 'conversations' | 'store'
+  // `onConversationLoad` is wired internally (below, JSX prop on
+  // `<ChatThread>`) as a dispatched `kai-conversation-load` event — matching
+  // every other ChatThread callback on this element — rather than left as a
+  // settable JS property: a `JSX.Element`-shaped callback prop has no HTML-
+  // consumer analogue the way `store`/`messages` do, and the kai- contract's
+  // idiom for "this thread wants to tell you something" is already an event.
+  // Excluded from `Props` for the same reason `onValueChange`/`onSubmit`/etc
+  // are excluded above: it is not a property a consumer of `<kai-chat>` sets.
+  | 'onConversationLoad'
+  // `hostOpen`/`onUnreadChange` (unread indicators, 2026-08-26) are the SAME
+  // "types without forwarding" trap as `onConversationLoad` above, for the
+  // same reason: this facade does not read either off the host element and
+  // forward it onto `<ChatThread>` below. Both exist for a caller composing
+  // `ChatThread` directly as a Solid component with its OWN show/hide chrome
+  // to report through `hostOpen` and its own sibling control (a `Dock`'s
+  // `unread` badge) to mirror `onUnreadChange` onto — the construct engine's
+  // emitted App is the motivating case (codegen.ts's `emitChatThreadUnreadProps`),
+  // exactly like `headerEndContent`/`emptyContent` below. `<kai-chat>` has no
+  // such sibling chrome of its own to report to or read from, so there is
+  // nothing here for either prop to DO — left unexcluded, `gen-element-api.mjs`
+  // would still type them into the public API and docs as settable properties
+  // that silently do nothing when set.
+  | 'hostOpen' | 'onUnreadChange'
   // `headerEndContent`/`emptyContent` are JSX.Element escape hatches for a caller
   // composing `ChatThread` directly as a Solid component (see their doc comments in
   // chat-thread.tsx — the construct-engine's emitted App is the motivating case).
@@ -75,6 +107,29 @@ type Props = Omit<ChatThreadProps,
      *  authored one carries `$schema`/`title`/`description`/`additionalProperties`,
      *  so the tighter type would reject both of the normal ways to supply one. */
     cardSchemas?: Record<string, object>;
+    /** Turns on the prior-conversations list (a list-toggle button in the
+     *  header, plus a second list view sharing the panel, C-1). Attribute-
+     *  settable like every other boolean flag on this element:
+     *  `<kai-chat conversations>`. Requires `store`. A row select, "new
+     *  conversation," or the visitor's mount-time auto-restore all deliver
+     *  their messages the same way: listen for `kai-conversation-load` and
+     *  set `el.messages` from `event.detail.messages` (a fresh array): this
+     *  element does not update `messages` for you. Set with no `store`, the
+     *  underlying `ChatThread` decides loudly (one console.error) and stays
+     *  visually off; this facade always supplies its own internal load
+     *  handler (the `kai-conversation-load` dispatch below), so the second
+     *  ChatThread guard, missing `onConversationLoad`, never trips here,
+     *  even for a consumer who never listens for the event. Default false. */
+    conversations?: boolean;
+    /** The adapter this thread persists conversations through: an object of
+     *  three functions (`list`/`load`/`save`; `ConversationStore`, exported
+     *  from `@kitn.ai/ui`'s `primitives/conversation-store`). A JS PROPERTY
+     *  ONLY: `el.store = myAdapter`. It can never be an attribute, since a
+     *  function-bearing object has no HTML string form, the same reasoning
+     *  that keeps `messages`/`cardSchemas` property-only (the kai- contract:
+     *  array/object props are JS properties, never attributes). Two built-ins
+     *  ship: `localStorageStore(name, userId?)` and `fetchStore(url, userId?)`. */
+    store?: ConversationStore;
   };
 
 interface Events {
@@ -102,6 +157,16 @@ interface Events {
   'kai-web-search': Record<string, never>;
   /** The Mic / voice button was clicked. */
   'kai-voice': Record<string, never>;
+  /** A conversation's history loaded: a row tap in the list, "new
+   *  conversation," or the visitor's own mount-time auto-restore of their
+   *  most recent thread (only fires when `conversations` is on and a `store`
+   *  is set). `detail.id` is that conversation's id, `undefined` for the
+   *  "new conversation" case (no id exists until the first message mints
+   *  one, C-6). Set `el.messages = event.detail.messages` (already a fresh
+   *  array) to actually render it, since this element does not do that for
+   *  you; `messages` stays your own state like everywhere else on this
+   *  element. */
+  'kai-conversation-load': { id: string | undefined; messages: ChatMessage[] };
 }
 
 defineWebComponent<Props, Events>('kai-chat', {
@@ -111,7 +176,7 @@ defineWebComponent<Props, Events>('kai-chat', {
   models: undefined, currentModel: undefined, context: undefined, scrollButton: true,
   attach: true, webSearch: false, voice: false, triggers: undefined, kindIcons: undefined,
   actionsReveal: 'always', cardTypes: undefined, cardSchemas: undefined, accept: undefined,
-  reasoning: undefined, reasoningOpen: undefined,
+  reasoning: undefined, reasoningOpen: undefined, conversations: false, store: undefined,
 }, (props, { dispatch, flag, reflectFlag, element, expose }) => {
   // `messages` is an untyped boundary: a consumer can hand it anything at
   // runtime (a pre-0.20.0 `{ id, role, content }` array, in particular). Skip
@@ -185,6 +250,9 @@ defineWebComponent<Props, Events>('kai-chat', {
     actionsReveal={props.actionsReveal as 'always' | 'hover'}
     cardTypes={cardComponentsFromTags(props.cardTypes as Record<string, string> | undefined, (props as { theme?: string }).theme)}
     cardSchemas={props.cardSchemas as Record<string, object> | undefined}
+    conversations={flag('conversations')}
+    store={props.store as ConversationStore | undefined}
+    onConversationLoad={(messages, id) => dispatch('kai-conversation-load', { id, messages })}
     /* F-26: card parts emit off THIS element as the bubbling `kai-card` event,
        so `listenForCardEvents(el)` / addEventListener('kai-card') work. */
     cardHostElement={element}

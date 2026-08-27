@@ -301,6 +301,53 @@ export function createTsHelpers(program, checker, { importable = new Set() } = {
       .map((x) => x.t);
   }
 
+  // Does `type` name, anywhere in its own structure, a symbol `renderType`
+  // would need to EXPAND (a non-lib named object type)? Used only to gate the
+  // generic-lib-type-argument branch inside `renderType` below: that branch
+  // exists so `Promise<ConversationSummary[]>` doesn't print `ConversationSummary`
+  // bare-and-unresolved in a no-imports `.d.ts`, but firing it unconditionally
+  // on every lib generic regressed a real case — `AsyncIterable<string>`
+  // rendered as the fully-reified `AsyncIterable<string, any, any>`, because
+  // `checker.getTypeArguments` always returns every type parameter (defaults
+  // included) while `checker.typeToString` elides a defaulted one. So this
+  // mirrors `renderType`'s own branch order (union, array, function, then the
+  // symbol/lib check) but only ANSWERS the question, it never renders:
+  // `typeToString` is still the one producing the string when the answer is
+  // "no", which is what keeps `AsyncIterable`'s elision intact.
+  //
+  // Deliberately does NOT walk into a lib type's own properties/methods (e.g.
+  // `ArrayBuffer.slice(...)`) the way renderType's object-with-properties
+  // branch does for a non-lib type -- `typeToString` never expands a named
+  // type reference's members, so a lib type's members are irrelevant to
+  // whether ITS bare name prints safely. Only a lib GENERIC's own type
+  // arguments matter, recursed into via the same `ObjectFlags.Reference`
+  // check `renderType` uses.
+  function needsSelfContainment(type, seen = new Set()) {
+    if (type.isUnion?.()) return type.types.some((t) => needsSelfContainment(t, seen));
+    if (checker.isArrayType(type)) return needsSelfContainment(checker.getTypeArguments(type)[0], seen);
+    const callSignatures = type.getCallSignatures?.() ?? [];
+    if (callSignatures.length === 1 && type.getProperties().length === 0) {
+      const sig = callSignatures[0];
+      const paramNeeds = sig.parameters.some((p) => {
+        const pt = checker.getTypeOfSymbolAtLocation(p, p.valueDeclaration ?? p.declarations?.[0]);
+        return needsSelfContainment(pt, seen);
+      });
+      return paramNeeds || needsSelfContainment(sig.getReturnType(), seen);
+    }
+    const sym = type.aliasSymbol || type.getSymbol();
+    if (!sym) return false; // a primitive (string, number, any, void, …) always renders bare, fine
+    if (!isLibSym(sym)) return true; // a non-lib named type: renderType's object branch would expand it
+    if (type.flags & ts.TypeFlags.Object && type.objectFlags & ts.ObjectFlags.Reference) {
+      const id = type.id;
+      if (id != null) {
+        if (seen.has(id)) return false;
+        seen = new Set(seen).add(id);
+      }
+      return checker.getTypeArguments(type).some((a) => needsSelfContainment(a, seen));
+    }
+    return false;
+  }
+
   // Render a type to a self-contained, fully-expanded string: every named
   // (non-lib, non-importable) object type is inlined so the output drags no
   // imports into a consumer's compilation. Unions de-dup; arrays parenthesize
@@ -334,6 +381,34 @@ export function createTsHelpers(program, checker, { importable = new Set() } = {
     const sym = type.aliasSymbol || type.getSymbol();
     const name = sym?.getName();
     if (name && importable.has(name)) return name;
+    // A FUNCTION-valued type (an object property whose value is itself callable,
+    // e.g. `store.list: () => Promise<ConversationSummary[]>` on the `store` prop
+    // of <kai-chat>): render the signature with every parameter and the return
+    // type recursively self-contained, the same treatment `dtsSignature` gives
+    // expose() methods. Without this branch a lone call signature falls straight
+    // to `checker.typeToString` below, which prints named non-lib return/param
+    // types (ConversationSummary, ChatMessage) BARE — valid only because the
+    // AUTHORING file (chat.tsx) happens to have them in scope; the generated
+    // `.d.ts` this string is spliced into carries no imports at all, so that bare
+    // name is an invisible TS2304 under the `skipLibCheck: true` every consumer
+    // template sets (caught here only by
+    // tests/elements/element-types-lib-check.test.ts, which runs with it off).
+    // `getProperties().length === 0` keeps this from misfiring on an ordinary
+    // object that also happens to carry call signatures (none do today).
+    const callSignatures = type.getCallSignatures();
+    if (callSignatures.length === 1 && type.getProperties().length === 0) {
+      const sig = callSignatures[0];
+      const params = sig.parameters.map((p) => {
+        const pDecl = p.valueDeclaration;
+        const pt = checker.getTypeOfSymbolAtLocation(p, pDecl ?? decl);
+        const isParamNode = pDecl && ts.isParameter(pDecl);
+        const rest = isParamNode && pDecl.dotDotDotToken ? '...' : '';
+        const opt = isParamNode && (pDecl.questionToken || pDecl.initializer) ? '?' : '';
+        return `${rest}${propKey(p.name)}${opt}: ${renderType(pt, pDecl ?? decl, seen)}`;
+      });
+      const ret = renderType(sig.getReturnType(), decl, seen);
+      return `(${params.join(', ')}) => ${ret}`;
+    }
     if (
       type.flags & ts.TypeFlags.Object &&
       type.getCallSignatures().length === 0 &&
@@ -374,6 +449,41 @@ export function createTsHelpers(program, checker, { importable = new Set() } = {
     if (type.flags & ts.TypeFlags.Object && type.getCallSignatures().length === 0) {
       const stringIndex = checker.getIndexInfoOfType(type, ts.IndexKind.String);
       if (stringIndex) return `Record<string, ${renderType(stringIndex.type, decl, seen)}>`;
+    }
+    // A generic LIB type instantiated with a non-lib type argument — the one
+    // that matters in practice is `Promise<X>` inside a function-valued prop
+    // member (e.g. `store.list: () => Promise<ConversationSummary[]>`, reached
+    // via the call-signature branch above). `Promise` itself is a lib symbol
+    // (isLibSym true, so it never reaches the object-with-properties branch
+    // above and its own `then`/`catch`/`finally` members are never expanded —
+    // correctly), but a bare `checker.typeToString` still prints its type
+    // ARGUMENT by name only, with the same invisible-in-a-no-imports-.d.ts
+    // problem the Record<string, X> branch above exists to avoid.
+    //
+    // Only reconstruct when a type argument actually NEEDS it. `typeToString`
+    // is otherwise the better renderer for a lib generic: it elides a type
+    // argument that equals its parameter's default (`AsyncIterable<string>`,
+    // not the fully-reified `AsyncIterable<string, any, any>`), a nicety
+    // `checker.getTypeArguments` does not preserve (it always returns every
+    // parameter, defaults included). Reconstructing unconditionally regressed
+    // exactly that case — caught in review, not by any test, because nothing
+    // here asserts the FULL rendered string for every prop, only that it
+    // compiles self-contained (element-types-lib-check.test.ts), and
+    // `AsyncIterable<string, any, any>` still compiles fine. So the guard is
+    // "does any type argument, anywhere in its own expansion, name a
+    // non-lib type" -- checked with `needsSelfContainment` below -- not "is
+    // this a lib generic at all".
+    if (
+      sym &&
+      isLibSym(sym) &&
+      type.flags & ts.TypeFlags.Object &&
+      type.objectFlags & ts.ObjectFlags.Reference &&
+      !checker.getIndexInfoOfType(type, ts.IndexKind.String)
+    ) {
+      const typeArgs = checker.getTypeArguments(type);
+      if (typeArgs.length && typeArgs.some(needsSelfContainment)) {
+        return `${name}<${typeArgs.map((a) => renderType(a, decl, seen)).join(', ')}>`;
+      }
     }
     return checker.typeToString(type, decl, ts.TypeFormatFlags.NoTruncation);
   }

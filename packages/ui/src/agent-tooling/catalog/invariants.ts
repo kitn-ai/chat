@@ -142,9 +142,9 @@ export const invariants: TInvariant[] = [
     ],
     examples: [
       {
-        wrong: 'chat.conversations = rows;',
+        wrong: 'chat.conversationRows = rows;',
         right: 'conversations.conversations = rows;',
-        note: 'kai-chat has no conversations prop — the sidebar is its own element. One element never holds the whole app state.',
+        note: "kai-chat's own `conversations` prop is a boolean flag (turns the built-in list panel on); it has no `conversationRows`-shaped data prop, and the sidebar is its own element. One element never holds the whole app state.",
       },
       {
         wrong: "chat.addEventListener('kai-conversation-select', (e) => load(e.detail.id));",

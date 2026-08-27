@@ -5,19 +5,20 @@
   "provider": { "mode": "mock" },
   "userId": "user_123",
   "header": { "title": "Acme Support" },
+  "theme": { "unreadColor": "#38BDF8" },
   "empty": {
     "title": "Hi, we're Acme Support",
     "description": "Ask us about orders, refunds, and more."
   },
   "widget": {
     "position": "top-start",
-    "launcherIcon": "https://example.com/logo.png",
     "defaultOpen": true
   },
   "capabilities": {
     "attachments": { "accept": ["image/*", "application/pdf"] },
     "history": { "persistence": "local" },
     "starters": ["Where's my order?", "Request a refund"],
-    "reasoningOpen": true
+    "reasoningOpen": true,
+    "conversations": true
   }
 }

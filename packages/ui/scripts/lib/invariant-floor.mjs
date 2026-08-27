@@ -464,12 +464,16 @@ export const HARNESSES = {
         },
       },
     ],
-    // The claim in the note -- "kai-chat has no conversations prop" -- is the
+    // The claim in the note -- "kai-chat has no conversationRows prop" -- is the
     // half no execution can see, because assigning to any object succeeds
     // whatever the property is called. Check it against the derived layer
-    // instead, which is where the fact actually lives.
+    // instead, which is where the fact actually lives. (kai-chat DOES have its
+    // own `conversations` prop as of the conversations feature -- a boolean
+    // flag, not the rows-shaped data this example is about -- so the example
+    // was renamed to `conversationRows` rather than checked against the old
+    // name.)
     corroborate({ derivedProp }) {
-      assert(!derivedProp('kai-chat', 'conversations'), 'kai-chat DOES have a conversations prop; the example is stale');
+      assert(!derivedProp('kai-chat', 'conversationRows'), 'kai-chat DOES have a conversationRows prop; the example is stale');
       assert(derivedProp('kai-conversations', 'conversations'), 'kai-conversations has no conversations prop');
     },
   },

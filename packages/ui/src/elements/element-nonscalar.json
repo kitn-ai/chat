@@ -32,6 +32,7 @@
     "kindIcons",
     "messages",
     "models",
+    "store",
     "suggestions",
     "triggers",
     "value"

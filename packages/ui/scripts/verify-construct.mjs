@@ -133,6 +133,17 @@ const CAPABILITY_VALUES = {
   // combined into one object). Handled below in fixtureFor, not by changing
   // either valuer — each keeps its own solo-cell coverage.
   reasoningOpen: true,
+  // Task 5: schema.ts's superRefine (C-4) rejects `conversations: true`
+  // unless `capabilities.history.persistence` is 'local' or 'endpoint' — a
+  // hard cross-field dependency, same class as reasoningOpen's coupling to
+  // `reasoning` above but the opposite direction (this one requires a
+  // partner key rather than colliding with one). The solo `conversations`
+  // cell never carries a `history` key on its own, so fixtureFor below
+  // injects `history: { persistence: 'local' }` alongside it whenever
+  // `history` isn't already present in the same cell (the all-capabilities
+  // combo already carries its own `history` entry, so no injection needed
+  // there).
+  conversations: true,
 };
 for (const key of capabilityKeys) {
   if (!(key in CAPABILITY_VALUES)) {
@@ -155,6 +166,12 @@ function fixtureFor(layout, capKeys, index) {
       ? capKeys.filter((k) => k !== 'reasoningOpen')
       : capKeys;
   const capabilities = Object.fromEntries(effectiveKeys.map((k) => [k, CAPABILITY_VALUES[k]]));
+  // `conversations` (Task 5) requires a `history` partner (schema.ts C-4) —
+  // inject one when the cell doesn't already carry its own `history` key
+  // (see the CAPABILITY_VALUES.conversations comment above).
+  if (effectiveKeys.includes('conversations') && !('history' in capabilities)) {
+    capabilities.history = { persistence: 'local' };
+  }
   return {
     name: `probe-${layout}-${index}`,
     layout,

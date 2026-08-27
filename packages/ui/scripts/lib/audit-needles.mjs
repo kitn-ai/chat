@@ -60,7 +60,7 @@ export const NEEDLE_TABLE = {
   'events-non-bubbling#1': { needle: "wrapper.addEventListener('kai-", tier: 'literal-bound' },
   // Data on the element that displays the conversation rather than the one that
   // owns the list, and the listener on the wrong side of the wiring edge.
-  'host-coordinates#0': { needle: 'chat.conversations', tier: 'literal-bound' },
+  'host-coordinates#0': { needle: 'chat.conversationRows', tier: 'literal-bound' },
   'host-coordinates#1': { needle: "chat.addEventListener('kai-conversation-select'", tier: 'literal-bound' },
   // Model text into an HTML sink.
   'untrusted-model-output#0': { needle: '.innerHTML = part.', tier: 'literal-bound' },

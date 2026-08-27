@@ -662,6 +662,19 @@ describe('D-D unread is the consumer\'s', () => {
     expect(el.unread, 'closing must not clear unread').toBe(true);
     expect(el.hasAttribute('unread')).toBe(true);
   });
+
+  test('the badge is painted with the dedicated --color-unread token, not --color-destructive (owner ruling, 2026-08-26)', async () => {
+    const el = await mount();
+    const css = Array.from(shadow(el).querySelectorAll('style')).map((s) => s.textContent).join('\n');
+    const badgeRule = css.match(/\[part="badge"\]\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(badgeRule).toMatch(/background:\s*var\(--color-unread\)/);
+    // Scoped to the badge's OWN rule, not the whole shadow-root stylesheet:
+    // the adopted Tailwind theme sheet legitimately defines --color-destructive
+    // as a token elsewhere (for other consumers of that color entirely), so a
+    // blanket `css.not.toContain` would false-fail on that unrelated
+    // definition rather than on the badge's own declaration.
+    expect(badgeRule).not.toContain('--color-destructive');
+  });
 });
 
 // ---------------------------------------------------------------------------

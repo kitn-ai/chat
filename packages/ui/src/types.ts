@@ -37,10 +37,29 @@ export interface ConversationSummary {
   /** Fallback for the auto relative time when updatedAt is absent. */
   lastMessageAt?: string;
   updatedAt: string;
-  /** Right-aligned trailing text on the row — a count, status, or "days ago".
-   *  When omitted, a short relative time is auto-derived from `updatedAt`
-   *  (fallback `lastMessageAt`). */
+  /** Trailing text describing the row's content, read differently by the two
+   *  built-in list surfaces (both optional, same field — no widened shape):
+   *  the desktop `ConversationList`/`ConversationItem` renders it right-aligned
+   *  as a count/status/"days ago" and auto-derives a short relative time from
+   *  `updatedAt` (fallback `lastMessageAt`) when it's absent; the widget-box
+   *  `ConversationPanel` list view (owner rework, 2026-08-26) renders it as the
+   *  one-line last-message preview under the title instead — that view always
+   *  computes its own right-aligned relative time from `updatedAt` separately,
+   *  since a box that size has no room for a third line. `localStorageStore`
+   *  writes it as the ~80-char truncated last-message preview on every save
+   *  (`primitives/conversation-store.ts`). */
   trailing?: string;
+  /** ISO timestamp of when this conversation was last SEEN by the visitor
+   *  (widened additively, 2026-08-26 — unread indicators; no existing field
+   *  fit, since `trailing`/`lastMessageAt`/`updatedAt` are all content-timing
+   *  facts, not viewing-state). Unread = `updatedAt` is later than this.
+   *  Written by `ConversationStore.markRead` (see that doc for exactly when
+   *  and for the decide-loudly default when a store never implements it —
+   *  an absent `lastReadAt` reads as "not unread," never as "definitely
+   *  unread," so a store that doesn't support the concept at all simply
+   *  never shows an indicator rather than guessing). Round-tripped through
+   *  `list()`/`save()`; never author this by hand. */
+  lastReadAt?: string;
 }
 
 export interface ConversationGroup {

@@ -493,13 +493,43 @@ function emitIndexHtml(c: Construct): string {
 
 function emitElement(c: Construct): string {
   const accent = c.theme?.accent;
-  if (!accent) {
+  const unreadColor = c.theme?.unreadColor;
+  if (!accent && !unreadColor) {
     // `empty` (Task 14) composes straight into ChatThread's own `emptyContent`
     // prop now (see emitEmptyContentProp's doc) — a plain JSX value passed down
     // through App, not a Portal onto the host — so the facade needs no `ctx` and
     // every construct, `empty` declared or not, keeps this line byte-for-byte
     // unchanged.
     const facade = '() => <App />';
+    return `import { defineWebComponent } from '@kitn.ai/ui/define';
+import { App } from './App';
+
+// The one facade. Interior stays pure Solid (no nested element registrations);
+// the kit CSS is injected into the shadow root by defineWebComponent itself.
+defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' | 'auto' }, ${facade});
+`;
+  }
+
+  // `unreadColor` (owner ruling, 2026-08-26 — unread-indicator round) gets the
+  // exact same setProperty treatment as `accent` below — construct-authored/
+  // untrusted text, JSON.stringify'd at its one interpolation site, carried via
+  // `ctx.element.style.setProperty` rather than interpolated into CSS text (so
+  // it can never break out into a new declaration/rule) — but with NO paired
+  // -foreground computation: unlike the primary accent, --color-unread never
+  // sits behind text, only inside small filled dots (list-row/header/Dock
+  // badge), so there is nothing to contrast-pair against. Emitted
+  // unconditionally alongside accent's setProperty call when present, even if
+  // `accent` itself is absent — this branch is reached whenever EITHER is set.
+  const unreadColorSetProperty = unreadColor
+    ? `\n  ctx.element.style.setProperty('--kai-color-unread', ${JSON.stringify(unreadColor)});`
+    : '';
+
+  if (!accent) {
+    // unreadColor-only construct: no accent, so none of the contrast-pairing
+    // machinery below applies — just the one setProperty call and `ctx`.
+    const facade = `(_props, ctx) => {${unreadColorSetProperty}
+  return <App />;
+}`;
     return `import { defineWebComponent } from '@kitn.ai/ui/define';
 import { App } from './App';
 
@@ -557,7 +587,7 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
     foregroundCss + `${CONTRAST_COLOR_SUPPORTS} {\n  :host { --kai-color-primary-foreground: contrast-color(var(--kai-color-primary)); }\n}`;
 
   const facade = `(_props, ctx) => {
-  ctx.element.style.setProperty('--kai-color-primary', ${JSON.stringify(accent)});
+  ctx.element.style.setProperty('--kai-color-primary', ${JSON.stringify(accent)});${unreadColorSetProperty}
   return (
     <>
       <style>{${JSON.stringify(styleText)}}</style>
@@ -582,10 +612,11 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
 
 function emitApp(c: Construct): string {
   if (c.layout === 'custom') return emitCustomApp(c);
-  return `${emitSolidJsImport(c)}import { ChatThread, createKaiChat${emitLayoutImport(c)}${emitCardComponentImport(c)}${emitEmptyComponentImport(c)}${emitHeaderCloseImport(c)} } from '@kitn.ai/ui/solid';
-import type { AttachmentData${emitHistoryTypeImport(c)} } from '@kitn.ai/ui/solid';
+  return `${emitSolidJsImport(c)}${emitConversationsSignalsImport(c)}import { ChatThread, createKaiChat${emitLayoutImport(c)}${emitCardComponentImport(c)}${emitEmptyComponentImport(c)}${emitHeaderCloseImport(c)} } from '@kitn.ai/ui/solid';
+import type { AttachmentData${emitHistoryTypeImport(c)}${emitConversationsResetTypeImport(c)} } from '@kitn.ai/ui/solid';
 ${emitProviderImports(c)}
 ${emitCardsImport(c)}
+${emitConversationsImport(c)}
 
 ${emitProviderSetup(c)}
 ${emitHistorySetup(c)}
@@ -654,9 +685,26 @@ ${emitHistorySetup(c)}
 //     emitDockCloseVar/emitHeaderEndContentProp's docs. No header means no
 //     row for it to sit in, so that case is untouched and Dock's own built-in
 //     mobile X keeps covering it.
+//   - conversations (Task 5): gated via ChatThread's own \`conversations\`/
+//     \`store\` props (kit-owned end to end — the prior-conversations list,
+//     list/load/save, autosave on every \`chat.messages()\` change). Requires
+//     capabilities.history persistence \`local\` or \`endpoint\` (schema
+//     superRefine, C-4) and SUBSUMES this file's hand-rolled history effect
+//     when on — see emitHistorySetup's own doc for the persistence-ownership
+//     decision: the store prop is the ONLY persistence mechanism emitted,
+//     never both. ChatThread never mutates \`messages\` itself, so
+//     \`onConversationLoad\` is ALSO wired here (\`chat.setMessages(() =>
+//     messages)\`) — without it, select/new/mount-restore all update
+//     ChatThread's own internal view/list state while the rendered thread
+//     never changes (see emitConversationsProps's own doc for the Task 6
+//     live-browser bug this fixes).
+//   - conversations + widget (owner follow-up): closing the widget while its
+//     list view is open must not leave it there for the next open — see
+//     widgetHasConversationsChrome/emitDockOnOpenChangeProp's docs. Wired only
+//     for \`widget\`, the one layout with something that closes/reopens at all.
 export function App() {
-${emitDockCloseVar(c, '  ')}  return (
-${emitLayoutOpen(c)}${emitSlots(c.slots, '      ')}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitHeaderProp(c)}${emitHeaderEndContentProp(c)}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitReasoningOpenProp(c)}${emitEmptyContentProp(c)}${emitCardTypesProp(c)} />
+${emitDockCloseVar(c, '  ')}${emitChatControllerVar(c, '  ')}${emitConversationsSignalsVar(c, '  ')}  return (
+${emitLayoutOpen(c)}${emitSlots(c.slots, '      ')}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitHeaderProp(c)}${emitHeaderEndContentProp(c)}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitReasoningOpenProp(c)}${emitEmptyContentProp(c)}${emitCardTypesProp(c)}${emitConversationsProps(c)}${emitChatControllerRefProp(c)}${emitChatThreadUnreadProps(c)} />
 ${emitLayoutClose(c)}  );
 }
 `;
@@ -683,13 +731,18 @@ ${emitLayoutClose(c)}  );
  * hand, which this format's own rule already commits to (no code-in-JSON).
  *
  * Capability gating: only cards are wired here (`Thread` accepts `cardTypes`
- * natively, same as `ChatThread`). starters/attachments/reasoning are NOT
- * wired for `custom` in v1 — `Thread`/`PromptInput` don't carry the kit's own
- * plumbing for those (they live inside `ChatThread`'s composer), and
- * hand-rolling a second copy here is exactly the restatement this file
- * avoids everywhere else. Decided loudly in the emitted comment below, not
- * silently: this is the eject artifact, so a construct author who needs one
- * of them on `custom` adds it directly to the plain Solid file they now own.
+ * natively, same as `ChatThread`). starters/attachments/reasoning/
+ * reasoningOpen/header.title/empty/conversations are NOT wired for `custom`
+ * in v1 — `Thread`/`PromptInput` don't carry the kit's own plumbing for
+ * those (they live inside `ChatThread`'s composer, or — for conversations —
+ * ChatThread itself owns the list/load/save wiring), and hand-rolling a
+ * second copy here is exactly the restatement this file avoids everywhere
+ * else. Decided loudly in the emitted comment below, not silently: this is
+ * the eject artifact, so a construct author who needs one of them on
+ * `custom` adds it directly to the plain Solid file they now own.
+ * capabilities.history persistence itself IS still honored on `custom` (the
+ * hand-rolled effect below), independent of whether conversations is also
+ * set — see emitHistorySetup's own doc for why `custom` keeps it.
  */
 function emitCustomApp(c: Construct): string {
   const slots = c.slots ?? [];
@@ -708,8 +761,8 @@ ${emitHistorySetup(c)}
 // layout: custom — minimal chrome, no ChatThread/Dock/PaneGroup. The bare
 // spine (Thread + PromptInput) plus the declared slots, positioned by hand so
 // YOU own the surrounding DOM. Capabilities beyond the spine (starters,
-// attachments, reasoning display-mode, reasoningOpen, header.title, empty)
-// are NOT wired here in v1 — this file is the eject artifact; add them the
+// attachments, reasoning display-mode, reasoningOpen, header.title, empty,
+// conversations) are NOT wired here in v1 — this file is the eject artifact; add them the
 // way ChatThread composes them (components/chat-thread.tsx in the kit's own
 // source) if this construct needs them on a custom layout.
 export function App() {
@@ -820,6 +873,110 @@ function widgetHasHeaderClose(c: Construct): boolean {
   return c.layout === 'widget' && !!c.header?.title;
 }
 
+/** `widget` layout with `capabilities.conversations` on: whether the widget
+ *  needs the close-resets-the-list-view wiring below (owner follow-up,
+ *  2026-08-26 — closing the widget while its conversations list was open
+ *  left `ChatThread`'s internal `view` state at `'list'`, so the NEXT open
+ *  landed back on the list instead of the default chat screen). Only
+ *  `widget` has a `Dock` to close/reopen at all; every other layout renders
+ *  ChatThread inline with nothing that ever hides it, so the regression
+ *  can't occur there and nothing is emitted for them.
+ *
+ *  ALSO gates unread indicators (owner round, 2026-08-26): the FAB's `Dock
+ *  unread` badge and `ChatThread`'s own `hostOpen` prop both need the exact
+ *  same `dockOpen` tracking this reset wiring already needs, and both need
+ *  the same "is there even a Dock to reflect this on" condition — one gate,
+ *  reused, rather than two nearly-identical predicates drifting apart. */
+function widgetHasConversationsChrome(c: Construct): boolean {
+  return c.layout === 'widget' && !!c.capabilities?.conversations;
+}
+
+/** Declares the closure `emitChatControllerRefProp`/`emitDockOnOpenChangeProp`
+ *  share: `ChatThread`'s own `controllerRef` (chat-thread.tsx) hands back a
+ *  `ChatThreadController` — the existing imperative seam, not a new one — and
+ *  this captures it so `Dock`'s `onOpenChange` (a sibling prop on a sibling
+ *  element, not a ChatThread descendant) can call
+ *  `closeConversationsList()` on it. Declared inside `App()`, not at module
+ *  scope, for the same instance-isolation reason as `emitDockCloseVar`. */
+function emitChatControllerVar(c: Construct, indent: string): string {
+  return widgetHasConversationsChrome(c) ? `${indent}let chatController: ChatThreadController | undefined;\n` : '';
+}
+
+/** Threads `emitChatControllerVar`'s closure onto `<ChatThread controllerRef>`. */
+function emitChatControllerRefProp(c: Construct): string {
+  return widgetHasConversationsChrome(c) ? ' controllerRef={(api) => (chatController = api)}' : '';
+}
+
+/** `Dock`'s own `onOpenChange` (ui/dock.tsx) already fires on EVERY close
+ *  path — the header X, the launcher toggle, and Escape all resolve through
+ *  its single `setOpen` — so wiring it once here covers all three with no
+ *  per-path duplication (the alternative `emitDockCloseVar`/`dockClose`
+ *  closure above only covers the header-X path, which is why that one isn't
+ *  reused for this). The reset half fires ONLY on the close transition
+ *  (`!open`) — opening needs no action there, the list stays gone until the
+ *  visitor taps the toggle again, and a mid-open reset call would fight
+ *  anyone still viewing the list. `setDockOpen(open)` fires on BOTH
+ *  transitions unconditionally — it's a plain mirror of Dock's own state
+ *  into a signal `ChatThread`'s `hostOpen` prop can read (see
+ *  `emitConversationsSignalsVar`'s doc for why a signal, not a variable). */
+function emitDockOnOpenChangeProp(c: Construct): string {
+  return widgetHasConversationsChrome(c)
+    ? ' onOpenChange={(open) => { setDockOpen(open); if (!open) chatController?.closeConversationsList(); }}'
+    : '';
+}
+
+/** `ChatThreadController` is needed only when `emitChatControllerVar` above
+ *  declares a variable of that type — appended onto the same `import type`
+ *  statement as `AttachmentData`/`ChatMessage`, never a second import
+ *  statement for the module (same convention as `emitHistoryTypeImport`). */
+function emitConversationsResetTypeImport(c: Construct): string {
+  return widgetHasConversationsChrome(c) ? ', ChatThreadController' : '';
+}
+
+/** `createSignal` import for `emitConversationsSignalsVar`'s two signals.
+ *  Deliberately its OWN `import { createSignal } from 'solid-js'` line, not
+ *  folded onto `emitSolidJsImport`'s: that one imports `createEffect` for the
+ *  hand-rolled history-restore effect, which is UNEMITTED whenever
+ *  `capabilities.conversations` is on (conversations subsumes persistence —
+ *  see that function's own doc) — so for every construct this function
+ *  actually fires for, `emitSolidJsImport` is already returning `''` and
+ *  there's nothing to fold onto. */
+function emitConversationsSignalsImport(c: Construct): string {
+  return widgetHasConversationsChrome(c) ? `import { createSignal } from 'solid-js';\n` : '';
+}
+
+/** Declares the two signals `Dock`'s `onOpenChange` (above) writes and
+ *  `ChatThread`'s `hostOpen`/`onUnreadChange` props (below) read/write:
+ *  `dockOpen` mirrors whether the panel is currently open — a SIGNAL, not a
+ *  plain closure variable like `dockClose`/`chatController` above, because
+ *  `ChatThread` reads it REACTIVELY every render (`hostOpen={dockOpen()}`),
+ *  not just calls it imperatively on an event; `anyUnread` is the reverse
+ *  direction, `ChatThread` writing outward via `onUnreadChange={setAnyUnread}`
+ *  so `Dock`'s own `unread` prop (ui/dock.tsx — already exists, already
+ *  tested, no change needed there) can mirror it onto the FAB.
+ *  `dockOpen`'s initial value matches `widget.defaultOpen` (mirroring
+ *  `emitDockDefaultOpen`'s own read of the same field) — a widget that opens
+ *  by default has to start "seen", or a message arriving before the first
+ *  `onOpenChange` fire would look like it happened while closed. */
+function emitConversationsSignalsVar(c: Construct, indent: string): string {
+  if (!widgetHasConversationsChrome(c)) return '';
+  const w = c.layout === 'widget' ? c.widget : undefined;
+  const defaultOpen = w?.defaultOpen === true ? 'true' : 'false';
+  return `${indent}const [dockOpen, setDockOpen] = createSignal(${defaultOpen});\n${indent}const [anyUnread, setAnyUnread] = createSignal(false);\n`;
+}
+
+/** Threads the two signals above onto `<ChatThread hostOpen>`/
+ *  `<ChatThread onUnreadChange>`. */
+function emitChatThreadUnreadProps(c: Construct): string {
+  return widgetHasConversationsChrome(c) ? ' hostOpen={dockOpen()} onUnreadChange={setAnyUnread}' : '';
+}
+
+/** Threads `anyUnread` onto `Dock`'s own (pre-existing, unchanged) `unread`
+ *  prop — the FAB's badge while closed. */
+function emitDockUnreadProp(c: Construct): string {
+  return widgetHasConversationsChrome(c) ? ' unread={anyUnread()}' : '';
+}
+
 /** The local closure `emitHeaderEndContentProp`/`emitDockControllerRef` share:
  *  Dock's `controllerRef` hands back `{ open, setOpen }` (ui/dock.tsx) — the
  *  existing imperative seam, not a new one — and this captures `setOpen`
@@ -916,22 +1073,91 @@ function emitReasoningOpenProp(c: Construct): string {
   return c.capabilities?.reasoningOpen === true ? ' reasoningOpen={true}' : '';
 }
 
+/** capabilities.conversations -> ChatThread's own `conversations`/`store`
+ *  props (C-8: this is the ONLY logic codegen contributes — everything else
+ *  is kit code behind ChatThread). `local` persistence wires
+ *  localStorageStore(name[, userId]); `endpoint` wires fetchStore(url[,
+ *  userId]) — both re-exported from @kitn.ai/ui/solid, never hand-rolled
+ *  here (composition-over-reauthoring, same discipline as every other
+ *  capability in this file). `c.name` is validated against TAG_RE
+ *  (schema.ts — lowercase, hyphenated, a valid custom-element tag), so like
+ *  the other `'${c.name}'` interpolation sites in this file (defineWebComponent,
+ *  the preview HTML's element tag) it is embedded directly rather than
+ *  JSON.stringify'd. userId/url ARE construct-authored/untrusted free text,
+ *  JSON.stringify'd at their one interpolation site like theme.accent. The
+ *  schema's superRefine (C-4) guarantees history is present with persistence
+ *  'local' or 'endpoint' whenever conversations is true, so no further guard
+ *  is needed here.
+ *
+ *  BUG FIX (Task 6 live-browser demo, both defects traced to one root cause):
+ *  `conversations`/`store` alone only drive ChatThread's OWN internal
+ *  view/list/activeId state machine — select/new/mount-restore all resolve
+ *  through `store.load()`/a cleared array, but ChatThread never mutates
+ *  `props.messages` itself (doc comment on `onConversationLoad`, chat-thread.tsx
+ *  line ~144: "this component does not mutate props.messages itself"). Without
+ *  `onConversationLoad` wired back to this app's own `chat` store, every
+ *  load/new/restore updated ChatThread's internal bookkeeping (active id, list
+ *  entry) while the actually-rendered `chat.messages()` never changed — the
+ *  exact silent-drop class this codebase's CLAUDE.md calls out ("decide
+ *  loudly"), except here the drop was an OMITTED wire, not a decision: "+ New
+ *  conversation" appeared to do nothing (same messages kept rendering) and a
+ *  reload's mount-time auto-restore updated the list's active row but left the
+ *  chat view on the empty/welcome screen. `chat.setMessages(() => messages)`
+ *  closes the loop — ChatThread already hands back a FRESH array reference on
+ *  every call (`[...messages]` at both call sites in chat-thread.tsx), so no
+ *  extra clone is needed here; the updater-returns-new-array form is what the
+ *  reactivity contract (CLAUDE.md) requires and is what emitHistorySetup's
+ *  own hand-rolled local/endpoint restore already did before conversations
+ *  subsumed it. */
+function emitConversationsProps(c: Construct): string {
+  if (!c.capabilities?.conversations) return '';
+  const history = c.capabilities.history;
+  const storeCall =
+    history?.persistence === 'endpoint'
+      ? `fetchStore(${JSON.stringify(history.url)}${c.userId ? `, ${JSON.stringify(c.userId)}` : ''})`
+      : `localStorageStore('${c.name}'${c.userId ? `, ${JSON.stringify(c.userId)}` : ''})`;
+  return ` conversations={true} store={${storeCall}} onConversationLoad={(messages) => chat.setMessages(() => messages)}`;
+}
+
+/** A dedicated named import for whichever store constructor
+ *  emitConversationsProps used — its own statement (mirrors emitCardsImport's
+ *  own `import { cards } from './cards'` line) rather than spliced onto the
+ *  ChatThread import list, so noUnusedLocals never trips when conversations
+ *  is absent. */
+function emitConversationsImport(c: Construct): string {
+  if (!c.capabilities?.conversations) return '';
+  const name = c.capabilities.history?.persistence === 'endpoint' ? 'fetchStore' : 'localStorageStore';
+  return `import { ${name} } from '@kitn.ai/ui/solid';`;
+}
+
 /** capabilities.history -> whether the App module needs `createEffect`
  *  (both persisted variants react to `chat.messages()` changing; `none`/
  *  absent needs no extra Solid import at all, matching the off-by-default
- *  gating everywhere else in this file). */
+ *  gating everywhere else in this file).
+ *
+ *  capabilities.conversations SUBSUMES this on every layout EXCEPT `custom`
+ *  (CU-1: conversations is one of the capabilities excluded from the custom
+ *  layout's escape hatch, so custom never wires the store-based path and
+ *  must keep this hand-rolled one). Where it applies, ChatThread's own
+ *  conversations feature owns persistence entirely through the `store` prop
+ *  (see emitHistorySetup's doc for the full decision) and this file's
+ *  hand-rolled effect is never emitted, so it needs no `createEffect` import
+ *  either — gate the same way. */
 function emitSolidJsImport(c: Construct): string {
   const history = c.capabilities?.history;
-  if (!history || history.persistence === 'none') return '';
+  if (!history || history.persistence === 'none' || (c.layout !== 'custom' && c.capabilities?.conversations)) return '';
   return `import { createEffect } from 'solid-js';\n`;
 }
 
 /** capabilities.history -> whether the AttachmentData type import also needs
  *  ChatMessage (only the persisted variants read/write full ChatMessage[]
- *  arrays). */
+ *  arrays). Gated off when capabilities.conversations subsumes persistence
+ *  (see emitSolidJsImport's doc — same `layout !== 'custom'` condition) for
+ *  the same reason: the hand-rolled block that used this type is never
+ *  emitted there. */
 function emitHistoryTypeImport(c: Construct): string {
   const history = c.capabilities?.history;
-  if (!history || history.persistence === 'none') return '';
+  if (!history || history.persistence === 'none' || (c.layout !== 'custom' && c.capabilities?.conversations)) return '';
   // The enclosing statement is already `import type { ... }` (AttachmentData),
   // so this must NOT repeat the `type` modifier inside the braces — `import
   // type { AttachmentData, type ChatMessage }` is a TS syntax error.
@@ -991,6 +1217,28 @@ function emitUserIdHeaderEntry(c: Construct): string {
 function emitHistorySetup(c: Construct): string {
   const history = c.capabilities?.history;
   if (!history || history.persistence === 'none') return '';
+
+  // PERSISTENCE-OWNERSHIP DECISION (Task 5): capabilities.conversations
+  // SUBSUMES this hand-rolled block entirely. ChatThread's own conversations
+  // feature (chat-thread.tsx) already autosaves the current thread on every
+  // `chat.messages()` change through whatever ConversationStore its `store`
+  // prop wires — localStorageStore(name) for `local`, fetchStore(url) for
+  // `endpoint` (see emitConversationsProps below), the SAME "keyed by
+  // construct name, local browser storage or a fetch endpoint" mechanism this
+  // block hand-rolls for a single anonymous thread via THREAD_KEY/fetch. With
+  // conversations on there is a real conversation id to save under (the store
+  // contract), so the store path is strictly more correct, not just
+  // redundant. Emitting both would persist through two independent
+  // mechanisms on every change — not corrupting, but wasteful, confusing to
+  // read, and exactly the kind of restatement this file avoids elsewhere
+  // (see emitApp's header comment) — so this function contributes NOTHING
+  // when capabilities.conversations is set: the store prop is the ONE
+  // persistence mechanism in the emitted App. This does NOT apply to the
+  // `custom` layout — CU-1 excludes conversations from custom's escape
+  // hatch (emitCustomApp never calls emitConversationsProps), so custom
+  // must keep this hand-rolled block as its only persistence mechanism even
+  // when capabilities.conversations is set on the construct.
+  if (c.layout !== 'custom' && c.capabilities?.conversations) return '';
 
   if (history.persistence === 'local') {
     const key = JSON.stringify(c.userId ? `kai:${c.name}:${c.userId}:thread` : `kai:${c.name}:thread`);
@@ -1159,7 +1407,7 @@ async function submit(detail: { value: string; attachments: AttachmentData[] }) 
 function emitLayoutImport(c: Construct): string {
   switch (c.layout) {
     case 'widget':
-      return ', Dock';
+      return `, Dock${hasLauncherIcon(c) ? ', DockLauncherImage' : ''}`;
     case 'split':
       return ', WorkspaceShell';
     case 'fullscreen':
@@ -1240,15 +1488,28 @@ function emitDockPosition(c: Construct): string {
   return w?.position ? ` position="${w.position}"` : '';
 }
 
-/** widget.launcherIcon -> Dock's `launcher` prop, replacing the built-in
- *  closed-state glyph with an <img>. launcherIcon is construct-authored/
- *  untrusted text (like theme.accent/provider.url elsewhere in this file),
- *  so it is JSON.stringify'd into a real JS string-literal expression, never
- *  interpolated into a raw JSX attribute string. */
+/** Whether `widgetHasLauncherIcon` (see below) needs the extra import — its
+ *  own named predicate so `emitLayoutImport`'s `widget` case reads plainly. */
+function hasLauncherIcon(c: Construct): boolean {
+  return c.layout === 'widget' && !!c.widget?.launcherIcon;
+}
+
+/** widget.launcherIcon -> Dock's `launcher` prop, via `DockLauncherImage`
+ *  (ui/dock.tsx) rather than a hand-rolled `<img>`: a construct-authored URL
+ *  is exactly as capable of 404ing as any other network fetch (this is what
+ *  the fix report found — `kai dev`'s own `owner-widget` fixture pinned a
+ *  `https://example.com/logo.png` placeholder that never resolved, so the
+ *  FAB rendered a permanently broken image), and `DockLauncherImage` is the
+ *  kit's own tested graceful-degradation component for exactly that,
+ *  falling back to the built-in glyph on load failure. launcherIcon is
+ *  construct-authored/untrusted text (like theme.accent/provider.url
+ *  elsewhere in this file), so it is JSON.stringify'd into a real JS
+ *  string-literal expression, never interpolated into a raw JSX attribute
+ *  string. */
 function emitDockLauncher(c: Construct): string {
   const w = c.layout === 'widget' ? c.widget : undefined;
   if (!w?.launcherIcon) return '';
-  return ` launcher={<img src={${JSON.stringify(w.launcherIcon)}} alt="" style={{ width: '24px', height: '24px', 'border-radius': '9999px' }} />}`;
+  return ` launcher={<DockLauncherImage src={${JSON.stringify(w.launcherIcon)}} />}`;
 }
 
 /** widget.defaultOpen -> Dock's own `defaultOpen` prop. Only `true` costs a
@@ -1262,7 +1523,7 @@ function emitDockDefaultOpen(c: Construct): string {
 function emitLayoutOpen(c: Construct): string {
   switch (c.layout) {
     case 'widget':
-      return `    <Dock label="${c.name}"${emitDockPosition(c)}${emitDockLauncher(c)}${emitDockDefaultOpen(c)}${emitDockHideClose(c)}${emitDockControllerRef(c)}>\n`;
+      return `    <Dock label="${c.name}"${emitDockPosition(c)}${emitDockLauncher(c)}${emitDockDefaultOpen(c)}${emitDockHideClose(c)}${emitDockControllerRef(c)}${emitDockOnOpenChangeProp(c)}${emitDockUnreadProp(c)}>\n`;
     case 'fullscreen':
       return `    <div style={{ height: '100dvh', display: 'flex', 'flex-direction': 'column' }}>\n`;
     case 'aside':

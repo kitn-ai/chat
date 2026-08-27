@@ -32,6 +32,29 @@ export function relativeTimeShort(iso?: string, now: number = Date.now()): strin
 }
 
 /**
+ * Whether a conversation should show an unread indicator (owner round,
+ * 2026-08-26). `lastReadAt`'s own doc (`types.ts`) has the full contract;
+ * this is the one place that reads it, so both list surfaces (this file's
+ * `ConversationItem` and the widget-box `ConversationPanel`) derive it
+ * identically rather than each restating the comparison.
+ *
+ * Absent `lastReadAt` reads as NOT unread — the decide-loudly default for a
+ * store that never implements `ConversationStore.markRead` at all (every
+ * summary it returns leaves the field undefined forever, so this always
+ * returns `false` for it) rather than guessing "probably unread" from a
+ * signal the store never actually provided. Defensive `Date.parse`, same
+ * pattern as `relativeTimeShort` above: an unparsable date reads as not
+ * unread rather than throwing.
+ */
+export function isConversationUnread(conv: Pick<ConversationSummary, 'updatedAt' | 'lastReadAt'>): boolean {
+  if (!conv.lastReadAt) return false;
+  const updated = Date.parse(conv.updatedAt);
+  const read = Date.parse(conv.lastReadAt);
+  if (Number.isNaN(updated) || Number.isNaN(read)) return false;
+  return updated > read;
+}
+
+/**
  * The slotted-item shape rendered by `<kai-conversation-item>` — the composed
  * row of the consumer-owned loop. Distinct from the
  * data-mode `ConversationItem` above, which batteries mode keeps rendering

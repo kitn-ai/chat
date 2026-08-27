@@ -376,3 +376,36 @@ describe('userId', () => {
     expect(out.ok).toBe(false);
   });
 });
+
+describe('capabilities.conversations (C-4)', () => {
+  const base = { name: 'acme-support', layout: 'widget', provider: { mode: 'mock' } } as const;
+
+  it('accepts conversations: true when history persistence is local', () => {
+    const out = validateConstruct({
+      ...base,
+      capabilities: { conversations: true, history: { persistence: 'local' } },
+    });
+    expect(out.ok).toBe(true);
+  });
+
+  it('rejects conversations: true with no history persistence configured — loud, pathed', () => {
+    const out = validateConstruct({ ...base, capabilities: { conversations: true } });
+    expect(out.ok).toBe(false);
+    if (!out.ok) {
+      expect(out.problems.some((p) => p.path === 'capabilities.conversations')).toBe(true);
+    }
+  });
+
+  it('rejects conversations: true with history.persistence "none"', () => {
+    const out = validateConstruct({
+      ...base,
+      capabilities: { conversations: true, history: { persistence: 'none' } },
+    });
+    expect(out.ok).toBe(false);
+  });
+
+  it('rejects conversations: false — the vocabulary is presence-only, matching every other true-only capability flag in this schema', () => {
+    const out = validateConstruct({ ...base, capabilities: { conversations: false } });
+    expect(out.ok).toBe(false);
+  });
+});

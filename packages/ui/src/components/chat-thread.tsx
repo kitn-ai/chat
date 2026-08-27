@@ -1,4 +1,4 @@
-import { createSignal, createEffect, createMemo, For, Show, onMount } from 'solid-js';
+import { createSignal, createEffect, createMemo, For, Show, onMount, untrack } from 'solid-js';
 import { ChatConfig, useChatConfig } from '../primitives/chat-config';
 import { type ComposerDoc, normalizeValue, serializeToText } from '../primitives/composer-model';
 import { ChatContainer, ChatContainerContent, ChatContainerScrollAnchor } from './chat-container';
@@ -20,6 +20,12 @@ import type { ModelOption } from '../types';
 import type { CardComponentMap } from '../primitives/card-registry';
 import type { CardSchemaMap } from './card-renderer';
 import type { JSX } from 'solid-js';
+import type { ConversationStore } from '../primitives/conversation-store';
+import { ConversationPanel } from './conversation-panel';
+import { isConversationUnread } from './conversation-item';
+import type { ConversationSummary } from '../types';
+import { MessagesSquare, ArrowLeft } from 'lucide-solid';
+import { Button } from '../ui/button';
 
 export interface ChatThreadContextUsage {
   usedTokens: number;
@@ -120,6 +126,66 @@ export interface ChatThreadProps {
    *  toward `showHeader()` the same as `headerEnd`, so a construct with no title
    *  and only this content still gets a header row to sit in. */
   headerEndContent?: JSX.Element;
+  /** Turns on the prior-conversations list: a list-toggle button appears in
+   *  the header row and the panel gains a second, list, view (C-1 — one
+   *  panel, two states, never a persistent sidebar). Off by default, same
+   *  convention as every other capability in this file. Requires BOTH
+   *  `store` AND `onConversationLoad` — the second is the only path a caller
+   *  has to actually receive a loaded conversation's messages back (this
+   *  component never mutates `props.messages` itself). Set with either
+   *  missing, the feature decides loudly (one `console.error` on mount) and
+   *  stays visually off rather than throwing or silently going inert: a
+   *  `store` with no `onConversationLoad` would otherwise make row-select/
+   *  new/restore fire and do nothing visible, and mount's own auto-restore
+   *  would still stamp an active conversation id that the save effect could
+   *  then clobber with whatever `props.messages` the caller drives in next. */
+  conversations?: boolean;
+  /** The adapter this thread persists through when `conversations` is on:
+   *  `list()` on mount and on every list-view open, `load(id)` on row select,
+   *  `save(id, messages)` on every message-array change for the active
+   *  conversation. A kit-owned INTERFACE (C-3) — the dev owns invocation,
+   *  transport, auth and retention entirely; `localStorageStore`/`fetchStore`
+   *  (`@kitn.ai/ui`'s `primitives/conversation-store`) are the shipped
+   *  built-ins. Set as a JS property; never expressible as an attribute (an
+   *  adapter is a live object of functions, not scalar data). */
+  store?: ConversationStore;
+  /** Fires whenever `load(id)` resolves and this thread's `messages` are
+   *  about to be replaced with that conversation's history — the hook a
+   *  caller uses to actually own and re-render `messages` (this component
+   *  does not mutate `props.messages` itself; C-8 keeps the state machine
+   *  here but the message ARRAY stays the caller's own state, matching every
+   *  other prop in this file). The second argument is the conversation's id
+   *  — `undefined` for the "new conversation" case (C-6: no id exists until
+   *  the first message mints one). Required whenever `conversations` is on;
+   *  see that prop's own doc for the guard this component runs without it. */
+  onConversationLoad?: (messages: ChatMessage[], id?: string) => void;
+  /** Whether the surrounding chrome that HOSTS this thread is currently
+   *  VISIBLE to the visitor — e.g. a docked widget's open/closed state.
+   *  `ChatThread` has no knowledge of whatever hosts it (a `Dock`, a plain
+   *  page, anything — same boundary `closeConversationsList` documents), so
+   *  this is the seam: a host that can hide itself sets it, everyone else
+   *  leaves it unset.
+   *
+   *  Meaningful only when `conversations` is on, where it's the third leg of
+   *  "seen" (owner round, 2026-08-26 — unread indicators): the active
+   *  conversation counts as seen, and gets `store.markRead` called for it,
+   *  only while it's ALSO the active conversation AND the chat view (not the
+   *  list) is showing AND this is true. Undeclared/`true` (the default) means
+   *  "always visible" — correct for every layout with no show/hide concept at
+   *  all (fullscreen/aside/split/custom) and for any widget consumer that
+   *  doesn't wire it, which just means unread never distinguishes "closed"
+   *  from "open" for them (a smaller inaccuracy than the alternative: without
+   *  this leg, a message arriving to the active conversation while the
+   *  widget is actually closed would get silently marked read behind the
+   *  visitor's back, purely because it happened to be the active id). */
+  hostOpen?: boolean;
+  /** Fires whenever "is any OTHER conversation (not the active one) unread"
+   *  changes — the value this thread already renders as a dot on its own
+   *  header toggle, reported outward so a sibling control with no view into
+   *  `ChatThread`'s internal conversation-summary state (a `Dock`'s own
+   *  `unread` prop, say) can mirror it. Only meaningful with `conversations`
+   *  on; never fires otherwise. */
+  onUnreadChange?: (unread: boolean) => void;
   // ── Composition slots ─────────────────────────────────────────────────────
   // Each flag below is set by the `<kai-chat>` facade when matching light-DOM
   // `slot="…"` content is projected, and gates one composition slot. Two kinds:
@@ -199,6 +265,19 @@ export interface ChatThreadController {
   clear(): void;
   send(): void;
   scrollToBottom(behavior?: ScrollBehavior): void;
+  /** Force the conversations view back to `'chat'` (a no-op if it's already
+   *  there, or if `conversations` isn't on). ChatThread has no knowledge of
+   *  whatever chrome hosts it — a `Dock`, a plain page, anything — so it
+   *  cannot know when that host closes. The seam is this one imperative
+   *  call: a host that can go from visible to hidden and back (the `kai-dock`
+   *  widget being the motivating case) calls it on every hide, so the NEXT
+   *  open always lands on the chat view rather than wherever the list was
+   *  left (owner: reopening the widget should show the default screen, not
+   *  a stale list view). `Dock`'s own `onOpenChange` already fires on every
+   *  close path — header X, the launcher toggle, and Escape — so a single
+   *  `onOpenChange={(open) => !open && controller.closeConversationsList()}`
+   *  at the call site covers all three with no per-path wiring. */
+  closeConversationsList(): void;
 }
 
 /**
@@ -278,6 +357,227 @@ export function ChatThread(props: ChatThreadProps) {
   });
   const [internal, setInternal] = createSignal<string | ComposerDoc>(props.value ?? '');
   const [attachments, setAttachments] = createSignal<AttachmentData[]>([]);
+  // ── Conversations (C-1..C-9) ────────────────────────────────────────────
+  const [view, setView] = createSignal<'chat' | 'list'>('chat');
+  const [conversationSummaries, setConversationSummaries] = createSignal<ConversationSummary[]>([]);
+  const [activeConversationId, setActiveConversationId] = createSignal<string | undefined>(undefined);
+  const conversationsReady = () => props.conversations === true && props.store != null && props.onConversationLoad != null;
+  // Set right before a load/restore hands its messages to the caller via
+  // `onConversationLoad`, and consumed (read-then-cleared) by the very next
+  // run of the save effect below. Plain closure variable, not a signal: it
+  // gates a single effect run rather than driving any render, so it needs no
+  // reactivity of its own. See the save effect's own comment for why this
+  // exists (IMPORTANT-1, 2026-08-26 final review).
+  let suppressNextSave = false;
+
+  onMount(() => {
+    if (props.conversations && !props.store) {
+      console.error('ChatThread: `conversations` is true but no `store` was provided — the conversations feature needs a ConversationStore to persist to. Staying in chat-only mode.');
+    } else if (props.conversations && props.store && !props.onConversationLoad) {
+      console.error('ChatThread: `conversations` is true but no `onConversationLoad` handler was provided — row-select, "new conversation", and mount auto-restore would have nowhere to deliver the loaded messages, leaving row-tap/new/restore inert (and mount\'s auto-restore would still stamp an active conversation id the save effect could then clobber). Staying in chat-only mode.');
+    }
+  });
+
+  const refreshConversations = async () => {
+    if (!conversationsReady()) return;
+    try {
+      // Fresh array reference every refresh (reactivity contract) — the
+      // adapter already returns a new array per call, so no extra clone is
+      // needed here; the signal write is what notifies <ConversationPanel>.
+      setConversationSummaries(await props.store!.list());
+    } catch (err) {
+      // Note this can run in the BACKGROUND, not just from `openList()`: the
+      // save effect below calls this after every save() to keep the badge
+      // cache fresh, so a transient list() failure here — even while the
+      // visitor is happily mid-conversation, list view never opened — still
+      // snaps `view` back to 'chat'. Harmless when already there; worth
+      // knowing if a future caller ever renders anything conditioned on
+      // `view()` outside this component.
+      console.warn('ChatThread: conversations list() failed; staying in chat-only mode.', err);
+      setView('chat');
+    }
+  };
+
+  const openList = () => { setView('list'); void refreshConversations(); };
+
+  const selectConversation = async (id: string) => {
+    if (!conversationsReady()) return;
+    try {
+      const messages = await props.store!.load(id);
+      setActiveConversationId(id);
+      setView('chat');
+      // IMPORTANT-1 (2026-08-26 final review): the caller is about to hand
+      // this same content straight back in as a new `props.messages`
+      // reference (the reactivity contract requires a fresh array on every
+      // change, load included). Without this flag the save effect below
+      // reads that as "the thread changed," stamps a fresh `updatedAt`, and
+      // calls `store.save()` — phantom-unreading a fully-read conversation
+      // on every reload and, for `fetchStore`, firing a full-thread PUT on
+      // every load for no actual change. Set BEFORE the callback so it's
+      // armed no matter how synchronously the caller re-renders.
+      suppressNextSave = true;
+      // A genuinely new array (never a mutated one) — the reactivity
+      // contract's array-reference rule, satisfied at the caller boundary.
+      props.onConversationLoad?.([...messages], id);
+    } catch (err) {
+      console.warn(`ChatThread: conversations load(${id}) failed.`, err);
+    }
+  };
+
+  const startNewConversation = () => {
+    // C-6: lazy id — no id, no save, until the first message. Clearing the
+    // active id and the message list (via onConversationLoad) is enough; the
+    // id itself is minted the first time the save-on-change effect below
+    // sees a non-empty thread with no active id. No `suppressNextSave` here:
+    // an empty thread already short-circuits the save effect on its own
+    // (`messages.length === 0`), so there is nothing to suppress.
+    setActiveConversationId(undefined);
+    setView('chat');
+    props.onConversationLoad?.([], undefined);
+  };
+
+  createEffect(() => {
+    if (!conversationsReady()) return;
+    const messages = props.messages;
+    if (messages.length === 0) return; // C-6: nothing persists until the first message
+    // IMPORTANT-1: skip exactly the one save that is this same effect firing
+    // on the `props.messages` bounce a load/restore itself caused — see
+    // `suppressNextSave`'s own comment at `selectConversation`. Consumed
+    // (cleared) unconditionally so only that one run is skipped; a genuine
+    // edit right after a load still saves normally.
+    if (suppressNextSave) { suppressNextSave = false; return; }
+    // `untrack` the read: this effect also WRITES activeConversationId (minting
+    // the lazy id below), so a tracked read makes the effect depend on a signal
+    // it sets itself — the write re-triggers the same run and store.save() fires
+    // twice with identical args for a conversation's first message. Reading it
+    // untracked keeps the dependency set to `conversationsReady`/`props.messages`
+    // only; the mint-then-set below still updates the signal (for the toggle
+    // button/list UI) without feeding back into this effect's own re-run.
+    let id = untrack(activeConversationId);
+    if (!id) {
+      id = crypto.randomUUID();
+      setActiveConversationId(id);
+    }
+    props.store!.save(id, messages)
+      // Re-fetch the summary list after every save (not just on mount/list-open):
+      // `anyUnread`/the badge read `conversationSummaries()`, a CACHE that
+      // otherwise only refreshes on those two paths, so a message arriving on
+      // the active conversation while the host is closed (hostOpen === false —
+      // `seenNow` below is false, so `markRead` correctly does NOT fire) would
+      // update the persisted record's `updatedAt` but leave the cached summary
+      // stale, and the badge would never appear until the visitor happened to
+      // open the list. `refreshConversations` already no-ops safely if this
+      // component unmounts mid-flight (`conversationsReady` guard) and handles
+      // its own list() failure (console.warn, degrades to chat-only) — no new
+      // error path here.
+      .then(() => refreshConversations())
+      .catch((err) => {
+        // Decide loudly (spec's degradation section): the thread stays usable,
+        // the failure is surfaced, never a silent no-op.
+        console.error(`ChatThread: conversations save(${id}) failed; the conversation is not persisted for this change.`, err);
+      });
+  });
+
+  // "Seen" (owner round, 2026-08-26, revised in the follow-up review): the
+  // active conversation, AND the chat view (not the list) is showing, AND
+  // the host is open (`hostOpen`, defaulting true — see that prop's doc).
+  // ONE memo, shared by both consumers below, so they cannot drift: the
+  // markRead effect gates on it directly, and `anyUnread` uses it to decide
+  // whether the active conversation is still exempt from the "unread"
+  // badge. Before this fix the two were separately-written conditions that
+  // happened to look alike; `anyUnread` excluded the active id
+  // UNCONDITIONALLY, so a message arriving on the active conversation while
+  // the host was CLOSED (hostOpen === false) — the canonical "agent replied
+  // while your box was shut" case — was dropped from the badge too, even
+  // though it was never marked read (markRead's own gate correctly skips it
+  // while closed). The active id is only a legitimate exclusion when it is
+  // ALSO currently being marked seen.
+  const seenNow = createMemo(
+    () => activeConversationId() !== undefined && view() === 'chat' && props.hostOpen !== false,
+  );
+
+  // Every dependency read here is TRACKED — unlike the save effect above,
+  // nothing in this effect writes any of them, so there's no feedback loop
+  // to guard against with `untrack`. Re-running on every `props.messages`
+  // change is exactly "on new messages arriving while seen holds";
+  // re-running on `activeConversationId`/`view`/`hostOpen` changes is "on
+  // select/restore/host-visibility-change" (the first two resolve through
+  // `selectConversation`, which sets both).
+  createEffect(() => {
+    if (!conversationsReady()) return;
+    const id = activeConversationId();
+    const seen = seenNow();
+    void props.messages; // tracked on purpose: see the comment above
+    if (!seen || id === undefined) return;
+    props.store!.markRead?.(id).catch((err) => {
+      // Decide loudly, matching the save effect above — this degrades to
+      // "unread never clears for this conversation," not a crash.
+      console.error(`ChatThread: conversations markRead(${id}) failed.`, err);
+    });
+  });
+
+  // The header toggle's own dot (rendered below) AND the value reported
+  // outward via onUnreadChange are the SAME computation — a Dock (or any
+  // other sibling control with no view into this thread's internal
+  // conversation-summary state) mirrors it through the callback rather than
+  // reaching in. Excludes the active conversation by id — but ONLY while
+  // `seenNow()` holds. When it doesn't (list view open, or the host is
+  // closed), the active conversation is exactly as unread-eligible as any
+  // other row: nothing has marked it seen, so a message landing on it must
+  // still surface here. `undefined` never matches a real conversation id, so
+  // the exclusion is simply inert (matches nothing) while not seen, rather
+  // than needing a second branch. Also excludes the active id (not by its
+  // possibly-stale lastReadAt) so switching `activeConversationId` — e.g.
+  // selecting a previously-unread row — clears that row's contribution to
+  // this badge immediately, without waiting on a fresh list() round-trip.
+  const anyUnread = createMemo(() =>
+    conversationSummaries().some(
+      (c) => c.id !== (seenNow() ? activeConversationId() : undefined) && isConversationUnread(c),
+    ),
+  );
+  createEffect(() => props.onUnreadChange?.(anyUnread()));
+
+  // Visitor continuity (C-7's whole point): a plain-history construct
+  // auto-restored the visitor's thread on mount, so upgrading to
+  // `conversations` must not regress that — their most recent conversation
+  // (migrated legacy thread included) has to reappear without an extra tap
+  // into the list. Guarded three ways: only when `list()` actually returned
+  // something (a failed list() already degrades to chat-only inside
+  // `refreshConversations`, and an empty store is a brand-new visitor who
+  // gets the empty-chat welcome screen); only when nothing is active yet
+  // (never fights `startNewConversation`/a prior `selectConversation`); and
+  // only when `props.messages` is still empty (a parent that seeded its own
+  // thread owns that choice — never clobber it). Reuses `selectConversation`
+  // so the fresh-array/`onConversationLoad` contract is the same single path
+  // as an explicit row click, and stays in `view() === 'chat'` throughout
+  // (this never opens the list). One more guard: `view()` is re-checked
+  // right before selecting, still 'chat' — mount's own list() and an
+  // impatient caller's own `openList()`/manual navigation racing it (both
+  // just microtask chains over the same synchronous localStorage) can
+  // interleave, and `selectConversation` unconditionally snaps `view` back
+  // to 'chat'; without this a visitor who opened the list before this
+  // resolved would get yanked back out of it.
+  onMount(() => {
+    if (!conversationsReady()) return;
+    void (async () => {
+      await refreshConversations();
+      if (untrack(activeConversationId) !== undefined) return;
+      if (props.messages.length !== 0) return;
+      if (view() !== 'chat') return;
+      const summaries = conversationSummaries();
+      if (summaries.length === 0) return;
+      // Most-recently-updated first. `list()`'s own ordering isn't a
+      // contract (`localStorageStore` returns insertion order, not recency),
+      // so sort defensively by `updatedAt` rather than trusting index [0];
+      // an unparsable/missing date sorts last rather than throwing.
+      const newest = [...summaries].sort((a, b) => {
+        const at = Date.parse(a.updatedAt ?? '');
+        const bt = Date.parse(b.updatedAt ?? '');
+        return (Number.isNaN(bt) ? -Infinity : bt) - (Number.isNaN(at) ? -Infinity : at);
+      })[0];
+      await selectConversation(newest.id);
+    })();
+  });
   // A string `value` is controlled; a ComposerDoc `value` is a one-time seed that
   // lives in `internal` so the user's (string) edits replace it without a fight.
   const current = (): string | ComposerDoc =>
@@ -297,7 +597,7 @@ export function ChatThread(props: ChatThreadProps) {
     if ((props.suggestionMode ?? 'submit') === 'fill') { handleChange(v); props.onSuggestionClick?.(v); }
     else { props.onSubmit?.({ value: v, attachments: attachments() }); afterSubmit(); }
   };
-  const showHeader = () => !!(props.chatTitle || props.models || props.context || props.headerStart || props.headerEnd || props.headerEndContent);
+  const showHeader = () => !!(props.chatTitle || props.models || props.context || props.headerStart || props.headerEnd || props.headerEndContent || conversationsReady());
   // Suggestions are conversation starters: show only on an empty thread unless
   // the host opts into persisting them.
   const visibleSuggestions = () =>
@@ -317,6 +617,7 @@ export function ChatThread(props: ChatThreadProps) {
         const vp = rootEl?.querySelector<HTMLElement>('.overflow-y-auto');
         vp?.scrollTo({ top: vp.scrollHeight, behavior: behavior ?? 'smooth' });
       },
+      closeConversationsList: () => setView('chat'),
     });
   });
 
@@ -370,6 +671,46 @@ export function ChatThread(props: ChatThreadProps) {
                         </ContextContent>
                       </Context>
                     </Show>
+                    {/* A chat-bubble glyph, not the "menu that does nothing" the retrofit
+                        shipped (owner feedback: it "looks like nothing and isn't even
+                        the same size as the X"). Same `Button variant="ghost"
+                        size="icon-sm"` component AND the same 24px icon size as the
+                        widget's own close X (`codegen.ts`'s `headerEndContent` button,
+                        which renders `DockCloseGlyph` = `<X size={24} />`) — identical
+                        hit-area and optical weight, so the two read as siblings.
+                        Swaps to a back arrow while the list is open, returning to chat. */}
+                    <Show when={props.conversations && props.store}>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        class="relative"
+                        data-kai-conversations-toggle
+                        // `aria-label` WINS over any descendant text for a button's
+                        // accessible name, so "unread" has to be folded in here rather
+                        // than in a sr-only sibling span (which AT would never reach).
+                        aria-label={
+                          view() === 'list'
+                            ? 'Back to chat'
+                            : anyUnread() && view() === 'chat'
+                              ? 'Conversations (unread)'
+                              : 'Conversations'
+                        }
+                        onClick={() => (view() === 'list' ? setView('chat') : openList())}
+                      >
+                        <Show when={view() === 'list'} fallback={<MessagesSquare size={24} aria-hidden="true" />}>
+                          <ArrowLeft size={24} aria-hidden="true" />
+                        </Show>
+                        {/* Unread badge (owner round, 2026-08-26): ANY conversation other
+                            than the active one is unread. Only over the chat-bubble glyph
+                            — once the list is open showing the back arrow, the visitor is
+                            already looking at the rows themselves, each carrying its own
+                            dot (ConversationPanel), so a second badge on the arrow would be
+                            redundant chrome. */}
+                        <Show when={anyUnread() && view() === 'chat'}>
+                          <span data-kai-conversations-unread aria-hidden="true" class="absolute right-0.5 top-0.5 size-1.5 rounded-full bg-unread" />
+                        </Show>
+                      </Button>
+                    </Show>
                     {/* Consumer-injected trailing controls (share, settings, …).
                         Projects light-DOM `slot="header-end"` children of <kai-chat>. */}
                     <slot name="header-end" />
@@ -386,7 +727,10 @@ export function ChatThread(props: ChatThreadProps) {
             <header part="header" class="shrink-0"><slot name="header" /></header>
           </Show>
           <div class="relative flex-1 overflow-hidden">
-            <ChatContainer class="h-full px-4 py-3">
+            <Show
+              when={view() === 'list' && conversationsReady()}
+              fallback={
+                <ChatContainer class="h-full px-4 py-3">
               <ChatContainerContent class="mx-auto w-full max-w-3xl space-y-4">
                 {/* REPLACE — custom empty-state content, shown only while the thread is
                     empty. The component still owns WHEN it shows (data state); the
@@ -474,42 +818,59 @@ export function ChatThread(props: ChatThreadProps) {
                   <ScrollButton />
                 </div>
               </Show>
-            </ChatContainer>
+                </ChatContainer>
+              }
+            >
+              <ConversationPanel
+                conversations={conversationSummaries()}
+                activeId={activeConversationId()}
+                onSelect={(id) => void selectConversation(id)}
+                onNewChat={startNewConversation}
+              />
+            </Show>
           </div>
-          {/* INJECT — accessory row above the composer (extra actions/toolbar). */}
-          <Show when={props.composerActions}>
-            <div class="shrink-0 px-4">
-              <div class="mx-auto flex max-w-3xl items-center gap-2 pb-2"><slot name="composer-actions" /></div>
+          {/* The list view TAKES OVER the full content area (owner: "if we are
+              looking at the conversations, i don't think i would see the
+              suggestions nor the prompt input... the convo list would be taking
+              over the full content area"). The retrofit only swapped the thread;
+              this hides the composer-actions row, the composer itself and the
+              footer too — nothing below the header renders except the panel. */}
+          <Show when={view() !== 'list'}>
+            {/* INJECT — accessory row above the composer (extra actions/toolbar). */}
+            <Show when={props.composerActions}>
+              <div class="shrink-0 px-4">
+                <div class="mx-auto flex max-w-3xl items-center gap-2 pb-2"><slot name="composer-actions" /></div>
+              </div>
+            </Show>
+            <div class="shrink-0 px-4 pb-4">
+              <div class="mx-auto max-w-3xl">
+                {/* REPLACE — a full `composer` slot stands in for the built-in input.
+                    The slotted content owns its own submit/loading wiring. */}
+                <Show
+                  when={props.composer}
+                  fallback={
+                    <DefaultPromptInput
+                      value={current()} placeholder={props.placeholder} loading={props.loading === true}
+                      suggestions={visibleSuggestions()} attachments={attachments()}
+                      accept={props.accept} onAttachmentsRejected={props.onAttachmentsRejected}
+                      attach={props.attach} webSearch={props.webSearch === true} voice={props.voice === true}
+                      triggers={props.triggers} kindIcons={props.kindIcons}
+                      onValueChange={handleChange} onSubmit={handleSubmit} onSuggestionClick={handleSuggestionClick}
+                      onAttachmentsChange={(a) => { setAttachments(a); props.onAttachmentsChange?.(a); }}
+                      onWebSearch={() => props.onWebSearch?.()} onVoice={() => props.onVoice?.()}
+                    />
+                  }
+                >
+                  <slot name="composer" />
+                </Show>
+              </div>
             </div>
-          </Show>
-          <div class="shrink-0 px-4 pb-4">
-            <div class="mx-auto max-w-3xl">
-              {/* REPLACE — a full `composer` slot stands in for the built-in input.
-                  The slotted content owns its own submit/loading wiring. */}
-              <Show
-                when={props.composer}
-                fallback={
-                  <DefaultPromptInput
-                    value={current()} placeholder={props.placeholder} loading={props.loading === true}
-                    suggestions={visibleSuggestions()} attachments={attachments()}
-                    accept={props.accept} onAttachmentsRejected={props.onAttachmentsRejected}
-                    attach={props.attach} webSearch={props.webSearch === true} voice={props.voice === true}
-                    triggers={props.triggers} kindIcons={props.kindIcons}
-                    onValueChange={handleChange} onSubmit={handleSubmit} onSuggestionClick={handleSuggestionClick}
-                    onAttachmentsChange={(a) => { setAttachments(a); props.onAttachmentsChange?.(a); }}
-                    onWebSearch={() => props.onWebSearch?.()} onVoice={() => props.onVoice?.()}
-                  />
-                }
-              >
-                <slot name="composer" />
-              </Show>
-            </div>
-          </div>
-          {/* INJECT: footer row below the composer. */}
-          <Show when={props.footer}>
-            <div part="footer" class="shrink-0 px-4 pb-3">
-              <div class="mx-auto max-w-3xl text-center text-xs text-muted-foreground"><slot name="footer" /></div>
-            </div>
+            {/* INJECT: footer row below the composer. */}
+            <Show when={props.footer}>
+              <div part="footer" class="shrink-0 px-4 pb-3">
+                <div class="mx-auto max-w-3xl text-center text-xs text-muted-foreground"><slot name="footer" /></div>
+              </div>
+            </Show>
           </Show>
         </div>
       </div>

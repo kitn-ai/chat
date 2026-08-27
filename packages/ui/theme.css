@@ -74,6 +74,29 @@
      added at the bottom. */
   --color-hover: var(--kai-color-hover, color-mix(in oklab, var(--color-muted) 60%, var(--color-background)));
   --color-selected: var(--kai-color-selected, color-mix(in oklab, var(--color-primary) 8%, var(--color-background)));
+  /* UNREAD indicator — a dedicated token (owner ruling, 2026-08-26), not a
+     reuse of --color-destructive: unread is notification semantics, not
+     error, so a consumer re-theming "danger" red must not also move every
+     unread dot. Used identically by all three places an unread conversation
+     surfaces: the list-row trailing dot (ConversationPanel), the header
+     toggle's badge (ChatThread), and Dock's own closed-launcher badge.
+     A vivid "messenger red" (Tailwind red-500 territory, the Intercom/iOS
+     badge convention) rather than the darker --color-destructive hue: the
+     first pass at this token picked a color that read as legible-on-paper
+     but visually flat/dark next to the launcher's near-black ring. This one
+     value is used in BOTH light and dark (no .dark override below) because
+     it independently clears 3:1 (WCAG 1.4.11, non-text) against every real
+     surface an unread dot sits on in EITHER mode: light row/card background
+     (white) 3.78:1, light Dock-launcher ring (--color-primary, near-black)
+     4.68:1, dark row/card background (near-black) 4.73–4.35:1, dark
+     Dock-launcher ring (--color-primary, near-white) 3.62:1. (Measured via
+     the WCAG relative-luminance formula against this file's own light/dark
+     --color-background/-card/-primary values — see
+     .superpowers/sdd/2026-08-26-conversations/rework-report.md Round 4 for
+     the worked numbers.) Override via --kai-color-unread; a construct author
+     can also set it per-widget through `theme.unreadColor` (construct
+     vocabulary — see agent-tooling/construct/schema.ts). */
+  --color-unread: var(--kai-color-unread, hsl(0 84% 60%));
   /* MARKED text — the fill behind a keyword the app has flagged (the composer's
      `highlights` rules, decorated through the CSS Custom Highlight API). This is
      `<mark>`, not a selection and not a status: a warm yellow, the convention
@@ -241,6 +264,11 @@
   --color-destructive-soft: var(--kai-color-destructive-soft, color-mix(in oklab, var(--color-destructive) 14%, var(--color-background)));
   --color-hover: var(--kai-color-hover, color-mix(in oklab, var(--color-muted) 60%, var(--color-background)));
   --color-selected: var(--kai-color-selected, color-mix(in oklab, var(--color-primary) 8%, var(--color-background)));
+  /* Unread indicator — dark. Same value as light (see the light block for the
+     full contrast note): one vivid red independently clears 3:1 against both
+     modes' real surfaces, so there is nothing to flip here. Still redeclared
+     for override symmetry with every other semantic color in this file. */
+  --color-unread: var(--kai-color-unread, hsl(0 84% 60%));
   /* Marked text — dark. A deep warm amber rather than the light yellow: a pale
      highlighter on a near-black field would blow out and force the text to flip
      colour. See the light block for the full note. */
