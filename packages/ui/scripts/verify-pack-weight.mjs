@@ -168,8 +168,34 @@ const ALLOWED_LARGE_FILES = new Map([
  * stays at or under ~0.29 MiB so the same class of regression (a dropped
  * dedupe, a chunk quietly forking back into two paths) trips this rule
  * again instead of hiding in slack. 12.67 + 0.29 MiB of margin -> 12.96 MiB.
+ *
+ * 12.96 -> 13.49 MiB (2026-08-27, conversations + the home-screen widget):
+ * tripped at 13.20 MiB (13,838,986 bytes), diffed file-by-file against the
+ * published 0.27.0 tarball (12.87 MiB / 13,495,503 bytes, fetched via
+ * lint-cdn-pins: historical -- names the exact already-published version this
+ * `npm pack @kitn.ai/ui@0.27.0 --dry-run --json`) rather than a stale local
+ * listing. No fork: the two `solid-*.js` chunks (client vs SSR runtime, one
+ * per `solid.js`/`solid.server.js`) and `kai.es.js`'s own copy of the shiki
+ * `core`/`engine-javascript` chunks are unchanged in count and structure from
+ * 0.27.0 -- both already existed there at the same hashes, predating this
+ * round entirely, so neither is the regression the 13.5 -> 12.96 MiB dedupe
+ * above guards against. The net +0.33 MiB is the two feature merges honestly
+ * landing in the one element that carries them: `kai-chat` grew conversations
+ * (multi-conversation adapter stores, list view, unread indicators, 6bfad4c8)
+ * and the Home/Messages tabbed home screen (bf77a890) directly into its
+ * existing facade -- no new element files were added (`git diff --stat
+ * 62ac3ea4 HEAD -- src/elements/` touches only chat.tsx + the generated
+ * manifests), so the growth is concentrated: src/components/chat-thread.tsx
+ * doubled (30.1 KB -> 59.2 KB packed) and dist/register-impl-*.js +
+ * dist/solid-*.js + dist/define-*.js grew by tens of KB each carrying that
+ * source; the rest is the generated fan-out the CLAUDE.md "derive it, don't
+ * type it" rule predicts for a bigger facade -- element-meta.json,
+ * element-types.d.ts, elements.d.ts, custom-elements.json, and the React
+ * wrappers all grew a few KB each because they re-describe the same facade
+ * per generated artifact, same as the five-form-control note above. Margin
+ * rule unchanged: 13.20 + 0.29 MiB of headroom -> 13.49 MiB.
  */
-const MAX_UNPACKED_BYTES = 12.96 * 1024 * 1024;
+const MAX_UNPACKED_BYTES = 13.49 * 1024 * 1024;
 
 const kib = (n) => `${(n / 1024).toFixed(1)} KiB`;
 const mib = (n) => `${(n / 1024 / 1024).toFixed(2)} MiB`;
