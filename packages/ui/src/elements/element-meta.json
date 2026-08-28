@@ -1620,7 +1620,7 @@
         "type": "undefined | (\"copy\" | \"dislike\" | \"edit\" | \"like\" | \"regenerate\" | \"speak\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]",
         "optional": true,
         "scalar": false,
-        "description": "Role-scoped DEFAULT action bars (B-7b): a user message with no `actions` of its own gets `userActions`; an assistant message, `assistantActions`. A per-message `m.actions` OVERRIDES the role default — override = replace, not merge — so a message that sets `actions: []` renders NO action bar even when a role default is set. Set as JS properties.",
+        "description": "Role-scoped DEFAULT action bars (B-7b): a user message with no `actions` of its own gets `userActions`; an assistant message, `assistantActions`. A per-message `m.actions` OVERRIDES the role default (replace, not merge), so a message that sets `actions: []` renders NO action bar even when a role default is set. Set as JS properties.",
         "displayType": "undefined | (\"copy\" | \"dislike\" | \"edit\" | \"like\" | \"regenerate\" | \"speak\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]"
       },
       {
@@ -1628,7 +1628,7 @@
         "type": "undefined | (\"copy\" | \"dislike\" | \"edit\" | \"like\" | \"regenerate\" | \"speak\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]",
         "optional": true,
         "scalar": false,
-        "description": "See `userActions` — the assistant-role default.",
+        "description": "See `userActions`, the assistant-role default.",
         "displayType": "undefined | (\"copy\" | \"dislike\" | \"edit\" | \"like\" | \"regenerate\" | \"speak\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]"
       },
       {

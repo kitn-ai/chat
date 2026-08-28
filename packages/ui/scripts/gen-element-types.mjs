@@ -21,7 +21,7 @@ import { resolve } from 'node:path';
 // side and assume the other followed.
 export const INLINE_ELEMENT_TYPES = `// --- Inlined from src/elements/chat-types.ts + the types it references
 //     (kept self-contained: no source imports) ---
-export type ChatMessageAction = 'copy' | 'like' | 'dislike' | 'regenerate' | 'edit';
+export type ChatMessageAction = 'copy' | 'like' | 'dislike' | 'regenerate' | 'edit' | 'speak';
 
 /** A like/dislike feedback vote on an assistant message. */
 export type FeedbackVote = 'like' | 'dislike';

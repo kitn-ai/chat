@@ -426,9 +426,9 @@ export interface KaiChatElement extends HTMLElement {
   kindIcons?: Record<string, string>;
   /** Whether each message's action bar is always visible (`'always'`, default) or only revealed on hover of that message row (`'hover'`). */
   actionsReveal?: "always" | "hover";
-  /** Role-scoped DEFAULT action bars (B-7b): a user message with no `actions` of its own gets `userActions`; an assistant message, `assistantActions`. A per-message `m.actions` OVERRIDES the role default — override = replace, not merge — so a message that sets `actions: []` renders NO action bar even when a role default is set. Set as JS properties. */
+  /** Role-scoped DEFAULT action bars (B-7b): a user message with no `actions` of its own gets `userActions`; an assistant message, `assistantActions`. A per-message `m.actions` OVERRIDES the role default (replace, not merge), so a message that sets `actions: []` renders NO action bar even when a role default is set. Set as JS properties. */
   userActions?: ("copy" | "dislike" | "edit" | "like" | "regenerate" | "speak" | { id: string; label: string; icon?: string; tooltip?: string })[];
-  /** See `userActions` — the assistant-role default. */
+  /** See `userActions`, the assistant-role default. */
   assistantActions?: ("copy" | "dislike" | "edit" | "like" | "regenerate" | "speak" | { id: string; label: string; icon?: string; tooltip?: string })[];
   /** Hide the citations row consecutive `source` parts collapse into (`part="citations"`, message.tsx). Named as a HIDE, not `sources: boolean`, so absence-means-default stays unambiguous: absent/false is today's rendering, byte-for-byte (B-8). */
   hideSources?: boolean;
@@ -2377,9 +2377,9 @@ export interface KaiChatElementProps {
   kindIcons?: Record<string, string>;
   /** Whether each message's action bar is always visible (`'always'`, default) or only revealed on hover of that message row (`'hover'`). */
   actionsReveal?: "always" | "hover";
-  /** Role-scoped DEFAULT action bars (B-7b): a user message with no `actions` of its own gets `userActions`; an assistant message, `assistantActions`. A per-message `m.actions` OVERRIDES the role default — override = replace, not merge — so a message that sets `actions: []` renders NO action bar even when a role default is set. Set as JS properties. */
+  /** Role-scoped DEFAULT action bars (B-7b): a user message with no `actions` of its own gets `userActions`; an assistant message, `assistantActions`. A per-message `m.actions` OVERRIDES the role default (replace, not merge), so a message that sets `actions: []` renders NO action bar even when a role default is set. Set as JS properties. */
   userActions?: ("copy" | "dislike" | "edit" | "like" | "regenerate" | "speak" | { id: string; label: string; icon?: string; tooltip?: string })[];
-  /** See `userActions` — the assistant-role default. */
+  /** See `userActions`, the assistant-role default. */
   assistantActions?: ("copy" | "dislike" | "edit" | "like" | "regenerate" | "speak" | { id: string; label: string; icon?: string; tooltip?: string })[];
   /** Hide the citations row consecutive `source` parts collapse into (`part="citations"`, message.tsx). Named as a HIDE, not `sources: boolean`, so absence-means-default stays unambiguous: absent/false is today's rendering, byte-for-byte (B-8). */
   hideSources?: boolean;

@@ -263,11 +263,11 @@ export interface ChatThreadProps {
   actionsReveal?: 'always' | 'hover';
   /** Role-scoped DEFAULT action bars (B-7b): a user message with no `actions`
    *  of its own gets `userActions`; an assistant message, `assistantActions`.
-   *  A per-message `m.actions` OVERRIDES the role default — override =
-   *  replace, not merge — so a message that sets `actions: []` renders NO
-   *  action bar even when a role default is set. Set as JS properties. */
+   *  A per-message `m.actions` OVERRIDES the role default (replace, not
+   *  merge), so a message that sets `actions: []` renders NO action bar even
+   *  when a role default is set. Set as JS properties. */
   userActions?: (ChatMessageAction | CustomAction)[];
-  /** See `userActions` — the assistant-role default. */
+  /** See `userActions`, the assistant-role default. */
   assistantActions?: (ChatMessageAction | CustomAction)[];
   /** Hide the citations row consecutive `source` parts collapse into
    *  (`part="citations"`, message.tsx). Named as a HIDE, not `sources:
