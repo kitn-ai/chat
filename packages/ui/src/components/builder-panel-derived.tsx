@@ -134,11 +134,14 @@ const HISTORY_PERSISTENCE_OPTIONS = [
 function HistoryEditor(props: FieldEditorProps): JSX.Element {
   const current = () => getAtPath(props.value, props.path) as { persistence?: string; url?: string } | undefined;
   const persistence = () => current()?.persistence ?? 'none';
+  const persistenceId = createUniqueId();
+  const urlId = createUniqueId();
   return (
     <>
       <div class="flex flex-col gap-1.5">
-        <label class="text-xs font-medium text-foreground">History</label>
+        <label for={persistenceId} class="text-xs font-medium text-foreground">History</label>
         <Select
+          id={persistenceId}
           options={HISTORY_PERSISTENCE_OPTIONS}
           value={persistence()}
           onChange={(e) =>
@@ -148,8 +151,9 @@ function HistoryEditor(props: FieldEditorProps): JSX.Element {
       </div>
       <Show when={persistence() === 'endpoint'}>
         <div class="flex flex-col gap-1.5">
-          <label class="text-xs font-medium text-foreground">Endpoint URL</label>
+          <label for={urlId} class="text-xs font-medium text-foreground">Endpoint URL</label>
           <Input
+            id={urlId}
             size="sm"
             required
             value={current()?.url ?? ''}
@@ -340,6 +344,8 @@ function UserMenuEditor(props: FieldEditorProps): JSX.Element {
   const setEnabled = (on: boolean): void => {
     props.write(on ? setAtPath(props.value, props.path, current() ?? { name: '' }) : deleteAtPath(props.value, props.path));
   };
+  const nameId = createUniqueId();
+  const planId = createUniqueId();
   return (
     <>
       <Row label="User menu">
@@ -349,8 +355,9 @@ function UserMenuEditor(props: FieldEditorProps): JSX.Element {
         {(um) => (
           <div class="flex flex-col gap-3">
             <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-medium text-foreground">Name</label>
+              <label for={nameId} class="text-xs font-medium text-foreground">Name</label>
               <Input
+                id={nameId}
                 size="sm"
                 required
                 value={um().name}
@@ -358,8 +365,9 @@ function UserMenuEditor(props: FieldEditorProps): JSX.Element {
               />
             </div>
             <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-medium text-foreground">Plan</label>
+              <label for={planId} class="text-xs font-medium text-foreground">Plan</label>
               <Input
+                id={planId}
                 size="sm"
                 value={um().plan ?? ''}
                 onValueInput={(v) => props.write(setAtPath(props.value, props.path, { ...um(), plan: v || undefined }))}
@@ -383,6 +391,8 @@ function HomeEditor(props: FieldEditorProps): JSX.Element {
   const setEnabled = (on: boolean): void => {
     props.write(on ? setAtPath(props.value, props.path, current() ?? {}) : deleteAtPath(props.value, props.path));
   };
+  const titleId = createUniqueId();
+  const subtitleId = createUniqueId();
   return (
     <>
       <Row label="Home tab">
@@ -392,8 +402,9 @@ function HomeEditor(props: FieldEditorProps): JSX.Element {
         {(home) => (
           <div class="flex flex-col gap-3">
             <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-medium text-foreground">Greeting title</label>
+              <label for={titleId} class="text-xs font-medium text-foreground">Greeting title</label>
               <Input
+                id={titleId}
                 size="sm"
                 value={home().greeting?.title ?? ''}
                 onValueInput={(v) =>
@@ -404,8 +415,9 @@ function HomeEditor(props: FieldEditorProps): JSX.Element {
               />
             </div>
             <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-medium text-foreground">Greeting subtitle</label>
+              <label for={subtitleId} class="text-xs font-medium text-foreground">Greeting subtitle</label>
               <Input
+                id={subtitleId}
                 size="sm"
                 value={home().greeting?.subtitle ?? ''}
                 onValueInput={(v) =>
@@ -453,11 +465,15 @@ interface ProviderShape {
 
 function ProviderEditor(props: FieldEditorProps): JSX.Element {
   const current = () => getAtPath(props.value, props.path) as ProviderShape;
+  const modeId = createUniqueId();
+  const urlId = createUniqueId();
+  const wireId = createUniqueId();
   return (
     <>
       <div class="flex flex-col gap-1.5">
-        <label class="text-xs font-medium text-foreground">Mode</label>
+        <label for={modeId} class="text-xs font-medium text-foreground">Mode</label>
         <Select
+          id={modeId}
           options={PROVIDER_MODE_OPTIONS}
           value={current()?.mode ?? 'mock'}
           onChange={(e) => {
@@ -470,8 +486,9 @@ function ProviderEditor(props: FieldEditorProps): JSX.Element {
       </div>
       <Show when={current()?.mode === 'endpoint'}>
         <div class="flex flex-col gap-1.5">
-          <label class="text-xs font-medium text-foreground">Endpoint URL</label>
+          <label for={urlId} class="text-xs font-medium text-foreground">Endpoint URL</label>
           <Input
+            id={urlId}
             size="sm"
             value={current()?.url ?? ''}
             placeholder="/api/chat"
@@ -479,8 +496,9 @@ function ProviderEditor(props: FieldEditorProps): JSX.Element {
           />
         </div>
         <div class="flex flex-col gap-1.5">
-          <label class="text-xs font-medium text-foreground">Wire format</label>
+          <label for={wireId} class="text-xs font-medium text-foreground">Wire format</label>
           <Select
+            id={wireId}
             options={PROVIDER_WIRE_OPTIONS}
             value={current()?.wire ?? 'openai'}
             onChange={(e) => props.write(setAtPath(props.value, props.path, { ...current(), wire: e.currentTarget.value }))}
