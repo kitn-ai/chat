@@ -1,0 +1,1220 @@
+import type { Meta, StoryObj } from 'storybook-solidjs-vite';
+import { type JSX, createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
+import { Code2, Globe, Monitor, Tablet, Smartphone, Lock, ExternalLink, Maximize2, Minimize2, Plus, ChevronUp, ChevronDown, X, Search, Sun, Moon } from 'lucide-solid';
+import { BuilderPanel, type BuilderConstruct } from '../components/builder-panel';
+import { BuilderLayout, type BuilderViewport } from '../components/builder-layout';
+import { resolveAccentWrapperStyle } from '../components/builder-preview';
+import { ChatThread } from '../components/chat-thread';
+import { WorkspaceShell } from '../components/workspace-shell';
+import { mix, StubStatTile, StubCodeBlock } from '../components/builder-skeleton';
+import {
+  type UserActionId,
+  type AssistantActionId,
+  type ActionRowState,
+  USER_ACTION_CATALOG,
+  ASSISTANT_ACTION_CATALOG,
+  DEFAULT_USER_ACTION_ROWS,
+  DEFAULT_ASSISTANT_ACTION_ROWS,
+  SPEAK_CUSTOM_ACTION,
+  ActionRowPicker,
+} from '../components/builder-message-actions';
+import {
+  type TriggerGroupState,
+  ComposerTriggersSection,
+  buildTriggerDefs,
+  DEFAULT_SLASH_ENTRIES,
+  DEFAULT_MENTION_ENTRIES,
+} from '../components/builder-composer-triggers';
+import {
+  type ShellControlsState,
+  ShellSection,
+  CommandPaletteOverlay,
+  CommandPaletteTrigger,
+  UserMenu,
+} from '../components/builder-shell-controls';
+import { RadioGroup, type RadioOption } from '../ui/radio';
+import { Switch } from '../ui/switch';
+import { Select } from '../ui/select';
+import { Input } from '../ui/input';
+import { Button } from '../ui/button';
+import { Dropdown, DropdownTrigger, DropdownContent, DropdownItem } from '../ui/dropdown';
+import { Separator } from '../ui/separator';
+import { Tooltip } from '../ui/tooltip';
+import { renderIcon } from '../ui/icon';
+import { cn } from '../utils/cn';
+import type { ChatMessage, ChatMessageAction, CustomAction } from './chat-types';
+
+// Labs/Builder/Workspace — T-1 build-out (docs/superpowers/specs/
+// 2026-08-28-template-builder-design.md), FIFTH and hardest template story:
+// chat rail + work surface (v0/lovable/split-workspace's own shape, the
+// design spec's own words: "expected to split into a construct-expressible
+// core and eject-tier composition; its round's primary deliverable is that
+// boundary, drawn concretely"). T-2: the template fixes the layout, no
+// Layout radio.
+//
+// THE SPLIT FRAME IS A REAL COMPONENT, NOT A HAND-ROLLED FLEX ROW:
+// `components/workspace-shell.tsx`'s `WorkspaceShell` — "the chat-agnostic
+// workspace layout shell: five regions ... with resize handles between the
+// columns" (its own doc comment, read before use) — already IS this split:
+// `start` holds the chat rail, `children` (the main region, always
+// rendered, intentionally the LARGER of the two) holds the work pane. A
+// real resize handle sits between them (`ResizableHandle`, internal to
+// `WorkspaceShell`) — dragging it actually resizes the chat rail.
+//
+// OWNER FEEDBACK ROUND (folded in): modeled the work pane's own toolbar,
+// the workspace's app-level header, and the composer's optional
+// affordances on `Labs/Apps`'s Lovable and v0 stories, read closely before
+// building any of this rather than guessed at:
+//
+// 1. WORK-PANE HEADER (`WorkPane`'s toolbar) mirrors Lovable's browser
+//    chrome (`elements/lovable.stories.tsx`'s preview toolbar, read line by
+//    line): a device toggle (desktop/tablet/mobile, segmented, scoped to
+//    the PANE's own canvas only — independent of `BuilderLayout`'s outer
+//    builder-chrome viewport chips, which scale the whole builder frame) ·
+//    a read-only URL bar (lock icon + fake domain text, Lovable's own
+//    `preview--*.lovable.app` shape) · an open-in-new-tab button · a
+//    Preview|Code segmented toggle with PREVIEW listed FIRST (Lovable's own
+//    `TABS` array order: `preview` before `code`, `globe`/`code` icons —
+//    this file had it backwards as Code/Preview before this round; fixed).
+//    EVERY one of these five is independently optional (`WorkSurfaceSection`
+//    below) — "someone may want preview-only" per the owner's brief, so
+//    `showCodeView: false` removes the Preview|Code toggle ENTIRELY (not
+//    just disables it) and the pane always renders its preview content.
+// 2. EXPAND (owner amendment): a v0-style maximize toggle, also optional.
+//    Checked `elements/v0.stories.tsx` first: v0's real `<kai-artifact
+//    expandable>` maximizes "via the kai-resizable maximize protocol" (that
+//    file's own comment) — `ui/resizable.tsx`'s `ResizablePanelGroup` has a
+//    real `maximizedIndex`/`onMaximizeChange` API. But `WorkspaceShell`
+//    (what THIS template's split actually uses, confirmed by reading it
+//    before building) does NOT forward that prop to its internal
+//    `ResizablePanelGroup` — it exposes a DIFFERENT real mechanism instead:
+//    per-aside `startCollapsed`/`endCollapsed`, controlled or imperative via
+//    `controllerRef`. That is the exact shape "hide the chat rail entirely,
+//    click again to restore the split" needs, and it is the SAME mechanism
+//    `Labs/Elements/Resizable Collapsed` demonstrates — so Expand here is
+//    wired through `WorkspaceShell`'s real CONTROLLED `startCollapsed` prop
+//    (`startCollapsed={expanded()}`), not a hand-rolled `display:none` or
+//    the v0/kai-artifact maximize protocol, which this shell does not carry.
+//
+// APP HEADER: a new top-level strip inside the preview frame, above the
+// split entirely (persists through Expand, matching Lovable's own top bar
+// living outside/above its split body) — modeled on Lovable's real
+// `<header>` (brand/title one side, actions the other). JUDGMENT CALL,
+// recorded rather than silently resolved: the brief said "product title on
+// the right (mirror Lovable's placement exactly)", but Lovable's ACTUAL
+// header puts its brand/title on the LEFT and its action buttons (GitHub /
+// Invite / Publish / avatar) on the RIGHT (`lovable.stories.tsx` lines
+// ~391-420, read again to confirm before writing this). Read literally,
+// "title on the right" and "mirror Lovable's placement exactly" contradict
+// each other. Resolved as: MIRROR (flip) Lovable's own header — actions on
+// the left, title on the right — which satisfies both halves of the
+// instruction at once (a mirror image of Lovable's left/right assignment)
+// rather than picking one half and silently dropping the other.
+// `header.title` is the REAL, already-existing construct field (reused, not
+// duplicated); the action buttons are new preview-only rows (`HeaderAction
+// Row[]`), since `construct.v1` has no header-actions vocabulary — see the
+// widened T-5 note below.
+//
+// SUPERSEDED (owner feedback round, explicit this time — no judgment call
+// needed): title moves to the LEFT, actions to the RIGHT — the opposite of
+// the mirror resolved above. The right side is now a full, EXPLICIT
+// arrangement (search · theme toggle | Share/Deploy | avatar+chevron, see
+// `AppHeader`'s own doc comment) rather than a single actions cluster.
+// Every header element is individually optional via a panel toggle; the
+// ARRANGEMENT itself is not configurable, per the owner's own ruling.
+//
+// COMPOSER (owner amendment, two parts):
+//  - Quick-fill label/value chips: rows the dev defines (label shown on the
+//    chip, value filled into the composer) — DISTINCT from `ChatThread`'s
+//    own `suggestions` (label IS the value there). Wired to `ChatThread`'s
+//    REAL controlled `value`/`onValueChange` props (confirmed they exist
+//    before use) — clicking a chip actually fills the composer's real
+//    input, not a stub.
+//  - A v0-style composer MENU (the plus-button trigger next to the
+//    composer): checked `v0.stories.tsx`'s own composer first — it slots a
+//    real `kai-menu` into `kai-prompt-input`'s `toolbar-start` LIGHT-DOM
+//    slot, a mechanism only the `kai-chat`/`kai-prompt-input` WEB COMPONENT
+//    facade can receive (light-DOM child projection). This story renders
+//    the bare Solid `<ChatThread>` directly (same choice every other
+//    template story makes), which has NO JSX prop for its composer
+//    toolbar — `emptyContent` is the one JSX-form escape hatch `ChatThread`
+//    has (Round R), and it is REPLACE-only for the empty state, not
+//    additive to the composer. So the composer menu here renders as its
+//    own strip directly above the rail's `ChatThread`, composing the kit's
+//    REAL `Dropdown`/`DropdownTrigger`/`DropdownContent`/`DropdownItem`
+//    primitives (the same ones `components/model-switcher.tsx` composes,
+//    read as a real usage example before building this) — a real, working
+//    menu, just not literally inside `ChatThread`'s own shadow-gated
+//    composer. Kit-tier gap worth naming: `ChatThread` could grow a
+//    `composerStart`/`composerEnd` JSX prop mirroring `emptyContent`'s
+//    pattern, so a bare-Solid consumer gets the same composer-toolbar
+//    injection the web-component facade already has via slots.
+//  - Attachments and Microphone: `capabilities.attachments` was already a
+//    real, existing `BuilderPanel` control (Capabilities section) but this
+//    template never actually WIRED it to `ChatThread`'s own `attach`/
+//    `accept` props before this round — fixed here (the toggle now
+//    genuinely applies). Microphone is a new preview-only switch (same
+//    shape as every other template's own Microphone control), wired to
+//    `ChatThread`'s real `voice` prop. (The same `attach`/`accept` wiring
+//    gap exists on `Labs/Builder/Assistant`, `.../Research`, and `.../
+//    In-app assistant` — out of scope for this Workspace-only round, noted
+//    here rather than reached into their files.)
+//
+// THE WORK PANE'S CONTENT HAS NO CONSTRUCT VOCABULARY — drawn concretely,
+// per the design spec's own framing of this round's deliverable, and now
+// WIDER after this feedback round (see the widened T-5 proposal in
+// docs/superpowers/research/2026-08-28-builder-t5-vocabulary-proposals.md,
+// item 8):
+//  - The SPLIT FRAME ITSELF fits today's schema cleanly: `layout: 'split'`
+//    already exists in `BuilderLayoutKind` and codegen has a real emission
+//    for it. The frame is construct-expressible NOW.
+//  - What CANNOT be expressed: the pane's CONTENT (unchanged from the
+//    first round), the pane's OWN CHROME (device toggle / URL bar / open-
+//    in-tab / expand / Preview-Code, all preview-only signals below), the
+//    app header's ACTIONS, and all four composer knobs (chips, menu,
+//    attachments-applying, mic). Every control this round added past
+//    Identity/Provider/Theme/Capabilities is preview-only, writing to
+//    local signals, never to `BuilderConstruct` — the Raw JSON section
+//    never reflects any of it, which is the honest tell.
+//
+// Panel: the Assistant template's set minus the persistent sidebar
+// (Workspace's own basis — v0/lovable/split-workspace — has no
+// conversation-history rail; the chat rail here is single-thread) plus
+// Work surface (pane chrome + kind), App header (title reuse + actions),
+// Composer (chips + menu + attach/mic), and the shared Message actions
+// picker.
+
+type PaneDevice = 'desktop' | 'tablet' | 'mobile';
+type PaneKind = 'preview' | 'code';
+type HeaderButtonVariant = 'primary' | 'secondary' | 'ghost';
+
+interface HeaderActionRow {
+  id: string;
+  label: string;
+  variant: HeaderButtonVariant;
+}
+
+interface ComposerChip {
+  id: string;
+  label: string;
+  value: string;
+}
+
+interface ComposerMenuEntry {
+  id: string;
+  label: string;
+  /** A curated `renderIcon` name (`ui/icon.tsx`'s `NAMED_ICONS`), typed as
+   *  free text per the assignment ("a text field with the renderIcon names
+   *  is fine for the story") — resolved through the REAL `renderIcon`
+   *  helper, not a lookalike icon lookup. */
+  icon?: string;
+}
+
+let nextRowId = 1;
+const newRowId = (prefix: string): string => `${prefix}-${nextRowId++}`;
+
+const PANE_DEVICES: readonly { id: PaneDevice; label: string; Icon: typeof Monitor }[] = [
+  { id: 'desktop', label: 'Desktop', Icon: Monitor },
+  { id: 'tablet', label: 'Tablet', Icon: Tablet },
+  { id: 'mobile', label: 'Mobile', Icon: Smartphone },
+];
+
+/** Lovable's own `DEVICE_W` shape (`lovable.stories.tsx`) — the preview
+ *  canvas gets a max-width and centers; the device toggle scales only the
+ *  pane's PREVIEW content, never the Code view (mirroring Lovable, whose
+ *  device toggle only ever wraps its `tab() === 'preview'` branch). */
+const PANE_DEVICE_W: Record<PaneDevice, string> = { desktop: '100%', tablet: '834px', mobile: '390px' };
+
+const PANE_KIND_OPTIONS: readonly RadioOption<PaneKind>[] = [
+  { value: 'preview', label: 'Preview', description: 'Rendered-output skeleton' },
+  { value: 'code', label: 'Code', description: 'Code view — StubCodeBlock' },
+];
+
+/** Primary→`default`, Secondary→`outline`, Ghost→`ghost`. The kit's real
+ *  `Button` variant vocabulary (`ui/button.tsx`) is `default`/`ghost`/
+ *  `subtle`/`outline`/`destructive` — there is no literal `primary` or
+ *  `secondary` variant. Mapped honestly rather than inventing new variant
+ *  names on `Button` itself: `default` IS the kit's filled/primary-looking
+ *  variant, and `outline` is the closest existing look to a conventional
+ *  "secondary" button. */
+const HEADER_VARIANT_TO_BUTTON: Record<HeaderButtonVariant, 'default' | 'outline' | 'ghost'> = {
+  primary: 'default',
+  secondary: 'outline',
+  ghost: 'ghost',
+};
+
+const HEADER_VARIANT_OPTIONS: readonly { value: HeaderButtonVariant; label: string }[] = [
+  { value: 'primary', label: 'Primary' },
+  { value: 'secondary', label: 'Secondary' },
+  { value: 'ghost', label: 'Ghost' },
+];
+
+const DEFAULT_HEADER_ACTIONS: HeaderActionRow[] = [
+  { id: 'share', label: 'Share', variant: 'secondary' },
+  { id: 'deploy', label: 'Deploy', variant: 'primary' },
+];
+
+const DEFAULT_COMPOSER_CHIPS: ComposerChip[] = [
+  { id: 'pricing', label: 'Pricing table', value: 'Build a pricing table component' },
+  { id: 'dark-mode', label: 'Dark mode', value: 'Add a dark mode toggle' },
+];
+
+/** The owner's own v0 stub set (`v0.stories.tsx`'s composer `+` menu),
+ *  reused verbatim as this menu's default entries. */
+const DEFAULT_COMPOSER_MENU_ENTRIES: ComposerMenuEntry[] = [
+  { id: newRowId('menu'), label: 'Attach image', icon: 'paperclip' },
+  { id: newRowId('menu'), label: 'Import from Figma' },
+  { id: newRowId('menu'), label: 'Import from URL', icon: 'link' },
+];
+
+const stubMessages: ChatMessage[] = [
+  { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'Build a pricing table component' }] },
+  { id: 'm2', role: 'assistant', parts: [{ type: 'text', text: "Here's a three-tier pricing table with a highlighted middle plan." }] },
+];
+
+const DEFAULT_CONSTRUCT: BuilderConstruct = {
+  name: 'build-workspace',
+  layout: 'split',
+  provider: { mode: 'endpoint', url: '/api/chat', wire: 'openai' },
+  header: { title: 'Workspace' },
+  theme: { accent: '#ea580c', mode: 'system' },
+  capabilities: {
+    starters: ['Build a pricing table', 'Add a dark mode toggle'],
+    attachments: { accept: ['image/*'] },
+    history: { persistence: 'local' },
+  },
+};
+
+/** Icon-only theme toggle — the kit's real icon-button idiom (`Tooltip` +
+ *  ghost `icon-sm` `Button`, the same pairing every other round's icon
+ *  button on this branch uses — `voice-output.tsx`, Voice's transcript
+ *  download). Shows the icon for the mode you'd switch TO (the universal
+ *  convention: Sun while dark — "tap for light" — Moon while light), never
+ *  "dark mode"/"light mode" text. `NAMED_ICONS` (`ui/icon.tsx`) already
+ *  carries both `sun`/`moon`; imported directly here (`lucide-solid`) the
+ *  same way this file already imports `Lock`/`ExternalLink`/etc. rather
+ *  than reused through the string-keyed `renderIcon` helper, since the
+ *  icon is fixed, not data-driven. */
+function ThemeToggleButton(props: { dark: boolean; onToggle: () => void }): JSX.Element {
+  const label = () => (props.dark ? 'Switch to light mode' : 'Switch to dark mode');
+  return (
+    <Tooltip content={label()}>
+      <Button type="button" variant="ghost" size="icon-sm" aria-label={label()} onClick={props.onToggle}>
+        {props.dark ? <Sun size={14} aria-hidden="true" /> : <Moon size={14} aria-hidden="true" />}
+      </Button>
+    </Tooltip>
+  );
+}
+
+/** The workspace's own app-level top bar — see the module doc comment's
+ *  "APP HEADER" note for the mirrored-placement reasoning. Sits ABOVE the
+ *  split entirely (a sibling of `WorkspaceShell`, not inside it), so it
+ *  persists through Expand.
+ *
+ *  OWNER FEEDBACK ROUND — rearranged + made individually optional. The
+ *  title moved to the LEFT (was right); the right side is now a fixed,
+ *  OPINIONATED arrangement, left to right: a utility cluster (search,
+ *  theme toggle) · a divider · the header-actions row (Share/Deploy by
+ *  default, a real configurable ordered-rows list — see `HeaderActionsSection`
+ *  below, unchanged from the prior round) · a divider · the user avatar
+ *  (compact: initials + chevron only, no name/plan text — the owner's own
+ *  instruction). POSITIONS are not configurable, only presence is: every
+ *  element (`showTitle`/`showThemeToggle`/`showActions`, plus the existing
+ *  `shell.commandPalette`/`shell.userMenu` toggles this file already had)
+ *  is its own on/off panel switch. Dividers render only between two GROUPS
+ *  that both actually have visible content, so turning a group off never
+ *  leaves an orphan divider next to nothing. */
+function AppHeader(props: {
+  title?: string;
+  showTitle: boolean;
+  actions: HeaderActionRow[];
+  showActions: boolean;
+  showThemeToggle: boolean;
+  dark: boolean;
+  onToggleDark: () => void;
+  shell: ShellControlsState;
+  onOpenPalette: () => void;
+}): JSX.Element {
+  const utilityVisible = () => props.shell.commandPalette || props.showThemeToggle;
+  const actionsVisible = () => props.showActions && props.actions.length > 0;
+  const userVisible = () => props.shell.userMenu;
+
+  return (
+    <header class="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-4" data-builder-app-header>
+      <div class="flex min-w-0 items-center gap-2">
+        {props.showTitle && <span class="truncate text-sm font-semibold text-foreground">{props.title}</span>}
+      </div>
+      <div class="flex items-center gap-2">
+        <Show when={utilityVisible()}>
+          <div class="flex items-center gap-1">
+            {props.shell.commandPalette && (
+              <Tooltip content="Search commands">
+                <CommandPaletteTrigger onOpen={props.onOpenPalette} />
+              </Tooltip>
+            )}
+            {props.showThemeToggle && <ThemeToggleButton dark={props.dark} onToggle={props.onToggleDark} />}
+          </div>
+        </Show>
+
+        <Show when={utilityVisible() && (actionsVisible() || userVisible())}>
+          <Separator orientation="vertical" class="h-5" />
+        </Show>
+
+        <Show when={actionsVisible()}>
+          <div class="flex items-center gap-2">
+            <For each={props.actions}>
+              {(action) => (
+                <Button type="button" variant={HEADER_VARIANT_TO_BUTTON[action.variant]} size="sm">
+                  {action.label}
+                </Button>
+              )}
+            </For>
+          </div>
+        </Show>
+
+        <Show when={actionsVisible() && userVisible()}>
+          <Separator orientation="vertical" class="h-5" />
+        </Show>
+
+        <Show when={userVisible()}>
+          <UserMenu name="Ada" plan="Pro" class="w-auto" compact />
+        </Show>
+      </div>
+    </header>
+  );
+}
+
+/** The work pane's browser-chrome toolbar, mirroring Lovable's preview
+ *  toolbar order (device toggle · URL bar · open-in-new-tab · Preview|Code,
+ *  Preview first) plus the owner-amended Expand control near the tab
+ *  toggle (v0/kai-artifact's own ordering) — every item individually
+ *  optional via the `show*` flags. */
+function WorkPaneToolbar(props: {
+  showDeviceToggle: boolean;
+  device: PaneDevice;
+  onDeviceChange: (d: PaneDevice) => void;
+  showUrlBar: boolean;
+  showOpenInNewTab: boolean;
+  showExpand: boolean;
+  expanded: boolean;
+  onExpandedChange: (v: boolean) => void;
+  showCodeView: boolean;
+  kind: PaneKind;
+  onKindChange: (k: PaneKind) => void;
+}): JSX.Element {
+  return (
+    <div class="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3" style={{ 'background-color': mix('--color-muted', 20) }} data-builder-work-pane-toolbar>
+      <Show when={props.showDeviceToggle}>
+        <div class="flex items-center gap-0.5 rounded-lg bg-muted p-0.5" role="group" aria-label="Pane device">
+          <For each={PANE_DEVICES}>
+            {(d) => (
+              <button
+                type="button"
+                aria-label={d.label}
+                aria-pressed={props.device === d.id}
+                class={cn('grid size-7 place-items-center rounded-md transition-colors', props.device === d.id ? 'bg-surface text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+                onClick={() => props.onDeviceChange(d.id)}
+              >
+                <d.Icon size={14} aria-hidden="true" />
+              </button>
+            )}
+          </For>
+        </div>
+      </Show>
+
+      <Show when={props.showUrlBar}>
+        <div class="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5">
+          <Lock size={13} class="shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span class="truncate font-mono text-xs text-muted-foreground">preview--build-workspace.kitn.app</span>
+        </div>
+      </Show>
+      <Show when={!props.showUrlBar}>
+        <div class="min-w-0 flex-1" />
+      </Show>
+
+      <Show when={props.showOpenInNewTab}>
+        <Button type="button" variant="ghost" size="icon-sm" aria-label="Open in new tab">
+          <ExternalLink size={14} aria-hidden="true" />
+        </Button>
+      </Show>
+
+      <Show when={props.showExpand}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label={props.expanded ? 'Restore split' : 'Expand work pane'}
+          aria-pressed={props.expanded}
+          onClick={() => props.onExpandedChange(!props.expanded)}
+        >
+          {props.expanded ? <Minimize2 size={14} aria-hidden="true" /> : <Maximize2 size={14} aria-hidden="true" />}
+        </Button>
+      </Show>
+
+      <Show when={props.showCodeView}>
+        <div class="flex items-center gap-0.5 rounded-lg bg-muted p-0.5" role="group" aria-label="Pane kind">
+          <button
+            type="button"
+            class={cn('flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors', props.kind === 'preview' ? 'bg-surface text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+            aria-pressed={props.kind === 'preview'}
+            onClick={() => props.onKindChange('preview')}
+          >
+            <Globe size={13} aria-hidden="true" />
+            Preview
+          </button>
+          <button
+            type="button"
+            class={cn('flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors', props.kind === 'code' ? 'bg-surface text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+            aria-pressed={props.kind === 'code'}
+            onClick={() => props.onKindChange('code')}
+          >
+            <Code2 size={13} aria-hidden="true" />
+            Code
+          </button>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
+function WorkPane(props: {
+  showDeviceToggle: boolean;
+  showUrlBar: boolean;
+  showOpenInNewTab: boolean;
+  showExpand: boolean;
+  showCodeView: boolean;
+  kind: PaneKind;
+  onKindChange: (k: PaneKind) => void;
+  expanded: boolean;
+  onExpandedChange: (v: boolean) => void;
+}): JSX.Element {
+  const [device, setDevice] = createSignal<PaneDevice>('desktop');
+  const effectiveKind = createMemo<PaneKind>(() => (props.showCodeView ? props.kind : 'preview'));
+
+  // Owner feedback round: the artifact viewport (the area surrounding/
+  // behind the previewed content — both the preview AND code panes, per
+  // `WorkPane`'s single shared root below) sits on a MUTED background,
+  // matching `elements/lovable.stories.tsx`'s own real preview surface
+  // (its RIGHT `<section>`, read line by line: `bg-muted/30` around the
+  // toolbar+canvas, with the toolbar bar itself staying `bg-background`
+  // and the actual preview content card `bg-background`-bordered ON TOP
+  // of the muted backdrop — read again below). A plain `bg-muted/30`
+  // Tailwind opacity-modifier class is NOT used here even though it's
+  // the literal token Lovable uses: `builder-skeleton.tsx`'s own module
+  // doc comment (read before touching this) already flagged this exact
+  // class of arbitrary/opacity Tailwind string as non-deterministic in
+  // THIS story's live Storybook dev server, and prescribes `mix()`
+  // (real `color-mix()`, no compile step to race) as the fix every
+  // other skeleton token in this file already uses — so the SAME
+  // real color, expressed the way this file's own precedent already
+  // established, not a fresh literal class string.
+  return (
+    <div class="flex h-full min-w-0 flex-1 flex-col" style={{ 'background-color': mix('--color-muted', 30) }} data-builder-work-pane data-builder-pane-kind={effectiveKind()}>
+      <WorkPaneToolbar
+        showDeviceToggle={props.showDeviceToggle}
+        device={device()}
+        onDeviceChange={setDevice}
+        showUrlBar={props.showUrlBar}
+        showOpenInNewTab={props.showOpenInNewTab}
+        showExpand={props.showExpand}
+        expanded={props.expanded}
+        onExpandedChange={props.onExpandedChange}
+        showCodeView={props.showCodeView}
+        kind={effectiveKind()}
+        onKindChange={props.onKindChange}
+      />
+      <div class="min-h-0 flex-1 overflow-auto p-5">
+        {effectiveKind() === 'code' ? (
+          <StubCodeBlock lines={12} class="max-w-2xl" />
+        ) : (
+          <div class="mx-auto h-full transition-all duration-300" style={{ 'max-width': PANE_DEVICE_W[device()] }}>
+            <div class="flex h-full flex-col gap-4">
+              <div class="grid grid-cols-3 gap-3">
+                <StubStatTile class="h-28" />
+                <StubStatTile class="h-28" />
+                <StubStatTile class="h-28" />
+              </div>
+              <div class="flex-1 rounded-xl border border-border" style={{ 'background-color': mix('--color-surface', 30) }} />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The v0-style composer `+` menu — see the module doc comment's COMPOSER
+ *  note for why this composes `Dropdown`/`DropdownTrigger`/`DropdownContent`/
+ *  `DropdownItem` directly (the real primitives `model-switcher.tsx` also
+ *  composes) rather than reaching for `ChatThread`'s slot-gated toolbar,
+ *  which a bare Solid usage cannot fill. Entries fire a real onSelect —
+ *  reported to `onEntrySelect` for display, never a fake integration. */
+function ComposerMenu(props: { entries: ComposerMenuEntry[]; onEntrySelect: (entry: ComposerMenuEntry) => void }): JSX.Element {
+  return (
+    <Dropdown>
+      <DropdownTrigger
+        as={(triggerProps: JSX.ButtonHTMLAttributes<HTMLButtonElement>) => (
+          <Button type="button" variant="ghost" size="icon-sm" aria-label="Add" {...triggerProps}>
+            <Plus size={14} aria-hidden="true" />
+          </Button>
+        )}
+      />
+      <DropdownContent>
+        <For each={props.entries}>
+          {(entry) => (
+            <DropdownItem onSelect={() => props.onEntrySelect(entry)}>
+              {renderIcon(entry.icon, { class: 'mr-2 size-3.5 shrink-0' })}
+              {entry.label}
+            </DropdownItem>
+          )}
+        </For>
+      </DropdownContent>
+    </Dropdown>
+  );
+}
+
+/** The composer-extras strip: quick-fill chips (label shown, `value` fills
+ *  `ChatThread`'s real controlled composer) plus the composer menu, if
+ *  either is configured. Renders directly ABOVE the rail's `ChatThread` —
+ *  see the module doc comment's COMPOSER note for why this is a sibling
+ *  strip rather than literally inside `ChatThread`'s own composer. */
+function ComposerExtras(props: {
+  chips: ComposerChip[];
+  menuEnabled: boolean;
+  menuEntries: ComposerMenuEntry[];
+  onFill: (value: string) => void;
+  lastAction: string;
+}): JSX.Element {
+  if (!props.chips.length && !props.menuEnabled) return null;
+  return (
+    <div class="flex flex-wrap items-center gap-1.5 border-b border-border px-3 py-2" data-builder-composer-extras>
+      <Show when={props.menuEnabled}>
+        <ComposerMenu entries={props.menuEntries} onEntrySelect={(entry) => props.onFill(`(${entry.label})`)} />
+      </Show>
+      <For each={props.chips}>
+        {(chip) => (
+          <button
+            type="button"
+            class="rounded-full border border-border bg-surface px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
+            onClick={() => props.onFill(chip.value)}
+          >
+            {chip.label}
+          </button>
+        )}
+      </For>
+      <Show when={props.lastAction}>
+        <span class="ml-auto shrink-0 truncate text-[11px] text-muted-foreground">{props.lastAction}</span>
+      </Show>
+    </div>
+  );
+}
+
+function WorkspacePreview(props: {
+  construct: BuilderConstruct;
+  paneKind: PaneKind;
+  onPaneKindChange: (k: PaneKind) => void;
+  chrome: { showDeviceToggle: boolean; showUrlBar: boolean; showOpenInNewTab: boolean; showExpand: boolean; showCodeView: boolean };
+  expanded: boolean;
+  onExpandedChange: (v: boolean) => void;
+  headerActions: HeaderActionRow[];
+  headerShowTitle: boolean;
+  headerShowActions: boolean;
+  headerShowThemeToggle: boolean;
+  dark: boolean;
+  onToggleDark: () => void;
+  composerChips: ComposerChip[];
+  composerMenuEnabled: boolean;
+  composerMenuEntries: ComposerMenuEntry[];
+  slashTriggers: TriggerGroupState;
+  mentionTriggers: TriggerGroupState;
+  mic: boolean;
+  userActions: ChatMessageAction[];
+  assistantActions: (ChatMessageAction | CustomAction)[];
+  shell: ShellControlsState;
+  viewport: BuilderViewport;
+}): JSX.Element {
+  const [composerValue, setComposerValue] = createSignal('');
+  const [lastAction, setLastAction] = createSignal('');
+  const [paletteOpen, setPaletteOpen] = createSignal(false);
+  const fill = (value: string): void => {
+    setComposerValue(value);
+    setLastAction(`Filled: ${value}`);
+  };
+
+  const frameStyle = createMemo(() => ({
+    ...resolveAccentWrapperStyle(props.construct.theme),
+    height: 'calc(100vh - 9rem)',
+    width: 'calc(100vw - 27rem)',
+    'max-width': '100%',
+  }));
+  const messages = createMemo<ChatMessage[]>(() =>
+    stubMessages.map((m) => {
+      if (m.role === 'user') return { ...m, actions: props.userActions.length ? props.userActions : undefined };
+      return { ...m, actions: props.assistantActions.length ? props.assistantActions : undefined };
+    }),
+  );
+  const attachments = createMemo(() => props.construct.capabilities?.attachments);
+
+  // Owner feedback round: the header's theme toggle needs a REAL dark mode
+  // to flip, scoped to just this preview frame — not the whole Storybook
+  // page (that's the manager's own theme toggle, an unrelated control).
+  // `elements/define.tsx`'s real `<kai-*>` facade does exactly this per
+  // shadow root already: `classList={{ dark: isDark() }}` on a wrapper div,
+  // because `theme.css`'s `.dark { --color-background: ...; ... }` is a
+  // plain class selector (not `:root`/`:host`-scoped), so it re-declares
+  // every color token at WHATEVER element carries the class and cascades
+  // down from there — confirmed by reading `theme.css` before relying on
+  // this. That helper is module-private to `define.tsx` (not exported, and
+  // this file has no shadow root to attach to), so the same mechanism is
+  // replicated here rather than imported — `resolvedDark`/`toggleDark` in
+  // `WorkspaceBuilderDemo` below do the `theme.mode` + system-preference
+  // resolution `define.tsx`'s `createDarkMode` does, kept in sync with the
+  // panel's own Theme > Mode select (both read/write the same
+  // `construct().theme.mode` field, so there is only ever one source of
+  // truth, not two signals to keep in sync by hand).
+  return (
+    <div
+      class="flex flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl"
+      classList={{ dark: props.dark }}
+      style={frameStyle()}
+      data-builder-workspace-frame
+      data-builder-viewport={props.viewport}
+      data-builder-pane-expanded={props.expanded}
+    >
+      <CommandPaletteOverlay open={props.shell.commandPalette && paletteOpen()} onClose={() => setPaletteOpen(false)} />
+      <AppHeader
+        title={props.construct.header?.title}
+        showTitle={props.headerShowTitle}
+        actions={props.headerActions}
+        showActions={props.headerShowActions}
+        showThemeToggle={props.headerShowThemeToggle}
+        dark={props.dark}
+        onToggleDark={props.onToggleDark}
+        shell={props.shell}
+        onOpenPalette={() => setPaletteOpen(true)}
+      />
+      <div class="min-h-0 flex-1">
+        <WorkspaceShell
+          class="h-full"
+          startWidth={360}
+          startMinWidth={280}
+          startMaxWidth={520}
+          startCollapsed={props.expanded}
+          start={
+            <div class="flex h-full flex-col">
+              <ComposerExtras
+                chips={props.composerChips}
+                menuEnabled={props.composerMenuEnabled}
+                menuEntries={props.composerMenuEntries}
+                onFill={fill}
+                lastAction={lastAction()}
+              />
+              <ChatThread
+                class="h-full min-h-0 flex-1"
+                messages={messages()}
+                chatTitle={props.construct.header?.title}
+                suggestions={props.construct.capabilities?.starters}
+                value={composerValue()}
+                onValueChange={setComposerValue}
+                attach={!!attachments()}
+                accept={attachments()?.accept}
+                voice={props.mic}
+                triggers={buildTriggerDefs(props.slashTriggers, props.mentionTriggers)}
+                onSubmit={() => {}}
+              />
+            </div>
+          }
+        >
+          <WorkPane
+            showDeviceToggle={props.chrome.showDeviceToggle}
+            showUrlBar={props.chrome.showUrlBar}
+            showOpenInNewTab={props.chrome.showOpenInNewTab}
+            showExpand={props.chrome.showExpand}
+            showCodeView={props.chrome.showCodeView}
+            kind={props.paneKind}
+            onKindChange={props.onPaneKindChange}
+            expanded={props.expanded}
+            onExpandedChange={props.onExpandedChange}
+          />
+        </WorkspaceShell>
+      </div>
+    </div>
+  );
+}
+
+function WorkSurfaceSection(props: {
+  kind: PaneKind;
+  onKindChange: (v: PaneKind) => void;
+  showDeviceToggle: boolean;
+  onShowDeviceToggleChange: (v: boolean) => void;
+  showUrlBar: boolean;
+  onShowUrlBarChange: (v: boolean) => void;
+  showOpenInNewTab: boolean;
+  onShowOpenInNewTabChange: (v: boolean) => void;
+  showExpand: boolean;
+  onShowExpandChange: (v: boolean) => void;
+  showCodeView: boolean;
+  onShowCodeViewChange: (v: boolean) => void;
+}): JSX.Element {
+  return (
+    <section class="flex flex-col gap-3 border-b border-border p-4">
+      <h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Work surface</h3>
+      <RadioGroup<PaneKind> options={PANE_KIND_OPTIONS} value={props.kind} label="Pane kind" onChange={props.onKindChange} />
+      <div class="flex flex-col gap-2 pt-1">
+        <span class="text-xs font-medium text-foreground">Toolbar chrome</span>
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-xs text-muted-foreground">Device toggle</span>
+          <Switch checked={props.showDeviceToggle} label="Device toggle" onChange={props.onShowDeviceToggleChange} />
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-xs text-muted-foreground">URL bar</span>
+          <Switch checked={props.showUrlBar} label="URL bar" onChange={props.onShowUrlBarChange} />
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-xs text-muted-foreground">Open in new tab</span>
+          <Switch checked={props.showOpenInNewTab} label="Open in new tab" onChange={props.onShowOpenInNewTabChange} />
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-xs text-muted-foreground">Expand</span>
+          <Switch checked={props.showExpand} label="Expand" onChange={props.onShowExpandChange} />
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-xs text-muted-foreground">Code view</span>
+          <Switch checked={props.showCodeView} label="Code view" onChange={props.onShowCodeViewChange} />
+        </div>
+      </div>
+      <p class="text-xs text-muted-foreground">
+        Preview-only — construct.v1 has no work-surface/pane key at all (T-5, see this file's module doc comment). The split frame is
+        construct-expressible today (`layout: 'split'`); its content and every toolbar affordance above are not. Turning off Code view
+        removes the Preview|Code toggle entirely — a preview-only workspace, not just a disabled control.
+      </p>
+    </section>
+  );
+}
+
+function HeaderActionsSection(props: {
+  showTitle: boolean;
+  onShowTitleChange: (v: boolean) => void;
+  showThemeToggle: boolean;
+  onShowThemeToggleChange: (v: boolean) => void;
+  showActions: boolean;
+  onShowActionsChange: (v: boolean) => void;
+  actions: HeaderActionRow[];
+  onChange: (v: HeaderActionRow[]) => void;
+}): JSX.Element {
+  const [draftLabel, setDraftLabel] = createSignal('');
+  const [draftVariant, setDraftVariant] = createSignal<HeaderButtonVariant>('secondary');
+
+  const move = (index: number, dir: -1 | 1): void => {
+    const target = index + dir;
+    if (target < 0 || target >= props.actions.length) return;
+    const next = props.actions.slice();
+    [next[index], next[target]] = [next[target], next[index]];
+    props.onChange(next);
+  };
+  const remove = (index: number): void => props.onChange(props.actions.filter((_, i) => i !== index));
+  const setVariant = (index: number, variant: HeaderButtonVariant): void => {
+    const next = props.actions.slice();
+    next[index] = { ...next[index], variant };
+    props.onChange(next);
+  };
+  const add = (): void => {
+    if (!draftLabel().trim()) return;
+    props.onChange([...props.actions, { id: newRowId('header-action'), label: draftLabel().trim(), variant: draftVariant() }]);
+    setDraftLabel('');
+  };
+
+  return (
+    <section class="flex flex-col gap-3 border-b border-border p-4">
+      <h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">App header</h3>
+      <p class="text-xs text-muted-foreground">
+        Header title reuses Identity's Header title field above. Owner feedback round: every header element is individually optional
+        (panel toggles below) but the ARRANGEMENT itself is opinionated — no placement knobs. Search and the user avatar are toggled
+        from the App chrome section further down (the same Command palette / User menu switches every shell-bearing template shares).
+      </p>
+
+      <div class="flex items-center justify-between gap-3">
+        <span class="text-xs font-medium text-foreground">Title</span>
+        <Switch checked={props.showTitle} label="Title" onChange={props.onShowTitleChange} />
+      </div>
+      <div class="flex items-center justify-between gap-3">
+        <span class="text-xs font-medium text-foreground">Theme toggle</span>
+        <Switch checked={props.showThemeToggle} label="Theme toggle" onChange={props.onShowThemeToggleChange} />
+      </div>
+      <div class="flex items-center justify-between gap-3">
+        <span class="text-xs font-medium text-foreground">Actions area</span>
+        <Switch checked={props.showActions} label="Actions area" onChange={props.onShowActionsChange} />
+      </div>
+      <p class="text-xs text-muted-foreground">
+        Off hides the whole Share/Deploy button row without clearing it — turn it back on and the rows below are exactly as you left
+        them. Share and Deploy are the stub DEFAULT entries of this row, not hardcoded buttons: add, remove, reorder, and pick each
+        one's variant below.
+      </p>
+
+      <div class="flex flex-col gap-1.5" role="group" aria-label="Header actions">
+        <For each={props.actions}>
+          {(action, i) => (
+            <div class="flex items-center gap-1.5 rounded-md border border-border/70 bg-surface px-2 py-1.5">
+              <span class="flex-1 truncate text-xs font-medium text-foreground">{action.label}</span>
+              <Select
+                options={HEADER_VARIANT_OPTIONS}
+                value={action.variant}
+                onChange={(e) => setVariant(i(), e.currentTarget.value as HeaderButtonVariant)}
+                class="text-xs"
+              />
+              <Button type="button" variant="ghost" size="icon-sm" aria-label={`Move ${action.label} up`} disabled={i() === 0} onClick={() => move(i(), -1)}>
+                <ChevronUp size={12} aria-hidden="true" />
+              </Button>
+              <Button type="button" variant="ghost" size="icon-sm" aria-label={`Move ${action.label} down`} disabled={i() === props.actions.length - 1} onClick={() => move(i(), 1)}>
+                <ChevronDown size={12} aria-hidden="true" />
+              </Button>
+              <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove ${action.label}`} onClick={() => remove(i())}>
+                <X size={12} aria-hidden="true" />
+              </Button>
+            </div>
+          )}
+        </For>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <Input value={draftLabel()} onValueInput={setDraftLabel} placeholder="Button label" class="flex-1 text-xs" />
+        <Select options={HEADER_VARIANT_OPTIONS} value={draftVariant()} onChange={(e) => setDraftVariant(e.currentTarget.value as HeaderButtonVariant)} class="text-xs" />
+        <Button type="button" variant="outline" size="sm" onClick={add}>Add</Button>
+      </div>
+    </section>
+  );
+}
+
+function ComposerSection(props: {
+  chips: ComposerChip[];
+  onChipsChange: (v: ComposerChip[]) => void;
+  menuEnabled: boolean;
+  onMenuEnabledChange: (v: boolean) => void;
+  menuEntries: ComposerMenuEntry[];
+  onMenuEntriesChange: (v: ComposerMenuEntry[]) => void;
+  slashTriggers: TriggerGroupState;
+  onSlashTriggersChange: (v: TriggerGroupState) => void;
+  mentionTriggers: TriggerGroupState;
+  onMentionTriggersChange: (v: TriggerGroupState) => void;
+  mic: boolean;
+  onMicChange: (v: boolean) => void;
+}): JSX.Element {
+  const [chipLabel, setChipLabel] = createSignal('');
+  const [chipValue, setChipValue] = createSignal('');
+  const addChip = (): void => {
+    if (!chipLabel().trim() || !chipValue().trim()) return;
+    props.onChipsChange([...props.chips, { id: newRowId('chip'), label: chipLabel().trim(), value: chipValue().trim() }]);
+    setChipLabel('');
+    setChipValue('');
+  };
+  const removeChip = (id: string): void => props.onChipsChange(props.chips.filter((c) => c.id !== id));
+
+  const [entryLabel, setEntryLabel] = createSignal('');
+  const [entryIcon, setEntryIcon] = createSignal('');
+  const moveEntry = (index: number, dir: -1 | 1): void => {
+    const target = index + dir;
+    if (target < 0 || target >= props.menuEntries.length) return;
+    const next = props.menuEntries.slice();
+    [next[index], next[target]] = [next[target], next[index]];
+    props.onMenuEntriesChange(next);
+  };
+  const removeEntry = (id: string): void => props.onMenuEntriesChange(props.menuEntries.filter((e) => e.id !== id));
+  const addEntry = (): void => {
+    if (!entryLabel().trim()) return;
+    props.onMenuEntriesChange([...props.menuEntries, { id: newRowId('menu'), label: entryLabel().trim(), icon: entryIcon().trim() || undefined }]);
+    setEntryLabel('');
+    setEntryIcon('');
+  };
+
+  return (
+    <section class="flex flex-col gap-3 border-b border-border p-4" data-builder-preview-only-controls>
+      <h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Composer</h3>
+
+      <div class="flex items-center justify-between gap-3">
+        <span class="text-xs font-medium text-foreground">Microphone</span>
+        <Switch checked={props.mic} label="Microphone" onChange={props.onMicChange} />
+      </div>
+      <p class="text-xs text-muted-foreground">Attachments reuse Capabilities' own Attachments toggle above — now actually wired to the composer.</p>
+
+      <div class="flex flex-col gap-1.5 pt-1">
+        <span class="text-xs font-medium text-foreground">Quick-fill chips</span>
+        <For each={props.chips}>
+          {(chip) => (
+            <div class="flex items-center gap-1.5 rounded-md border border-border/70 bg-surface px-2 py-1.5">
+              <span class="w-24 shrink-0 truncate text-xs font-medium text-foreground">{chip.label}</span>
+              <span class="flex-1 truncate text-xs text-muted-foreground">{chip.value}</span>
+              <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove ${chip.label}`} onClick={() => removeChip(chip.id)}>
+                <X size={12} aria-hidden="true" />
+              </Button>
+            </div>
+          )}
+        </For>
+        <div class="flex items-center gap-1.5">
+          <Input value={chipLabel()} onValueInput={setChipLabel} placeholder="Label" class="w-24 shrink-0 text-xs" />
+          <Input value={chipValue()} onValueInput={setChipValue} placeholder="Value filled into the composer" class="flex-1 text-xs" />
+          <Button type="button" variant="outline" size="sm" onClick={addChip}>Add</Button>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between gap-3 pt-1">
+        <span class="text-xs font-medium text-foreground">Composer menu</span>
+        <Switch checked={props.menuEnabled} label="Composer menu" onChange={props.onMenuEnabledChange} />
+      </div>
+      <Show when={props.menuEnabled}>
+        <div class="flex flex-col gap-1.5" role="group" aria-label="Composer menu entries">
+          <For each={props.menuEntries}>
+            {(entry, i) => (
+              <div class="flex items-center gap-1.5 rounded-md border border-border/70 bg-surface px-2 py-1.5">
+                {renderIcon(entry.icon, { class: 'size-3.5 shrink-0 text-muted-foreground' })}
+                <span class="flex-1 truncate text-xs font-medium text-foreground">{entry.label}</span>
+                <Button type="button" variant="ghost" size="icon-sm" aria-label={`Move ${entry.label} up`} disabled={i() === 0} onClick={() => moveEntry(i(), -1)}>
+                  <ChevronUp size={12} aria-hidden="true" />
+                </Button>
+                <Button type="button" variant="ghost" size="icon-sm" aria-label={`Move ${entry.label} down`} disabled={i() === props.menuEntries.length - 1} onClick={() => moveEntry(i(), 1)}>
+                  <ChevronDown size={12} aria-hidden="true" />
+                </Button>
+                <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove ${entry.label}`} onClick={() => removeEntry(entry.id)}>
+                  <X size={12} aria-hidden="true" />
+                </Button>
+              </div>
+            )}
+          </For>
+          <div class="flex items-center gap-1.5">
+            <Input value={entryLabel()} onValueInput={setEntryLabel} placeholder="Entry label" class="flex-1 text-xs" />
+            <Input value={entryIcon()} onValueInput={setEntryIcon} placeholder="icon name" class="w-24 shrink-0 text-xs" />
+            <Button type="button" variant="outline" size="sm" onClick={addEntry}>Add</Button>
+          </div>
+        </div>
+      </Show>
+
+      <ComposerTriggersSection
+        slash={props.slashTriggers}
+        onSlashChange={props.onSlashTriggersChange}
+        mention={props.mentionTriggers}
+        onMentionChange={props.onMentionTriggersChange}
+      />
+
+      <p class="text-xs text-muted-foreground">
+        Preview-only — none of the composer knobs above exist in construct.v1 today (T-5, see this file's module doc comment and the
+        widened Workspace proposal in docs/superpowers/research/2026-08-28-builder-t5-vocabulary-proposals.md). Triggers are the one
+        exception: they're wired to ChatThread's real `triggers` prop, a real mechanism already shipped at the component tier — ON by
+        default for this template (owner's default matrix: agentic/dev shapes default on).
+      </p>
+    </section>
+  );
+}
+
+function MessageActionsSection(props: {
+  userActionRows: ActionRowState<UserActionId>[];
+  onUserActionRowsChange: (v: ActionRowState<UserActionId>[]) => void;
+  assistantActionRows: ActionRowState<AssistantActionId>[];
+  onAssistantActionRowsChange: (v: ActionRowState<AssistantActionId>[]) => void;
+}): JSX.Element {
+  return (
+    <section class="flex flex-col gap-3 border-b border-border p-4" data-builder-preview-only-controls>
+      <h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Message actions</h3>
+      <div class="flex flex-col gap-1.5">
+        <span class="text-xs font-medium text-foreground">Your messages</span>
+        <ActionRowPicker legend="Your messages — action order" catalog={USER_ACTION_CATALOG} rows={props.userActionRows} onChange={props.onUserActionRowsChange} />
+      </div>
+      <div class="flex flex-col gap-1.5">
+        <span class="text-xs font-medium text-foreground">Assistant messages</span>
+        <ActionRowPicker legend="Assistant messages — action order" catalog={ASSISTANT_ACTION_CATALOG} rows={props.assistantActionRows} onChange={props.onAssistantActionRowsChange} />
+      </div>
+      <p class="text-xs text-muted-foreground">Same role-scoped picker every other template uses — reused, not forked.</p>
+    </section>
+  );
+}
+
+function WorkspaceBuilderDemo(): JSX.Element {
+  const [construct, setConstruct] = createSignal<BuilderConstruct>(DEFAULT_CONSTRUCT);
+  const [paneKind, setPaneKind] = createSignal<PaneKind>('preview');
+  const [showDeviceToggle, setShowDeviceToggle] = createSignal(true);
+  const [showUrlBar, setShowUrlBar] = createSignal(true);
+  const [showOpenInNewTab, setShowOpenInNewTab] = createSignal(true);
+  const [showExpand, setShowExpand] = createSignal(true);
+  const [showCodeView, setShowCodeView] = createSignal(true);
+  const [expanded, setExpanded] = createSignal(false);
+  const [headerActions, setHeaderActions] = createSignal<HeaderActionRow[]>(DEFAULT_HEADER_ACTIONS);
+  const [headerShowTitle, setHeaderShowTitle] = createSignal(true);
+  const [headerShowThemeToggle, setHeaderShowThemeToggle] = createSignal(true);
+  const [headerShowActions, setHeaderShowActions] = createSignal(true);
+  const [composerChips, setComposerChips] = createSignal<ComposerChip[]>(DEFAULT_COMPOSER_CHIPS);
+  const [composerMenuEnabled, setComposerMenuEnabled] = createSignal(true);
+  const [composerMenuEntries, setComposerMenuEntries] = createSignal<ComposerMenuEntry[]>(DEFAULT_COMPOSER_MENU_ENTRIES);
+  // Owner's default matrix (docs/superpowers/research/2026-08-28-builder-t5-
+  // vocabulary-proposals.md, composer.triggers): ON by default for Workspace,
+  // an agentic/dev shape (the Claude-Code/Codex precedent).
+  const [slashTriggers, setSlashTriggers] = createSignal<TriggerGroupState>({ enabled: true, entries: DEFAULT_SLASH_ENTRIES });
+  const [mentionTriggers, setMentionTriggers] = createSignal<TriggerGroupState>({ enabled: true, entries: DEFAULT_MENTION_ENTRIES });
+  const [mic, setMic] = createSignal(false);
+  const [userActionRows, setUserActionRows] = createSignal<ActionRowState<UserActionId>[]>(DEFAULT_USER_ACTION_ROWS);
+  const [assistantActionRows, setAssistantActionRows] = createSignal<ActionRowState<AssistantActionId>[]>(DEFAULT_ASSISTANT_ACTION_ROWS);
+  const [viewport, setViewport] = createSignal<BuilderViewport>('desktop');
+  const [shell, setShell] = createSignal<ShellControlsState>({ commandPalette: true, userMenu: true });
+
+  const userActions = createMemo<ChatMessageAction[]>(() => userActionRows().filter((r) => r.enabled).map((r) => r.id));
+  const assistantActions = createMemo<(ChatMessageAction | CustomAction)[]>(() =>
+    assistantActionRows().filter((r) => r.enabled).map((r) => (r.id === 'speak' ? SPEAK_CUSTOM_ACTION : r.id)),
+  );
+
+  // Owner feedback round — a REAL dark toggle in the header, kept in sync
+  // with the panel's own Theme > Mode select rather than a second signal:
+  // both read/write `construct().theme.mode` ('light' | 'dark' | 'system'),
+  // the one field `BuilderPanel`'s Mode select already writes (previously
+  // unwired to anything visual in this template, same as every other
+  // template's Theme > Mode — this round is the first to actually apply
+  // it). `system` follows `prefers-color-scheme`, matching
+  // `elements/define.tsx`'s own `createDarkMode` resolution exactly (that
+  // helper is module-private, replicated here — see the comment above
+  // `WorkspacePreview`'s root div for why).
+  const [systemDark, setSystemDark] = createSignal(
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+      : false,
+  );
+  createEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = (e: MediaQueryListEvent): void => { setSystemDark(e.matches); };
+    mq.addEventListener('change', onChange);
+    onCleanup(() => mq.removeEventListener('change', onChange));
+  });
+  const resolvedDark = createMemo<boolean>(() => {
+    const mode = construct().theme?.mode ?? 'system';
+    return mode === 'dark' || (mode === 'system' && systemDark());
+  });
+  const toggleDark = (): void => {
+    const next = resolvedDark() ? 'light' : 'dark';
+    setConstruct((c) => ({ ...c, theme: { ...c.theme, mode: next } }));
+  };
+
+  return (
+    <div class="h-screen w-screen">
+      <BuilderLayout
+        name={construct().name}
+        panel={
+          <>
+            <BuilderPanel value={construct()} onChange={setConstruct} sections={{ layout: false, widget: 'never', provider: true, home: false }} />
+            <WorkSurfaceSection
+              kind={paneKind()}
+              onKindChange={setPaneKind}
+              showDeviceToggle={showDeviceToggle()}
+              onShowDeviceToggleChange={setShowDeviceToggle}
+              showUrlBar={showUrlBar()}
+              onShowUrlBarChange={setShowUrlBar}
+              showOpenInNewTab={showOpenInNewTab()}
+              onShowOpenInNewTabChange={setShowOpenInNewTab}
+              showExpand={showExpand()}
+              onShowExpandChange={setShowExpand}
+              showCodeView={showCodeView()}
+              onShowCodeViewChange={setShowCodeView}
+            />
+            <HeaderActionsSection
+              showTitle={headerShowTitle()}
+              onShowTitleChange={setHeaderShowTitle}
+              showThemeToggle={headerShowThemeToggle()}
+              onShowThemeToggleChange={setHeaderShowThemeToggle}
+              showActions={headerShowActions()}
+              onShowActionsChange={setHeaderShowActions}
+              actions={headerActions()}
+              onChange={setHeaderActions}
+            />
+            <ComposerSection
+              chips={composerChips()}
+              onChipsChange={setComposerChips}
+              menuEnabled={composerMenuEnabled()}
+              onMenuEnabledChange={setComposerMenuEnabled}
+              menuEntries={composerMenuEntries()}
+              onMenuEntriesChange={setComposerMenuEntries}
+              slashTriggers={slashTriggers()}
+              onSlashTriggersChange={setSlashTriggers}
+              mentionTriggers={mentionTriggers()}
+              onMentionTriggersChange={setMentionTriggers}
+              mic={mic()}
+              onMicChange={setMic}
+            />
+            <MessageActionsSection
+              userActionRows={userActionRows()}
+              onUserActionRowsChange={setUserActionRows}
+              assistantActionRows={assistantActionRows()}
+              onAssistantActionRowsChange={setAssistantActionRows}
+            />
+            <ShellSection state={shell()} onChange={setShell} />
+          </>
+        }
+        preview={
+          <WorkspacePreview
+            construct={construct()}
+            paneKind={paneKind()}
+            onPaneKindChange={setPaneKind}
+            chrome={{
+              showDeviceToggle: showDeviceToggle(),
+              showUrlBar: showUrlBar(),
+              showOpenInNewTab: showOpenInNewTab(),
+              showExpand: showExpand(),
+              showCodeView: showCodeView(),
+            }}
+            expanded={expanded()}
+            onExpandedChange={setExpanded}
+            headerActions={headerActions()}
+            headerShowTitle={headerShowTitle()}
+            headerShowActions={headerShowActions()}
+            headerShowThemeToggle={headerShowThemeToggle()}
+            dark={resolvedDark()}
+            onToggleDark={toggleDark}
+            composerChips={composerChips()}
+            composerMenuEnabled={composerMenuEnabled()}
+            composerMenuEntries={composerMenuEntries()}
+            slashTriggers={slashTriggers()}
+            mentionTriggers={mentionTriggers()}
+            mic={mic()}
+            userActions={userActions()}
+            assistantActions={assistantActions()}
+            shell={shell()}
+            viewport={viewport()}
+          />
+        }
+        viewport={viewport()}
+        onViewportChange={setViewport}
+      />
+    </div>
+  );
+}
+
+const meta = { title: 'Labs/Builder/Workspace', parameters: { layout: 'fullscreen' } } satisfies Meta;
+export default meta;
+type Story = StoryObj;
+
+/**
+ * The Workspace template's builder: a resizable split — a chat rail
+ * (`WorkspaceShell`'s `start`) beside a large work pane (`children`).
+ * Modeled on `Labs/Apps`'s Lovable and v0 stories (read closely before
+ * building): the work pane carries Lovable's own browser-chrome toolbar
+ * (device toggle, URL bar, open-in-new-tab, Preview|Code with Preview
+ * first) plus a v0-style Expand control wired through `WorkspaceShell`'s
+ * REAL controlled `startCollapsed` prop — every toolbar affordance is
+ * individually optional. The pane's own viewport (behind both the preview
+ * and code content, matching Lovable's real preview surface) sits on a
+ * muted background, distinct from the pane's toolbar and content cards.
+ * An app-level header sits above the split: title on the left; on the
+ * right, a fixed left-to-right arrangement (search + a real dark-mode
+ * toggle scoped to just this preview frame, a divider, the configurable
+ * Share/Deploy actions row, a divider, a compact avatar+chevron user menu)
+ * — every element individually optional via a panel toggle, the
+ * arrangement itself is not. The composer gains optional quick-fill
+ * chips (wired to `ChatThread`'s real controlled `value`) and a v0-style
+ * `+` menu (the kit's real `Dropdown` primitives), plus Microphone and a
+ * now-actually-wired Attachments toggle. Panel: Identity, Provider, Theme,
+ * Capabilities, Work surface, App header, Composer, and the shared Message
+ * actions picker.
+ *
+ * This template's own module doc comment draws the construct-expressible
+ * boundary concretely: the split FRAME is real (`layout: 'split'`);
+ * everything else this round added — pane content, pane chrome, header
+ * actions, and all four composer knobs — has no construct vocabulary
+ * today (T-5, widened proposal in docs/superpowers/research/
+ * 2026-08-28-builder-t5-vocabulary-proposals.md).
+ */
+export const Workspace: Story = {
+  render: () => <WorkspaceBuilderDemo />,
+};

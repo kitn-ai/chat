@@ -51,6 +51,8 @@ export type {
 export { clampBasis } from './ui/resizable';
 export { Input } from './ui/input';
 export type { InputProps } from './ui/input';
+export { ColorField, isValidHex } from './ui/color-field';
+export type { ColorFieldProps } from './ui/color-field';
 export { Kbd } from './ui/kbd';
 export type { KbdProps, KbdPlatform } from './ui/kbd';
 export { Checkbox } from './ui/checkbox';
@@ -61,6 +63,8 @@ export { CheckboxGroup } from './ui/checkbox-group';
 export type { CheckboxGroupProps, CheckboxOption } from './ui/checkbox-group';
 export { Switch } from './ui/switch';
 export type { SwitchProps } from './ui/switch';
+export { ToggleChip, toggleChipVariants } from './ui/toggle-chip';
+export type { ToggleChipProps } from './ui/toggle-chip';
 export { Slider } from './ui/slider';
 export type { SliderProps } from './ui/slider';
 export { Select } from './ui/select';
@@ -169,5 +173,10 @@ export type {
 } from './components/audio-visualizer';
 export type { VisualizerSize } from './components/audio-visualizer/sizes';
 export { WorkspaceShell, type WorkspaceShellProps, type WorkspaceShellController, type WorkspaceAsideSide, type WorkspaceAsideToggleDetail, type WorkspaceAsideResizeDetail } from './components/workspace-shell';
+// Captions — live closed-captioning line for voice surfaces, distinct from a
+// scrollback transcript. Voice-domain, composed from kit tokens (not a `ui/`
+// atom), same tier as AudioVisualizer above.
+export { Captions } from './components/captions';
+export type { CaptionsProps, CaptionSegment, CaptionsVariant } from './components/captions';
 export { createConversationItemsController, readConversationItemId } from './components/conversation-list';
 export type { ConversationItemsController, ConversationItemsControllerOptions } from './components/conversation-list';

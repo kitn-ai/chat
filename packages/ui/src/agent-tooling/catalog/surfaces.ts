@@ -72,6 +72,12 @@ export const inventory: TInventoryEntry[] = [
   { title: 'wisp', sort: 'surface', note: 'Labs/App, end-to-end composition' },
   { title: 'lovable', sort: 'surface', note: 'Labs/App, end-to-end composition' },
   { title: 'split-workspace', sort: 'surface', note: 'Labs/App, end-to-end composition' },
+  {
+    title: 'Builder',
+    sort: 'surface',
+    note:
+      'the template-first visual construct builder, story-first (docs/superpowers/specs/2026-08-28-template-builder-design.md): Labs/Builder/Start (the template picker) plus one Labs/Builder/<Template> story per template as each lands — Round W (T-2/T-6) replaced the old single Labs/Apps builder.stories.tsx entry (renamed from "builder", which resolved only that one Labs/Apps file) with this GROUP row, the same synthesized-prefix mechanism "Foundations" already uses, so a new template story registers under it without a new row each round',
+  },
   { title: 'Workspace Home', sort: 'surface', note: 'the workspace preset' },
   { title: 'Message Thread', sort: 'ingredient', note: 'the keystone of the composition-first direction (kai-thread)' },
   { title: 'Composer', sort: 'ingredient', note: 'rich input, lives inside a surface' },
