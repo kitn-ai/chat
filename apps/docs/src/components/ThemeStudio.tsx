@@ -13,6 +13,11 @@
  *  actually do. The type-size rungs earned their place when theme.css re-pointed
  *  Tailwind's `text-xs`/`text-sm`/`text-base`/`text-lg` at `--kai-text-*`: before
  *  that a size slider would have moved a small minority of the kit's call sites.
+ *
+ *  The token list lives in theme-tokens.ts (guarded against theme.css by
+ *  packages/ui/tests/styles/theme-studio-coverage.test.ts). The DEFAULTS are not
+ *  typed here at all: theme.css is imported raw and parsed, so the editor's
+ *  "Default" theme is the kit's, byte for byte, and cannot drift from it.
  */
 import { createSignal, createEffect, onMount, onCleanup, For, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
@@ -27,6 +32,8 @@ import IconSave from '~icons/lucide/bookmark';
 import IconClose from '~icons/lucide/x';
 import { THEME_PRESETS, SHADCN_TO_KAI } from './theme-presets';
 import { sampleFor } from '../lib/sample-data';
+import kitCss from '@kitn.ai/ui/theme.css?raw';
+import { GROUPS, ALL_TOKENS, TEXT_RUNGS, parseKitDefaults, remValue, type TextRung } from './theme-tokens';
 
 /** Mount a kai-* element into `container`, seeded from the docs sample-data registry
  *  (the same verified data the component pages use) so the showroom shows real,
@@ -91,94 +98,20 @@ function Modal(props: { title: string; onClose: () => void; wide?: boolean; chil
 
 type Palette = Record<string, string>;
 
-/** One editable token: full `--kai-*` name, label, hint, and light/dark defaults
- *  (verbatim from theme.css). Grouped for the inspector. */
-type TokenDef = { token: string; label: string; hint: string; light: string; dark: string };
-type Group = { name: string; tokens: TokenDef[] };
+/** Every token's light/dark default, read out of the kit's own theme.css. */
+const KIT_DEFAULTS = parseKitDefaults(kitCss);
+const kitDefault = (token: string, mode: 'light' | 'dark'): string => {
+  const d = KIT_DEFAULTS.get(token);
+  if (!d) throw new Error(`theme.css declares no ${token}; the theme editor lists a knob that would theme nothing.`);
+  return d[mode];
+};
+const DEFAULT_RADIUS = remValue(kitDefault('--kai-radius', 'light')); // rem
 
-const GROUPS: Group[] = [
-  {
-    name: 'Surfaces',
-    tokens: [
-      { token: '--kai-color-background', label: 'Background', hint: 'App / chat surface', light: 'hsl(0 0% 100%)', dark: 'hsl(50 2% 9%)' },
-      { token: '--kai-color-foreground', label: 'Foreground', hint: 'Default text', light: 'hsl(240 10% 3.9%)', dark: 'hsl(0 0% 98%)' },
-      { token: '--kai-color-card', label: 'Card', hint: 'Bubbles, panels, cards', light: 'hsl(0 0% 100%)', dark: 'hsl(45 4% 12%)' },
-      { token: '--kai-color-card-foreground', label: 'Card text', hint: 'Text on cards', light: 'hsl(240 10% 3.9%)', dark: 'hsl(0 0% 98%)' },
-      { token: '--kai-color-popover', label: 'Popover', hint: 'Menus & popovers', light: 'hsl(0 0% 100%)', dark: 'hsl(45 4% 12%)' },
-      { token: '--kai-color-popover-foreground', label: 'Popover text', hint: 'Text in popovers', light: 'hsl(240 10% 3.9%)', dark: 'hsl(0 0% 98%)' },
-      { token: '--kai-color-sidebar', label: 'Sidebar', hint: 'Conversation sidebar', light: 'hsl(0 0% 100%)', dark: 'hsl(50 2% 7%)' },
-    ],
-  },
-  {
-    name: 'Brand & actions',
-    tokens: [
-      { token: '--kai-color-primary', label: 'Primary', hint: 'Buttons, accents, send', light: 'hsl(240 5.9% 10%)', dark: 'hsl(0 0% 98%)' },
-      { token: '--kai-color-primary-foreground', label: 'On primary', hint: 'Text on primary', light: 'hsl(0 0% 98%)', dark: 'hsl(45 4% 11%)' },
-      { token: '--kai-color-ring', label: 'Focus ring', hint: 'Keyboard-focus outline', light: 'hsl(217 91% 53%)', dark: 'hsl(217 91% 68%)' },
-      { token: '--kai-color-accent', label: 'Accent', hint: 'Hover / accent surface', light: 'hsl(240 4.8% 95.9%)', dark: 'hsl(45 4% 17%)' },
-      { token: '--kai-color-accent-foreground', label: 'On accent', hint: 'Text on accent', light: 'hsl(240 5.9% 10%)', dark: 'hsl(0 0% 98%)' },
-      { token: '--kai-color-secondary', label: 'Secondary', hint: 'Secondary surface', light: 'hsl(240 4.8% 95.9%)', dark: 'hsl(45 4% 17%)' },
-      { token: '--kai-color-secondary-foreground', label: 'On secondary', hint: 'Text on secondary', light: 'hsl(240 5.9% 10%)', dark: 'hsl(0 0% 98%)' },
-    ],
-  },
-  {
-    name: 'Muted text',
-    tokens: [
-      { token: '--kai-color-muted', label: 'Muted', hint: 'Subtle fills', light: 'hsl(240 4.8% 95.9%)', dark: 'hsl(45 4% 17%)' },
-      { token: '--kai-color-muted-foreground', label: 'Muted text', hint: 'Secondary text', light: 'hsl(240 3.8% 43%)', dark: 'hsl(45 4% 64%)' },
-    ],
-  },
-  {
-    name: 'Inputs & borders',
-    tokens: [
-      { token: '--kai-color-border', label: 'Border', hint: 'Dividers & outlines', light: 'hsl(240 5.9% 90%)', dark: 'hsl(45 4% 17%)' },
-      { token: '--kai-color-input', label: 'Input', hint: 'Input field background', light: 'hsl(240 5.9% 90%)', dark: 'hsl(45 4% 17%)' },
-    ],
-  },
-  {
-    name: 'Status & code',
-    tokens: [
-      { token: '--kai-color-destructive', label: 'Destructive', hint: 'Danger / delete', light: 'hsl(0 72% 45%)', dark: 'hsl(0 62.8% 30.6%)' },
-      { token: '--kai-color-destructive-foreground', label: 'On destructive', hint: 'Text on danger', light: 'hsl(0 0% 98%)', dark: 'hsl(0 0% 98%)' },
-      { token: '--kai-color-code-foreground', label: 'Code', hint: 'Inline code accent', light: 'hsl(224.3 76.3% 48%)', dark: 'hsl(213 94% 78%)' },
-      { token: '--kai-color-highlight', label: 'Highlight', hint: 'Marked keywords (composer highlights)', light: 'hsl(45 96% 78%)', dark: 'hsl(40 75% 26%)' },
-      { token: '--kai-color-selection', label: 'Selection', hint: 'Selected-text background', light: 'hsl(213 94% 87%)', dark: 'hsl(217 60% 32%)' },
-      { token: '--kai-color-selection-foreground', label: 'On selection', hint: 'Selected-text colour', light: 'hsl(240 10% 3.9%)', dark: 'hsl(0 0% 98%)' },
-      { token: '--kai-color-tool-blue', label: 'Tool blue', hint: 'Tool / status chip', light: 'hsl(217 91% 38%)', dark: 'hsl(217 91% 70%)' },
-      { token: '--kai-color-tool-amber', label: 'Tool amber', hint: 'Tool / status chip', light: 'hsl(38 92% 28%)', dark: 'hsl(38 92% 50%)' },
-      { token: '--kai-color-tool-green', label: 'Tool green', hint: 'Tool / status chip', light: 'hsl(142 71% 26%)', dark: 'hsl(142 71% 45%)' },
-      { token: '--kai-color-tool-red', label: 'Tool red', hint: 'Tool / status chip', light: 'hsl(0 72% 42%)', dark: 'hsl(0 84% 70%)' },
-    ],
-  },
-  {
-    name: 'Scrollbar',
-    tokens: [
-      { token: '--kai-color-scrollbar-thumb', label: 'Scrollbar', hint: 'Scrollbar thumb', light: 'hsl(240 5% 80%)', dark: 'hsl(45 3% 30%)' },
-      { token: '--kai-color-scrollbar-thumb-hover', label: 'Scrollbar hover', hint: 'Thumb on hover', light: 'hsl(240 4% 64%)', dark: 'hsl(45 3% 42%)' },
-    ],
-  },
-];
-
-const ALL_TOKENS = GROUPS.flatMap((g) => g.tokens);
-const DEFAULT_RADIUS = 0.6; // rem — kit default --kai-radius
-
-/** The kit's semantic type scale. Every rung is a `--kai-text-*` token that
- *  theme.css resolves through (and that Tailwind's own text-xs/sm/base/lg are
- *  re-pointed at), so setting one here moves the whole kit, not one component.
- *  Defaults are verbatim from theme.css. `body` is the medium rung the ladder
- *  hangs off — labelled as such so nobody has to infer which one is the default. */
-type TextRung = { token: string; label: string; hint: string; def: number; min: number; max: number };
-const TEXT_RUNGS: TextRung[] = [
-  { token: '--kai-text-micro', label: 'Micro', hint: 'Badges, pills, eyebrows', def: 0.625, min: 0.5, max: 1 },
-  { token: '--kai-text-caption', label: 'Caption', hint: 'Sub-counts, xs code', def: 0.6875, min: 0.5, max: 1.125 },
-  { token: '--kai-text-meta', label: 'Meta', hint: 'Controls, toggles, switchers', def: 0.75, min: 0.5, max: 1.25 },
-  { token: '--kai-text-body', label: 'Body (default)', hint: 'Primary reading text', def: 0.875, min: 0.625, max: 1.375 },
-  { token: '--kai-text-title', label: 'Title', hint: 'Emphasis & headers', def: 1, min: 0.75, max: 1.625 },
-  { token: '--kai-text-lg', label: 'Large', hint: 'Section headings, lg prose', def: 1.125, min: 0.875, max: 2 },
-];
+/** A rung's default rem, from theme.css. */
+const rungDef = (r: TextRung): number => remValue(kitDefault(r.token, 'light'));
 const TEXT_STEP = 0.0625; // rem — 1px at a 16px root
 type TextScale = Record<string, number>;
-const seedText = (): TextScale => Object.fromEntries(TEXT_RUNGS.map((r) => [r.token, r.def]));
+const seedText = (): TextScale => Object.fromEntries(TEXT_RUNGS.map((r) => [r.token, rungDef(r)]));
 /** Fill any rung a saved/imported scale is missing (older presets, partial paste). */
 const fillText = (t: TextScale | undefined): TextScale => ({ ...seedText(), ...(t ?? {}) });
 /** rem → px at the 16px root, for the readout beside each slider. */
@@ -258,8 +191,45 @@ function shiftPalette(p: Palette, a: Hsl): Palette {
   return Object.fromEntries(Object.entries(p).map(([k, v]) => [k, shiftHsl(v, a)]));
 }
 
-const seedPalette = (mode: 'light' | 'dark'): Palette =>
-  Object.fromEntries(ALL_TOKENS.map((t) => [t.token, toHex(mode === 'light' ? t.light : t.dark)]));
+/** Any CSS color expression → #rrggbb. Plain colors go through the canvas; a
+ *  color-mix() (or anything else the canvas parser can't take) is evaluated by
+ *  the browser through a hidden probe element's background-color. */
+let _probe: HTMLElement | undefined;
+function cssToHex(expr: string): string {
+  if (/^#[0-9a-fA-F]{6}$/.test(expr)) return expr.toLowerCase();
+  if (!/color-mix\(|var\(/.test(expr)) return toHex(expr);
+  if (!_probe) {
+    _probe = document.createElement('div');
+    _probe.style.cssText = 'position:absolute;width:0;height:0;pointer-events:none;visibility:hidden';
+    document.body.appendChild(_probe);
+  }
+  _probe.style.backgroundColor = '';
+  _probe.style.backgroundColor = expr;
+  return toHex(getComputedStyle(_probe).backgroundColor);
+}
+
+/** The full palette for one mode as hex, from the kit's defaults with `overrides`
+ *  (raw CSS values, e.g. a preset's oklch strings) laid over them. The derived
+ *  tokens — surface, the soft status tints, hover, selected — default in
+ *  theme.css to a color-mix over OTHER tokens, so their `var(--color-x)`
+ *  references are substituted from this same palette first: a preset's surface
+ *  then follows the preset's muted/background, exactly as it does in the kit. */
+function resolvePalette(mode: 'light' | 'dark', overrides: Palette = {}): Palette {
+  const out: Palette = {};
+  const inFlight = new Set<string>();
+  const resolve = (token: string): string => {
+    if (out[token]) return out[token];
+    if (overrides[token]) return (out[token] = cssToHex(overrides[token]));
+    if (inFlight.has(token)) return '#000000'; // a cycle would be a theme.css bug
+    inFlight.add(token);
+    const expr = kitDefault(token, mode).replace(/var\(\s*--color-([a-z0-9-]+)\s*\)/g, (_, name: string) => resolve(`--kai-color-${name}`));
+    out[token] = cssToHex(expr);
+    inFlight.delete(token);
+    return out[token];
+  };
+  for (const t of ALL_TOKENS) resolve(t.token);
+  return out;
+}
 
 /** All selectable themes: the kit default + the ported tweakcn presets. */
 const ALL_THEME_NAMES = ['Default', ...THEME_PRESETS.map((t) => t.name)];
@@ -355,7 +325,7 @@ interface ThemeExtras { radius: number; fontBase: string; fontCode: string; trac
 function buildCss(light: Palette, dark: Palette, x: ThemeExtras): string {
   const rootExtra = [
     `  --kai-radius: ${x.radius}rem;`,
-    ...TEXT_RUNGS.map((r) => `  ${r.token}: ${x.text[r.token] ?? r.def}rem;`),
+    ...TEXT_RUNGS.map((r) => `  ${r.token}: ${x.text[r.token] ?? rungDef(r)}rem;`),
     x.fontBase ? `  --kai-font-base: ${x.fontBase};` : '',
     x.fontCode ? `  --kai-font-code: ${x.fontCode};` : '',
     x.tracking ? `  --kai-tracking: ${x.tracking}em;` : '',
@@ -458,7 +428,7 @@ export default function ThemeStudio() {
     setOrClear('--kai-font-code', fontCode());
     canvasEl.style.setProperty('--kai-tracking', `${tracking()}em`);
     const scale = textScale();
-    for (const r of TEXT_RUNGS) canvasEl.style.setProperty(r.token, `${scale[r.token] ?? r.def}rem`);
+    for (const r of TEXT_RUNGS) canvasEl.style.setProperty(r.token, `${scale[r.token] ?? rungDef(r)}rem`);
     canvasEl.style.setProperty('--kai-shadow-color', shadowColor());
     ensureFont(fontBase());
     ensureFont(fontCode());
@@ -479,26 +449,27 @@ export default function ThemeStudio() {
     // A user-saved preset stores full palettes + extras — apply directly.
     const s = saved().find((x) => x.name === name);
     if (s) {
-      setLight(s.light); setDark(s.dark); setRadius(s.radius);
+      // Tokens the kit grew after the preset was saved get their derived default.
+      setLight(resolvePalette('light', s.light)); setDark(resolvePalette('dark', s.dark)); setRadius(s.radius);
       setFontBase(s.fontBase); setFontCode(s.fontCode); setTracking(s.tracking); setShadowColor(s.shadow);
       setTextScale(fillText(s.text));
       ensureFont(s.fontBase); ensureFont(s.fontCode);
       setPreset(name);
       return;
     }
-    const l = seedPalette('light');
-    const d = seedPalette('dark');
+    const lo: Palette = {};
+    const dk: Palette = {};
     setTextScale(seedText()); // no built-in preset ships a type scale — back to the kit ladder
     const t = THEME_PRESETS.find((x) => x.name === name);
     if (t) {
       for (const [k, tok] of Object.entries(SHADCN_TO_KAI)) {
-        if (t.light[k]) l[tok] = toHex(t.light[k]);
-        if (t.dark[k]) d[tok] = toHex(t.dark[k]);
+        if (t.light[k]) lo[tok] = t.light[k];
+        if (t.dark[k]) dk[tok] = t.dark[k];
       }
       // The kit has a code-foreground token tweakcn doesn't — derive it from the
       // theme's ring so inline code stays on-brand.
-      if (t.light.ring) l['--kai-color-code-foreground'] = toHex(t.light.ring);
-      if (t.dark.ring) d['--kai-color-code-foreground'] = toHex(t.dark.ring);
+      if (t.light.ring) lo['--kai-color-code-foreground'] = t.light.ring;
+      if (t.dark.ring) dk['--kai-color-code-foreground'] = t.dark.ring;
       setRadius(t.radius);
       setFontBase(matchFont(t.fontBase, BODY_FONTS) || t.fontBase || '');
       setFontCode(matchFont(t.fontCode, CODE_FONTS) || t.fontCode || '');
@@ -511,8 +482,10 @@ export default function ThemeStudio() {
       setTracking(0);
       setShadowColor('#000000');
     }
-    setLight(l);
-    setDark(d);
+    // Everything the preset doesn't name — and every derived token — comes from
+    // theme.css, computed over the preset's own colors.
+    setLight(resolvePalette('light', lo));
+    setDark(resolvePalette('dark', dk));
     setPreset(name);
   };
 
@@ -673,7 +646,7 @@ export default function ThemeStudio() {
    *  carries a px readout beside the rem — a type scale is the one place the
    *  computed pixel size is what you're actually judging. */
   const RungRow = (props: { r: TextRung }) => {
-    const val = () => textScale()[props.r.token] ?? props.r.def;
+    const val = () => textScale()[props.r.token] ?? rungDef(props.r);
     const set = (n: number) => {
       const v = Math.min(props.r.max, Math.max(props.r.min, n));
       setTextScale((t) => ({ ...t, [props.r.token]: v }));
@@ -707,7 +680,7 @@ export default function ThemeStudio() {
     );
   };
 
-  const textIsDefault = () => TEXT_RUNGS.every((r) => (textScale()[r.token] ?? r.def) === r.def);
+  const textIsDefault = () => TEXT_RUNGS.every((r) => (textScale()[r.token] ?? rungDef(r)) === rungDef(r));
 
   /** One showroom item: a labeled, bordered slot the element mounts into. */
   const ShowSlot = (props: { s: Slot }) => (
@@ -843,7 +816,7 @@ export default function ThemeStudio() {
                         <label class="flex items-center gap-2.5">
                           <input
                             type="color"
-                            value={active()[t.token] ?? '#000000'}
+                            value={cssToHex(active()[t.token] ?? '#000000')}
                             onInput={(e) => setColor(t.token, e.currentTarget.value)}
                             aria-label={t.label}
                             class={swatch}
@@ -989,19 +962,47 @@ export default function ThemeStudio() {
               <div class="grid gap-3 sm:grid-cols-2">
                 <For each={COMPONENT_SLOTS}>{(s) => <ShowSlot s={s} />}</For>
               </div>
-              {/* Coverage strip — tokens not surfaced at rest, reading the live vars */}
-              <div class="flex flex-wrap items-center gap-2 rounded-xl border p-3" style={{ 'border-color': 'var(--kai-color-border)', color: 'var(--kai-color-foreground)' }}>
-                <span class="mr-1 text-xs" style={{ color: 'var(--kai-color-muted-foreground)' }}>Also themed:</span>
-                <span class="rounded-md px-2.5 py-1 text-xs font-medium" style={{ background: 'var(--kai-color-destructive)', color: 'var(--kai-color-destructive-foreground)' }}>Destructive</span>
-                <span class="rounded-md px-2.5 py-1 text-xs font-medium" style={{ background: 'var(--kai-color-secondary)', color: 'var(--kai-color-secondary-foreground)' }}>Secondary</span>
-                <span class="rounded-md px-2.5 py-1 text-xs font-medium" style={{ background: 'var(--kai-color-popover)', color: 'var(--kai-color-popover-foreground)', border: '1px solid var(--kai-color-border)' }}>Popover</span>
-                <code class="rounded px-1.5 py-0.5 text-xs" style={{ color: 'var(--kai-color-code-foreground)', background: 'color-mix(in oklab, var(--kai-color-code-foreground) 15%, transparent)' }}>inline code</code>
-                <span class="ml-1 flex items-center gap-1">
-                  <span class="h-3.5 w-3.5 rounded-full" style={{ background: 'var(--kai-color-tool-blue)' }} />
-                  <span class="h-3.5 w-3.5 rounded-full" style={{ background: 'var(--kai-color-tool-amber)' }} />
-                  <span class="h-3.5 w-3.5 rounded-full" style={{ background: 'var(--kai-color-tool-green)' }} />
-                  <span class="h-3.5 w-3.5 rounded-full" style={{ background: 'var(--kai-color-tool-red)' }} />
-                </span>
+              {/* Coverage strip — tokens not surfaced at rest, reading the live vars.
+                  Status badges are solid + soft pairs (bg-success / bg-success-soft
+                  with text-success); the interaction row is hover / selected /
+                  unread; the surface row is the three surface steps over the
+                  card. `data-token` names the token each chip paints with. */}
+              <div class="flex flex-col gap-2 rounded-xl border p-3" style={{ 'border-color': 'var(--kai-color-border)', color: 'var(--kai-color-foreground)' }}>
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="mr-1 text-xs" style={{ color: 'var(--kai-color-muted-foreground)' }}>Status:</span>
+                  <For each={['success', 'warning', 'info', 'destructive'] as const}>
+                    {(k) => (
+                      <>
+                        <span data-token={`--kai-color-${k}`} class="rounded-md px-2.5 py-1 text-xs font-medium capitalize" style={{ background: `var(--kai-color-${k})`, color: `var(--kai-color-${k}-foreground)` }}>{k}</span>
+                        <span data-token={`--kai-color-${k}-soft`} class="rounded-md px-2.5 py-1 text-xs font-medium capitalize" style={{ background: `var(--kai-color-${k}-soft)`, color: `var(--kai-color-${k})` }}>{k} soft</span>
+                      </>
+                    )}
+                  </For>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="mr-1 text-xs" style={{ color: 'var(--kai-color-muted-foreground)' }}>Interaction:</span>
+                  <span data-token="--kai-color-hover" class="rounded-md px-2.5 py-1 text-xs" style={{ background: 'var(--kai-color-hover)' }}>Hover</span>
+                  <span data-token="--kai-color-selected" class="rounded-md px-2.5 py-1 text-xs" style={{ background: 'var(--kai-color-selected)' }}>Selected</span>
+                  <span class="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs" style={{ background: 'var(--kai-color-card)', border: '1px solid var(--kai-color-border)' }}>
+                    Unread <span data-token="--kai-color-unread" class="size-2 rounded-full" style={{ background: 'var(--kai-color-unread)' }} />
+                  </span>
+                  <span class="rounded-md px-2.5 py-1 text-xs font-medium" style={{ background: 'var(--kai-color-secondary)', color: 'var(--kai-color-secondary-foreground)' }}>Secondary</span>
+                  <span class="rounded-md px-2.5 py-1 text-xs font-medium" style={{ background: 'var(--kai-color-popover)', color: 'var(--kai-color-popover-foreground)', border: '1px solid var(--kai-color-border)' }}>Popover</span>
+                  <code class="rounded px-1.5 py-0.5 text-xs" style={{ color: 'var(--kai-color-code-foreground)', background: 'color-mix(in oklab, var(--kai-color-code-foreground) 15%, transparent)' }}>inline code</code>
+                  <span class="ml-1 flex items-center gap-1">
+                    <span class="h-3.5 w-3.5 rounded-full" style={{ background: 'var(--kai-color-tool-blue)' }} />
+                    <span class="h-3.5 w-3.5 rounded-full" style={{ background: 'var(--kai-color-tool-amber)' }} />
+                    <span class="h-3.5 w-3.5 rounded-full" style={{ background: 'var(--kai-color-tool-green)' }} />
+                    <span class="h-3.5 w-3.5 rounded-full" style={{ background: 'var(--kai-color-tool-red)' }} />
+                  </span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 rounded-lg p-2" style={{ background: 'var(--kai-color-card)', border: '1px solid var(--kai-color-border)' }}>
+                  <span class="mr-1 text-xs" style={{ color: 'var(--kai-color-muted-foreground)' }}>Surfaces on card:</span>
+                  <span data-token="--kai-color-surface" class="rounded-md px-2.5 py-1 text-xs" style={{ background: 'var(--kai-color-surface)' }}>Surface</span>
+                  <span data-token="--kai-color-surface-strong" class="rounded-md px-2.5 py-1 text-xs" style={{ background: 'var(--kai-color-surface-strong)' }}>Strong</span>
+                  <span data-token="--kai-color-surface-sunken" class="rounded-md px-2.5 py-1 text-xs" style={{ background: 'var(--kai-color-surface-sunken)' }}>Sunken</span>
+                  <span class="rounded-md px-2.5 py-1 text-xs" style={{ background: 'var(--kai-color-card)', border: '1px solid var(--kai-color-input)' }}>Input edge</span>
+                </div>
               </div>
             </div>
           </div>
@@ -1020,7 +1021,7 @@ export default function ThemeStudio() {
 
       <Show when={importOpen()}>
         <Modal title="Import theme" onClose={() => { setImportOpen(false); setImportError(''); }}>
-          <p class="mb-2 text-xs text-ink-2">Paste a <code class="rounded bg-ink/5 px-1">:root</code> / <code class="rounded bg-ink/5 px-1">.dark</code> block of <code class="rounded bg-ink/5 px-1">--kai-color-*</code> tokens.</p>
+          <p class="mb-2 text-xs text-ink-2">Paste a <code class="rounded bg-ink/5 px-1">:root</code> / <code class="rounded bg-ink/5 px-1">.dark</code> block of <code class="rounded bg-ink/5 px-1">--kai-color-*</code> tokens. Any CSS color works, including one with alpha.</p>
           <textarea
             value={importText()}
             onInput={(e) => setImportText(e.currentTarget.value)}
