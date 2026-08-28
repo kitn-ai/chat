@@ -201,6 +201,15 @@ export function createEventHub(): { attach: (res: ServerResponse) => void; broad
   };
 }
 
+/** The ONE listen call for the builder server, extracted so the loopback
+ *  bind is unit-testable without spawning vite or a whole devBuilder run:
+ *  omitting the host argument binds the unspecified address (`::`/
+ *  `0.0.0.0`), reachable from the rest of the local network, which matters
+ *  because this server writes files and spawns processes on POST. */
+export function listenLoopbackOnly(server: import('node:http').Server, port: number, onListening: () => void): void {
+  server.listen(port, '127.0.0.1', onListening);
+}
+
 const ASSET_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -210,7 +219,14 @@ const ASSET_TYPES: Record<string, string> = {
 };
 
 /** Resolve a request path inside the prebuilt page dir; undefined on
- *  traversal or a miss. Root serves index.html. */
+ *  traversal or a miss. Root serves index.html. Uses `resolve`, not
+ *  `realpathSync`: this only rejects `..`-style traversal in the URL, it
+ *  does not chase a symlink placed inside rootDir out to another
+ *  filesystem location. Trust assumption: rootDir is `dist/builder-page`,
+ *  written by the kit's OWN build step, never by request input — a symlink
+ *  there would have to come from a compromised build or dependency, which
+ *  is a supply-chain concern this function cannot and does not defend
+ *  against. */
 export function serveBuilderAsset(urlPath: string, rootDir: string): { file: string; type: string } | undefined {
   const decoded = decodeURIComponent(urlPath.split('?')[0]);
   const rel = decoded === '/' ? 'index.html' : decoded.replace(/^\/+/, '');
@@ -346,6 +362,6 @@ export async function devBuilder(
       return send(400, { problems: [{ path: '', message: err instanceof Error ? err.message : String(err) }] });
     }
   });
-  server.listen(port, () => io.log(`kai builder at http://localhost:${port}/ — the construct file stays yours.`));
+  listenLoopbackOnly(server, port, () => io.log(`kai builder at http://localhost:${port}/ — the construct file stays yours.`));
   return new Promise<never>(() => {});
 }

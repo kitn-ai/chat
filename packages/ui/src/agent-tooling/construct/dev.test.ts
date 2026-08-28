@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { join } from 'node:path';
 import { mkdtempSync, readFileSync as readF, writeFileSync as writeF, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { workDirFor, installKey, regenerate, regenTurn, handleConstructPut, createEventHub, serveBuilderAsset } from './dev';
+import { createServer } from 'node:http';
+import { workDirFor, installKey, regenerate, regenTurn, handleConstructPut, createEventHub, serveBuilderAsset, listenLoopbackOnly } from './dev';
 import { generateProject, type GeneratedFile } from './codegen';
 import { validateConstruct } from './schema';
 
@@ -161,5 +162,16 @@ describe('kai dev --builder internals (B-22)', () => {
     expect(serveBuilderAsset('/', dir)?.file.endsWith('index.html')).toBe(true);
     expect(serveBuilderAsset('/../../../etc/passwd', dir)).toBeUndefined();
     expect(serveBuilderAsset('/%2e%2e/%2e%2e/etc/passwd', dir)).toBeUndefined();
+  });
+
+  it('listenLoopbackOnly binds 127.0.0.1, never the unspecified address', async () => {
+    const server = createServer();
+    try {
+      await new Promise<void>((resolveP) => listenLoopbackOnly(server, 0, resolveP));
+      const addr = server.address();
+      expect(typeof addr === 'object' && addr !== null ? addr.address : addr).toBe('127.0.0.1');
+    } finally {
+      server.close();
+    }
   });
 });
