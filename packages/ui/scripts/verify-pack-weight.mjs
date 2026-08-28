@@ -358,8 +358,21 @@ if (SELF_TEST) {
  * count is unchanged from fix (1) alone -- the dedupe shrinks two files in
  * place, it doesn't remove or add any). Margin rule unchanged: 9.1957 +
  * ~0.29 MiB of headroom -> 9.49 MiB.
+ *
+ * 9.49 -> 9.85 MiB (2026-08-28, the visual builder, B-22/B-23): tripped at
+ * 10,027,508 bytes / 9.5630 MiB / 614 files (`npm pack --dry-run
+ * --ignore-scripts --json` on a fresh `nx build ui --skip-nx-cache`).
+ * Controller ruling: the growth is deliberate feature weight, not a
+ * regression to fix -- `dist/builder-page/` (280 K on disk: `index.html` +
+ * one bundled JS asset + one CSS asset) is the prebuilt visual-builder page
+ * `kai dev --builder` serves as static files (see dev.ts's devBuilder),
+ * shipped so the CLI compiles nothing at consumer runtime. It is new
+ * surface, not dead weight or a dedupe regression: the pack listing shows
+ * exactly two new entries under dist/builder-page/assets/ and nothing else
+ * unaccounted for. Margin rule unchanged: 9.5630 + ~0.29 MiB of headroom ->
+ * 9.85 MiB.
  */
-const MAX_UNPACKED_BYTES = 9.49 * 1024 * 1024;
+const MAX_UNPACKED_BYTES = 9.85 * 1024 * 1024;
 
 const kib = (n) => `${(n / 1024).toFixed(1)} KiB`;
 const mib = (n) => `${(n / 1024 / 1024).toFixed(2)} MiB`;
