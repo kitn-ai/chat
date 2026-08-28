@@ -106,6 +106,13 @@ const PROBE_TYPES = {
   './diagnostics': 'KaiDevtoolsHook',
   './define': 'WebComponentContext',
   './construct': 'Construct',
+  // BuildableTemplate's `starter` field is typed `Construct`, imported into
+  // templates.d.ts across a relative specifier to schema.d.ts — the same
+  // resolution path `./construct` itself depends on. TemplateId was the
+  // other candidate but it's a pure string-literal union defined entirely
+  // inside templates.ts, with zero cross-file dependency, so it would
+  // exercise nothing this guard cares about.
+  './construct/templates': 'BuildableTemplate',
 };
 
 /** Entries whose declarations reach nothing through a RELATIVE specifier, so
