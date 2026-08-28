@@ -83,4 +83,16 @@ describe('starter templates come from the registry (B-17c)', () => {
     expect(out).toContain('"title": "Support"'); // widget starter chrome rides along
     expect(JSON.stringify(buildableTemplates().find((t) => t.id === 'widget')!.starter)).toBe(before);
   });
+
+  it('intent patterns are word-boundary anchored, not unanchored substrings (regression: "resources" ≠ "sources", "japanese" ≠ "pane")', async () => {
+    const resources = text(
+      await constructTool.handler({ intent: 'a tool to manage company resources' }),
+    );
+    expect(resources).toMatch(/which template/i);
+    expect(resources).not.toMatch(/template: research/i);
+
+    const japanese = text(await constructTool.handler({ intent: 'a japanese language tutor' }));
+    expect(japanese).toMatch(/which template/i);
+    expect(japanese).not.toMatch(/template: workspace/i);
+  });
 });

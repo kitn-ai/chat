@@ -40,16 +40,25 @@ const inputSchema = z
   .strict();
 
 /** Intent → template, checked in specificity order (widget's own regex kept
- *  from the pre-registry version of this function). A match is STATED, per
- *  this tool's existing stated/questions convention; no match returns the
- *  buildable list and asks which. Story-only templates are never offered
- *  (menu-honesty). */
+ *  from the pre-registry version of this function, now word-boundary
+ *  anchored). A match is STATED, per this tool's existing stated/questions
+ *  convention; no match returns the buildable list and asks which.
+ *  Story-only templates are never offered (menu-honesty).
+ *
+ *  Every alternative is wrapped in `\b(?:…)\b` — an UNANCHORED substring
+ *  match is a false positive waiting to happen ("resources" implying
+ *  research off a bare `sources?\b`, "japanese" implying workspace off a
+ *  bare `pane`, "console" matching inside an unrelated word) and a stated
+ *  "implied by your request" that wasn't is the opposite of menu-honesty.
+ *  `\b` sits on the whole alternation, not per-word, so a multi-token
+ *  alternative like `side.?by.?side` still gets one boundary check at each
+ *  end of its full match. */
 const INTENT_PATTERNS: readonly { id: BuildableTemplateId; re: RegExp }[] = [
-  { id: 'widget', re: /widget|embed|bubble|corner|launcher/i },
-  { id: 'research', re: /research|search|cite|citation|sources?\b/i },
-  { id: 'workspace', re: /workspace|split|pane|artifact|side.?by.?side|preview/i },
-  { id: 'inAppAssistant', re: /aside|dock|in.?app|copilot|console|sidebar/i },
-  { id: 'assistant', re: /assistant|chat\s*(app|bot)|full.?screen/i },
+  { id: 'widget', re: /\b(?:widget|embed|bubble|corner|launcher)\b/i },
+  { id: 'research', re: /\b(?:research|search|cite|citation|sources?)\b/i },
+  { id: 'workspace', re: /\b(?:workspace|split|pane|artifact|side.?by.?side|preview)\b/i },
+  { id: 'inAppAssistant', re: /\b(?:aside|dock|in.?app|copilot|console|sidebar)\b/i },
+  { id: 'assistant', re: /\b(?:assistant|chat\s*(?:app|bot)|full.?screen)\b/i },
 ];
 
 function starterFor(intent: string) {
