@@ -61,8 +61,9 @@ export interface BuilderStartProps {
    * navigate to.
    */
   onSelect: (id: BuilderTemplateId) => void;
-  /** Which cards to render. Defaults to BUILDER_TEMPLATES (all six — the
-   *  story). A product surface passes BUILDABLE_BUILDER_TEMPLATES. */
+  /** Which cards to render. Defaults to BUILDABLE_BUILDER_TEMPLATES
+   *  (menu-honest by default). The Labs story passes BUILDER_TEMPLATES (all
+   *  six) explicitly to show the full catalog. */
   templates?: readonly BuilderTemplate[];
   class?: string;
 }
@@ -135,7 +136,7 @@ export function BuilderStart(props: BuilderStartProps): JSX.Element {
           (still visible, just the kit's default color) alone. */}
       <style>{'[data-builder-start] [aria-pressed="true"]{--tw-ring-color:var(--color-primary) !important}'}</style>
       <div class={cn('grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3', props.class)} data-builder-start>
-      <For each={props.templates ?? BUILDER_TEMPLATES}>
+      <For each={props.templates ?? BUILDABLE_BUILDER_TEMPLATES}>
         {(template) => {
           const selected = () => props.value === template.id;
           const Illustration = TEMPLATE_ILLUSTRATIONS[template.id];

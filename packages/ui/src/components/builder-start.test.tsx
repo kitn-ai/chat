@@ -15,8 +15,15 @@ import { TEMPLATES } from '../agent-tooling/construct/templates';
 afterEach(cleanup);
 
 describe('BuilderStart', () => {
+  // These behavior tests (selection, keyboard operability, a11y) are about
+  // BuilderStart's mechanics, not about which template set is the default —
+  // so they pass the full BUILDER_TEMPLATES explicitly (as the Labs story
+  // does) rather than riding on whatever the `templates` prop defaults to.
+  // The default itself is pinned separately below, in the
+  // "derives from the template registry" describe block.
+
   it('renders one card per template, each named', () => {
-    render(() => <BuilderStart onSelect={vi.fn()} />);
+    render(() => <BuilderStart templates={BUILDER_TEMPLATES} onSelect={vi.fn()} />);
     for (const template of BUILDER_TEMPLATES) {
       expect(screen.getByText(template.name)).toBeInTheDocument();
     }
@@ -24,7 +31,7 @@ describe('BuilderStart', () => {
   });
 
   it('renders each template\'s one-line description', () => {
-    render(() => <BuilderStart onSelect={vi.fn()} />);
+    render(() => <BuilderStart templates={BUILDER_TEMPLATES} onSelect={vi.fn()} />);
     for (const template of BUILDER_TEMPLATES) {
       expect(screen.getByText(template.description)).toBeInTheDocument();
     }
@@ -32,14 +39,14 @@ describe('BuilderStart', () => {
 
   it('clicking a card fires onSelect with that template\'s id', () => {
     const onSelect = vi.fn();
-    render(() => <BuilderStart onSelect={onSelect} />);
+    render(() => <BuilderStart templates={BUILDER_TEMPLATES} onSelect={onSelect} />);
     fireEvent.click(screen.getByRole('button', { name: /Support widget/ }));
     expect(onSelect).toHaveBeenCalledWith('widget');
   });
 
   it('every card is keyboard-operable: Enter and Space both fire onSelect (role=button semantics, per Card\'s own clickable behavior)', () => {
     const onSelect = vi.fn();
-    render(() => <BuilderStart onSelect={onSelect} />);
+    render(() => <BuilderStart templates={BUILDER_TEMPLATES} onSelect={onSelect} />);
     const research = screen.getByRole('button', { name: /Research/ });
     research.focus();
     expect(document.activeElement).toBe(research);
@@ -50,7 +57,7 @@ describe('BuilderStart', () => {
   });
 
   it('reflects the controlled `value` as the selected card (aria-pressed), and nothing else', () => {
-    render(() => <BuilderStart value="workspace" onSelect={vi.fn()} />);
+    render(() => <BuilderStart templates={BUILDER_TEMPLATES} value="workspace" onSelect={vi.fn()} />);
     expect(screen.getByRole('button', { name: /Workspace/ })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: /Support widget/ })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: /^In-app assistant/ })).toHaveAttribute('aria-pressed', 'false');
@@ -60,7 +67,7 @@ describe('BuilderStart', () => {
   });
 
   it('every card is a real, focusable button (tabIndex 0) — not a decorative div with a click handler', () => {
-    render(() => <BuilderStart onSelect={vi.fn()} />);
+    render(() => <BuilderStart templates={BUILDER_TEMPLATES} onSelect={vi.fn()} />);
     for (const template of BUILDER_TEMPLATES) {
       const card = screen.getByRole('button', { name: new RegExp(template.name) });
       expect(card.tabIndex).toBe(0);
@@ -68,14 +75,14 @@ describe('BuilderStart', () => {
   });
 
   it('renders no part= attribute on the panel-authored root — only Card, the reused kit primitive, carries its own baked-in part', () => {
-    const { container } = render(() => <BuilderStart onSelect={vi.fn()} />);
+    const { container } = render(() => <BuilderStart templates={BUILDER_TEMPLATES} onSelect={vi.fn()} />);
     const root = container.querySelector('[data-builder-start]');
     expect(root).not.toBeNull();
     expect(root).not.toHaveAttribute('part');
   });
 
   it('each illustration is decorative (aria-hidden), so the card\'s accessible name comes from its heading/description text, not SVG content', () => {
-    render(() => <BuilderStart onSelect={vi.fn()} />);
+    render(() => <BuilderStart templates={BUILDER_TEMPLATES} onSelect={vi.fn()} />);
     for (const svg of document.querySelectorAll('[data-builder-start] svg')) {
       expect(svg).toHaveAttribute('aria-hidden', 'true');
     }
@@ -83,7 +90,7 @@ describe('BuilderStart', () => {
   });
 
   it('renders a "Start from scratch" action below the grid, with its muted sub-line', () => {
-    render(() => <BuilderStart onSelect={vi.fn()} />);
+    render(() => <BuilderStart templates={BUILDER_TEMPLATES} onSelect={vi.fn()} />);
     expect(screen.getByText('Start from scratch')).toBeInTheDocument();
     expect(
       screen.getByText('A bare chat, everything off. You can switch to a template later.'),
@@ -92,7 +99,7 @@ describe('BuilderStart', () => {
 
   it('"Start from scratch" is a real, keyboard-operable button that fires onSelect with \'scratch\', not a template', () => {
     const onSelect = vi.fn();
-    render(() => <BuilderStart onSelect={onSelect} />);
+    render(() => <BuilderStart templates={BUILDER_TEMPLATES} onSelect={onSelect} />);
     const scratch = screen.getByRole('button', { name: /Start from scratch/ });
     expect(scratch.tagName).toBe('BUTTON');
     expect(scratch.tabIndex).toBe(0);
@@ -102,7 +109,7 @@ describe('BuilderStart', () => {
   });
 
   it('reflects `value="scratch"` as aria-pressed on the scratch action, and false on every card', () => {
-    render(() => <BuilderStart value="scratch" onSelect={vi.fn()} />);
+    render(() => <BuilderStart templates={BUILDER_TEMPLATES} value="scratch" onSelect={vi.fn()} />);
     expect(screen.getByRole('button', { name: /Start from scratch/ })).toHaveAttribute('aria-pressed', 'true');
     for (const template of BUILDER_TEMPLATES) {
       expect(screen.getByRole('button', { name: new RegExp(`^${template.name}`) })).toHaveAttribute(
@@ -135,8 +142,16 @@ describe('BuilderStart derives from the template registry (B-17b)', () => {
     }
   });
 
-  it('the default (story) rendering still shows all six', () => {
+  it('the default (no `templates` prop) is menu-honest: BUILDABLE_BUILDER_TEMPLATES, no Voice', () => {
     render(() => <BuilderStart onSelect={vi.fn()} />);
+    expect(screen.queryByText('Voice')).not.toBeInTheDocument();
+    for (const t of BUILDABLE_BUILDER_TEMPLATES) {
+      expect(screen.getByText(t.name)).toBeInTheDocument();
+    }
+  });
+
+  it('the Labs story renders all six by passing BUILDER_TEMPLATES explicitly', () => {
+    render(() => <BuilderStart templates={BUILDER_TEMPLATES} onSelect={vi.fn()} />);
     expect(screen.getByText('Voice')).toBeInTheDocument();
     expect(BUILDER_TEMPLATES).toHaveLength(6);
   });
