@@ -425,7 +425,32 @@ export const ConstructSchema = z
   })
   .strict()
   .superRefine((construct, ctx) => {
-    if (construct.slots) {
+    for (const rule of CROSS_FIELD_RULES) rule.check(construct, ctx);
+  });
+
+export type Construct = z.infer<typeof ConstructSchema>;
+
+/** One cross-field rule of the construct format (B-20). The table is the
+ *  visibility layer's guard: the builder's RULE_VISIBILITY registry
+ *  (src/components/construct-form-paths.ts) is keyed by these ids, and a
+ *  key-set-equality test fails any new rule until the builder classifies
+ *  it. `paths` names the dotted construct paths the rule READS — panel
+ *  metadata, not zod mechanics. Bodies are the pre-table superRefine code
+ *  verbatim; behavior (messages included) is pinned by schema.test.ts and
+ *  the generated artifact is pinned byte-identical by verify:generated
+ *  (superRefine never serializes into z.toJSONSchema output). */
+export interface CrossFieldRule {
+  id: string;
+  paths: readonly string[];
+  check: (construct: Construct, ctx: z.RefinementCtx) => void;
+}
+
+export const CROSS_FIELD_RULES: readonly CrossFieldRule[] = [
+  {
+    id: 'slots-unique',
+    paths: ['slots'],
+    check: (construct, ctx) => {
+      if (!construct.slots) return;
       const seen = new Set<string>();
       construct.slots.forEach((name, i) => {
         if (seen.has(name)) {
@@ -437,41 +462,70 @@ export const ConstructSchema = z
         }
         seen.add(name);
       });
-    }
-    if (construct.layout === 'custom' && (!construct.slots || construct.slots.length === 0)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['slots'],
-        message: '"custom" layout requires at least one declared slot — custom IS the slots grain',
-      });
-    }
-    if (construct.layout === 'split' && construct.slots) {
-      const i = construct.slots.indexOf('pane');
-      if (i !== -1) {
+    },
+  },
+  {
+    id: 'custom-layout-needs-slots',
+    paths: ['layout', 'slots'],
+    check: (construct, ctx) => {
+      if (construct.layout === 'custom' && (!construct.slots || construct.slots.length === 0)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ['slots', i],
-          message:
-            '"pane" collides with the "split" layout\'s own fixed <slot name="pane"> — choose a different slot name',
+          path: ['slots'],
+          message: '"custom" layout requires at least one declared slot — custom IS the slots grain',
         });
       }
-    }
-    if (construct.widget && construct.layout !== 'widget') {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['widget'],
-        message: '"widget" is only valid on layout: "widget"',
-      });
-    }
-    if (construct.aside && construct.layout !== 'aside') {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['aside'],
-        message: '"aside" is only valid on layout: "aside"',
-      });
-    }
-    const messageActions = construct.capabilities?.messageActions;
-    if (messageActions) {
+    },
+  },
+  {
+    id: 'split-pane-slot-collision',
+    paths: ['layout', 'slots'],
+    check: (construct, ctx) => {
+      if (construct.layout === 'split' && construct.slots) {
+        const i = construct.slots.indexOf('pane');
+        if (i !== -1) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['slots', i],
+            message:
+              '"pane" collides with the "split" layout\'s own fixed <slot name="pane"> — choose a different slot name',
+          });
+        }
+      }
+    },
+  },
+  {
+    id: 'widget-layout-scope',
+    paths: ['layout', 'widget'],
+    check: (construct, ctx) => {
+      if (construct.widget && construct.layout !== 'widget') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['widget'],
+          message: '"widget" is only valid on layout: "widget"',
+        });
+      }
+    },
+  },
+  {
+    id: 'aside-layout-scope',
+    paths: ['layout', 'aside'],
+    check: (construct, ctx) => {
+      if (construct.aside && construct.layout !== 'aside') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['aside'],
+          message: '"aside" is only valid on layout: "aside"',
+        });
+      }
+    },
+  },
+  {
+    id: 'message-actions-unique',
+    paths: ['capabilities.messageActions.user', 'capabilities.messageActions.assistant'],
+    check: (construct, ctx) => {
+      const messageActions = construct.capabilities?.messageActions;
+      if (!messageActions) return;
       // Same reason the slots rule exists: a regex/enum alone can't see
       // across array entries. Per-array only — the two roles may share ids.
       for (const role of ['user', 'assistant'] as const) {
@@ -489,73 +543,109 @@ export const ConstructSchema = z
           seen.add(id);
         });
       }
-    }
-    if (construct.widget?.launcherIcon && !isSafeUrl(construct.widget.launcherIcon)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['widget', 'launcherIcon'],
-        message: 'launcherIcon must be an http(s)/mailto or relative URL — no javascript:/data: schemes',
-      });
-    }
-    if (construct.empty?.icon && !isSafeUrl(construct.empty.icon)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['empty', 'icon'],
-        message: 'icon must be an http(s)/mailto or relative URL — no javascript:/data: schemes',
-      });
-    }
-    const reasoning = construct.capabilities?.reasoning;
-    const reasoningOpen = construct.capabilities?.reasoningOpen;
-    if (reasoningOpen !== undefined && (reasoning === 'compact' || reasoning === 'off')) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['capabilities', 'reasoningOpen'],
-        message: '"reasoningOpen" only applies when reasoning is "full" or omitted — "compact"/"off" have no disclosure to open',
-      });
-    }
-    const history = construct.capabilities?.history;
-    if (construct.capabilities?.conversations && (!history || history.persistence === 'none')) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['capabilities', 'conversations'],
-        message: '"conversations" requires capabilities.history.persistence to be "local" or "endpoint" — a conversation list needs somewhere to persist conversations',
-      });
-    }
-    const URL_SHAPED = /^[a-zA-Z][a-zA-Z0-9+.-]*:|^\/\//;
-    for (const [i, link] of (construct.home?.links ?? []).entries()) {
-      if (link.href && !isSafeUrl(link.href)) {
+    },
+  },
+  {
+    id: 'launcher-icon-url',
+    paths: ['widget.launcherIcon'],
+    check: (construct, ctx) => {
+      if (construct.widget?.launcherIcon && !isSafeUrl(construct.widget.launcherIcon)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ['home', 'links', i, 'href'],
-          message: 'href must be an http(s)/mailto or relative URL — no javascript:/data: schemes',
+          path: ['widget', 'launcherIcon'],
+          message: 'launcherIcon must be an http(s)/mailto or relative URL — no javascript:/data: schemes',
         });
       }
-      if (link.icon && URL_SHAPED.test(link.icon) && !isSafeUrl(link.icon)) {
+    },
+  },
+  {
+    id: 'empty-icon-url',
+    paths: ['empty.icon'],
+    check: (construct, ctx) => {
+      if (construct.empty?.icon && !isSafeUrl(construct.empty.icon)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ['home', 'links', i, 'icon'],
-          message: 'icon must be a kit icon name or an http(s)/relative URL — no javascript:/data: schemes',
+          path: ['empty', 'icon'],
+          message: 'icon must be an http(s)/mailto or relative URL — no javascript:/data: schemes',
         });
       }
-    }
-    if (!history) return;
-    if (history.persistence === 'endpoint' && !history.url) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['capabilities', 'history', 'url'],
-        message: '"endpoint" persistence requires a url',
-      });
-    }
-    if (history.persistence !== 'endpoint' && history.url !== undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['capabilities', 'history', 'url'],
-        message: 'url is only valid with "endpoint" persistence',
-      });
-    }
-  });
-
-export type Construct = z.infer<typeof ConstructSchema>;
+    },
+  },
+  {
+    id: 'reasoning-open-scope',
+    paths: ['capabilities.reasoning', 'capabilities.reasoningOpen'],
+    check: (construct, ctx) => {
+      const reasoning = construct.capabilities?.reasoning;
+      const reasoningOpen = construct.capabilities?.reasoningOpen;
+      if (reasoningOpen !== undefined && (reasoning === 'compact' || reasoning === 'off')) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['capabilities', 'reasoningOpen'],
+          message: '"reasoningOpen" only applies when reasoning is "full" or omitted — "compact"/"off" have no disclosure to open',
+        });
+      }
+    },
+  },
+  {
+    id: 'conversations-need-history',
+    paths: ['capabilities.conversations', 'capabilities.history'],
+    check: (construct, ctx) => {
+      const history = construct.capabilities?.history;
+      if (construct.capabilities?.conversations && (!history || history.persistence === 'none')) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['capabilities', 'conversations'],
+          message: '"conversations" requires capabilities.history.persistence to be "local" or "endpoint" — a conversation list needs somewhere to persist conversations',
+        });
+      }
+    },
+  },
+  {
+    id: 'home-link-urls',
+    paths: ['home.links'],
+    check: (construct, ctx) => {
+      const URL_SHAPED = /^[a-zA-Z][a-zA-Z0-9+.-]*:|^\/\//;
+      for (const [i, link] of (construct.home?.links ?? []).entries()) {
+        if (link.href && !isSafeUrl(link.href)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['home', 'links', i, 'href'],
+            message: 'href must be an http(s)/mailto or relative URL — no javascript:/data: schemes',
+          });
+        }
+        if (link.icon && URL_SHAPED.test(link.icon) && !isSafeUrl(link.icon)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['home', 'links', i, 'icon'],
+            message: 'icon must be a kit icon name or an http(s)/relative URL — no javascript:/data: schemes',
+          });
+        }
+      }
+    },
+  },
+  {
+    id: 'history-endpoint-url',
+    paths: ['capabilities.history.persistence', 'capabilities.history.url'],
+    check: (construct, ctx) => {
+      const history = construct.capabilities?.history;
+      if (!history) return;
+      if (history.persistence === 'endpoint' && !history.url) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['capabilities', 'history', 'url'],
+          message: '"endpoint" persistence requires a url',
+        });
+      }
+      if (history.persistence !== 'endpoint' && history.url !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['capabilities', 'history', 'url'],
+          message: 'url is only valid with "endpoint" persistence',
+        });
+      }
+    },
+  },
+];
 
 export interface ConstructProblem {
   /** Dotted path into the construct, '' for the root. */

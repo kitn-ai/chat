@@ -598,3 +598,26 @@ describe('shell (B-5/10a)', () => {
     expect(validateConstruct({ ...minimal, shell: { search: true } }).ok).toBe(false);
   });
 });
+
+describe('CROSS_FIELD_RULES (B-20)', () => {
+  it('is the exported, named-rule form of the superRefine body: twelve rules, unique ids, in source order', async () => {
+    const { CROSS_FIELD_RULES } = await import('./schema');
+    const ids = CROSS_FIELD_RULES.map((r) => r.id);
+    expect(ids).toEqual([
+      'slots-unique',
+      'custom-layout-needs-slots',
+      'split-pane-slot-collision',
+      'widget-layout-scope',
+      'aside-layout-scope',
+      'message-actions-unique',
+      'launcher-icon-url',
+      'empty-icon-url',
+      'reasoning-open-scope',
+      'conversations-need-history',
+      'home-link-urls',
+      'history-endpoint-url',
+    ]);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const r of CROSS_FIELD_RULES) expect(r.paths.length, r.id).toBeGreaterThan(0);
+  });
+});
