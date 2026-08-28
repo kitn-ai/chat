@@ -130,8 +130,24 @@ export function Captions(props: CaptionsProps): JSX.Element {
                 <div
                   data-speaker={seg.speaker}
                   class={cn(
-                    'text-sm leading-snug text-balance text-muted-foreground',
-                    i() === historySegments().length - 1 ? 'opacity-70' : 'opacity-40',
+                    /* The recency fade used to be opacity-70/opacity-40 over
+                       text-muted-foreground, which blends to ~#96969c/#c3c3c7
+                       on white — 2.94:1 and 1.75:1, both under WCAG AA's 4.5:1
+                       for 14px text (axe color-contrast). No opacity fade can
+                       pass here: muted-foreground itself sits at ~5.4:1, so
+                       any blend below ~91% opacity drops under 4.5:1 while
+                       being visually indistinguishable from solid. Instead the
+                       hierarchy is built from colors that each pass on their
+                       own: older lines render solid muted-foreground (the
+                       lightest passing shade the theme has), and the newest
+                       line mixes 35% foreground into it — darker than the
+                       older lines, lighter than the current segment's
+                       text-foreground, so the "newest is closest" gradient
+                       survives in both themes. */
+                    'text-sm leading-snug text-balance',
+                    i() === historySegments().length - 1
+                      ? 'text-[color-mix(in_srgb,var(--color-foreground)_35%,var(--color-muted-foreground))]'
+                      : 'text-muted-foreground',
                   )}
                 >
                   {seg.text}
