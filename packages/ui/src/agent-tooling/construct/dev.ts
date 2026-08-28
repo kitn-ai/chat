@@ -10,10 +10,13 @@
  */
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync, watch, writeFileSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { existsSync, readFileSync, renameSync, watch, writeFileSync } from 'node:fs';
+import { basename, dirname, extname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { accentContrastNotice, generateProject, writeProject, type GeneratedFile, type GenerateOptions } from './codegen';
 import { validateConstruct, type Construct, type ConstructProblem } from './schema';
+import { buildableTemplates } from './templates';
 import type { CliIo } from './cli';
 
 export function workDirFor(name: string, root: string): string {
@@ -145,4 +148,204 @@ export async function dev(
       process.exit(code ?? 0);
     });
   });
+}
+
+// ── kai dev --builder (B-22/B-23) ───────────────────────────────────────────
+// A SECOND, thin server beside the loop above — dev() itself is untouched
+// (plain `kai dev` stays byte-identical). The builder page is PREBUILT into
+// dist/builder-page at kit build time (vite.config.builder-page.ts), so at
+// consumer runtime this server compiles nothing: it serves static files,
+// exposes ONE validate-then-write endpoint (the construct FILE is the sole
+// state), and iframes the generated project's own Vite dev server. Deviation
+// from the spec's "thin Vite server" wording, recorded in the plan: a
+// runtime Vite server would need vite + the Solid compiler resolvable at
+// the CLI's runtime for zero benefit — the page needs no runtime compile,
+// and node:http keeps plain kai dev's dependency graph unchanged.
+
+export function atomicWriteJson(abs: string, value: unknown): void {
+  const tmp = `${abs}.tmp-${process.pid}`;
+  writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`);
+  renameSync(tmp, abs);
+}
+
+/** The ONE write doorway (B-22): validate, then atomically write the RAW
+ *  body — not the parsed construct, whose zod defaults (theme.mode) would
+ *  silently rewrite the author's file. A rejection returns pathed problems
+ *  and touches nothing. */
+export function handleConstructPut(
+  raw: unknown,
+  abs: string,
+): { ok: true; construct: Construct } | { ok: false; problems: ConstructProblem[] } {
+  const out = validateConstruct(raw);
+  if (!out.ok) return out;
+  atomicWriteJson(abs, raw);
+  return { ok: true, construct: out.construct };
+}
+
+export function createEventHub(): { attach: (res: ServerResponse) => void; broadcast: (event: string) => void } {
+  const clients = new Set<ServerResponse>();
+  return {
+    attach(res) {
+      res.writeHead(200, {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+        connection: 'keep-alive',
+      });
+      res.write(': connected\n\n');
+      clients.add(res);
+      res.on('close', () => clients.delete(res));
+    },
+    broadcast(event) {
+      for (const res of clients) res.write(`event: ${event}\ndata: {}\n\n`);
+    },
+  };
+}
+
+const ASSET_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.map': 'application/json',
+};
+
+/** Resolve a request path inside the prebuilt page dir; undefined on
+ *  traversal or a miss. Root serves index.html. */
+export function serveBuilderAsset(urlPath: string, rootDir: string): { file: string; type: string } | undefined {
+  const decoded = decodeURIComponent(urlPath.split('?')[0]);
+  const rel = decoded === '/' ? 'index.html' : decoded.replace(/^\/+/, '');
+  const file = resolve(rootDir, rel);
+  if (!file.startsWith(resolve(rootDir) + '/') && file !== resolve(rootDir, 'index.html')) return undefined;
+  if (!existsSync(file)) return undefined;
+  return { file, type: ASSET_TYPES[extname(file)] ?? 'application/octet-stream' };
+}
+
+/** dist/builder-page relative to the BUNDLED cli (dist/construct-cli.es.js). */
+export function builderPageDir(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), 'builder-page');
+}
+
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > 1_000_000) throw new Error('body too large');
+    chunks.push(chunk as Buffer);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+export async function devBuilder(
+  constructPath: string | undefined,
+  opts: { io?: CliIo; uiSpec?: string; port?: number; previewPort?: number } = {},
+): Promise<never> {
+  const io = opts.io ?? { log: (s: string) => console.log(s), error: (s: string) => console.error(s) };
+  const port = opts.port ?? 4400;
+  const previewPort = opts.previewPort ?? 4401;
+  const pageDir = builderPageDir();
+  if (!existsSync(join(pageDir, 'index.html'))) {
+    io.error(`Missing build artifact: ${pageDir} — the builder page ships prebuilt. Run \`nx build ui\` (or npm run build in packages/ui) and try again.`);
+    process.exit(1);
+  }
+
+  const hub = createEventHub();
+  let abs = constructPath ? resolve(constructPath) : undefined;
+  // previewUrl is handed straight to the builder page, which iframes it
+  // unguarded (no isSafeUrl check on the consuming side) — its trust story
+  // lives HERE: it is never model- or consumer-supplied, only ever this
+  // process's OWN spawned `npm run dev` Vite server on localhost, on a port
+  // this same function chose. There is no injection surface between "we
+  // spawned this" and "we iframe it".
+  let previewUrl: string | undefined;
+
+  const boot = async (absPath: string): Promise<void> => {
+    const readRaw = (): unknown => JSON.parse(readFileSync(absPath, 'utf8'));
+    const first = validateConstruct(readRaw());
+    if (!first.ok) {
+      for (const p of first.problems) io.error(`  ${p.path || '(root)'}: ${p.message}`);
+      throw new Error('construct invalid');
+    }
+    const dir = workDirFor(first.construct.name, process.cwd());
+    const files = generateProject(first.construct, { uiSpec: opts.uiSpec });
+    writeProject(files, dir);
+    await ensureInstalled(dir, files, io);
+    // Same rename-surviving directory watch as dev() — see its comment.
+    const base = basename(absPath);
+    watch(dirname(absPath), (_event, filename) => {
+      if (filename !== base) return;
+      regenTurn(readRaw, { write: writeProject }, dir, { uiSpec: opts.uiSpec }, io);
+      hub.broadcast('construct'); // hand-edits flow into the open builder
+    });
+    const vite = spawn('npm', ['run', 'dev', '--', '--port', String(previewPort), '--strictPort'], {
+      cwd: dir,
+      stdio: 'inherit',
+    });
+    const killVite = () => vite.kill();
+    process.once('exit', killVite);
+    process.once('SIGINT', killVite);
+    process.once('SIGTERM', killVite);
+    previewUrl = `http://localhost:${previewPort}/`;
+    io.log(`previewing <${first.construct.name}> at ${previewUrl}`);
+  };
+
+  if (abs) await boot(abs);
+
+  const server = createServer(async (req, res) => {
+    const send = (code: number, body: unknown): void => {
+      res.writeHead(code, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(body));
+    };
+    try {
+      const url = req.url ?? '/';
+      if (req.method === 'GET' && url === '/api/state') {
+        return send(200, abs
+          ? { phase: 'panel', constructPath: abs, construct: JSON.parse(readFileSync(abs, 'utf8')), previewUrl }
+          : { phase: 'start' });
+      }
+      if (req.method === 'GET' && url === '/api/construct') {
+        if (!abs) return send(404, { problems: [{ path: '', message: 'no construct yet' }] });
+        return send(200, JSON.parse(readFileSync(abs, 'utf8')));
+      }
+      if (req.method === 'GET' && url === '/api/events') return hub.attach(res);
+      if (req.method === 'POST' && url === '/api/construct') {
+        if (!abs) return send(409, { problems: [{ path: '', message: 'create a construct first' }] });
+        const out = handleConstructPut(await readJsonBody(req), abs);
+        return out.ok ? send(200, { ok: true }) : send(422, { problems: out.problems });
+      }
+      if (req.method === 'POST' && url === '/api/create') {
+        if (abs) return send(409, { problems: [{ path: '', message: 'a construct already exists in this session' }] });
+        const body = (await readJsonBody(req)) as { templateId?: string; variantId?: string; name?: string };
+        const template = buildableTemplates().find((t) => t.id === body.templateId);
+        const starter: unknown = body.templateId === 'scratch' || !template
+          ? { name: body.name, layout: 'fullscreen', provider: { mode: 'mock' } }
+          : {
+              ...(template.variants?.find((v) => v.id === body.variantId)?.starter ?? template.starter),
+              name: body.name,
+            };
+        const validated = validateConstruct(starter);
+        if (!validated.ok) return send(422, { problems: validated.problems });
+        const target = resolve(process.cwd(), `${body.name}.construct.json`);
+        atomicWriteJson(target, starter);
+        abs = target;
+        await boot(target);
+        return send(200, { previewUrl, construct: starter });
+      }
+      const asset = serveBuilderAsset(url, pageDir);
+      if (asset) {
+        res.writeHead(200, { 'content-type': asset.type });
+        return res.end(readFileSync(asset.file));
+      }
+      // SPA fallback: any other GET serves the page shell.
+      if (req.method === 'GET') {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        return res.end(readFileSync(join(pageDir, 'index.html')));
+      }
+      return send(404, { problems: [{ path: '', message: 'not found' }] });
+    } catch (err) {
+      return send(400, { problems: [{ path: '', message: err instanceof Error ? err.message : String(err) }] });
+    }
+  });
+  server.listen(port, () => io.log(`kai builder at http://localhost:${port}/ — the construct file stays yours.`));
+  return new Promise<never>(() => {});
 }

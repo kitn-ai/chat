@@ -22,6 +22,7 @@ const USAGE = `usage: npx @kitn.ai/ui <command>   (or \`kai <command>\` once @ki
   kai validate <construct.json>          check a construct, print problems with paths
   kai eject <construct.json> <outDir>    write the generated Solid project (it's yours)
   kai dev <construct.json>               live preview with reload-on-edit
+  kai dev --builder [construct.json]     visual builder + live preview (no file = start from a template)
   kai compile <construct.json> [outDir]  one self-registering .js
 `;
 
@@ -73,6 +74,16 @@ function parseUiFlag(rest: string[]): { uiSpec: string | undefined; positional: 
   return { uiSpec, positional };
 }
 
+/** `kai dev` arg parse, exported for tests: `--builder` opens the visual
+ *  builder (path optional — no path = the Start screen, B-23); plain dev
+ *  keeps requiring a path. */
+export function parseDevArgs(rest: string[]): { uiSpec: string | undefined; builder: boolean; path: string | undefined } {
+  const { uiSpec, positional } = parseUiFlag(rest);
+  const builder = positional.includes('--builder');
+  const path = positional.filter((a) => a !== '--builder')[0];
+  return { uiSpec, builder, path };
+}
+
 export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<number> {
   const [command, ...rest] = argv;
   switch (command) {
@@ -103,8 +114,12 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       return 0;
     }
     case 'dev': {
-      const { uiSpec, positional } = parseUiFlag(rest);
-      const path = positional[0];
+      const { uiSpec, builder, path } = parseDevArgs(rest);
+      if (builder) {
+        const { devBuilder } = await import('./dev');
+        await devBuilder(path, { io, uiSpec });
+        return 0; // unreachable; devBuilder never resolves
+      }
       if (!path) {
         io.error(USAGE);
         return 2;

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { join } from 'node:path';
-import { workDirFor, installKey, regenerate, regenTurn } from './dev';
+import { mkdtempSync, readFileSync as readF, writeFileSync as writeF, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { workDirFor, installKey, regenerate, regenTurn, handleConstructPut, createEventHub, serveBuilderAsset } from './dev';
 import { generateProject, type GeneratedFile } from './codegen';
 import { validateConstruct } from './schema';
 
@@ -110,5 +112,54 @@ describe('kai dev internals', () => {
       ),
     ).not.toThrow();
     expect(errors.some((e) => e.includes('Unexpected end of JSON input'))).toBe(true);
+  });
+});
+
+describe('kai dev --builder internals (B-22)', () => {
+  const goodRaw = { name: 'demo-widget', layout: 'widget', provider: { mode: 'mock' } };
+
+  it('handleConstructPut: a rejection reports pathed problems and NEVER writes', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-builder-'));
+    const abs = join(dir, 'demo.construct.json');
+    writeF(abs, JSON.stringify(goodRaw));
+    const before = readF(abs, 'utf8');
+    const out = handleConstructPut({ ...goodRaw, layout: 'sidebar' }, abs);
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.problems.some((p) => p.path === 'layout')).toBe(true);
+    expect(readF(abs, 'utf8')).toBe(before);
+  });
+
+  it('handleConstructPut: a valid body is written atomically — pretty JSON + trailing newline, RAW body preserved (no zod defaults injected), no tmp litter', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-builder-'));
+    const abs = join(dir, 'demo.construct.json');
+    writeF(abs, '{}');
+    // theme WITHOUT mode: zod's .default('system') must NOT leak into the file.
+    const body = { ...goodRaw, theme: { accent: '#e91e63' } };
+    const out = handleConstructPut(body, abs);
+    expect(out.ok).toBe(true);
+    const onDisk = JSON.parse(readF(abs, 'utf8')) as Record<string, unknown>;
+    expect((onDisk.theme as Record<string, unknown>).mode).toBeUndefined();
+    expect(readF(abs, 'utf8').endsWith('\n')).toBe(true);
+    expect(readdirSync(dir)).toEqual(['demo.construct.json']); // tmp renamed away
+  });
+
+  it('event hub broadcasts to attached responses as SSE frames', () => {
+    const hub = createEventHub();
+    const frames: string[] = [];
+    hub.attach({
+      writeHead: () => {},
+      write: (chunk: string) => { frames.push(chunk); return true; },
+      on: () => {},
+    } as never);
+    hub.broadcast('construct');
+    expect(frames.some((f) => f.includes('event: construct'))).toBe(true);
+  });
+
+  it('serveBuilderAsset refuses path traversal out of the page dir', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-page-'));
+    writeF(join(dir, 'index.html'), '<!doctype html>');
+    expect(serveBuilderAsset('/', dir)?.file.endsWith('index.html')).toBe(true);
+    expect(serveBuilderAsset('/../../../etc/passwd', dir)).toBeUndefined();
+    expect(serveBuilderAsset('/%2e%2e/%2e%2e/etc/passwd', dir)).toBeUndefined();
   });
 });
