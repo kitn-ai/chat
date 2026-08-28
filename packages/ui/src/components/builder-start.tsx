@@ -1,6 +1,7 @@
 import { type JSX, For } from 'solid-js';
 import { cn } from '../utils/cn';
 import { Card } from '../ui/card';
+import { TEMPLATES, type TemplateId } from '../agent-tooling/construct/templates';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The template picker's data — T-3/T-4 (docs/superpowers/specs/
@@ -18,19 +19,11 @@ import { Card } from '../ui/card';
 // weight text action rather than a seventh card, but it fires `onSelect`
 // with this id the same way a card fires with its own, so the id belongs
 // in the same union `onSelect` is typed over.
-export type BuilderTemplateId =
-  | 'widget'
-  | 'inAppAssistant'
-  | 'assistant'
-  | 'research'
-  | 'workspace'
-  | 'voice'
-  | 'scratch';
+// 'scratch' is NOT a template — no illustration, no card, no registry entry.
+export type BuilderTemplateId = TemplateId | 'scratch';
 
-/** The template ids that DO have a card — every `BuilderTemplateId` except
- *  `'scratch'`, which has no illustration and never appears in
- *  `BUILDER_TEMPLATES`. */
-export type BuilderCardTemplateId = Exclude<BuilderTemplateId, 'scratch'>;
+/** The template ids that DO have a card — every registry id. */
+export type BuilderCardTemplateId = TemplateId;
 
 export interface BuilderTemplate {
   id: BuilderCardTemplateId;
@@ -38,43 +31,18 @@ export interface BuilderTemplate {
   description: string;
 }
 
-/** V1 templates, in build order (T-1: easiest to hardest, so controls
- *  accumulate template to template). Names and one-liners are the T-4/T-7
- *  copy this round exists to force into existence. Round P2 grows the set
- *  from four to six (In-app assistant, Voice) and sharpens the four
- *  existing one-liners for instant recognition. */
-export const BUILDER_TEMPLATES: readonly BuilderTemplate[] = [
-  {
-    id: 'widget',
-    name: 'Support widget',
-    description: 'A floating chat that lives in the corner of your site.',
-  },
-  {
-    id: 'inAppAssistant',
-    name: 'In-app assistant',
-    description: 'An assistant docked inside your existing app.',
-  },
-  {
-    id: 'assistant',
-    name: 'Assistant',
-    description: 'A full-page assistant with a history of past conversations.',
-  },
-  {
-    id: 'research',
-    name: 'Research',
-    description: 'Search-first answers with cited sources.',
-  },
-  {
-    id: 'workspace',
-    name: 'Workspace',
-    description: 'Chat drives a live work surface: previews, code, and artifacts build beside the conversation.',
-  },
-  {
-    id: 'voice',
-    name: 'Voice',
-    description: 'A voice-first assistant you talk to, push-to-talk and all.',
-  },
-];
+/** All six cards, DERIVED from the template registry (B-17b) — id, name and
+ *  one-liner are the registry's own; this module adds only the
+ *  illustrations, which stay component-side keyed by id (SVGs are not
+ *  registry data). The Labs story renders all six (T-1a); a real product
+ *  surface renders BUILDABLE_BUILDER_TEMPLATES instead (menu-honesty). */
+export const BUILDER_TEMPLATES: readonly BuilderTemplate[] = TEMPLATES.map(
+  ({ id, name, description }) => ({ id, name, description }),
+);
+
+export const BUILDABLE_BUILDER_TEMPLATES: readonly BuilderTemplate[] = TEMPLATES.filter(
+  (t) => t.availability === 'buildable',
+).map(({ id, name, description }) => ({ id, name, description }));
 
 export interface BuilderStartProps {
   /** The currently selected template id, or unset for none yet. Controlled —
@@ -93,6 +61,9 @@ export interface BuilderStartProps {
    * navigate to.
    */
   onSelect: (id: BuilderTemplateId) => void;
+  /** Which cards to render. Defaults to BUILDER_TEMPLATES (all six — the
+   *  story). A product surface passes BUILDABLE_BUILDER_TEMPLATES. */
+  templates?: readonly BuilderTemplate[];
   class?: string;
 }
 
@@ -164,7 +135,7 @@ export function BuilderStart(props: BuilderStartProps): JSX.Element {
           (still visible, just the kit's default color) alone. */}
       <style>{'[data-builder-start] [aria-pressed="true"]{--tw-ring-color:var(--color-primary) !important}'}</style>
       <div class={cn('grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3', props.class)} data-builder-start>
-      <For each={BUILDER_TEMPLATES}>
+      <For each={props.templates ?? BUILDER_TEMPLATES}>
         {(template) => {
           const selected = () => props.value === template.id;
           const Illustration = TEMPLATE_ILLUSTRATIONS[template.id];

@@ -9,7 +9,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, screen, fireEvent } from '@solidjs/testing-library';
-import { BuilderStart, BUILDER_TEMPLATES } from './builder-start';
+import { BuilderStart, BUILDER_TEMPLATES, BUILDABLE_BUILDER_TEMPLATES } from './builder-start';
+import { TEMPLATES } from '../agent-tooling/construct/templates';
 
 afterEach(cleanup);
 
@@ -109,5 +110,34 @@ describe('BuilderStart', () => {
         'false',
       );
     }
+  });
+});
+
+describe('BuilderStart derives from the template registry (B-17b)', () => {
+  it('BUILDER_TEMPLATES is the registry, id/name/description, in registry order — never restated', () => {
+    expect(BUILDER_TEMPLATES).toEqual(
+      TEMPLATES.map(({ id, name, description }) => ({ id, name, description })),
+    );
+  });
+
+  it('BUILDABLE_BUILDER_TEMPLATES filters availability === "buildable" (voice stays a story card only)', () => {
+    expect(BUILDABLE_BUILDER_TEMPLATES.map((t) => t.id)).toEqual(
+      TEMPLATES.filter((t) => t.availability === 'buildable').map((t) => t.id),
+    );
+    expect(BUILDABLE_BUILDER_TEMPLATES.some((t) => t.id === 'voice')).toBe(false);
+  });
+
+  it('a product surface passing the buildable list renders five cards and no Voice', () => {
+    render(() => <BuilderStart templates={BUILDABLE_BUILDER_TEMPLATES} onSelect={vi.fn()} />);
+    expect(screen.queryByText('Voice')).not.toBeInTheDocument();
+    for (const t of BUILDABLE_BUILDER_TEMPLATES) {
+      expect(screen.getByText(t.name)).toBeInTheDocument();
+    }
+  });
+
+  it('the default (story) rendering still shows all six', () => {
+    render(() => <BuilderStart onSelect={vi.fn()} />);
+    expect(screen.getByText('Voice')).toBeInTheDocument();
+    expect(BUILDER_TEMPLATES).toHaveLength(6);
   });
 });
