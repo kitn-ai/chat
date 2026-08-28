@@ -1,0 +1,36 @@
+{
+  "$schema": "https://ui.kitn.ai/schemas/construct/v1.json",
+  "name": "daily-assistant",
+  "layout": "fullscreen",
+  "provider": {
+    "mode": "mock"
+  },
+  "header": {
+    "title": "Assistant"
+  },
+  "theme": {
+    "accent": "#7c3aed",
+    "mode": "system"
+  },
+  "empty": {
+    "title": "What can I help with?",
+    "description": "Ask anything, or start from a suggestion below."
+  },
+  "capabilities": {
+    "starters": [
+      "Draft the Q3 board update",
+      "Summarize a document",
+      "Compare two options"
+    ],
+    "attachments": {
+      "accept": [
+        "image/*",
+        "application/pdf"
+      ]
+    },
+    "history": {
+      "persistence": "local"
+    },
+    "conversations": true
+  }
+}

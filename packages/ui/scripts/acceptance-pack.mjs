@@ -320,6 +320,7 @@ const EXPORT_NOTES = {
   './schemas': { agent: true, what: 'The generative-UI card schemas.' },
   './schemas/*': { agent: true, what: 'One card schema JSON file at a time.' },
   './construct': { agent: true, what: 'The construct format: `ConstructSchema` (Zod), `validateConstruct`, `CONSTRUCT_SCHEMA_URL`. Lets a build-time tool (e.g. a scaffolder) validate a construct against the same schema the `kai` CLI and MCP `construct` tool use.' },
+  './construct/templates': { agent: true, what: 'The template registry: `TEMPLATES`, `buildableTemplates()`, `templateById()`. A zod-free leaf — starter constructs plus control manifests for the buildable templates (support widget, in-app assistant, assistant, research, workspace) — safe for a bundler that bans zod (e.g. `create-kai`).' },
   './element-meta.json': { agent: false, what: 'Tooling manifest of every element API. This pack is rendered from it.' },
   './icon-names.json': { agent: false, what: 'Tooling manifest of icon names.' },
   './package.json': { agent: false, what: 'The manifest itself.' },

@@ -43,7 +43,11 @@ import { resolve } from 'node:path';
 export default defineConfig({
   plugins: [
     dts({
-      include: ['src/agent-tooling/construct/public.ts', 'src/agent-tooling/construct/schema.ts'],
+      include: [
+        'src/agent-tooling/construct/public.ts',
+        'src/agent-tooling/construct/schema.ts',
+        'src/agent-tooling/construct/schema-url.ts',
+      ],
       outDir: 'dist',
       entryRoot: 'src',
     }),

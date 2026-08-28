@@ -145,6 +145,18 @@ const GENERATED = [
   // generator, which build:api already runs.
   { file: 'packages/ui/src/agent-tooling/construct/construct.v1.schema.json', probe: 'overwrite' },
   { file: 'apps/docs/public/schemas/construct/v1.json', probe: 'overwrite' },
+  // The template registry's derived fixture JSONs (B-15) — written by
+  // scripts/gen-construct-template-fixtures.mjs in build:api, read by
+  // verify-construct.mjs's recursive fixture discovery. One file per
+  // buildable starter + variant; a template removed from templates.ts
+  // leaves its file's sentinel standing, which is this guard's red.
+  { file: 'packages/ui/src/agent-tooling/construct/fixtures/templates/widget.construct.json', probe: 'overwrite' },
+  { file: 'packages/ui/src/agent-tooling/construct/fixtures/templates/inAppAssistant.construct.json', probe: 'overwrite' },
+  { file: 'packages/ui/src/agent-tooling/construct/fixtures/templates/assistant.construct.json', probe: 'overwrite' },
+  { file: 'packages/ui/src/agent-tooling/construct/fixtures/templates/research.construct.json', probe: 'overwrite' },
+  { file: 'packages/ui/src/agent-tooling/construct/fixtures/templates/workspace.construct.json', probe: 'overwrite' },
+  { file: 'packages/ui/src/agent-tooling/construct/fixtures/templates/workspace.artifactPreview.construct.json', probe: 'overwrite' },
+  { file: 'packages/ui/src/agent-tooling/construct/fixtures/templates/workspace.appPreview.construct.json', probe: 'overwrite' },
   { file: 'docs/web-components.md', probe: 'in-block' },
 ];
 

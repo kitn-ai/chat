@@ -29,7 +29,7 @@ import { isSafeUrl } from '../../primitives/url-scheme-policy';
 import { CHAT_MESSAGE_ACTIONS } from '../../elements/chat-actions';
 import { BUTTON_VARIANT_NAMES } from '../../ui/button-variant-names';
 
-export const CONSTRUCT_SCHEMA_URL = 'https://ui.kitn.ai/schemas/construct/v1.json';
+export { CONSTRUCT_SCHEMA_URL } from './schema-url';
 
 /** A valid custom-element tag: lowercase, starts with a letter, contains a hyphen. */
 const TAG_RE = /^[a-z][a-z0-9]*-[a-z0-9-]+$/;

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://ui.kitn.ai/schemas/construct/v1.json",
+  "name": "in-app-assistant",
+  "layout": "aside",
+  "provider": {
+    "mode": "mock"
+  },
+  "header": {
+    "title": "Assistant"
+  },
+  "theme": {
+    "accent": "#0ea5e9",
+    "mode": "system"
+  },
+  "aside": {
+    "position": "end",
+    "width": "380px"
+  },
+  "capabilities": {
+    "starters": [
+      "Deploy payments to production",
+      "Check the canary status"
+    ],
+    "attachments": {
+      "accept": [
+        "image/*",
+        "application/pdf"
+      ]
+    },
+    "history": {
+      "persistence": "local"
+    }
+  }
+}

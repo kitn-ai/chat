@@ -1,0 +1,42 @@
+{
+  "$schema": "https://ui.kitn.ai/schemas/construct/v1.json",
+  "name": "research-assistant",
+  "layout": "fullscreen",
+  "provider": {
+    "mode": "mock"
+  },
+  "header": {
+    "title": "Research"
+  },
+  "theme": {
+    "accent": "#0f766e",
+    "mode": "system"
+  },
+  "capabilities": {
+    "starters": [
+      "How does the wire adapter work?",
+      "What are message parts?"
+    ],
+    "attachments": {
+      "accept": [
+        "application/pdf"
+      ]
+    },
+    "history": {
+      "persistence": "local"
+    },
+    "sources": {
+      "strip": true
+    },
+    "messageActions": {
+      "user": [
+        "edit"
+      ],
+      "assistant": [
+        "copy",
+        "like",
+        "dislike"
+      ]
+    }
+  }
+}
