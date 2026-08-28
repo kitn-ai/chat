@@ -14,7 +14,6 @@ import {
   ASSISTANT_ACTION_CATALOG,
   DEFAULT_USER_ACTION_ROWS,
   DEFAULT_ASSISTANT_ACTION_ROWS,
-  SPEAK_CUSTOM_ACTION,
   ActionRowPicker,
 } from '../components/builder-message-actions';
 import {
@@ -341,7 +340,7 @@ function AssistantBuilderDemo(): JSX.Element {
   const assistantActions = createMemo<(ChatMessageAction | CustomAction)[]>(() =>
     assistantActionRows()
       .filter((r) => r.enabled)
-      .map((r) => (r.id === 'speak' ? SPEAK_CUSTOM_ACTION : r.id)),
+      .map((r) => r.id),
   );
 
   return (

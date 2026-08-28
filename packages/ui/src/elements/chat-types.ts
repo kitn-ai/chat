@@ -1,14 +1,20 @@
 import type { ToolPart, RawOrigin } from '../components/tool-types';
 import type { AttachmentData } from '../components/attachment-types';
 import type { CardEnvelope } from '../primitives/card-contract';
+import { CHAT_MESSAGE_ACTIONS } from './chat-actions';
 
 /** Re-exported so consumers of chat-types (and MessagePart) can keep using
  *  RawOrigin unqualified. It is defined in components/tool-types.ts, not here,
  *  to keep the components -> elements import direction one-way. */
 export type { RawOrigin };
 
-/** The five built-in action buttons (each carries its own curated icon + label). */
-export type ChatMessageAction = 'copy' | 'like' | 'dislike' | 'regenerate' | 'edit';
+export { CHAT_MESSAGE_ACTIONS };
+
+/** The built-in action buttons (each carries its own curated icon + label).
+ *  Derived from the CHAT_MESSAGE_ACTIONS const in ./chat-actions — a leaf
+ *  both this union and the construct schema's zod enum read (B-6/C-2); the
+ *  const is re-exported here so existing import sites keep one address. */
+export type ChatMessageAction = (typeof CHAT_MESSAGE_ACTIONS)[number];
 
 /** A like/dislike feedback vote on an assistant message. */
 export type FeedbackVote = 'like' | 'dislike';

@@ -2,6 +2,7 @@ import { splitProps, Show, createSignal, createEffect, on, onCleanup } from 'sol
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
 import { Tooltip } from '../ui/tooltip';
+import { hasSpeechSynthesis } from '../primitives/speech';
 
 /** Imperative handle exposed via `controllerRef` — surfaces the playback controls
  *  so the `<kai-voice-output>` facade can forward them as instance methods. Both
@@ -42,11 +43,6 @@ export interface VoiceOutputProps {
   /** Receive the imperative controller once mounted. The `<kai-voice-output>`
    *  facade forwards these as element methods (speak/pause/resume/stop). */
   controllerRef?: (controller: VoiceOutputController) => void;
-}
-
-/** True when the browser exposes the Web Speech synthesis API. */
-function hasSpeechSynthesis(): boolean {
-  return typeof window !== 'undefined' && 'speechSynthesis' in window;
 }
 
 export function VoiceOutput(props: VoiceOutputProps) {

@@ -11,6 +11,7 @@ import { createSignal, onCleanup } from 'solid-js';
 import type { ChatMessage, FeedbackVote } from '../elements/chat-types';
 import { partsToText } from '../state';
 import { toast } from './toast-store';
+import { speakText } from './speech';
 
 /** Detail shape emitted by the action row. `state` is present only for the
  *  toggleable feedback votes: `'on'` when a vote is set, `'off'` when cleared.
@@ -114,6 +115,15 @@ export function createMessageFeedback(opts: MessageFeedbackOptions): MessageFeed
         toast('Thanks for your feedback', { target: opts.target?.() });
         opts.emit({ messageId: m.id, action, state: 'on' });
       }
+      return;
+    }
+    if (action === 'speak') {
+      // Built-in read-aloud (B-7a): the kit's own SpeechSynthesis mechanics
+      // (primitives/speech.ts, shared with VoiceOutput) over the message's
+      // text parts — free, local, no provider. Still emits, so a host can
+      // layer a model-TTS path on the same kai-message-action event.
+      speakText(partsToText(m.parts));
+      opts.emit({ messageId: m.id, action });
       return;
     }
     // regenerate / edit / custom — passthrough, no state.
