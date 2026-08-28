@@ -207,7 +207,7 @@ const DEFAULT_ACCEPT: string[] = [
 // rhythm (label size, spacing, hint color) is set once, not per field.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function Section(props: { title: string; children: JSX.Element }): JSX.Element {
+export function Section(props: { title: string; children: JSX.Element }): JSX.Element {
   return (
     <section class="flex flex-col gap-3 border-b border-border p-4 last:border-b-0" data-builder-section={props.title}>
       <h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{props.title}</h3>
@@ -216,7 +216,7 @@ function Section(props: { title: string; children: JSX.Element }): JSX.Element {
   );
 }
 
-function Field(props: { label: string; hint?: string; children: JSX.Element }): JSX.Element {
+export function Field(props: { label: string; hint?: string; children: JSX.Element }): JSX.Element {
   return (
     <div class="flex flex-col gap-1.5">
       <label class="text-xs font-medium text-foreground">{props.label}</label>
@@ -228,7 +228,7 @@ function Field(props: { label: string; hint?: string; children: JSX.Element }): 
   );
 }
 
-function Row(props: { label: string; children: JSX.Element; muted?: boolean }): JSX.Element {
+export function Row(props: { label: string; children: JSX.Element; muted?: boolean }): JSX.Element {
   return (
     <div class="flex items-center justify-between gap-3">
       <span class={cn('text-xs font-medium', props.muted ? 'text-muted-foreground' : 'text-foreground')}>
@@ -243,7 +243,7 @@ function Row(props: { label: string; children: JSX.Element; muted?: boolean }): 
  *  proved out (`starters`). `capabilities.attachments.accept` moved to
  *  `AcceptTypeEditor` below (owner feedback, design round 2): raw MIME
  *  strings are a bad first surface for this audience. */
-function TagEditor(props: {
+export function TagEditor(props: {
   tags: string[];
   onChange: (next: string[]) => void;
   ariaLabel: string;
@@ -320,7 +320,7 @@ function TagEditor(props: {
  * fine, `commitDraft` splits on either). A hand-added entry lives only
  * there; no chip claims it.
  */
-function AcceptTypeEditor(props: { accept: string[]; onChange: (next: string[]) => void }): JSX.Element {
+export function AcceptTypeEditor(props: { accept: string[]; onChange: (next: string[]) => void }): JSX.Element {
   const isActive = (chip: AcceptChip): boolean => chip.patterns.every((p) => props.accept.includes(p));
   const toggleChip = (chip: AcceptChip): void => {
     if (isActive(chip)) {
@@ -397,7 +397,7 @@ function AcceptTypeEditor(props: { accept: string[]; onChange: (next: string[]) 
 /** `home.links` — the array-of-objects hard case (RECOMMENDATION.md), as a
  *  small labeled-row repeater. Each row explicitly numbered ("Link N") so a
  *  scanning eye always knows which entry it's looking at. */
-function LinksEditor(props: { links: BuilderHomeLink[]; onChange: (next: BuilderHomeLink[]) => void }): JSX.Element {
+export function LinksEditor(props: { links: BuilderHomeLink[]; onChange: (next: BuilderHomeLink[]) => void }): JSX.Element {
   const setRow = (i: number, patch: Partial<BuilderHomeLink>): void => {
     const next = props.links.slice();
     next[i] = { ...next[i], ...patch };
