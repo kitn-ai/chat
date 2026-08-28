@@ -236,9 +236,52 @@ export function serveBuilderAsset(urlPath: string, rootDir: string): { file: str
   return { file, type: ASSET_TYPES[extname(file)] ?? 'application/octet-stream' };
 }
 
-/** dist/builder-page relative to the BUNDLED cli (dist/construct-cli.es.js). */
+/** Bounded walk-up used by `builderPageDir()`, factored out so a test can
+ *  drive it from a synthetic directory tree instead of the real compiled
+ *  output. Exported so a chunk-split layout (a nested `dist/assets/`) is
+ *  pinned directly rather than only reachable through a real Vite build.
+ *
+ *  Why the walk-up exists at all (2026-08-28, IVP-found): this function
+ *  used to assume its own compiled module always lives directly beside
+ *  `builder-page/` — true only if Rollup inlines this module into
+ *  construct-cli.es.js. It doesn't: `cli.ts` reaches `dev.ts` through a
+ *  dynamic `import('./dev')` (so `plain kai dev` never pays for the
+ *  builder's code), and Rollup's default behaviour is to split a
+ *  dynamically-imported module into its own chunk — observed at
+ *  `dist/assets/dev-*.js`. `import.meta.url` inside that chunk resolves to
+ *  `dist/assets/`, one level below the real `dist/builder-page/`, so the
+ *  old single-level join silently computed the wrong path on every real
+ *  build. Rather than pin the chunk's exact depth (a Rollup output detail
+ *  that can change on any dependency bump), walk up from wherever the
+ *  chunk lands until `builder-page/` is found, bounded so a genuinely
+ *  missing artifact still fails fast and loud with every path it tried. */
+export function resolveBuilderPageDir(startDir: string): { dir: string } | { tried: string[] } {
+  const tried: string[] = [];
+  let dir = startDir;
+  for (let i = 0; i < 6; i++) {
+    const candidate = join(dir, 'builder-page');
+    tried.push(candidate);
+    if (existsSync(join(candidate, 'index.html'))) return { dir: candidate };
+    const atPackageRoot = existsSync(join(dir, 'package.json'));
+    const parent = dirname(dir);
+    if (atPackageRoot || parent === dir) break; // don't climb past the package root or the fs root
+    dir = parent;
+  }
+  return { tried };
+}
+
+/** dist/builder-page, resolved relative to wherever THIS module's compiled
+ *  chunk actually landed (see `resolveBuilderPageDir`'s comment) — not
+ *  assumed to sit beside dist/construct-cli.es.js. Throws loudly, naming
+ *  every path it tried, when no build artifact is found at all. */
 export function builderPageDir(): string {
-  return join(dirname(fileURLToPath(import.meta.url)), 'builder-page');
+  const out = resolveBuilderPageDir(dirname(fileURLToPath(import.meta.url)));
+  if ('dir' in out) return out.dir;
+  throw new Error(
+    `Missing build artifact: builder-page/index.html — the builder page ships prebuilt. ` +
+      `Tried:\n${out.tried.map((p) => `  ${p}`).join('\n')}\n` +
+      `Run \`nx build ui\` (or npm run build in packages/ui) and try again.`,
+  );
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
@@ -259,9 +302,11 @@ export async function devBuilder(
   const io = opts.io ?? { log: (s: string) => console.log(s), error: (s: string) => console.error(s) };
   const port = opts.port ?? 4400;
   const previewPort = opts.previewPort ?? 4401;
-  const pageDir = builderPageDir();
-  if (!existsSync(join(pageDir, 'index.html'))) {
-    io.error(`Missing build artifact: ${pageDir} — the builder page ships prebuilt. Run \`nx build ui\` (or npm run build in packages/ui) and try again.`);
+  let pageDir: string;
+  try {
+    pageDir = builderPageDir();
+  } catch (err) {
+    io.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
   }
 

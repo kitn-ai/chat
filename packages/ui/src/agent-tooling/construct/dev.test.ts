@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { mkdtempSync, readFileSync as readF, writeFileSync as writeF, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
-import { workDirFor, installKey, regenerate, regenTurn, handleConstructPut, createEventHub, serveBuilderAsset, listenLoopbackOnly } from './dev';
+import { mkdirSync } from 'node:fs';
+import { workDirFor, installKey, regenerate, regenTurn, handleConstructPut, createEventHub, serveBuilderAsset, listenLoopbackOnly, resolveBuilderPageDir } from './dev';
 import { generateProject, type GeneratedFile } from './codegen';
 import { validateConstruct } from './schema';
 
@@ -162,6 +163,37 @@ describe('kai dev --builder internals (B-22)', () => {
     expect(serveBuilderAsset('/', dir)?.file.endsWith('index.html')).toBe(true);
     expect(serveBuilderAsset('/../../../etc/passwd', dir)).toBeUndefined();
     expect(serveBuilderAsset('/%2e%2e/%2e%2e/etc/passwd', dir)).toBeUndefined();
+  });
+
+  it('resolveBuilderPageDir finds dist/builder-page from a chunk-split layout (e.g. dist/assets/dev-*.js)', () => {
+    // Mirrors the real Vite output that broke this (2026-08-28 IVP): dev.ts
+    // is reached via a dynamic import() from cli.ts, so Rollup splits it
+    // into its own chunk under dist/assets/, one level BELOW dist/builder-page.
+    const dist = mkdtempSync(join(tmpdir(), 'kai-dist-'));
+    mkdirSync(join(dist, 'assets'), { recursive: true });
+    mkdirSync(join(dist, 'builder-page'), { recursive: true });
+    writeF(join(dist, 'builder-page', 'index.html'), '<!doctype html>');
+    const out = resolveBuilderPageDir(join(dist, 'assets'));
+    expect('dir' in out && out.dir).toBe(join(dist, 'builder-page'));
+  });
+
+  it('resolveBuilderPageDir also finds it when NOT chunk-split (chunk beside builder-page)', () => {
+    const dist = mkdtempSync(join(tmpdir(), 'kai-dist-'));
+    mkdirSync(join(dist, 'builder-page'), { recursive: true });
+    writeF(join(dist, 'builder-page', 'index.html'), '<!doctype html>');
+    const out = resolveBuilderPageDir(dist);
+    expect('dir' in out && out.dir).toBe(join(dist, 'builder-page'));
+  });
+
+  it('resolveBuilderPageDir reports every path it tried when the artifact is genuinely missing', () => {
+    const dist = mkdtempSync(join(tmpdir(), 'kai-dist-'));
+    mkdirSync(join(dist, 'assets'), { recursive: true });
+    writeF(join(dist, 'package.json'), '{}'); // package root — bounds the climb
+    const out = resolveBuilderPageDir(join(dist, 'assets'));
+    expect('tried' in out).toBe(true);
+    if ('tried' in out) {
+      expect(out.tried).toEqual([join(dist, 'assets', 'builder-page'), join(dist, 'builder-page')]);
+    }
   });
 
   it('listenLoopbackOnly binds 127.0.0.1, never the unspecified address', async () => {
