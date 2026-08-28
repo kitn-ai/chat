@@ -15,8 +15,11 @@ real-build implementation begins.
 
 ## Where things stand
 
-**Branch `feat/builder-story`** (NOT merged, NOT pushed; ~45 commits off
-main at #345, rebased clean): the complete story-first design of the visual
+**MERGED TO MAIN 2026-08-28 as `e2888654`** (squash; branch deleted; full
+unit 5323 + typecheck green at merge). Everything below is ON MAIN now.
+Release-please will fold it into the next release PR — merge that when
+convenient (bin/docs are unaffected by timing here).
+The design suite (~45 commits' worth): the complete story-first design of the visual
 construct builder, iterated live with the owner over ~20 feedback rounds.
 Storybook (`pnpm --filter @kitn.ai/ui run storybook`, :6006) holds:
 
@@ -65,8 +68,23 @@ theme.mode, not the page (deliberate; owner aware).
    gallery feeds the banked MCP capability menu. This is the concrete
    opening move of the general-UI positioning round.
 
+## OWNER MANDATE AT SESSION CLEAR (2026-08-28)
+The owner delegated the continuation: "take over and supervise the actual
+continuation of the building of these items in our Create CLI or wherever
+we're using these things. Get that all working now that we have these
+templates in place." That means the supervisor RULES on the T-5 package
+itself (adopt the recommendations against the standing tests: one-chat-
+surface boundary, invoice/policy, derive-don't-type; LEDGER every ruling so
+the owner can rework any), then drives the implementation without waiting:
+templates into create-kai's wizard (the shape question grows to the
+template list, variants included, one registry serving wizard + builder +
+Start screen), the construct vocabulary additions the rulings admit, and
+the real builder build (schema-derived panel + kai dev seam per the spike).
+Brainstorm-with-owner is NOT required for this arc; spec+plan+subagent
+machinery per house process IS.
+
 ## What implementation needs (in order)
-1. **Owner rules on the T-5 package** (the 11 items — messageActions
+1. **Supervisor rules on the T-5 package** (delegated, see mandate) (the 11 items — messageActions
    role-scoped arrays + kit-tier 'speak', aside geometry, voice wholesale,
    composer group incl. triggers/menu/labels, sources display, header
    actions, shell knobs, Multi-mode `modes[]` which may be the vocabulary
