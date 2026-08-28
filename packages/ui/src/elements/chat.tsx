@@ -6,7 +6,7 @@ import { cardComponentsFromTags } from './message';
 import { createMessagesGuard } from './validate-messages';
 import type { AttachmentData } from '../components/attachments';
 import type { RejectedAttachment } from './default-input';
-import type { ChatMessage } from './chat-types';
+import type { ChatMessage, ChatMessageAction, CustomAction } from './chat-types';
 import type { TriggerDef } from '../components/composer';
 import type { ComposerDoc } from '../primitives/composer-model';
 import type { ProseSize } from '../primitives/chat-config';
@@ -66,7 +66,7 @@ type Props = Omit<ChatThreadProps,
   // without this, `gen-element-api.mjs` picked them up and put a JSX.Element type
   // (which it stringifies as Solid's internal array-like union — meaningless to a
   // web-component consumer) into `<kai-chat>`'s public prop surface and docs.
-  | 'headerEndContent' | 'emptyContent'> & Record<string, unknown> & {
+  | 'headerEndContent' | 'emptyContent' | 'composerStart' | 'composerEnd'> & Record<string, unknown> & {
     /** Which attachment media types the user may stage, in HTML `accept` syntax:
      *  `<kai-chat accept="image/*,application/pdf">`. A plain string, so unlike
      *  `messages` it DOES work as an attribute. Omitted means no filter.
@@ -198,7 +198,7 @@ defineWebComponent<Props, Events>('kai-chat', {
   attach: true, webSearch: false, voice: false, triggers: undefined, kindIcons: undefined,
   actionsReveal: 'always', cardTypes: undefined, cardSchemas: undefined, accept: undefined,
   reasoning: undefined, reasoningOpen: undefined, conversations: false, store: undefined,
-  home: undefined,
+  home: undefined, userActions: undefined, assistantActions: undefined, hideSources: false,
 }, (props, { dispatch, flag, reflectFlag, element, expose }) => {
   // `messages` is an untyped boundary: a consumer can hand it anything at
   // runtime (a pre-0.20.0 `{ id, role, content }` array, in particular). Skip
@@ -270,6 +270,9 @@ defineWebComponent<Props, Events>('kai-chat', {
     triggers={props.triggers as TriggerDef[] | undefined}
     kindIcons={props.kindIcons as Record<string, string> | undefined}
     actionsReveal={props.actionsReveal as 'always' | 'hover'}
+    userActions={props.userActions as (ChatMessageAction | CustomAction)[] | undefined}
+    assistantActions={props.assistantActions as (ChatMessageAction | CustomAction)[] | undefined}
+    hideSources={flag('hideSources')}
     cardTypes={cardComponentsFromTags(props.cardTypes as Record<string, string> | undefined, (props as { theme?: string }).theme)}
     cardSchemas={props.cardSchemas as Record<string, object> | undefined}
     conversations={flag('conversations')}

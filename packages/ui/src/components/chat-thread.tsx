@@ -14,7 +14,7 @@ import {
 import { DefaultPromptInput, type RejectedAttachment } from '../elements/default-input';
 import type { MediaTypeFilter } from '../wire/media-types';
 import type { TriggerDef } from './composer';
-import type { ChatMessage } from '../elements/chat-types';
+import type { ChatMessage, ChatMessageAction, CustomAction } from '../elements/chat-types';
 import type { ProseSize } from '../primitives/chat-config';
 import type { ModelOption } from '../types';
 import type { CardComponentMap } from '../primitives/card-registry';
@@ -261,6 +261,27 @@ export interface ChatThreadProps {
   /** Whether each message's action bar is always visible (`'always'`, default)
    *  or only revealed on hover of that message row (`'hover'`). */
   actionsReveal?: 'always' | 'hover';
+  /** Role-scoped DEFAULT action bars (B-7b): a user message with no `actions`
+   *  of its own gets `userActions`; an assistant message, `assistantActions`.
+   *  A per-message `m.actions` OVERRIDES the role default — override =
+   *  replace, not merge — so a message that sets `actions: []` renders NO
+   *  action bar even when a role default is set. Set as JS properties. */
+  userActions?: (ChatMessageAction | CustomAction)[];
+  /** See `userActions` — the assistant-role default. */
+  assistantActions?: (ChatMessageAction | CustomAction)[];
+  /** Hide the citations row consecutive `source` parts collapse into
+   *  (`part="citations"`, message.tsx). Named as a HIDE, not `sources:
+   *  boolean`, so absence-means-default stays unambiguous: absent/false is
+   *  today's rendering, byte-for-byte (B-8). */
+  hideSources?: boolean;
+  /** JSX rendered immediately BEFORE the composer region — the `emptyContent`
+   *  escape-hatch pattern verbatim (plain JSX handed down inside the same
+   *  tree, no Portal), for a caller composing ChatThread directly as a Solid
+   *  component (B-9). Not reachable through `<kai-chat>` (JSX has no
+   *  web-component consumer form — same boundary as `headerEndContent`). */
+  composerStart?: JSX.Element;
+  /** JSX rendered immediately AFTER the composer region (see composerStart). */
+  composerEnd?: JSX.Element;
   // callbacks (the facade maps these to dispatch())
   onValueChange?: (value: string) => void;
   onSubmit?: (detail: { value: string; attachments: AttachmentData[] }) => void;
@@ -296,6 +317,11 @@ export interface ChatThreadController {
    *  `onOpenChange={(open) => !open && controller.closeConversationsList()}`
    *  at the call site covers all three with no per-path wiring. */
   closeConversationsList(): void;
+  /** Start a fresh conversation — the same path as the list view's "+ New
+   *  conversation" row: clears the active id, returns to the chat view,
+   *  and delivers `[]` through `onConversationLoad`. The imperative seam
+   *  the construct shell palette's "New conversation" entry drives (B-10). */
+  startNewConversation(): void;
 }
 
 /**
@@ -713,6 +739,7 @@ export function ChatThread(props: ChatThreadProps) {
         vp?.scrollTo({ top: vp.scrollHeight, behavior: behavior ?? 'smooth' });
       },
       closeConversationsList: () => { setChatEntry(null); setView(homeEnabled() ? 'home' : 'chat'); },
+      startNewConversation: () => startNewConversation(),
     });
   });
 
@@ -883,7 +910,8 @@ export function ChatThread(props: ChatThreadProps) {
                             cardHostElement={props.cardHostElement}
                             isUser={m().role === 'user'}
                             markdown={m().role === 'assistant'}
-                            actions={m().actions}
+                            actions={m().actions ?? (m().role === 'user' ? props.userActions : props.assistantActions)}
+                            hideSources={props.hideSources}
                             actionsReveal={reveal()}
                             activeFeedback={feedback.resolveFeedback(m())}
                             copied={feedback.isCopied(m().id)}
@@ -968,6 +996,9 @@ export function ChatThread(props: ChatThreadProps) {
             </Show>
             <div class="shrink-0 px-4 pb-4">
               <div class="mx-auto max-w-3xl">
+                {/* JSX escape hatch, rendered immediately before the composer region
+                    (built-in or `slot="composer"` replacement) — see the prop doc. */}
+                <Show when={props.composerStart}>{props.composerStart}</Show>
                 {/* REPLACE — a full `composer` slot stands in for the built-in input.
                     The slotted content owns its own submit/loading wiring. */}
                 <Show
@@ -987,6 +1018,8 @@ export function ChatThread(props: ChatThreadProps) {
                 >
                   <slot name="composer" />
                 </Show>
+                {/* JSX escape hatch, rendered immediately after the composer region. */}
+                <Show when={props.composerEnd}>{props.composerEnd}</Show>
               </div>
             </div>
             {/* INJECT: footer row below the composer. */}

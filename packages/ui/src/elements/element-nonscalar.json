@@ -26,6 +26,7 @@
     "value"
   ],
   "kai-chat": [
+    "assistantActions",
     "cardSchemas",
     "cardTypes",
     "context",
@@ -36,6 +37,7 @@
     "store",
     "suggestions",
     "triggers",
+    "userActions",
     "value"
   ],
   "kai-checkbox-group": [

@@ -1207,3 +1207,95 @@ describe('home screen (H-2, H-3, H-5) — spec 2026-08-27', () => {
     warn.mockRestore();
   });
 });
+
+describe('per-role default actions (B-7b)', () => {
+  const msg = (id: string, role: 'user' | 'assistant', extra: Partial<ChatMessage> = {}): ChatMessage => ({
+    id, role, parts: [{ type: 'text', text: `msg ${id}` }], ...extra,
+  });
+
+  it('an assistant message with no actions of its own gets assistantActions, in order', () => {
+    const { container } = render(() => (
+      <ChatThread messages={[msg('a1', 'assistant')]} assistantActions={['copy', 'like']} />
+    ));
+    const ids = [...container.querySelectorAll('[data-action]')].map((b) => b.getAttribute('data-action'));
+    expect(ids).toEqual(['copy', 'like']);
+  });
+
+  it('a user message reads userActions, never assistantActions', () => {
+    const { container } = render(() => (
+      <ChatThread messages={[msg('u1', 'user')]} userActions={['edit']} assistantActions={['copy', 'like']} />
+    ));
+    const ids = [...container.querySelectorAll('[data-action]')].map((b) => b.getAttribute('data-action'));
+    expect(ids).toEqual(['edit']);
+  });
+
+  it('override = replace, not merge: a per-message actions array wins whole, and [] renders NO bar', () => {
+    const { container } = render(() => (
+      <ChatThread
+        messages={[msg('a1', 'assistant', { actions: ['regenerate'] }), msg('a2', 'assistant', { actions: [] })]}
+        assistantActions={['copy', 'like']}
+      />
+    ));
+    const ids = [...container.querySelectorAll('[data-action]')].map((b) => b.getAttribute('data-action'));
+    expect(ids).toEqual(['regenerate']); // a1's own list replaced the default; a2 got none
+  });
+});
+
+describe('hideSources (B-8)', () => {
+  const sourced: ChatMessage[] = [{
+    id: 's1', role: 'assistant',
+    parts: [
+      { type: 'text', text: 'the answer' },
+      { type: 'source', source: { url: 'https://example.com', title: 'Example' } },
+      { type: 'source', source: { url: 'https://example.org', title: 'Example 2' } },
+    ],
+  }];
+
+  it('default (absent) renders the citations row — today, byte-for-byte', () => {
+    const { container } = render(() => <ChatThread messages={sourced} />);
+    expect(container.querySelector('[part="citations"]')).not.toBeNull();
+  });
+
+  it('hideSources skips the row while the text still renders (parts stay in the array)', () => {
+    const { container, getByText } = render(() => <ChatThread messages={sourced} hideSources />);
+    expect(container.querySelector('[part="citations"]')).toBeNull();
+    expect(getByText('the answer')).toBeInTheDocument();
+  });
+});
+
+describe('composerStart/composerEnd (B-9)', () => {
+  it('renders composerStart before and composerEnd after the composer region', () => {
+    const { getByTestId } = render(() => (
+      <ChatThread
+        messages={[]}
+        composerStart={<div data-testid="cs">start</div>}
+        composerEnd={<div data-testid="ce">end</div>}
+      />
+    ));
+    const start = getByTestId('cs');
+    const end = getByTestId('ce');
+    expect(start.compareDocumentPosition(end) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe('controller.startNewConversation (B-10 seam)', () => {
+  it('clears the active conversation and delivers [] through onConversationLoad', async () => {
+    localStorage.clear();
+    const store = localStorageStore('ctl-new-convo');
+    await store.save('c1', [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }]);
+    let controller: ChatThreadController | undefined;
+    const loads: Array<{ id: string | undefined; count: number }> = [];
+    const [messages, setMessages] = createSignal<ChatMessage[]>([]);
+    render(() => (
+      <ChatThread
+        messages={messages()}
+        conversations
+        store={store}
+        onConversationLoad={(m, id) => { loads.push({ id, count: m.length }); setMessages(() => m); }}
+        controllerRef={(c) => (controller = c)}
+      />
+    ));
+    controller!.startNewConversation();
+    expect(loads.at(-1)).toEqual({ id: undefined, count: 0 });
+  });
+});

@@ -197,6 +197,48 @@ export const ListViewWithUnread: Story = {
   },
 };
 
+/** Role-scoped default action bars (B-7b): the user turn gets `userActions`,
+ *  the assistant turn gets `assistantActions` — neither message sets its own
+ *  `actions`, so both fall through to the role default. */
+export const PerRoleActions: Story = {
+  args: {
+    conversations: false,
+    messages: [
+      { id: 'pra-1', role: 'user', parts: [{ type: 'text', text: 'Summarize the Q2 report and cite your sources.' }] },
+      {
+        id: 'pra-2',
+        role: 'assistant',
+        parts: [
+          { type: 'text', text: 'Revenue grew 12% quarter over quarter, driven mostly by the new enterprise tier.' },
+          { type: 'source', source: { url: 'https://example.com/q2-report', title: 'Q2 Financial Report' } },
+        ],
+      },
+    ],
+    userActions: ['edit', 'copy'],
+    assistantActions: ['copy', 'like', 'dislike', 'speak'],
+  },
+};
+
+/** `hideSources` (B-8): the same assistant turn as `PerRoleActions`, with the
+ *  citations row toggled via the Storybook control — the answer text still
+ *  renders either way, only the `part="citations"` row is skipped. */
+export const HideSources: Story = {
+  args: {
+    conversations: false,
+    messages: [
+      {
+        id: 'hs-1',
+        role: 'assistant',
+        parts: [
+          { type: 'text', text: 'Revenue grew 12% quarter over quarter, driven mostly by the new enterprise tier.' },
+          { type: 'source', source: { url: 'https://example.com/q2-report', title: 'Q2 Financial Report' } },
+        ],
+      },
+    ],
+    hideSources: true,
+  },
+};
+
 /** Interactive playground: click the header toggle to swap between the chat
  *  view (bubble icon) and the list view (back arrow) freely. */
 export const Playground: Story = {
