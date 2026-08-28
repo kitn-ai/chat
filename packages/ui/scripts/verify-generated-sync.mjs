@@ -78,7 +78,7 @@
 // No network, no build required — build:api writes dist/custom-elements.json
 // itself before the downstream generators read it.
 //   node scripts/verify-generated-sync.mjs [--verbose]
-import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { resolve, dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -171,6 +171,18 @@ const REAL = {
   // valid-but-empty output clears the sentinel and would otherwise pass.
   metaFile: 'packages/ui/src/elements/element-meta.json',
   fix: FIX,
+  // §4 of docs/coupling-map.md's templates row used to say the fixture-JSON
+  // copy was guarded only in the REMOVE direction — a listed file going
+  // missing (the `existsSync` precondition above) — and that a NEW fixture
+  // gen-construct-template-fixtures.mjs writes for a template added to
+  // templates.ts was never added to GENERATED and so never sentinel-checked
+  // for drift at all. This closes that gap the smallest honest way: glob the
+  // directory the generator actually writes and fail if anything on disk
+  // there isn't one of the paths listed above.
+  fixtureDir: {
+    dir: 'packages/ui/src/agent-tooling/construct/fixtures/templates',
+    suffix: '.construct.json',
+  },
 };
 
 const SPEC_MARKER = /<!-- spec:[a-z0-9-]+ -->/;
@@ -217,6 +229,34 @@ function runGuard(cfg, { log = () => {} } = {}) {
           untracked.map((x) => `    ${x}`).join('\n') +
           '\n  An untracked artifact cannot drift in the repo, so guarding it proves nothing.',
       );
+    }
+  }
+
+  // The ADD direction for a generator that writes a variable number of files
+  // into one directory (the template fixtures): every entry ABOVE catches a
+  // listed file going missing, but a file the generator writes that was never
+  // added to the list above is invisible to everything else in this guard —
+  // it is never sentinel-planted, so it is never checked for drift. Glob the
+  // directory and fail if anything on disk there isn't one of the listed
+  // paths.
+  if (cfg.fixtureDir) {
+    const dirAbs = abs(cfg.fixtureDir.dir);
+    if (existsSync(dirAbs)) {
+      const onDisk = readdirSync(dirAbs).filter((f) => f.endsWith(cfg.fixtureDir.suffix));
+      const listed = new Set(
+        cfg.generated
+          .filter((g) => g.file.startsWith(`${cfg.fixtureDir.dir}/`))
+          .map((g) => g.file.slice(cfg.fixtureDir.dir.length + 1)),
+      );
+      const unlisted = onDisk.filter((f) => !listed.has(f));
+      if (unlisted.length) {
+        return p(
+          `${unlisted.length} fixture(s) in ${cfg.fixtureDir.dir} are not in GENERATED:\n` +
+            unlisted.map((x) => `    ${x}`).join('\n') +
+            '\n  A fixture nothing here lists is never sentinel-planted, so it is never checked\n' +
+            '  for drift. Add it to GENERATED in scripts/verify-generated-sync.mjs.',
+        );
+      }
     }
   }
 
@@ -523,6 +563,34 @@ const SELF_TEST_CASES = [
     name: 'an empty generated list asserts nothing',
     build: () => fixtureConfig(fixtureRepo(), { generated: [] }),
     expect: ['list is empty'],
+  },
+  {
+    // The ADD direction: a fixture the generator wrote that nothing added to
+    // GENERATED — the gap the templates row of docs/coupling-map.md §4 used
+    // to call unenforced. `extra.construct.json` is on disk (and tracked)
+    // but never listed, which is exactly what a template added to
+    // templates.ts without touching this list would look like.
+    name: 'a fixture on disk is not listed in GENERATED (the ADD direction)',
+    build: () => {
+      const dir = 'pkg-fixtures/templates';
+      return fixtureConfig(
+        fixtureRepo({
+          tree: {
+            [`${dir}/widget.construct.json`]: '{}\n',
+            [`${dir}/extra.construct.json`]: '{}\n',
+          },
+        }),
+        {
+          generated: [
+            { file: META_REL, probe: 'overwrite' },
+            { file: DOC_REL, probe: 'in-block' },
+            { file: `${dir}/widget.construct.json`, probe: 'overwrite' },
+          ],
+          fixtureDir: { dir, suffix: '.construct.json' },
+        },
+      );
+    },
+    expect: ['extra.construct.json', 'not in GENERATED'],
   },
 ];
 
