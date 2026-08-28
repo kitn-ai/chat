@@ -2,6 +2,8 @@
  * Flag parsing, kept dependency-free and pure so the non-interactive path a CI
  * run takes is testable without spawning a process.
  */
+import path from 'node:path';
+
 import { DEFAULT_FEATURES } from './features';
 import { DEFAULT_FRAMEWORK } from './frameworks';
 
@@ -106,6 +108,40 @@ export const ZERO_CONFIG = {
 export function normalizeGateway(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
   return value === 'none' ? 'mock' : value;
+}
+
+/**
+ * Lowercase + swap illegal characters for a hyphen, npm-name-rule shaped —
+ * the same alphabet `validateProjectName` accepts, minus the "cannot start
+ * with . or _" rule, stripped separately below so a name that sanitizes to
+ * ALL dots/underscores comes out empty rather than a bare hyphen.
+ */
+export function sanitizeProjectName(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/[^a-z0-9-._~]/g, '-')
+    .replace(/^[._]+/, '');
+}
+
+/**
+ * The default project name for a positional target directory, Vite/TanStack
+ * parity: `npm create kai .` scaffolds into the current directory and names
+ * the project after its basename, rather than trying (and failing) to use
+ * `.` itself as the name. The same rule generalizes to ANY path-y
+ * positional — `npm create kai apps/my-app` today takes the raw arg
+ * `"apps/my-app"` as the default name, which `validateProjectName` also
+ * rejects (the slash), so this always resolves to the LAST path segment,
+ * sanitized.
+ *
+ * Falls back to `ZERO_CONFIG.name` when the sanitized basename comes out
+ * empty or still fails `validateProjectName` (an absolute root, a
+ * dots-only directory name, …) — never a raw, unvalidated string.
+ */
+export function defaultNameForTarget(dirArg: string | undefined, cwd: string): string {
+  if (dirArg === undefined) return ZERO_CONFIG.name;
+  const resolved = path.resolve(cwd, dirArg);
+  const sanitized = sanitizeProjectName(path.basename(resolved));
+  return sanitized.length > 0 && validateProjectName(sanitized) === null ? sanitized : ZERO_CONFIG.name;
 }
 
 /** npm's own name rules, reduced to what a scaffolded project can hit. */

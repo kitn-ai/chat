@@ -21,7 +21,7 @@ import process from 'node:process';
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 
-import { ZERO_CONFIG, normalizeGateway, parseArgs, validateProjectName } from './args';
+import { ZERO_CONFIG, defaultNameForTarget, normalizeGateway, parseArgs, validateProjectName } from './args';
 import { answerAxis, gatewayAxis, layoutAxis } from './axes';
 import type { AxisIo } from './axes';
 import { WIRED_GATEWAYS, listGateways, wirableGateway } from './catalog';
@@ -123,7 +123,14 @@ async function main(): Promise<number> {
   p.intro(pc.bgMagenta(pc.black(' create-kai ')));
 
   // ── 1. project name ────────────────────────────────────────────────────────
-  const defaultName = args.dir ?? ZERO_CONFIG.name;
+  //
+  // NOT `args.dir ?? ZERO_CONFIG.name`: the raw positional is a PATH, and a
+  // path is almost never also a valid package name (`.`, a trailing slash, a
+  // nested `apps/my-app`). `defaultNameForTarget` derives the name from the
+  // resolved directory's own basename instead — Vite/TanStack parity, and it
+  // is what makes `npm create kai .` name the project after the cwd rather
+  // than failing on `.` itself.
+  const defaultName = defaultNameForTarget(args.dir, process.cwd());
   const name = nonInteractive
     ? defaultName
     : await ask(
