@@ -494,13 +494,25 @@ function emitIndexHtml(c: Construct): string {
 function emitElement(c: Construct): string {
   const accent = c.theme?.accent;
   const unreadColor = c.theme?.unreadColor;
+  // `ctx.element` is the host. header.themeToggle/actions and shell.userMenu
+  // (B-10) need it to flip the `theme` attribute and to dispatch
+  // `kai-header-action`/`kai-user-menu` CustomEvents on the host — the same
+  // handle accent/unreadColor already carry via `ctx`, now threaded through
+  // to `App` itself (via a `host` prop) rather than consumed only inside
+  // this facade.
+  const usesCtx = !!accent || !!unreadColor || needsHost(c);
+  const appJsx = needsHost(c) ? '<App host={ctx.element} />' : '<App />';
   if (!accent && !unreadColor) {
     // `empty` (Task 14) composes straight into ChatThread's own `emptyContent`
     // prop now (see emitEmptyContentProp's doc) — a plain JSX value passed down
     // through App, not a Portal onto the host — so the facade needs no `ctx` and
     // every construct, `empty` declared or not, keeps this line byte-for-byte
-    // unchanged.
-    const facade = '() => <App />';
+    // unchanged, UNLESS header chrome/shell.userMenu (B-10) needs the host.
+    const facade = usesCtx
+      ? `(_props, ctx) => {
+  return ${appJsx};
+}`
+      : '() => <App />';
     return `import { defineWebComponent } from '@kitn.ai/ui/define';
 import { App } from './App';
 
@@ -528,7 +540,7 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
     // unreadColor-only construct: no accent, so none of the contrast-pairing
     // machinery below applies — just the one setProperty call and `ctx`.
     const facade = `(_props, ctx) => {${unreadColorSetProperty}
-  return <App />;
+  return ${appJsx};
 }`;
     return `import { defineWebComponent } from '@kitn.ai/ui/define';
 import { App } from './App';
@@ -591,7 +603,7 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
   return (
     <>
       <style>{${JSON.stringify(styleText)}}</style>
-      <App />
+      ${appJsx}
     </>
   );
 }`;
@@ -612,7 +624,7 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
 
 function emitApp(c: Construct): string {
   if (c.layout === 'custom') return emitCustomApp(c);
-  return `${emitSolidJsImport(c)}${emitConversationsSignalsImport(c)}import { ChatThread, createKaiChat${emitLayoutImport(c)}${emitCardComponentImport(c)}${emitEmptyComponentImport(c)}${emitHeaderCloseImport(c)} } from '@kitn.ai/ui/solid';
+  return `${emitSolidJsImports(c)}import { ChatThread, createKaiChat${emitLayoutImport(c)}${emitCardComponentImport(c)}${emitEmptyComponentImport(c)}${emitChromeImports(c)} } from '@kitn.ai/ui/solid';
 import type { AttachmentData${emitHistoryTypeImport(c)}${emitConversationsResetTypeImport(c)} } from '@kitn.ai/ui/solid';
 ${emitProviderImports(c)}
 ${emitCardsImport(c)}
@@ -702,10 +714,10 @@ ${emitHistorySetup(c)}
 //     list view is open must not leave it there for the next open — see
 //     widgetHasConversationsChrome/emitDockOnOpenChangeProp's docs. Wired only
 //     for \`widget\`, the one layout with something that closes/reopens at all.
-export function App() {
-${emitDockCloseVar(c, '  ')}${emitChatControllerVar(c, '  ')}${emitConversationsSignalsVar(c, '  ')}  return (
-${emitLayoutOpen(c)}${emitSlots(c.slots, '      ')}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitHeaderProp(c)}${emitHeaderEndContentProp(c)}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitReasoningOpenProp(c)}${emitEmptyContentProp(c)}${emitCardTypesProp(c)}${emitHomeProp(c)}${emitConversationsProps(c)}${emitChatControllerRefProp(c)}${emitChatThreadUnreadProps(c)} />
-${emitLayoutClose(c)}  );
+${emitChromeComment(c)}export function App(${needsHost(c) ? 'props: { host: HTMLElement }' : ''}) {
+${emitToggleThemeVar(c, '  ')}${emitDockCloseVar(c, '  ')}${emitChatControllerVar(c, '  ')}${emitConversationsSignalsVar(c, '  ')}${emitShellPaletteVars(c, '  ')}  return (
+${hasShellPalette(c) ? '    <>\n' : ''}${emitLayoutOpen(c)}${emitSlots(c.slots, '      ')}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitHeaderProp(c)}${emitHeaderEndContentProp(c)}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitReasoningOpenProp(c)}${emitMessageActionsProps(c)}${emitHideSourcesProp(c)}${emitTriggersProp(c)}${emitEmptyContentProp(c)}${emitCardTypesProp(c)}${emitHomeProp(c)}${emitConversationsProps(c)}${emitChatControllerRefProp(c)}${emitChatThreadUnreadProps(c)} />
+${emitLayoutClose(c)}${emitShellPaletteOverlay(c)}${hasShellPalette(c) ? '    </>\n' : ''}  );
 }
 `;
 }
@@ -762,7 +774,8 @@ ${emitHistorySetup(c)}
 // spine (Thread + PromptInput) plus the declared slots, positioned by hand so
 // YOU own the surrounding DOM. Capabilities beyond the spine (starters,
 // attachments, reasoning display-mode, reasoningOpen, header.title, empty,
-// conversations) are NOT wired here in v1 — this file is the eject artifact; add them the
+// conversations, header.themeToggle/actions, composer.triggers, shell) are
+// NOT wired here in v1 — this file is the eject artifact; add them the
 // way ChatThread composes them (components/chat-thread.tsx in the kit's own
 // source) if this construct needs them on a custom layout.
 export function App() {
@@ -897,20 +910,104 @@ function widgetHasConversationsChrome(c: Construct): boolean {
   return c.layout === 'widget' && (!!c.capabilities?.conversations || !!c.home);
 }
 
+/** `shell.commandPalette` on any non-custom layout (B-10/CU-1): whether the
+ *  emitted App carries the Mod+K overlay at all. Named separately from
+ *  `c.shell?.commandPalette` itself so every gate below (imports, the
+ *  chatController var it shares with `widgetHasConversationsChrome`, the
+ *  overlay JSX) reads the same condition instead of restating the
+ *  `layout !== 'custom'` exclusion (CU-1) at each call site. */
+function hasShellPalette(c: Construct): boolean {
+  return c.layout !== 'custom' && c.shell?.commandPalette === true;
+}
+
+/** `shell.commandPalette` (10a): the App-body block declaring the palette's
+ *  state and behavior — signals, the entry list, the run/close handler, and
+ *  the Mod+K/Escape keydown listener. Entries are derived at CODEGEN time
+ *  from what this construct actually enables (menu-honesty, B-10): a
+ *  "New conversation"/"Toggle theme" row that called into nothing wired
+ *  would be a dead affordance, the same class of defect the CU-1 exclusion
+ *  disclosure exists to prevent elsewhere in this file. `chatController`
+ *  (declared by `emitChatControllerVar`, widened above to include this
+ *  gate) drives `focus`/`startNewConversation`; `toggleTheme`
+ *  (`emitToggleThemeVar`) is the SAME closure the header button uses — one
+ *  definition, no drift between the two call sites. */
+function emitShellPaletteVars(c: Construct, indent: string): string {
+  if (!hasShellPalette(c)) return '';
+  const entries = [
+    `{ id: 'focus-composer', label: 'Focus composer' }`,
+    ...(c.capabilities?.conversations ? [`{ id: 'new-conversation', label: 'New conversation' }`] : []),
+    ...(c.header?.themeToggle ? [`{ id: 'toggle-theme', label: 'Toggle theme' }`] : []),
+  ];
+  const newConversationLine = c.capabilities?.conversations
+    ? `\n${indent}  if (id === 'new-conversation') chatController?.startNewConversation();`
+    : '';
+  const toggleThemeLine = c.header?.themeToggle ? `\n${indent}  if (id === 'toggle-theme') toggleTheme();` : '';
+  return `${indent}// Command palette (shell.commandPalette): Mod+K toggles; Escape/backdrop
+${indent}// close; entries DERIVE from what this construct enables — no dead rows.
+${indent}const [paletteOpen, setPaletteOpen] = createSignal(false);
+${indent}const [paletteQuery, setPaletteQuery] = createSignal('');
+${indent}const PALETTE_COMMANDS = [${entries.join(', ')}];
+${indent}const paletteGroups = () => {
+${indent}  const q = paletteQuery().trim().toLowerCase();
+${indent}  const items = q ? PALETTE_COMMANDS.filter((i) => i.label.toLowerCase().includes(q)) : PALETTE_COMMANDS;
+${indent}  return [{ items }];
+${indent}};
+${indent}const runPaletteCommand = (id: string) => {
+${indent}  setPaletteOpen(false);
+${indent}  if (id === 'focus-composer') chatController?.focus();${newConversationLine}${toggleThemeLine}
+${indent}};
+${indent}onMount(() => {
+${indent}  const onKey = (e: KeyboardEvent) => {
+${indent}    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setPaletteOpen((v) => !v); }
+${indent}    if (e.key === 'Escape') setPaletteOpen(false);
+${indent}  };
+${indent}  window.addEventListener('keydown', onKey);
+${indent}  onCleanup(() => window.removeEventListener('keydown', onKey));
+${indent}});
+`;
+}
+
+/** `shell.commandPalette` (10a): the overlay JSX — backdrop + centered panel
+ *  + Escape/backdrop-close + a client-side `Input` filter over
+ *  `CommandList`, the `builder-shell-controls.tsx` recipe translated to
+ *  inline styles (the emitted-project styling rule: kit components + inline
+ *  styles, never utility classes — codegen.test.ts asserts this). Appended
+ *  after the layout close, inside the fragment `emitApp`'s `return (` opens
+ *  only when this gate fires — the return template stays byte-identical for
+ *  every construct without a palette. */
+function emitShellPaletteOverlay(c: Construct): string {
+  if (!hasShellPalette(c)) return '';
+  return `    <Show when={paletteOpen()}>
+      <div style={{ position: 'fixed', inset: '0', 'z-index': '50', display: 'flex', 'align-items': 'flex-start', 'justify-content': 'center', 'padding-block-start': '14vh', background: 'rgb(0 0 0 / 0.5)' }} onClick={() => setPaletteOpen(false)}>
+        <div style={{ width: '100%', 'max-width': '32rem', overflow: 'hidden', 'border-radius': '0.75rem', border: '1px solid var(--color-border)', background: 'var(--color-popover)' }} onClick={(e) => e.stopPropagation()}>
+          <Input value={paletteQuery()} onValueInput={setPaletteQuery} placeholder="Search commands..." autofocus />
+          <CommandList groups={paletteGroups()} onSelect={runPaletteCommand} />
+        </div>
+      </div>
+    </Show>
+`;
+}
+
 /** Declares the closure `emitChatControllerRefProp`/`emitDockOnOpenChangeProp`
  *  share: `ChatThread`'s own `controllerRef` (chat-thread.tsx) hands back a
  *  `ChatThreadController` — the existing imperative seam, not a new one — and
  *  this captures it so `Dock`'s `onOpenChange` (a sibling prop on a sibling
  *  element, not a ChatThread descendant) can call
  *  `closeConversationsList()` on it. Declared inside `App()`, not at module
- *  scope, for the same instance-isolation reason as `emitDockCloseVar`. */
+ *  scope, for the same instance-isolation reason as `emitDockCloseVar`.
+ *  Widened (B-10) to also fire for `shell.commandPalette`: its
+ *  "Focus composer"/"New conversation" entries drive the same controller. */
 function emitChatControllerVar(c: Construct, indent: string): string {
-  return widgetHasConversationsChrome(c) ? `${indent}let chatController: ChatThreadController | undefined;\n` : '';
+  return widgetHasConversationsChrome(c) || hasShellPalette(c)
+    ? `${indent}let chatController: ChatThreadController | undefined;\n`
+    : '';
 }
 
 /** Threads `emitChatControllerVar`'s closure onto `<ChatThread controllerRef>`. */
 function emitChatControllerRefProp(c: Construct): string {
-  return widgetHasConversationsChrome(c) ? ' controllerRef={(api) => (chatController = api)}' : '';
+  return widgetHasConversationsChrome(c) || hasShellPalette(c)
+    ? ' controllerRef={(api) => (chatController = api)}'
+    : '';
 }
 
 /** `Dock`'s own `onOpenChange` (ui/dock.tsx) already fires on EVERY close
@@ -936,19 +1033,7 @@ function emitDockOnOpenChangeProp(c: Construct): string {
  *  statement as `AttachmentData`/`ChatMessage`, never a second import
  *  statement for the module (same convention as `emitHistoryTypeImport`). */
 function emitConversationsResetTypeImport(c: Construct): string {
-  return widgetHasConversationsChrome(c) ? ', ChatThreadController' : '';
-}
-
-/** `createSignal` import for `emitConversationsSignalsVar`'s two signals.
- *  Deliberately its OWN `import { createSignal } from 'solid-js'` line, not
- *  folded onto `emitSolidJsImport`'s: that one imports `createEffect` for the
- *  hand-rolled history-restore effect, which is UNEMITTED whenever
- *  `capabilities.conversations` is on (conversations subsumes persistence —
- *  see that function's own doc) — so for every construct this function
- *  actually fires for, `emitSolidJsImport` is already returning `''` and
- *  there's nothing to fold onto. */
-function emitConversationsSignalsImport(c: Construct): string {
-  return widgetHasConversationsChrome(c) ? `import { createSignal } from 'solid-js';\n` : '';
+  return widgetHasConversationsChrome(c) || hasShellPalette(c) ? ', ChatThreadController' : '';
 }
 
 /** Declares the two signals `Dock`'s `onOpenChange` (above) writes and
@@ -1007,25 +1092,162 @@ function emitDockHideClose(c: Construct): string {
   return widgetHasHeaderClose(c) ? ' hideClose={true}' : '';
 }
 
-/** ChatThread's `headerEndContent` prop (chat-thread.tsx): the close button
- *  itself, sharing the header row with the title instead of floating as a
- *  second, visually unrelated control — the owner's stated preference over
- *  Dock's previous "reserved dead-row band" fix. Reuses the kit's own
- *  `DockCloseGlyph` (the same X Dock's built-in button draws) and `Button`
- *  (ghost/icon-sm, the same weight ChatThread's own header controls use —
- *  see `ModelSwitcher`'s trigger) rather than hand-rolling either, and calls
- *  back into `emitDockCloseVar`'s closure to actually close the panel —
- *  Dock's own `controllerRef` seam, not a new one. */
-function emitHeaderEndContentProp(c: Construct): string {
-  if (!widgetHasHeaderClose(c)) return '';
-  return ` headerEndContent={<Button variant="ghost" size="icon-sm" aria-label="Close ${c.name}" onClick={() => dockClose?.()}><DockCloseGlyph /></Button>}`;
+/** `header.themeToggle` (non-custom) -> a `toggleTheme` closure, shared by
+ *  the header button and the shell palette's "Toggle theme" entry (B-10) —
+ *  one closure, no drift between the two call sites. Flips the HOST's own
+ *  `theme` attribute (the one `defineWebComponent` already owns), reached
+ *  via the `host` prop `needsHost`/`emitElement` thread through the facade. */
+function emitToggleThemeVar(c: Construct, indent: string): string {
+  if (c.layout === 'custom' || !c.header?.themeToggle) return '';
+  return `${indent}const toggleTheme = () => props.host.setAttribute('theme', props.host.getAttribute('theme') === 'dark' ? 'light' : 'dark');\n`;
 }
 
-/** `Button`/`DockCloseGlyph`, needed only by `emitHeaderEndContentProp` above
- *  — appended onto the same `@kitn.ai/ui/solid` import as `emitEmptyComponentImport`,
- *  never a second import statement for the module. */
-function emitHeaderCloseImport(c: Construct): string {
-  return widgetHasHeaderClose(c) ? ', Button, DockCloseGlyph' : '';
+/** ChatThread's `headerEndContent` prop (chat-thread.tsx): an ORDERED
+ *  composition of every header-end piece this construct declares —
+ *  header.actions, header.themeToggle, shell.userMenu, and (last, unchanged)
+ *  the widget close control — all against this ONE prop, wrapped in a
+ *  fragment when more than one piece emits. `header.actions`/`themeToggle`
+ *  dispatch/mutate through the HOST (`props.host`, threaded via `needsHost`)
+ *  rather than a local closure, since they must reach outside this shadow
+ *  tree the same way the accent/unreadColor setProperty calls in
+ *  element.tsx do. The widget close control keeps its existing local
+ *  `dockClose` closure (Dock's own `controllerRef` seam) — untouched by
+ *  this rework. */
+function emitHeaderEndContentProp(c: Construct): string {
+  const pieces: string[] = [];
+
+  // 1. header.actions: vocabulary-never-logic — the construct cannot say
+  //    what a click DOES, so each dispatches a non-bubbling
+  //    `kai-header-action` CustomEvent on the host with `detail: { label }`,
+  //    the consumer's documented listening seam (B-10). `variant` is a
+  //    closed schema enum (BUTTON_VARIANT_NAMES), so it's interpolated
+  //    directly; `label` is construct-authored/untrusted text,
+  //    JSON.stringify'd at BOTH interpolation sites (the event detail and
+  //    the button's own child text).
+  if (c.layout !== 'custom' && c.header?.actions) {
+    for (const a of c.header.actions) {
+      const variant = a.variant ? ` variant="${a.variant}"` : '';
+      pieces.push(
+        `<Button${variant} size="sm" onClick={() => props.host.dispatchEvent(new CustomEvent('kai-header-action', { detail: { label: ${JSON.stringify(a.label)} } }))}>{${JSON.stringify(a.label)}}</Button>`,
+      );
+    }
+  }
+
+  // 2. header.themeToggle: flips the host's `theme` attribute via the
+  //    shared `toggleTheme` closure (emitToggleThemeVar).
+  if (c.layout !== 'custom' && c.header?.themeToggle) {
+    pieces.push(`<Button variant="ghost" size="sm" aria-label="Toggle theme" onClick={toggleTheme}>Theme</Button>`);
+  }
+
+  // 3. shell.userMenu: the documented Dropdown+Avatar recipe. Initials and
+  //    the aria-label are computed HERE, at codegen time, then
+  //    JSON.stringify'd — name/plan (construct-authored/untrusted, like
+  //    theme.accent) never land raw in the emitted source. Each item
+  //    dispatches `kai-user-menu` with `detail: { item }` — the same
+  //    vocabulary-never-logic seam as header.actions above, since a
+  //    construct has no app code to run "Settings"/"Get help"/"Log out"
+  //    itself.
+  if (c.layout !== 'custom' && c.shell?.userMenu) {
+    const m = c.shell.userMenu;
+    const menuLabel = JSON.stringify(`${m.name}${m.plan ? ` — ${m.plan}` : ''} account menu`);
+    const initials = JSON.stringify(m.name.slice(0, 2).toUpperCase());
+    const item = (id: string, label: string) =>
+      `<DropdownItem onSelect={() => props.host.dispatchEvent(new CustomEvent('kai-user-menu', { detail: { item: '${id}' } }))}>${label}</DropdownItem>`;
+    pieces.push(
+      `<Dropdown><DropdownTrigger aria-label={${menuLabel}}><Avatar fallback={${initials}} size="sm" /></DropdownTrigger><DropdownContent>${item('settings', 'Settings')}${item('help', 'Get help')}<DropdownSeparator />${item('log-out', 'Log out')}</DropdownContent></Dropdown>`,
+    );
+  }
+
+  // 4. the existing widget-close control (unchanged, last).
+  if (widgetHasHeaderClose(c)) {
+    pieces.push(
+      `<Button variant="ghost" size="icon-sm" aria-label="Close ${c.name}" onClick={() => dockClose?.()}><DockCloseGlyph /></Button>`,
+    );
+  }
+
+  if (pieces.length === 0) return '';
+  const content = pieces.length > 1 ? `<>${pieces.join('')}</>` : pieces[0];
+  return ` headerEndContent={${content}}`;
+}
+
+/** Every named import `emitHeaderEndContentProp`/`emitShellPalette*` pieces
+ *  need, appended onto the ONE `@kitn.ai/ui/solid` import list — never a
+ *  second import statement for the module. Each name is gated on its own
+ *  piece actually emitting (the same `noUnusedLocals` discipline
+ *  `emitEmptyComponentImport` already follows), so a construct that
+ *  declares none of this chrome imports none of these names. */
+function emitChromeImports(c: Construct): string {
+  let names = '';
+  const hasHeaderEnd = !!emitHeaderEndContentProp(c);
+  if (hasHeaderEnd) names += ', Button';
+  if (c.layout !== 'custom' && c.shell?.userMenu) {
+    names += ', Dropdown, DropdownTrigger, DropdownContent, DropdownItem, DropdownSeparator, Avatar';
+  }
+  if (hasShellPalette(c)) names += ', CommandList, Input';
+  if (widgetHasHeaderClose(c)) names += ', DockCloseGlyph';
+  return names;
+}
+
+/** `//` lines placed directly above `export function App`, documenting the
+ *  consumer seams B-10 wires when present — the vocabulary-never-logic
+ *  contract means the construct itself carries no handler, so the emitted
+ *  comment IS where a consumer of this eject artifact finds out what to
+ *  listen for. */
+function emitChromeComment(c: Construct): string {
+  const lines: string[] = [];
+  if (c.layout !== 'custom' && c.header?.actions) {
+    lines.push("// header.actions dispatch 'kai-header-action' on the host, detail: { label }.");
+  }
+  if (c.layout !== 'custom' && c.shell?.userMenu) {
+    lines.push("// shell.userMenu dispatches 'kai-user-menu' on the host, detail: { item }.");
+  }
+  if (hasShellPalette(c)) {
+    lines.push('// shell.commandPalette: Mod+K opens the command palette; entries derive from');
+    lines.push('// what this construct enables (menu-honesty — no dead rows).');
+  }
+  return lines.length ? `${lines.join('\n')}\n` : '';
+}
+
+/** capabilities.messageActions -> ChatThread's per-role default-action props
+ *  (B-3/B-7b). Enum-validated ids only — no CustomAction vocabulary (a
+ *  construct has no app code to handle a custom id; emitting one is a dead
+ *  affordance) — but the whole array is still JSON.stringify'd at this one
+ *  emit site: the escaping discipline is uniform, never value-dependent.
+ *  An absent role emits no prop at all (off-by-default, like every
+ *  capability in this file). */
+function emitMessageActionsProps(c: Construct): string {
+  const actions = c.capabilities?.messageActions;
+  if (!actions) return '';
+  let out = '';
+  if (actions.user) out += ` userActions={${JSON.stringify(actions.user)}}`;
+  if (actions.assistant) out += ` assistantActions={${JSON.stringify(actions.assistant)}}`;
+  return out;
+}
+
+/** capabilities.sources -> ChatThread's `hideSources` (B-4/B-8). `strip` is
+ *  a NOUN — the citations STRIP (the `part="citations"` row message.tsx
+ *  already renders): `strip: false` turns the row OFF; `strip: true` or
+ *  the key absent emits NOTHING, because the kit default IS the on state —
+ *  the same anchored-on-the-default convention as `reasoning: 'full'`. */
+function emitHideSourcesProp(c: Construct): string {
+  return c.capabilities?.sources?.strip === false ? ' hideSources={true}' : '';
+}
+
+/** composer.triggers -> ChatThread's real `triggers` prop: `slash` maps to
+ *  `{ char: '/', kind: 'command', items }` and `mention` to `{ char: '@',
+ *  kind: 'mention', items }` (B-5). Entries carry only display data
+ *  (id/label/description — schema-narrowed from the kit's own TriggerItem),
+ *  all construct-authored, so the whole built array is JSON.stringify'd at
+ *  this one emit site. */
+function emitTriggersProp(c: Construct): string {
+  const triggers = c.composer?.triggers;
+  if (!triggers) return '';
+  const defs = [
+    ...(triggers.slash ? [{ char: '/', kind: 'command', items: triggers.slash }] : []),
+    ...(triggers.mention ? [{ char: '@', kind: 'mention', items: triggers.mention }] : []),
+  ];
+  if (defs.length === 0) return '';
+  return ` triggers={${JSON.stringify(defs)}}`;
 }
 
 /** capabilities.attachments -> ChatThread's own \`attach\`/\`accept\` props.
@@ -1164,10 +1386,35 @@ function emitConversationsImport(c: Construct): string {
  *  (see emitHistorySetup's doc for the full decision) and this file's
  *  hand-rolled effect is never emitted, so it needs no `createEffect` import
  *  either — gate the same way. */
-function emitSolidJsImport(c: Construct): string {
+function needsCreateEffect(c: Construct): boolean {
   const history = c.capabilities?.history;
-  if (!history || history.persistence === 'none' || (c.layout !== 'custom' && c.capabilities?.conversations)) return '';
-  return `import { createEffect } from 'solid-js';\n`;
+  return !!history && history.persistence !== 'none' && !(c.layout !== 'custom' && c.capabilities?.conversations);
+}
+
+/** ONE `import { ... } from 'solid-js'` line for the non-custom App module,
+ *  replacing what used to be two separately-gated statements
+ *  (`createEffect` for the hand-rolled history-restore effect, `createSignal`
+ *  for the widget conversations-chrome/unread signals) — a widget +
+ *  conversations construct already imported `createSignal` on its own line,
+ *  and `shell.commandPalette` needs the SAME name plus `Show`/`onMount`/
+ *  `onCleanup`, so two independently-gated import statements binding the
+ *  same name is a TS duplicate-identifier error the moment both conditions
+ *  are true on one construct. This assembles the full name set once:
+ *    - `createEffect`: the hand-rolled history-restore effect (unchanged
+ *      condition, see `needsCreateEffect` above).
+ *    - `createSignal`: conversations-chrome signals (widget +
+ *      conversations/home) OR the palette's own `paletteOpen`/`paletteQuery`.
+ *    - `Show`/`onMount`/`onCleanup`: the palette's overlay visibility and its
+ *      Mod+K/Escape keydown listener.
+ *  Emits nothing at all when the set is empty — the same off-by-default
+ *  gating as every other import in this file. */
+function emitSolidJsImports(c: Construct): string {
+  const names: string[] = [];
+  if (needsCreateEffect(c)) names.push('createEffect');
+  if (widgetHasConversationsChrome(c) || hasShellPalette(c)) names.push('createSignal');
+  if (hasShellPalette(c)) names.push('Show', 'onMount', 'onCleanup');
+  if (names.length === 0) return '';
+  return `import { ${names.join(', ')} } from 'solid-js';\n`;
 }
 
 /** capabilities.history -> whether the AttachmentData type import also needs
@@ -1501,6 +1748,20 @@ function emitSlots(slots: readonly string[] | undefined, indent: string): string
  * exact gap when Task 13 added the enum member, and a `default` would have
  * hidden it again for the next one.
  */
+/** Whether the emitted App needs the HOST element handed down from the
+ *  facade (B-10): `header.themeToggle` flips the host's `theme` attribute
+ *  (the one defineWebComponent already owns), and `header.actions`/
+ *  `shell.userMenu` dispatch `kai-header-action`/`kai-user-menu`
+ *  CustomEvents ON the host — the consumer's documented listening seam.
+ *  `shell.commandPalette` alone needs none of this: its Mod+K listener and
+ *  entries live entirely inside App's own Solid tree. Excludes `custom`
+ *  (CU-1: none of header chrome/composer/shell is wired there — see
+ *  emitCustomApp's own "not wired here" list). */
+function needsHost(c: Construct): boolean {
+  if (c.layout === 'custom') return false;
+  return c.header?.themeToggle === true || !!c.header?.actions?.length || !!c.shell?.userMenu;
+}
+
 /** widget.position -> Dock's own `position` prop. A closed DockPosition enum
  *  (schema-constrained), so plain string interpolation is safe — no
  *  construct-authored free text here, unlike launcherIcon below. */
@@ -1547,14 +1808,26 @@ function emitLayoutOpen(c: Construct): string {
       return `    <Dock label="${c.name}"${emitDockPosition(c)}${emitDockLauncher(c)}${emitDockDefaultOpen(c)}${emitDockHideClose(c)}${emitDockControllerRef(c)}${emitDockOnOpenChangeProp(c)}${emitDockUnreadProp(c)}>\n`;
     case 'fullscreen':
       return `    <div style={{ height: '100dvh', display: 'flex', 'flex-direction': 'column' }}>\n`;
-    case 'aside':
-      return `    <aside data-kai-layout="aside" style={{ position: 'fixed', 'inset-block': '0', 'inset-inline-end': '0', width: '380px', display: 'flex', 'flex-direction': 'column', 'border-inline-start': '1px solid var(--kai-color-border)' }}>
+    case 'aside': {
+      // aside.position/width (B-2): position picks the docked inline edge
+      // (default 'end', the pre-B-2 hardcoded behavior) — a closed schema
+      // enum, so interpolated directly like widget.position. width is
+      // construct-authored/untrusted text; it lands as a JSON.stringify'd
+      // VALUE inside the Solid style object (property assignment, not CSS
+      // text concatenation), so a hostile width can't break out of the
+      // object the way string-concatenated CSS could.
+      const position = c.aside?.position ?? 'end';
+      const width = JSON.stringify(c.aside?.width ?? '380px');
+      const inset = position === 'start' ? "'inset-inline-start': '0'" : "'inset-inline-end': '0'";
+      const borderSide = position === 'start' ? 'border-inline-end' : 'border-inline-start';
+      return `    <aside data-kai-layout="aside" style={{ position: 'fixed', 'inset-block': '0', ${inset}, width: ${width}, display: 'flex', 'flex-direction': 'column', '${borderSide}': '1px solid var(--kai-color-border)' }}>
       {/* Mirrors Dock's own narrow-viewport full-bleed rule (ui/dock.tsx:229-240)
           — aside has no dedicated kit component (see the emitLayoutOpen doc
           comment above), so this is the honest hand-rolled equivalent, not a
           new responsive strategy. */}
-      <style>{\`@media (max-width: 480px) { [data-kai-layout="aside"] { inset: 0; width: auto; height: auto; border-inline-start: 0; } }\`}</style>
+      <style>{\`@media (max-width: 480px) { [data-kai-layout="aside"] { inset: 0; width: auto; height: auto; ${borderSide}: 0; } }\`}</style>
 `;
+    }
     case 'split':
       // drawerBelow: split's mobile takeover is the kit's OWN WorkspaceShell
       // capability (components/workspace-shell.tsx), not hand-rolled CSS — wiring
