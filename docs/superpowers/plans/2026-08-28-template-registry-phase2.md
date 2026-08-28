@@ -789,6 +789,7 @@ Also update comment line 48 in the same file's header ("every `*.construct.json`
 
 - [ ] **6.12 — task-6 gates, in order (the spec's list verbatim: unit, typecheck, build, verify:generated, verify:construct, verify:pack):**
 
+<!-- gate-list: partial -- the spec's own per-task gate list for task 6, run mid-plan; the merge verdict is the required CI `test` job, not this subset -->
 ```bash
 pnpm --filter @kitn.ai/ui exec vitest run --project=unit
 pnpm --filter @kitn.ai/ui run typecheck
@@ -1622,6 +1623,7 @@ Claude-Session: https://claude.ai/code/session_01Gg2uqtxknh9xtCcZPAerER"
 
 - [ ] Full gate sweep, fresh (no scoped runs as verdicts):
 
+<!-- gate-list: partial -- the phase-2-relevant gates run locally before handoff; the required CI `test` job (44 gates — `node packages/ui/scripts/lint-gate-parity.mjs --list`) is the merge verdict -->
 ```bash
 pnpm --filter @kitn.ai/ui exec vitest run --project=unit
 pnpm --filter @kitn.ai/ui exec vitest run --project=emitted
