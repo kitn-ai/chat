@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.29.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.28.0...@kitn.ai/ui-v0.29.0) (2026-08-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* **ui:** the published package no longer contains the src/ tree; imports must use the documented dist entry points, which all continue to resolve unchanged.
+
+### Features
+
+* npm create kai wizard, kai bin alias, public construct schema export ([cd37677](https://github.com/kitn-ai/ui/commit/cd376770c7b270f6282d6a270b69cdf380a8168a))
+
+
+### Bug Fixes
+
+* **ui:** register a declaration probe for the ./construct export ([cdfa9b0](https://github.com/kitn-ai/ui/commit/cdfa9b0c4fbf55bb3545008c9fc898680784ac10))
+* **ui:** trim the npm pack to shipped surfaces and dedupe shiki chunks ([12e6c6e](https://github.com/kitn-ai/ui/commit/12e6c6e3d8168f81d9c47c0f64914b0734ec330f))
+
 ## [0.28.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.27.0...@kitn.ai/ui-v0.28.0) (2026-08-27)
 
 
