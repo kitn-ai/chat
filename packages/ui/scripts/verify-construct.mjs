@@ -144,14 +144,81 @@ const CAPABILITY_VALUES = {
   // combo already carries its own `history` entry, so no injection needed
   // there).
   conversations: true,
+  // Phase-1 (B-11a): role-scoped defaults exercise BOTH new ChatThread props
+  // through the emit chain.
+  messageActions: { user: ['edit', 'copy'], assistant: ['copy', 'like', 'dislike', 'speak'] },
+  // strip: FALSE deliberately — that is the value that actually EMITS
+  // (hideSources={true}); strip: true emits nothing and would leave the new
+  // emit path uncompiled (B-4's anchored-on-the-default convention).
+  sources: { strip: false },
 };
-for (const key of capabilityKeys) {
-  if (!(key in CAPABILITY_VALUES)) {
-    fail(
-      `capability "${key}" is in the schema but has no fixture valuer — add one to ` +
-        `CAPABILITY_VALUES in scripts/verify-construct.mjs.`,
-    );
-  }
+
+/** Keys that have no valuer (and aren't excluded). Non-empty = hard failure:
+ *  a new schema key cannot silently skip coverage (the verify-scaffold
+ *  "unrecognised runtime label" rule). Shared by both derived axes and by
+ *  --self-test probe 3, which proves the detector detects. */
+function missingValuers(keys, valuers, excluded = new Set()) {
+  return keys.filter((k) => !excluded.has(k) && !(k in valuers));
+}
+
+for (const key of missingValuers(capabilityKeys, CAPABILITY_VALUES)) {
+  fail(
+    `capability "${key}" is in the schema but has no fixture valuer — add one to ` +
+      `CAPABILITY_VALUES in scripts/verify-construct.mjs.`,
+  );
+}
+
+// ── second derived axis: TOP-LEVEL emit-bearing keys (C-5/B-11b) ──────────
+// `aside`/`header`/`composer`/`shell` (and theme/empty/home/cards/slots/
+// widget, unprobed until now) are top-level keys the capability axis never
+// synthesizes — without this, new top-level vocabulary ships with zero
+// emit-chain coverage while the gate prints green. Derived from the schema
+// artifact, same as `layouts`/`capabilityKeys`.
+//
+// The exclusion set is the non-emitting spine plus the two keys that ARE
+// their own axes already: `layout` (the outer loop) and `capabilities`
+// (CAPABILITY_VALUES above).
+const TOP_LEVEL_EXCLUDED = new Set(['$schema', 'name', 'provider', 'userId', 'layout', 'capabilities']);
+const topLevelKeys = Object.keys(SCHEMA.properties ?? {}).filter((k) => !TOP_LEVEL_EXCLUDED.has(k));
+
+/** One synthesizer per top-level key — the same no-valuer-is-a-hard-failure
+ *  rule as CAPABILITY_VALUES. */
+const TOP_LEVEL_VALUES = {
+  theme: { accent: '#e91e63', mode: 'dark' },
+  header: { title: 'Probe header', themeToggle: true, actions: [{ label: 'Docs', variant: 'ghost' }] },
+  empty: { title: 'Welcome', description: 'Ask anything.' },
+  home: { greeting: { title: 'Hi there' } },
+  cards: [{ name: 'probe_card', schema: { type: 'object', properties: { note: { type: 'string' } } } }],
+  slots: ['probe-slot'],
+  widget: { position: 'bottom-start', defaultOpen: true },
+  aside: { position: 'start', width: '320px' },
+  composer: { triggers: { slash: [{ id: 'help', label: 'Help' }], mention: [{ id: 'docs', label: 'Docs' }] } },
+  shell: { commandPalette: true, userMenu: { name: 'Ada Lovelace', plan: 'Pro' } },
+};
+for (const key of missingValuers(topLevelKeys, TOP_LEVEL_VALUES)) {
+  fail(
+    `top-level key "${key}" is in the schema but has no fixture valuer — add one to ` +
+      `TOP_LEVEL_VALUES in scripts/verify-construct.mjs (or, for a non-emitting spine key, ` +
+      `to TOP_LEVEL_EXCLUDED with a reason).`,
+  );
+}
+
+/** Layout-scoped keys (schema superRefine couplings): the key's solo cell
+ *  only exists on its one valid layout — the same class of cross-field
+ *  handling fixtureFor already does for reasoningOpen/conversations. */
+const TOP_LEVEL_LAYOUT_SCOPE = { widget: 'widget', aside: 'aside' };
+
+function topLevelFixtureFor(layout, keys, index) {
+  const fixture = {
+    name: `probe-top-${layout}-${index}`,
+    layout,
+    provider: { mode: 'mock' },
+  };
+  for (const key of keys) fixture[key] = TOP_LEVEL_VALUES[key];
+  // `custom` layout requires slots (superRefine) even when `slots` isn't the
+  // probed key; the probed `slots` valuer already satisfies it when it is.
+  if (layout === 'custom' && !('slots' in fixture)) fixture.slots = ['header'];
+  return fixture;
 }
 
 function fixtureFor(layout, capKeys, index) {
@@ -195,6 +262,14 @@ function buildCells() {
       const isAllCaps = capabilityKeys.length > 0 && capKeys.length === capabilityKeys.length;
       cells.push({ fixture: fixtureFor(layout, capKeys, i), layout, isAllCaps });
     });
+
+    const applicable = topLevelKeys.filter(
+      (k) => !(k in TOP_LEVEL_LAYOUT_SCOPE) || TOP_LEVEL_LAYOUT_SCOPE[k] === layout,
+    );
+    applicable.forEach((key, j) => {
+      cells.push({ fixture: topLevelFixtureFor(layout, [key], j), layout, isAllCaps: false });
+    });
+    cells.push({ fixture: topLevelFixtureFor(layout, applicable, applicable.length), layout, isAllCaps: false });
   }
   return cells;
 }
@@ -307,23 +382,45 @@ async function selfTest() {
       );
     }
     console.log('  ✓ probe 2b: a stripped bundle is correctly reported as NOT registering the tag');
+
+    // Probe 3: the no-valuer hard-fail must actually detect — a novel key with
+    // no valuer must be reported missing, and the real key sets must not be.
+    step('probe 3: a schema key with no fixture valuer must be reported missing');
+    if (missingValuers(['__selftest_novel__'], CAPABILITY_VALUES).length !== 1) {
+      fail('probe 3: a fabricated capability key with no valuer was NOT reported missing — the hard-fail is broken.');
+    }
+    if (missingValuers(['__selftest_novel__'], TOP_LEVEL_VALUES).length !== 1) {
+      fail('probe 3: a fabricated top-level key with no valuer was NOT reported missing — the hard-fail is broken.');
+    }
+    if (
+      missingValuers(capabilityKeys, CAPABILITY_VALUES).length !== 0 ||
+      missingValuers(topLevelKeys, TOP_LEVEL_VALUES).length !== 0
+    ) {
+      fail('probe 3: a REAL schema key is missing its valuer — fix the valuer tables, not this probe.');
+    }
+    console.log('  ✓ probe 3: the missing-valuer detector detects (and the real tables are covered)');
   } finally {
     if (KEEP) console.log(`\n  (--keep) self-test temp dir left at ${tmp}`);
     else rmSync(tmp, { recursive: true, force: true });
   }
-  console.log('\n✓ verify-construct --self-test: both probes fail the right way. The harness is trustworthy.\n');
+  console.log('\n✓ verify-construct --self-test: all probes fail the right way. The harness is trustworthy.\n');
 }
 
 // ── the real gate ─────────────────────────────────────────────────────────
 async function main() {
   const cells = [...buildCells(), ...namedFixtures()];
-  const perLayoutProbeCount = capabilityKeys.length + 2; // none + each alone + all
-  const synthesizedCount = layouts.length * perLayoutProbeCount;
-  const namedCount = cells.length - synthesizedCount;
+  // Count, don't restate: derive the printed numbers from the cells actually
+  // built, not a closed formula that could drift from buildCells() itself.
+  const capabilityProbeCount = cells.filter(
+    (c) => c.fixture.name.startsWith('probe-') && !c.fixture.name.startsWith('probe-top-'),
+  ).length;
+  const topLevelProbeCount = cells.filter((c) => c.fixture.name.startsWith('probe-top-')).length;
+  const namedCount = cells.filter((c) => !c.fixture.name.startsWith('probe-')).length;
   console.log(
-    `\nverify:construct — ${layouts.length} layouts × ${perLayoutProbeCount} probes ` +
-      `(${capabilityKeys.length} capabilities: ${capabilityKeys.join(', ')}) ` +
-      `= ${synthesizedCount} synthesized cells + ${namedCount} named fixture(s) = ${cells.length} total\n`,
+    `\nverify:construct — ${layouts.length} layouts: ` +
+      `${capabilityProbeCount} capability probes (${capabilityKeys.length} capabilities: ${capabilityKeys.join(', ')}) ` +
+      `+ ${topLevelProbeCount} top-level probes (${topLevelKeys.length} top-level keys: ${topLevelKeys.join(', ')}) ` +
+      `+ ${namedCount} named fixture(s) = ${cells.length} total\n`,
   );
 
   const filtered = FILTER ? cells.filter((c) => c.fixture.name.includes(FILTER)) : cells;
