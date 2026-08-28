@@ -104,6 +104,11 @@ const ALLOWED_EXACT_FILES = new Set([
   'LICENSE',
   'NOTICE',
   'theme.css',
+  // The light-DOM Solid stylesheet (exported as ./solid.css) and the shared
+  // base/component rules it @imports. kit-base.css is not an exports subpath;
+  // it ships because solid.css resolves it by relative path.
+  'solid.css',
+  'kit-base.css',
   'llms.txt',
   'llms-full.txt',
   'src/elements/element-meta.json',
@@ -135,6 +140,8 @@ if (SELF_TEST) {
         'README.md',
         'NOTICE',
         'theme.css',
+        'solid.css',
+        'kit-base.css',
         'llms.txt',
         'llms-full.txt',
       ],

@@ -736,14 +736,14 @@ interface CodeProps {
 function ArtifactCode(props: CodeProps): JSX.Element {
   return (
     <div class="absolute inset-0 flex">
-      <div class="w-56 shrink-0 overflow-auto border-r border-border bg-surface-sunken py-1.5 scrollbar-thin">
+      <div class="w-56 shrink-0 overflow-auto border-r border-border bg-surface-sunken py-1.5 kai-scrollbar-thin">
         <FileTree
           files={props.files}
           activeFile={props.activeFile()}
           onSelect={(path, file) => props.onSelect(path, file)}
         />
       </div>
-      <div class="min-w-0 flex-1 overflow-auto scrollbar-thin">
+      <div class="min-w-0 flex-1 overflow-auto kai-scrollbar-thin">
         <Show
           when={props.activeFileObj()}
           fallback={
@@ -899,7 +899,7 @@ function ArtifactPdfPreview(props: { url: string; reloadKey: number }): JSX.Elem
         aria-label="PDF preview"
         aria-busy={state() === 'loading'}
         tabindex="0"
-        class="absolute inset-0 flex flex-col items-center gap-3 overflow-auto bg-surface-sunken p-3 scrollbar-thin focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        class="absolute inset-0 flex flex-col items-center gap-3 overflow-auto bg-surface-sunken p-3 kai-scrollbar-thin focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
       />
       <Show when={isPdfPreviewEnabled() && state() === 'loading'}>
         <div class="pointer-events-none absolute inset-0 flex items-center justify-center">

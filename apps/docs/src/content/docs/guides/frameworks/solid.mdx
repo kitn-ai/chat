@@ -32,15 +32,23 @@ The native components are Tailwind v4 classes over the kit's `--color-*` tokens,
 ```css
 /* src/styles.css */
 @import "tailwindcss";
-@import "@kitn.ai/ui/theme.css";       /* the --color-* design tokens */
+@import "@kitn.ai/ui/solid.css";       /* tokens, base rules, animation + typography plugins */
 @source "../node_modules/@kitn.ai/ui"; /* let Tailwind see the kit's class names */
+```
+
+`solid.css`, not `theme.css`. The `kai-*` elements carry a compiled stylesheet inside each shadow root; the Solid components ship class names and nothing else, so that sheet has to come out of your Tailwind build instead. `solid.css` imports `theme.css` (the tokens) and adds the rest: the `.kai-radio` / `.kai-checkbox` / `.kai-range` form controls, the focus ring, scrollbars, `::selection`, `tw-animate-css` for every overlay animation, and `@tailwindcss/typography` for `prose-sm` / `prose-lg`. Importing `theme.css` alone compiles, and renders native form controls with no animations. The base rules apply to your whole page; if you only want the tokens, import `theme.css` and opt in yourself. The [Theming guide](/guides/theming/#what-themecss-changes-in-a-tailwind-build) lists what `theme.css` itself adds to a Tailwind build.
+
+Install the two plugins next to Tailwind. They are optional peer dependencies of the kit:
+
+```bash
+npm install -D tailwindcss @tailwindcss/vite tw-animate-css @tailwindcss/typography
 ```
 
 <Aside type="caution" title="`@source` is not optional">
 Tailwind v4 only scans your own `src/` by default. Without the `@source` line it strips every kit utility class as unused and the components render unstyled. Point it at wherever `@kitn.ai/ui` resolves from your CSS file.
 </Aside>
 
-Add `tailwindcss` and `@tailwindcss/vite` to your dev dependencies and put `tailwindcss()` alongside `solidPlugin()` in `vite.config.ts`.
+Put `tailwindcss()` alongside `solidPlugin()` in `vite.config.ts`.
 
 The `kai-*` elements need none of this: they carry their own compiled styles inside Shadow DOM.
 

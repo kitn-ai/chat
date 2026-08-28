@@ -1,0 +1,33 @@
+/* @kitn.ai/ui for light-DOM SolidJS apps. Tailwind v4 SOURCE: import it from a
+   stylesheet that Tailwind processes, after `@import "tailwindcss"`, and keep
+   your `@source` line pointing at the kit so its class names survive:
+
+     @import "tailwindcss";
+     @import "@kitn.ai/ui/solid.css";
+     @source "../node_modules/@kitn.ai/ui";
+
+   Why this file and not theme.css alone: the Solid entry (`.` / `./solid`) ships
+   class-name strings and NO CSS, so everything the kai-* elements get from their
+   compiled shadow-root sheet has to reach your Tailwind build some other way.
+   theme.css carries only the tokens. This file adds the rest:
+
+     tw-animate-css              the animate-in/out, fade-*, zoom-*, slide-* classes
+                                 every overlay uses; without it they compile to
+                                 nothing and the animations are silently dead
+     @tailwindcss/typography     the prose-sm / prose-lg classes proseClass() emits
+     kit-base.css                the focus ring, scrollbars, ::selection, and the
+                                 .kai-radio / .kai-checkbox / .kai-range /
+                                 .kai-focus-inset component rules
+
+   tw-animate-css, @tailwindcss/typography and tailwindcss are optional peer
+   dependencies: install them next to the kit.
+
+   The base rules here are global by design: they style your whole page the way
+   the kit styles its own shadow roots. If you only want the tokens, import
+   theme.css instead and opt into the rest yourself.
+
+   Guarded by tests/styles/solid-css-contract.test.ts. */
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+@import "./theme.css";
+@import "./kit-base.css";

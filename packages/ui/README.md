@@ -96,7 +96,7 @@ import {
   Message, MessageContent,
   PromptInput, PromptInputTextarea, PromptInputActions,
 } from '@kitn.ai/ui';
-import '@kitn.ai/ui/theme.css'; // Tailwind-source; non-Tailwind builds import theme.tokens.css instead — see "Which theme file"
+import '@kitn.ai/ui/solid.css'; // Tailwind-source: tokens + base rules + the animation/typography plugins, see "Which theme file"
 
 function App() {
   const [input, setInput] = createSignal('');
@@ -315,17 +315,19 @@ Per element: `<kai-chat codeHighlight={false}>` renders code as plain text.
 
 ## Theming
 
-Visual appearance is driven by `--color-*` CSS custom properties in `theme.css`. Because inherited CSS pierces the Shadow DOM boundary, overriding tokens on `:root` rebrands the components — even the web-component ones:
+Every element reads its colors from `--color-*` custom properties, and each of those is defined on `:host` inside the shadow root as `var(--kai-color-*, <default>)`. A `:host` declaration beats anything inherited from the page, so setting `--color-primary` on `:root` does NOT reach the elements. Set the `--kai-` names instead; custom properties inherit through the shadow boundary and the `:host` fallback picks them up:
 
 ```css
 :root {
-  --color-background: #0f0f0f;
-  --color-primary: #7c3aed;
-  --color-muted: #1e1e1e;
+  --kai-color-background: #0f0f0f;
+  --kai-color-primary: #7c3aed;
+  --kai-color-muted: #1e1e1e;
 }
 ```
 
-For web components the kit's CSS is injected into each shadow root automatically; the token stylesheet is optional and only themes host-page chrome / rebrands.
+To rebrand one element rather than the page, target the element itself. A rule in the document (`kai-chat { --color-primary: #7c3aed }`) outranks the shadow root's `:host` rule, so the bare `--color-*` names work there.
+
+The kit's CSS is injected into each shadow root automatically, so the token stylesheet is optional for web components. The unprefixed `--color-*` names it defines are for your own host-page chrome and the light-DOM SolidJS components, which have no shadow root.
 
 ### Which theme file
 
@@ -333,6 +335,8 @@ Two builds of the same tokens; the condition is whether **Tailwind processes the
 
 - **`@kitn.ai/ui/theme.css`** — Tailwind v4 source (`@theme` block; needs `tailwindcss` as a peer). Import it only in an app whose build runs Tailwind over its CSS. Served raw to a browser, the `@theme` block is discarded whole and the tokens never apply.
 - **`@kitn.ai/ui/theme.tokens.css`** — the compiled plain-CSS build of the same tokens, no toolchain requirements. Use it in every non-Tailwind bundler app and for `<link>`/CDN pages.
+
+For the SolidJS components (Option B) import **`@kitn.ai/ui/solid.css`** instead of `theme.css`. It imports `theme.css` and adds what the `kai-*` elements carry in their shadow roots and a light-DOM app must compile itself: the form-control and focus-ring rules, `tw-animate-css` (overlay animations) and `@tailwindcss/typography` (`prose-*`). Those two are optional peer dependencies: `npm i -D tw-animate-css @tailwindcss/typography`. Keep the `@source` line pointing at the kit either way.
 
 ## For AI agents / LLMs
 

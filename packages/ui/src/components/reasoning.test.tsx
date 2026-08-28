@@ -63,7 +63,7 @@ describe('ReasoningTrigger label streaming shimmer', () => {
     // TextShimmer's own signature classes (text-shimmer.tsx): transparent text
     // clipped to a shimmering background-image, animated via the `shimmer` keyframe.
     expect(classes).toContain('text-transparent');
-    expect(classes.some((c) => c.startsWith('animate-[shimmer'))).toBe(true);
+    expect(classes.some((c) => c.startsWith('animate-[kai-shimmer'))).toBe(true);
     expect(classes).not.toContain('text-primary');
   });
 
@@ -74,7 +74,7 @@ describe('ReasoningTrigger label streaming shimmer', () => {
     const classes = (label!.getAttribute('class') ?? '').split(/\s+/);
     expect(classes).toContain('text-foreground');
     expect(classes).not.toContain('text-transparent');
-    expect(classes.some((c) => c.startsWith('animate-[shimmer'))).toBe(false);
+    expect(classes.some((c) => c.startsWith('animate-[kai-shimmer'))).toBe(false);
   });
 });
 

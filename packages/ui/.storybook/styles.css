@@ -17,13 +17,21 @@
    Do NOT re-add a copy of anything that lives in the shipped sheet.
 
    The import also brings tailwindcss, tw-animate-css, ../theme.css, the typography
-   plugin and `@source "../"` (which resolves to `src/`, the same tree the old
-   `@source "../src/"` scanned) — all of them exactly as production compiles them.
+   plugin and the shipped sheet's `@source` lines, exactly as production compiles
+   them. Those lines cover ONLY the shipped source (the shipped sheet is
+   `source(none)` so story-only classes stop landing in every consumer's shadow
+   root), so the classes a story uses for its own fixture chrome would compile to
+   nothing here. The @source lines below add the story trees back for Storybook
+   alone; nothing in them reaches compiled.css.
 
    What CANNOT come across is the shim below: `:host` selects nothing in the light
    DOM. Everything else in this file styles Storybook's own docs chrome, which does
    not exist in production. */
 @import "../src/elements/styles.css";
+@source "../src/**/*.stories.tsx";
+@source "../src/**/*.mdx";
+@source "../src/stories";
+@source ".";
 
 @layer base {
   /* The one unavoidable copy: the shipped sheet puts these on `:host`, which does

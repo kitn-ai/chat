@@ -104,12 +104,19 @@ export default defineConfig({
 ```css
 /* src/styles.css */
 @import "tailwindcss";
-@import "@kitn.ai/ui/theme.css";       /* design tokens: --color-background, --color-muted, … */
+@import "@kitn.ai/ui/solid.css";       /* tokens + base rules + the animation and typography plugins */
 @source "../node_modules/@kitn.ai/ui"; /* tell Tailwind to scan kit source for class names */
 ```
 
 The `@source` line is critical: without it Tailwind v4 only scans `src/` and
 strips every kit utility class as unused, leaving components unstyled.
+
+`solid.css` rather than `theme.css`: the Solid components ship as class names
+with no CSS of their own, so the sheet the `kai-*` elements carry inside their
+shadow roots (form controls, focus ring, scrollbars, overlay animations, prose
+sizes) has to come from your build instead. `solid.css` imports `theme.css` and
+adds all of that; it needs `tw-animate-css` and `@tailwindcss/typography`
+installed, both optional peers of the kit.
 
 Dark mode rides on the same tokens. `theme.css` declares every `--color-*` twice
 and flips the set under a `.dark` ancestor
@@ -119,7 +126,7 @@ themes the kit's components and your own chrome together.
 ### 3. Install devDependencies
 
 ```
-@tailwindcss/vite  tailwindcss  vite-plugin-solid
+@tailwindcss/typography  @tailwindcss/vite  tailwindcss  tw-animate-css  vite-plugin-solid
 ```
 
 ## Run locally
