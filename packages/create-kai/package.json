@@ -1,6 +1,6 @@
 {
   "name": "create-kai",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
   "description": "Scaffold a runnable @kitn.ai/ui chat app. `npm create kai@latest`",
   "license": "MIT",
