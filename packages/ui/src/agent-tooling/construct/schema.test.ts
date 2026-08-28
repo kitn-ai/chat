@@ -471,3 +471,130 @@ describe('home (Intercom-style landing, H-1..H-5)', () => {
     expect(validateConstruct({ ...base, home: { links: [{ label: 'x', icon: '/a.png' }] } }).ok).toBe(true);
   });
 });
+
+describe('aside geometry (B-2)', () => {
+  const asideBase = { name: 'acme-support', layout: 'aside', provider: { mode: 'mock' } } as const;
+
+  it('accepts position + width on layout: aside', () => {
+    expect(validateConstruct({ ...asideBase, aside: { position: 'start', width: '320px' } }).ok).toBe(true);
+    expect(validateConstruct({ ...asideBase, aside: {} }).ok).toBe(true);
+  });
+
+  it('rejects aside on any non-aside layout — loud, pathed, mirroring widget', () => {
+    const out = validateConstruct({ ...minimal, aside: { position: 'end' } }); // minimal is layout: widget
+    expect(out.ok).toBe(false);
+    if (!out.ok) {
+      const p = out.problems.find((p) => p.path === 'aside');
+      expect(p?.message).toBe('"aside" is only valid on layout: "aside"');
+    }
+  });
+
+  it('rejects an unknown position and an unknown key (vocabulary is closed)', () => {
+    expect(validateConstruct({ ...asideBase, aside: { position: 'left' } }).ok).toBe(false);
+    expect(validateConstruct({ ...asideBase, aside: { height: '100px' } }).ok).toBe(false);
+  });
+});
+
+describe('capabilities.messageActions (B-3)', () => {
+  it('accepts ordered role arrays of enum ids', () => {
+    expect(validateConstruct({
+      ...minimal,
+      capabilities: { messageActions: { user: ['edit', 'copy'], assistant: ['copy', 'like', 'dislike', 'speak'] } },
+    }).ok).toBe(true);
+  });
+
+  it('rejects an off-list id — the enum reads the ONE const (B-6), so this is the whole drift test', () => {
+    const out = validateConstruct({ ...minimal, capabilities: { messageActions: { assistant: ['share'] } } });
+    expect(out.ok).toBe(false);
+  });
+
+  it('rejects a CustomAction object — enum ids ONLY, no dead affordances', () => {
+    expect(validateConstruct({
+      ...minimal,
+      capabilities: { messageActions: { assistant: [{ id: 'x', label: 'X' }] } },
+    }).ok).toBe(false);
+  });
+
+  it('rejects duplicate ids within one array, pathed to the duplicate (slots pattern)', () => {
+    const out = validateConstruct({
+      ...minimal,
+      capabilities: { messageActions: { assistant: ['copy', 'like', 'copy'] } },
+    });
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.problems.some((p) => p.path === 'capabilities.messageActions.assistant.2')).toBe(true);
+  });
+
+  it('does NOT reject the same id across the two roles (per-array rule only)', () => {
+    expect(validateConstruct({
+      ...minimal,
+      capabilities: { messageActions: { user: ['copy'], assistant: ['copy'] } },
+    }).ok).toBe(true);
+  });
+
+  it('rejects an empty role array (min 1 — an empty list is the absent key)', () => {
+    expect(validateConstruct({ ...minimal, capabilities: { messageActions: { user: [] } } }).ok).toBe(false);
+  });
+});
+
+describe('capabilities.sources (B-4)', () => {
+  it('accepts strip true, strip false, and the bare object', () => {
+    expect(validateConstruct({ ...minimal, capabilities: { sources: { strip: true } } }).ok).toBe(true);
+    expect(validateConstruct({ ...minimal, capabilities: { sources: { strip: false } } }).ok).toBe(true);
+    expect(validateConstruct({ ...minimal, capabilities: { sources: {} } }).ok).toBe(true);
+  });
+  it('rejects an unknown key (vocabulary is closed)', () => {
+    expect(validateConstruct({ ...minimal, capabilities: { sources: { show: true } } }).ok).toBe(false);
+  });
+});
+
+describe('header.themeToggle + header.actions (B-5)', () => {
+  it('accepts themeToggle and variant-carrying actions on any layout', () => {
+    expect(validateConstruct({
+      ...minimal,
+      header: { title: 'Acme', themeToggle: true, actions: [{ label: 'Docs', variant: 'ghost' }, { label: 'Share' }] },
+    }).ok).toBe(true);
+  });
+  it('rejects an off-list variant — the enum reads BUTTON_VARIANT_NAMES (B-6a)', () => {
+    expect(validateConstruct({ ...minimal, header: { actions: [{ label: 'X', variant: 'primary' }] } }).ok).toBe(false);
+  });
+  it('rejects an empty actions array and an empty label', () => {
+    expect(validateConstruct({ ...minimal, header: { actions: [] } }).ok).toBe(false);
+    expect(validateConstruct({ ...minimal, header: { actions: [{ label: '' }] } }).ok).toBe(false);
+  });
+});
+
+describe('composer.triggers (B-5)', () => {
+  it('accepts slash and mention entry lists of display data', () => {
+    expect(validateConstruct({
+      ...minimal,
+      composer: { triggers: { slash: [{ id: 'help', label: 'Help', description: 'Show help' }], mention: [{ id: 'docs', label: 'Docs' }] } },
+    }).ok).toBe(true);
+  });
+  it('rejects the kit-side TriggerItem fields (promptText/data/kind stay kit-side)', () => {
+    expect(validateConstruct({
+      ...minimal,
+      composer: { triggers: { slash: [{ id: 'x', label: 'X', promptText: 'y' }] } },
+    }).ok).toBe(false);
+  });
+  it('rejects an empty entry array and an unknown composer key', () => {
+    expect(validateConstruct({ ...minimal, composer: { triggers: { slash: [] } } }).ok).toBe(false);
+    expect(validateConstruct({ ...minimal, composer: { chips: [] } }).ok).toBe(false);
+  });
+});
+
+describe('shell (B-5/10a)', () => {
+  it('accepts commandPalette: true and a userMenu with name/plan', () => {
+    expect(validateConstruct({
+      ...minimal,
+      shell: { commandPalette: true, userMenu: { name: 'Ada Lovelace', plan: 'Pro' } },
+    }).ok).toBe(true);
+    expect(validateConstruct({ ...minimal, shell: { userMenu: { name: 'Ada' } } }).ok).toBe(true);
+  });
+  it('rejects commandPalette: false — presence-only, matching conversations', () => {
+    expect(validateConstruct({ ...minimal, shell: { commandPalette: false } }).ok).toBe(false);
+  });
+  it('rejects an empty name and an unknown shell key', () => {
+    expect(validateConstruct({ ...minimal, shell: { userMenu: { name: '' } } }).ok).toBe(false);
+    expect(validateConstruct({ ...minimal, shell: { search: true } }).ok).toBe(false);
+  });
+});

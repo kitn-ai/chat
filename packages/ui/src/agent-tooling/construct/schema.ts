@@ -26,11 +26,26 @@ import { z } from 'zod';
 // DOM-lib pass (transitively, via mcp/tools/construct.ts), and card-routing.ts
 // pulls in HTMLElement/window/CustomEvent that pass can't see.
 import { isSafeUrl } from '../../primitives/url-scheme-policy';
+import { CHAT_MESSAGE_ACTIONS } from '../../elements/chat-actions';
+import { BUTTON_VARIANT_NAMES } from '../../ui/button-variant-names';
 
 export const CONSTRUCT_SCHEMA_URL = 'https://ui.kitn.ai/schemas/construct/v1.json';
 
 /** A valid custom-element tag: lowercase, starts with a letter, contains a hyphen. */
 const TAG_RE = /^[a-z][a-z0-9]*-[a-z0-9-]+$/;
+
+/** One composer trigger menu entry — the kit's own TriggerItem
+ *  (components/composer.tsx) narrowed to its pure display fields (B-5):
+ *  `promptText`/`data`/`kind`/`icon`/`group` stay kit-side. All three are
+ *  construct-authored untrusted text, JSON.stringify'd at their one emit
+ *  site (the whole triggers array is stringified in one go). */
+const TriggerEntrySchema = z
+  .object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    description: z.string().min(1).optional(),
+  })
+  .strict();
 
 const ProviderSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('mock') }).strict(),
@@ -115,6 +130,30 @@ export const ConstructSchema = z
          *  authored/untrusted text, like theme.accent/provider.url — JSON.stringify'd
          *  at its one emit site, never a raw JSX attribute string. */
         title: z.string().min(1).optional(),
+        /** Renders a theme-toggle Button in ChatThread's header-end region,
+         *  flipping the host's `theme` attribute (the attribute
+         *  defineWebComponent already owns) via the facade's ctx.element —
+         *  codegen work, no new kit surface (B-10). */
+        themeToggle: z.boolean().optional(),
+        /** Header action buttons (label + kit Button variant), rendered in
+         *  the header-end region. Vocabulary-never-logic: the construct
+         *  cannot say what an action DOES, so each click dispatches a
+         *  non-bubbling `kai-header-action` CustomEvent on the host with
+         *  `detail: { label }` — the consumer's listening seam (B-10).
+         *  `variant` derives from the kit Button's own list
+         *  (BUTTON_VARIANT_NAMES — B-6a), never restated. `label` is
+         *  construct-authored untrusted text, JSON.stringify'd at emit. */
+        actions: z
+          .array(
+            z
+              .object({
+                label: z.string().min(1),
+                variant: z.enum(BUTTON_VARIANT_NAMES).optional(),
+              })
+              .strict(),
+          )
+          .min(1)
+          .optional(),
       })
       .strict()
       .optional(),
@@ -243,6 +282,33 @@ export const ConstructSchema = z
          *  localStorage vs. a fetch endpoint) is codegen's call, never
          *  vocabulary here (C-3 — no transport-layer vocabulary). */
         conversations: z.literal(true).optional(),
+        /** Role-scoped default action bars, threaded onto ChatThread's
+         *  `userActions`/`assistantActions` props (B-3/B-7b). Ordered
+         *  arrays; enum ids ONLY, read off the ONE const
+         *  (CHAT_MESSAGE_ACTIONS — B-6): a CustomAction is an id the APP
+         *  must handle, a construct has no app code, so emitting one is a
+         *  dead affordance. Duplicates within one array rejected below
+         *  (superRefine, the slots pattern). min(1): an empty list IS the
+         *  absent key. */
+        messageActions: z
+          .object({
+            user: z.array(z.enum(CHAT_MESSAGE_ACTIONS)).min(1).optional(),
+            assistant: z.array(z.enum(CHAT_MESSAGE_ACTIONS)).min(1).optional(),
+          })
+          .strict()
+          .optional(),
+        /** The citations STRIP (the `part="citations"` row consecutive
+         *  `source` parts already collapse into — message.tsx). `strip:
+         *  false` hides it (emits ChatThread's `hideSources`); `strip:
+         *  true` or the key absent emits NOTHING — the row already renders,
+         *  the kit default IS the on state, the same anchored-on-the-
+         *  default convention as `reasoning: 'full'` (B-4). */
+        sources: z
+          .object({
+            strip: z.boolean().optional(),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .optional(),
@@ -304,6 +370,58 @@ export const ConstructSchema = z
       })
       .strict()
       .optional(),
+    /** Layout-scoped aside geometry, `layout: 'aside'` only (superRefine
+     *  below, mirroring `widget`'s scoping exactly). `position` picks the
+     *  docked inline edge (default 'end', today's hardcoded behavior);
+     *  `width` overrides codegen's 380px default. `width` is construct-
+     *  authored untrusted text: it lands as a JSON.stringify'd VALUE inside
+     *  the emitted Solid `style={{ }}` object — property assignment, the
+     *  same no-CSS-text-interpolation guarantee as setProperty — never
+     *  concatenated into a CSS string (B-2). */
+    aside: z
+      .object({
+        position: z.enum(['start', 'end']).optional(),
+        width: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional(),
+    /** Construct-wide shell chrome (10a): both members reuse REAL kit
+     *  pieces — command.tsx's CommandList behind a codegen-emitted overlay
+     *  (opened on Mod+K; entries DERIVE from what this construct enables —
+     *  menu-honesty against dead entries), and the documented Dropdown+
+     *  Avatar user-menu recipe. `name`/`plan` are construct-authored
+     *  untrusted text, JSON.stringify'd at emit like every sibling.
+     *  `commandPalette` is presence-only `z.literal(true)`, matching
+     *  `conversations`' pattern. */
+    shell: z
+      .object({
+        commandPalette: z.literal(true).optional(),
+        userMenu: z
+          .object({
+            name: z.string().min(1),
+            plan: z.string().min(1).optional(),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
+    /** Composer chrome — NOT a capability: chrome on the medium, like
+     *  `header` (B-5). `triggers` maps onto ChatThread's real, shipped
+     *  `triggers` prop: `slash` → `{ char: '/', kind: 'command', items }`,
+     *  `mention` → `{ char: '@', kind: 'mention', items }` at emit. */
+    composer: z
+      .object({
+        triggers: z
+          .object({
+            slash: z.array(TriggerEntrySchema).min(1).optional(),
+            mention: z.array(TriggerEntrySchema).min(1).optional(),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((construct, ctx) => {
@@ -344,6 +462,33 @@ export const ConstructSchema = z
         path: ['widget'],
         message: '"widget" is only valid on layout: "widget"',
       });
+    }
+    if (construct.aside && construct.layout !== 'aside') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['aside'],
+        message: '"aside" is only valid on layout: "aside"',
+      });
+    }
+    const messageActions = construct.capabilities?.messageActions;
+    if (messageActions) {
+      // Same reason the slots rule exists: a regex/enum alone can't see
+      // across array entries. Per-array only — the two roles may share ids.
+      for (const role of ['user', 'assistant'] as const) {
+        const list = messageActions[role];
+        if (!list) continue;
+        const seen = new Set<string>();
+        list.forEach((id, i) => {
+          if (seen.has(id)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['capabilities', 'messageActions', role, i],
+              message: `duplicate action id "${id}"`,
+            });
+          }
+          seen.add(id);
+        });
+      }
     }
     if (construct.widget?.launcherIcon && !isSafeUrl(construct.widget.launcherIcon)) {
       ctx.addIssue({

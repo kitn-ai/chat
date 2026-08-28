@@ -58,7 +58,7 @@ interface ChatMessage {
   /** The ONLY content channel. Ordered. */
   parts: MessagePart[];
   /** Action buttons under the message. Chrome, not content. */
-  actions?: ('copy' | 'like' | 'dislike' | 'regenerate' | 'edit')[];
+  actions?: ('copy' | 'like' | 'dislike' | 'regenerate' | 'edit' | 'speak')[];
   avatar?: { src?: string; fallback?: string; alt?: string };
   feedback?: 'like' | 'dislike';
 }

@@ -98,6 +98,36 @@
         "title": {
           "type": "string",
           "minLength": 1
+        },
+        "themeToggle": {
+          "type": "boolean"
+        },
+        "actions": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "variant": {
+                "type": "string",
+                "enum": [
+                  "default",
+                  "ghost",
+                  "subtle",
+                  "outline",
+                  "destructive"
+                ]
+              }
+            },
+            "required": [
+              "label"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "additionalProperties": false
@@ -249,6 +279,51 @@
         "conversations": {
           "type": "boolean",
           "const": true
+        },
+        "messageActions": {
+          "type": "object",
+          "properties": {
+            "user": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "copy",
+                  "like",
+                  "dislike",
+                  "regenerate",
+                  "edit",
+                  "speak"
+                ]
+              }
+            },
+            "assistant": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "copy",
+                  "like",
+                  "dislike",
+                  "regenerate",
+                  "edit",
+                  "speak"
+                ]
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "sources": {
+          "type": "object",
+          "properties": {
+            "strip": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -305,6 +380,114 @@
         },
         "defaultOpen": {
           "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "aside": {
+      "type": "object",
+      "properties": {
+        "position": {
+          "type": "string",
+          "enum": [
+            "start",
+            "end"
+          ]
+        },
+        "width": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "shell": {
+      "type": "object",
+      "properties": {
+        "commandPalette": {
+          "type": "boolean",
+          "const": true
+        },
+        "userMenu": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "plan": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "composer": {
+      "type": "object",
+      "properties": {
+        "triggers": {
+          "type": "object",
+          "properties": {
+            "slash": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "id",
+                  "label"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "mention": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "id",
+                  "label"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
