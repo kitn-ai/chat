@@ -57,6 +57,8 @@ import { existsSync } from 'node:fs';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { buildableTemplates, type BuildableTemplateId } from '@kitn.ai/ui/construct/templates';
+
 import type { Axis, AxisOption } from './axes';
 
 /**
@@ -67,30 +69,30 @@ import type { Axis, AxisOption } from './axes';
  */
 const SCHEMA_URL = __CONSTRUCT_SCHEMA_URL__;
 
-export type ShapeId = 'widget' | 'fullscreen' | 'app';
+export type ShapeId = BuildableTemplateId | 'scratch' | 'app';
 
 /**
- * "What are you building?" — a real three-way choice, always asked (never
- * decided for the user): a widget only makes sense embedded in an existing
- * page, a full-screen chat only makes sense as the whole page, and a full app
- * needs the OLDER `generate()` scaffold (routing, a project shell) that a
- * bare construct cannot express — so this axis exists to route the user to
- * the right tool, not to narrow a single mechanism. `runWizard` only accepts
- * `'widget' | 'fullscreen'`: the caller answers this axis first and only
- * reaches `runWizard` on those two branches, dispatching `'app'` to the
- * existing scaffold flow instead.
+ * "What are you building?" — the buildable-template list from the registry
+ * (`@kitn.ai/ui/construct/templates`) plus 'scratch' and 'app', always asked
+ * (never decided for the user): every template and 'scratch' compose a
+ * construct via this wizard, seeded from the template's own starter, while a
+ * full app needs the OLDER `generate()` scaffold (routing, a project shell)
+ * that a bare construct cannot express — so this axis exists to route the
+ * user to the right tool, not to narrow a single mechanism. `runWizard` only
+ * accepts `Exclude<ShapeId, 'app'>`: the caller answers this axis first and
+ * only reaches `runWizard` on the non-'app' branches, dispatching `'app'` to
+ * the existing scaffold flow instead.
  */
 export function shapeAxis(): Axis {
   const options: AxisOption[] = [
+    // Derived from the registry (B-17a): labels/hints are the templates'
+    // own names/one-liners, never restated. Only buildable templates are
+    // offered — menu-honesty (voice stays a Labs story card).
+    ...buildableTemplates().map((t) => ({ id: t.id, label: t.name, hint: t.description })),
     {
-      id: 'widget',
-      label: 'Embedded widget',
-      hint: 'a floating launcher that sits on top of an existing page',
-    },
-    {
-      id: 'fullscreen',
-      label: 'Full-screen chat',
-      hint: 'the chat is the whole page',
+      id: 'scratch',
+      label: 'Start from scratch',
+      hint: 'a bare chat construct, everything off — you can switch to a template later',
     },
     {
       id: 'app',
@@ -104,27 +106,25 @@ export function shapeAxis(): Axis {
     question: 'What are you building?',
     options,
     because:
-      'each shape needs a different tool: "widget" and "fullscreen" compose a construct ' +
-      '(this wizard), while "app" needs the project scaffold this wizard does not build',
+      'each shape needs a different tool: the templates and "scratch" compose a construct ' +
+      '(this wizard, seeded from the template registry), while "app" needs the project ' +
+      'scaffold this wizard does not build',
   };
 }
 
 export interface WizardAnswers {
   name: string;
   shape: Exclude<ShapeId, 'app'>;
-  /** '' means "no header" — omitted from the emitted construct. */
+  /** undefined = keep the starter's header untouched; '' = no header title. */
   headerTitle?: string;
-  /** true emits `home: { greeting: { title } } }`. */
-  home: boolean;
-  /** the greeting title when `home` is true; '' falls back to a stated default. */
+  /** undefined = keep the starter's home untouched; false removes it; true (re)writes the greeting. */
+  home?: boolean;
   homeGreeting?: string;
-  /** 0-6 starter prompts; an empty array omits `capabilities.starters` (the schema requires min 1). */
+  /** [] = keep the starter's list (the wizard cannot clear a list it did not write — stated). */
   starters: string[];
-  /** true emits the stated default accept list. */
   attachments: boolean;
-  /** true emits `history: { persistence: 'local' }` AND `conversations: true`. */
   history: boolean;
-  /** '' means "no accent" — omitted from the emitted construct's theme. */
+  /** undefined = keep the starter's accent untouched; '' = no accent. */
   accent?: string;
 }
 
@@ -133,6 +133,22 @@ const DEFAULT_ATTACHMENTS_ACCEPT = ['image/*', 'application/pdf'];
 
 /** The stated default greeting title, used when `home` is on and no title was given. */
 const DEFAULT_HOME_GREETING_TITLE = 'How can we help?';
+
+/**
+ * The starter construct a shape seeds the wizard with. Templates come from
+ * the registry (deep-cloned — answers must never mutate registry data);
+ * 'scratch' is the bare fullscreen construct. The BASE Workspace starter is
+ * used, never a variant: the CLI asks no variant question — the variants
+ * are the builder's second screen (B-23), stated out loud in runWizard.
+ */
+function wizardStarter(shape: Exclude<ShapeId, 'app'>): Record<string, unknown> {
+  if (shape === 'scratch') {
+    return { $schema: SCHEMA_URL, name: '', layout: 'fullscreen', provider: { mode: 'mock' } };
+  }
+  const template = buildableTemplates().find((t) => t.id === shape);
+  if (!template) throw new Error(`no buildable template '${shape}' in the registry`);
+  return structuredClone(template.starter) as unknown as Record<string, unknown>;
+}
 
 /**
  * The real schema's rule for `Construct.name`, mirrored here — NOT imported,
@@ -165,16 +181,17 @@ const CONSTRUCT_TAG_RE = /^[a-z][a-z0-9]*-[a-z0-9-]+$/;
  * the schema would actually reject. Everything else is sanitized (lowercase,
  * every forbidden character collapsed to a hyphen, runs of hyphens
  * collapsed, a leading/trailing hyphen trimmed, a non-letter first character
- * given a `k-` prefix) and then given a shape-based suffix — `-widget` or
- * `-chat` for fullscreen — which is also what GUARANTEES the required
- * hyphen exists no matter how the sanitize step landed.
+ * given a `k-` prefix) and then given a kind-based suffix — `-widget` for the
+ * one widget-layout template, `-chat` for everything else (fullscreen, split,
+ * aside) — which is also what GUARANTEES the required hyphen exists no
+ * matter how the sanitize step landed.
  *
  * Callers must STATE this when it actually changes the name (see
  * `index.ts`'s `runConstructFlow`) — a construct whose `name` silently
  * stopped matching what the user typed is exactly the kind of quiet
  * decision this repo's conventions ban.
  */
-export function constructTagName(projectName: string, shape: Exclude<ShapeId, 'app'>): string {
+export function constructTagName(projectName: string, kind: 'widget' | 'chat'): string {
   if (CONSTRUCT_TAG_RE.test(projectName)) return projectName;
 
   let base = projectName
@@ -187,8 +204,7 @@ export function constructTagName(projectName: string, shape: Exclude<ShapeId, 'a
     base = base.length > 0 ? `k-${base}` : 'k';
   }
 
-  const suffix = shape === 'widget' ? 'widget' : 'chat';
-  return `${base}-${suffix}`;
+  return `${base}-${kind}`;
 }
 
 /**
@@ -199,39 +215,66 @@ export function constructTagName(projectName: string, shape: Exclude<ShapeId, 'a
  * in the construct file a user goes on to hand-edit.
  */
 export function composeConstruct(a: WizardAnswers): unknown {
-  const capabilities: Record<string, unknown> = {};
-  if (a.starters.length > 0) capabilities.starters = a.starters;
-  if (a.attachments) capabilities.attachments = { accept: DEFAULT_ATTACHMENTS_ACCEPT };
-  if (a.history) {
-    capabilities.history = { persistence: 'local' };
-    capabilities.conversations = true;
-  }
-
-  const construct: Record<string, unknown> = {
-    $schema: SCHEMA_URL,
-    // NOT `a.name` — see `constructTagName`'s header. The project directory
-    // name and the construct's own `Construct.name` are different
-    // vocabularies (directory rules vs. a custom-element tag rule), and this
-    // is the one place they're allowed to diverge.
-    name: constructTagName(a.name, a.shape),
-    layout: a.shape,
-    provider: { mode: 'mock' },
+  const construct = wizardStarter(a.shape) as Record<string, unknown> & {
+    header?: Record<string, unknown> & { title?: string };
+    theme?: Record<string, unknown> & { accent?: string };
+    home?: Record<string, unknown> & { greeting?: Record<string, unknown> };
+    capabilities?: Record<string, unknown> & { history?: { persistence?: string } };
   };
 
-  if (a.headerTitle && a.headerTitle.length > 0) {
-    construct.header = { title: a.headerTitle };
+  construct.$schema = SCHEMA_URL;
+  construct.name = constructTagName(a.name, construct.layout === 'widget' ? 'widget' : 'chat');
+
+  if (a.headerTitle !== undefined) {
+    if (a.headerTitle.length > 0) {
+      construct.header = { ...construct.header, title: a.headerTitle };
+    } else if (construct.header) {
+      delete construct.header.title;
+      if (Object.keys(construct.header).length === 0) delete construct.header;
+    }
   }
-  if (a.home) {
-    const title =
-      a.homeGreeting && a.homeGreeting.length > 0 ? a.homeGreeting : DEFAULT_HOME_GREETING_TITLE;
-    construct.home = { greeting: { title } };
+
+  if (a.accent !== undefined) {
+    if (a.accent.length > 0) {
+      construct.theme = { mode: 'system', ...construct.theme, accent: a.accent };
+    } else if (construct.theme) {
+      delete construct.theme.accent;
+      if (Object.keys(construct.theme).length === 0) delete construct.theme;
+    }
   }
-  if (a.accent && a.accent.length > 0) {
-    construct.theme = { accent: a.accent };
+
+  if (a.home !== undefined) {
+    if (a.home) {
+      const title =
+        a.homeGreeting && a.homeGreeting.length > 0 ? a.homeGreeting : DEFAULT_HOME_GREETING_TITLE;
+      construct.home = { ...construct.home, greeting: { ...construct.home?.greeting, title } };
+    } else {
+      delete construct.home;
+    }
   }
-  if (Object.keys(capabilities).length > 0) {
-    construct.capabilities = capabilities;
+
+  const capabilities: Record<string, unknown> = { ...construct.capabilities };
+  if (a.starters.length > 0) capabilities.starters = a.starters.slice(0, 6);
+  if (a.attachments) {
+    capabilities.attachments = capabilities.attachments ?? { accept: DEFAULT_ATTACHMENTS_ACCEPT };
+  } else {
+    delete capabilities.attachments;
   }
+  if (a.history) {
+    // A starter that already persists keeps its exact shape (research keeps
+    // history WITHOUT a conversation list — its own defining shape); only
+    // history created from nothing gets the local+conversations pair.
+    if (!construct.capabilities?.history || construct.capabilities.history.persistence === 'none') {
+      capabilities.history = { persistence: 'local' };
+      capabilities.conversations = true;
+    }
+  } else {
+    delete capabilities.history;
+    // the schema rejects conversations with nowhere to persist — strip both.
+    delete capabilities.conversations;
+  }
+  if (Object.keys(capabilities).length > 0) construct.capabilities = capabilities;
+  else delete construct.capabilities;
 
   return construct;
 }
@@ -266,7 +309,7 @@ export async function emitConstruct(
   }
   await mkdir(dir, { recursive: true });
 
-  const construct = composeConstruct(answers);
+  const construct = composeConstruct(answers) as { name: string };
   const fileName = `${answers.name}.construct.json`;
   const file = path.join(dir, fileName);
   await writeFile(file, `${JSON.stringify(construct, null, 2)}\n`, 'utf8');
@@ -274,7 +317,7 @@ export async function emitConstruct(
   return {
     file,
     devCommand: `npx @kitn.ai/ui dev ${fileName}`,
-    constructName: constructTagName(answers.name, answers.shape),
+    constructName: construct.name,
   };
 }
 
@@ -392,7 +435,7 @@ export const WIZARD_REGISTRY: Record<string, RegistryEntry> = {
   },
   layout: {
     status: 'asked',
-    reason: "the shape axis (widget vs. fullscreen vs. app) decides this — widget/fullscreen map straight onto the construct's layout value. Asked by shapeAxis BEFORE runWizard is invoked; runWizard itself never prompts for it directly, only receives the already-answered shape",
+    reason: "fixed by the chosen TEMPLATE's starter (or 'fullscreen' for scratch) — asked by shapeAxis BEFORE runWizard is invoked; runWizard itself never prompts for it directly, only receives the already-answered shape",
   },
   provider: {
     status: 'stated',
@@ -404,11 +447,11 @@ export const WIZARD_REGISTRY: Record<string, RegistryEntry> = {
   },
   theme: {
     status: 'asked',
-    reason: 'the accent color is asked; unreadColor and mode are left at their kit defaults — edit the construct file directly for those',
+    reason: "the accent color is asked; a blank answer keeps the template starter's value. unreadColor and mode are left at their kit defaults — edit the construct file directly for those",
   },
   header: {
     status: 'asked',
-    reason: 'the header title is asked; an empty answer omits the header entirely rather than emitting one with nothing in it',
+    reason: "the header title is asked; a blank answer keeps the template starter's value",
   },
   empty: {
     status: 'not-asked',
@@ -416,7 +459,7 @@ export const WIZARD_REGISTRY: Record<string, RegistryEntry> = {
   },
   home: {
     status: 'asked',
-    reason: 'whether to show the home/greeting tab is asked, along with its title',
+    reason: "whether to show the home/greeting tab is asked, along with its title; a blank answer keeps the template starter's value",
   },
   capabilities: {
     status: 'asked',
@@ -434,9 +477,24 @@ export const WIZARD_REGISTRY: Record<string, RegistryEntry> = {
     status: 'not-asked',
     reason: 'layout-scoped widget chrome (position/launcherIcon/defaultOpen) keeps the kit\'s own Dock defaults; hand-edit the construct file to customize it',
   },
+  aside: {
+    status: 'not-asked',
+    reason:
+      'aside geometry (position/width) is seeded by the in-app-assistant template starter and passes through untouched; hand-edit the construct file to move or resize the rail',
+  },
+  composer: {
+    status: 'not-asked',
+    reason:
+      'composer triggers are template data (on for Workspace only — the ruling-8 default matrix lives in the registry starters); the wizard passes the starter through untouched and never prompts for trigger lists',
+  },
+  shell: {
+    status: 'not-asked',
+    reason:
+      'shell chrome (command palette, user menu) is template data seeded by the Workspace starter; the wizard passes it through untouched — edit the construct file to change it',
+  },
   'capabilities.starters': {
     status: 'asked',
-    reason: 'starter prompts are asked as a list (0-6); an empty answer omits the key, since the schema itself requires at least one entry when present',
+    reason: "starter prompts are asked as a list (0-6); a blank answer keeps the template starter's value",
   },
   'capabilities.attachments': {
     status: 'asked',
@@ -456,7 +514,18 @@ export const WIZARD_REGISTRY: Record<string, RegistryEntry> = {
   },
   'capabilities.conversations': {
     status: 'stated',
-    reason: 'always true exactly when history is enabled — the schema itself requires it whenever there is somewhere to persist a conversation list, so it is never asked separately',
+    reason:
+      "kept exactly as the template starter states it; created only when the wizard turns history on from nothing — the schema itself requires it whenever there is somewhere to persist a conversation list, so it is never asked separately",
+  },
+  'capabilities.messageActions': {
+    status: 'not-asked',
+    reason:
+      'per-role action lists are template data (the research starter states the owner-default matrix); the wizard passes the starter through untouched — hand-edit or use the builder to reorder/toggle actions',
+  },
+  'capabilities.sources': {
+    status: 'not-asked',
+    reason:
+      "the sources strip is the research template's defining fact, stated in its starter; the wizard passes it through untouched",
   },
 };
 
@@ -486,47 +555,67 @@ export async function runWizard(
   io: WizardIo,
   nonInteractive: boolean,
 ): Promise<WizardAnswers> {
-  // Nothing is asked OR stated in non-interactive mode — the same rule
-  // `answerAxis` follows in `axes.ts`: there is no prompt stream to leave a
-  // gap in, and `--yes` output is read by scripts. `shape` arrives already
-  // answered (by `shapeAxis`, before this function is ever called), so this
-  // branch needs nothing from `io` at all.
+  const starter = wizardStarter(shape) as {
+    header?: { title?: string };
+    theme?: { accent?: string };
+    home?: { greeting?: { title?: string } };
+    capabilities?: { attachments?: unknown; history?: { persistence?: string } };
+  };
+  const starterHasHistory = Boolean(
+    starter.capabilities?.history && starter.capabilities.history.persistence !== 'none',
+  );
+
   if (nonInteractive) {
+    // Nothing asked OR stated (answerAxis's own non-interactive rule). All
+    // "keep" sentinels — composeConstruct round-trips the starter unchanged.
     return {
       name,
       shape,
-      headerTitle: '',
-      home: false,
+      headerTitle: undefined,
+      home: undefined,
       homeGreeting: '',
       starters: [],
-      attachments: false,
-      history: false,
-      accent: '',
+      attachments: Boolean(starter.capabilities?.attachments),
+      history: starterHasHistory,
+      accent: undefined,
     };
   }
 
-  // Every `io.state` call below corresponds to exactly one WIZARD_REGISTRY
-  // key with status 'stated' that THIS function is responsible for stating —
-  // '$schema', 'name', 'provider' unconditionally, 'capabilities.conversations'
-  // only when history is on. 'layout' is also 'stated' upstream by whatever
-  // decided the shape axis before calling runWizard, but that is not this
-  // function's job to restate. `test/wizard.test.ts` drives this
-  // correspondence exactly, in both directions.
   io.state('Schema', `${SCHEMA_URL} — every construct the wizard emits stamps this so tooling can validate it`);
   io.state('Name', `${name} — the project directory already fixed this`);
-  io.state('Provider', "mock — a keyless first run; switch providers in the construct file after");
+  io.state('Provider', 'mock — a keyless first run; switch providers in the construct file after');
+  if (shape !== 'scratch') {
+    io.state(
+      'Template',
+      `${shape} — seeded from the registry starter; each answer below overrides its field, and a blank answer keeps the template's value`,
+    );
+  }
+  if (shape === 'workspace') {
+    io.state(
+      'Variant',
+      'the base Workspace starter — pick artifact-preview or app-preview in the builder, or hand-edit the file',
+    );
+  }
 
-  const headerTitle = await io.text('Header title? (leave blank for none)', '');
-  const accent = await io.text('Accent color? (leave blank for the kit default)', '');
-  const home = await io.confirm('Show a home/greeting screen?', true);
+  const headerTitle = await io.text('Header title? (leave blank for none)', starter.header?.title ?? '');
+  const accent = await io.text('Accent color? (leave blank for the kit default)', starter.theme?.accent ?? '');
+  const home = await io.confirm('Show a home/greeting screen?', Boolean(starter.home));
   const homeGreeting = home
-    ? await io.text('Greeting title? (leave blank for the default)', DEFAULT_HOME_GREETING_TITLE)
+    ? await io.text(
+        'Greeting title? (leave blank for the default)',
+        starter.home?.greeting?.title ?? DEFAULT_HOME_GREETING_TITLE,
+      )
     : '';
-  const starters = await io.multilineList('Starter prompts (comma-separated, up to 6, blank to skip)');
-  const attachments = await io.confirm('Allow file attachments?', false);
-  const history = await io.confirm('Persist conversation history in this browser?', true);
+  const starters = await io.multilineList(
+    "Starter prompts (comma-separated, up to 6, blank to keep the template's)",
+  );
+  const attachments = await io.confirm('Allow file attachments?', Boolean(starter.capabilities?.attachments));
+  const history = await io.confirm(
+    'Persist conversation history in this browser?',
+    starterHasHistory || shape === 'scratch',
+  );
 
-  if (history) {
+  if (history && !starterHasHistory) {
     io.state('Conversations', 'enabled — turned on automatically because history is on');
   }
 

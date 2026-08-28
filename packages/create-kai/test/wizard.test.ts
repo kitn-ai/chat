@@ -22,6 +22,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { CONSTRUCT_SCHEMA_URL, ConstructSchema } from '@kitn.ai/ui/construct';
+import { buildableTemplates } from '@kitn.ai/ui/construct/templates';
 
 import {
   composeConstruct,
@@ -31,6 +32,7 @@ import {
   runWizard,
   shapeAxis,
   WIZARD_REGISTRY,
+  type ShapeId,
   type SpawnLike,
   type WizardAnswers,
   type WizardIo,
@@ -97,7 +99,7 @@ describe('WIZARD_REGISTRY tracks every real schema key (no drift)', () => {
 
 // The full answer matrix, enumerated rather than hand-picked.
 const BOOLS = [false, true];
-const SHAPES: WizardAnswers['shape'][] = ['widget', 'fullscreen'];
+const SHAPES: WizardAnswers['shape'][] = ['widget', 'scratch'];
 const STARTER_SETS: string[][] = [[], ['one starter'], ['a', 'b', 'c', 'd', 'e', 'f']];
 const OPTIONAL_STRINGS = ['', 'a real value'];
 
@@ -190,7 +192,7 @@ describe('runWizard: the SET of keys it asks/states matches the registry exactly
     'Accent color? (leave blank for the kit default)': 'theme',
     'Show a home/greeting screen?': 'home',
     'Greeting title? (leave blank for the default)': 'home',
-    'Starter prompts (comma-separated, up to 6, blank to skip)': 'capabilities.starters',
+    "Starter prompts (comma-separated, up to 6, blank to keep the template's)": 'capabilities.starters',
     'Allow file attachments?': 'capabilities.attachments',
     'Persist conversation history in this browser?': 'capabilities.history',
   };
@@ -232,10 +234,14 @@ describe('runWizard: the SET of keys it asks/states matches the registry exactly
     return { io, askedKeys, statedKeys };
   }
 
-  // The spy's confirm() returns the initial value runWizard passes, which for
-  // `history` is `true` — so the conditional 'Conversations' state call fires
-  // on this run, and the expected-stated set below can be the FULL stated set
-  // with no carve-out for it.
+  // The spy's confirm() returns the initial value runWizard passes. Run this
+  // against 'scratch' specifically: its starter has no history of its own, so
+  // `history`'s initial defaults to `true` (the `shape === 'scratch'` half of
+  // runWizard's own default) and the starter-has-no-history guard lets the
+  // conditional 'Conversations' state call fire — so the expected-stated set
+  // below can be the FULL stated set with no carve-out for it. A template
+  // shape whose starter already persists (e.g. 'widget') would NOT restate
+  // Conversations, since nothing changed from the starter's own value.
   const EXPECTED_ASKED = new Set(
     Object.entries(WIZARD_REGISTRY)
       .filter(([, e]) => e.status === 'asked')
@@ -255,21 +261,78 @@ describe('runWizard: the SET of keys it asks/states matches the registry exactly
 
   it('interactive mode asks exactly the asked keys (minus layout/capabilities) and states exactly the stated keys', async () => {
     const { io, askedKeys, statedKeys } = spyIo();
-    await runWizard('widget', 'kai-app', io, false);
+    await runWizard('scratch', 'kai-app', io, false);
     expect(askedKeys).toEqual(EXPECTED_ASKED);
     expect(statedKeys).toEqual(EXPECTED_STATED);
   });
 
   it('non-interactive mode asks nothing and states nothing, and still returns defaults', async () => {
     const { io, askedKeys, statedKeys } = spyIo();
-    const answers = await runWizard('fullscreen', 'kai-app', io, true);
+    const answers = await runWizard('scratch', 'kai-app', io, true);
     expect(askedKeys).toEqual(new Set());
     expect(statedKeys).toEqual(new Set());
     expect(answers.name).toBe('kai-app');
-    expect(answers.shape).toBe('fullscreen');
+    expect(answers.shape).toBe('scratch');
     // The defaults themselves must still compose into a valid construct.
     const construct = composeConstruct(answers);
     expect(ConstructSchema.safeParse(construct).success).toBe(true);
+  });
+});
+
+describe("runWizard: template seeding states 'Template'/'Variant' and seeds initials from the starter (B-17a)", () => {
+  function recordingIo(): {
+    io: WizardIo;
+    states: [string, string][];
+    initials: Record<string, unknown>;
+  } {
+    const states: [string, string][] = [];
+    const initials: Record<string, unknown> = {};
+    const io: WizardIo = {
+      async text(msg, initial) {
+        initials[msg] = initial;
+        return initial ?? '';
+      },
+      async confirm(msg, initial) {
+        initials[msg] = initial;
+        return initial;
+      },
+      async multilineList() {
+        return [];
+      },
+      state(label, statement) {
+        states.push([label, statement]);
+      },
+    };
+    return { io, states, initials };
+  }
+
+  it("states 'Template' for a template shape but not 'Variant' for a non-workspace template", async () => {
+    const { io, states } = recordingIo();
+    await runWizard('widget', 'kai-app', io, false);
+    expect(states.some(([label]) => label === 'Template')).toBe(true);
+    expect(states.some(([label]) => label === 'Variant')).toBe(false);
+  });
+
+  it("states both 'Template' and 'Variant' for the workspace shape", async () => {
+    const { io, states } = recordingIo();
+    await runWizard('workspace', 'kai-app', io, false);
+    expect(states.some(([label]) => label === 'Template')).toBe(true);
+    expect(states.some(([label]) => label === 'Variant')).toBe(true);
+  });
+
+  it("does not state 'Template' for scratch", async () => {
+    const { io, states } = recordingIo();
+    await runWizard('scratch', 'kai-app', io, false);
+    expect(states.some(([label]) => label === 'Template')).toBe(false);
+  });
+
+  it('seeds io.text/io.confirm initial values from the template starter (assistant)', async () => {
+    const { io, initials } = recordingIo();
+    await runWizard('assistant', 'kai-app', io, false);
+    expect(initials['Header title? (leave blank for none)']).toBe('Assistant');
+    expect(initials['Accent color? (leave blank for the kit default)']).toBe('#7c3aed');
+    expect(initials['Allow file attachments?']).toBe(true);
+    expect(initials['Persist conversation history in this browser?']).toBe(true);
   });
 });
 
@@ -374,7 +437,7 @@ describe('emitConstruct: writes the construct file to disk', () => {
 describe('constructTagName: derives a schema-valid Construct.name from any valid project name', () => {
   it('passes an already-valid tag through unchanged', () => {
     expect(constructTagName('kai-widget-app', 'widget')).toBe('kai-widget-app');
-    expect(constructTagName('my-app', 'fullscreen')).toBe('my-app');
+    expect(constructTagName('my-app', 'chat')).toBe('my-app');
     // A tag with extra hyphens is still valid on its own terms — passthrough,
     // no suffix appended.
     expect(constructTagName('my--app', 'widget')).toBe('my--app');
@@ -382,7 +445,7 @@ describe('constructTagName: derives a schema-valid Construct.name from any valid
 
   it('appends a shape-based suffix when the name has no hyphen', () => {
     expect(constructTagName('myapp', 'widget')).toBe('myapp-widget');
-    expect(constructTagName('myapp', 'fullscreen')).toBe('myapp-chat');
+    expect(constructTagName('myapp', 'chat')).toBe('myapp-chat');
     expect(constructTagName('app2', 'widget')).toBe('app2-widget');
   });
 
@@ -401,7 +464,7 @@ describe('constructTagName: derives a schema-valid Construct.name from any valid
 
   it('never produces an empty base, even for a name that sanitizes to nothing', () => {
     expect(constructTagName('___', 'widget')).toBe('k-widget');
-    expect(constructTagName('~~~', 'fullscreen')).toBe('k-chat');
+    expect(constructTagName('~~~', 'chat')).toBe('k-chat');
   });
 
   it('trims a trailing hyphen rather than doubling up before the suffix', () => {
@@ -409,7 +472,7 @@ describe('constructTagName: derives a schema-valid Construct.name from any valid
     // the tag rule (nothing follows the hyphen) — sanitizing has to TRIM it,
     // not just append a suffix onto it (which would double the hyphen).
     expect(constructTagName('my-', 'widget')).toBe('my-widget');
-    expect(constructTagName('my-', 'fullscreen')).toBe('my-chat');
+    expect(constructTagName('my-', 'chat')).toBe('my-chat');
   });
 
   // THE PROPERTY THAT ACTUALLY MATTERS: not that this function's OWN mirror
@@ -459,7 +522,7 @@ describe('constructTagName: derives a schema-valid Construct.name from any valid
   });
 
   for (const name of REPRESENTATIVE_PROJECT_NAMES) {
-    for (const shape of ['widget', 'fullscreen'] as const) {
+    for (const shape of ['widget', 'scratch'] as const) {
       it(`"${name}" (${shape}) derives a name that safeParses under the real ConstructSchema`, () => {
         const answers: WizardAnswers = {
           name,
@@ -472,14 +535,18 @@ describe('constructTagName: derives a schema-valid Construct.name from any valid
           history: false,
           accent: '',
         };
-        const construct = composeConstruct(answers) as { name: string };
+        const construct = composeConstruct(answers) as { name: string; layout: string };
         const result = ConstructSchema.safeParse(construct);
         expect(
           result.success,
           `composeConstruct(${JSON.stringify(answers)}) -> name "${construct.name}" failed: ` +
             `${result.success ? '' : JSON.stringify(result.error.issues)}`,
         ).toBe(true);
-        expect(construct.name).toBe(constructTagName(name, shape));
+        // 'widget' shape's construct.layout is 'widget'; 'scratch' composes a
+        // 'fullscreen' construct, both mapping onto constructTagName's
+        // 'widget' | 'chat' kind exactly the way composeConstruct itself does.
+        const kind = construct.layout === 'widget' ? 'widget' : 'chat';
+        expect(construct.name).toBe(constructTagName(name, kind));
       });
     }
   }
@@ -544,14 +611,105 @@ describe('runDevPreview: a live-preview spawn failure decides loudly, not silent
   });
 });
 
-describe('shapeAxis: a real 3-way choice', () => {
-  it('offers exactly 3 options and is asked, not stated', () => {
+describe('shapeAxis: the buildable-template list + scratch + app (B-17a)', () => {
+  it('derives its template options from the registry, in registry order, then scratch, then app', () => {
     const axis = shapeAxis();
-    expect(axis.options.length).toBe(3);
-    expect(decideAxis(axis).ask).toBe(true);
+    expect(axis.options.map((o) => o.id)).toEqual([
+      ...buildableTemplates().map((t) => t.id),
+      'scratch',
+      'app',
+    ]);
+  });
+  it('labels/hints come from the registry, never restated', () => {
+    const axis = shapeAxis();
+    for (const t of buildableTemplates()) {
+      const opt = axis.options.find((o) => o.id === t.id)!;
+      expect(opt.label).toBe(t.name);
+      expect(opt.hint).toBe(t.description);
+    }
+  });
+  it('is a real choice with a reason (the ask-or-state law needs both)', () => {
+    expect(decideAxis(shapeAxis()).ask).toBe(true);
+    expect(shapeAxis().because.length).toBeGreaterThan(10);
+  });
+});
+
+describe('composeConstruct: template seeding (B-17a)', () => {
+  /** The non-interactive answers for a shape — every "keep" sentinel. */
+  const keep = (shape: Exclude<ShapeId, 'app'>, name = 'my-proj'): WizardAnswers => {
+    const starter = shape === 'scratch' ? undefined : buildableTemplates().find((t) => t.id === shape)!.starter;
+    return {
+      name,
+      shape,
+      headerTitle: undefined,
+      home: undefined,
+      homeGreeting: '',
+      starters: [],
+      attachments: Boolean(starter?.capabilities?.attachments),
+      history: Boolean(starter?.capabilities?.history && starter.capabilities.history.persistence !== 'none'),
+      accent: undefined,
+    };
+  };
+
+  for (const t of buildableTemplates()) {
+    it(`${t.id}: unanswered answers round-trip the starter unchanged except $schema/name`, () => {
+      const out = composeConstruct(keep(t.id)) as Record<string, unknown>;
+      const expected = structuredClone(t.starter) as Record<string, unknown>;
+      expected.$schema = CONSTRUCT_SCHEMA_URL;
+      expected.name = out.name; // asserted separately below
+      expect(out).toEqual(expected);
+      expect(ConstructSchema.safeParse(out).success).toBe(true);
+    });
+  }
+
+  it('the emitted name derives from the PROJECT name and the starter layout, not the starter name', () => {
+    const out = composeConstruct(keep('widget', 'acme')) as { name: string };
+    expect(out.name).toBe('acme-widget');
+    const chat = composeConstruct(keep('research', 'acme')) as { name: string };
+    expect(chat.name).toBe('acme-chat');
   });
 
-  it('carries a because-line explaining the split', () => {
-    expect(shapeAxis().because.length).toBeGreaterThan(10);
+  it('asked answers OVERRIDE starter fields; blank text answers CLEAR them', () => {
+    const answers = { ...keep('assistant'), headerTitle: 'My Bot', accent: '' };
+    const out = composeConstruct(answers) as { header?: { title?: string }; theme?: { accent?: string; mode: string } };
+    expect(out.header?.title).toBe('My Bot');
+    expect(out.theme?.accent).toBeUndefined();
+    expect(out.theme?.mode).toBe('system'); // mode survives an accent clear
+  });
+
+  it('history off strips history AND conversations (the schema forbids the orphan)', () => {
+    const out = composeConstruct({ ...keep('assistant'), history: false }) as {
+      capabilities?: Record<string, unknown>;
+    };
+    expect(out.capabilities?.history).toBeUndefined();
+    expect(out.capabilities?.conversations).toBeUndefined();
+    expect(ConstructSchema.safeParse(out).success).toBe(true);
+  });
+
+  it("history on over a starter WITHOUT it gets the local+conversations pair; research's history-without-conversations shape is preserved", () => {
+    const scratch = composeConstruct({ ...keep('scratch'), history: true }) as {
+      capabilities?: Record<string, unknown>;
+    };
+    expect(scratch.capabilities?.history).toEqual({ persistence: 'local' });
+    expect(scratch.capabilities?.conversations).toBe(true);
+    const research = composeConstruct(keep('research')) as { capabilities?: Record<string, unknown> };
+    expect(research.capabilities?.history).toEqual({ persistence: 'local' });
+    expect(research.capabilities?.conversations).toBeUndefined();
+  });
+
+  it('scratch is the bare fullscreen construct — everything off', () => {
+    // 'my-proj' already matches constructTagName's own tag rule (a letter, a
+    // hyphen, more letters) — it passes through UNCHANGED, the same
+    // already-valid-tag rule 'kai-widget-app' etc. exercise elsewhere in this
+    // file. No shape-based suffix is appended here, unlike the hyphen-free
+    // 'acme' case tested above.
+    const out = composeConstruct(keep('scratch', 'my-proj'));
+    expect(out).toEqual({
+      $schema: CONSTRUCT_SCHEMA_URL,
+      name: 'my-proj',
+      layout: 'fullscreen',
+      provider: { mode: 'mock' },
+    });
+    expect(ConstructSchema.safeParse(out).success).toBe(true);
   });
 });
