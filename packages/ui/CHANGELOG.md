@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.30.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.29.0...@kitn.ai/ui-v0.30.0) (2026-08-28)
+
+
+### Features
+
+* **builder:** template-first visual-builder design suite, new primitives, story-first rounds ([e288865](https://github.com/kitn-ai/ui/commit/e28886540a971a6eb09227444fed519e6263612a))
+* **ui:** ship solid.css for light-DOM consumers; harden the shadow sheet ([#345](https://github.com/kitn-ai/ui/issues/345)) ([7d611c2](https://github.com/kitn-ai/ui/commit/7d611c20b5d51e62dd33bbb288f1835653c40e68))
+
 ## [0.29.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.28.0...@kitn.ai/ui-v0.29.0) (2026-08-28)
 
 
