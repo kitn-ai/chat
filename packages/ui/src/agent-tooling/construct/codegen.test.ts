@@ -1715,6 +1715,16 @@ describe('header.themeToggle + header.actions (B-10)', () => {
     expect(app).toContain(JSON.stringify(hostile));
     expect(app).not.toContain('label: "Docs" onClick={alert(1)} x=""');
   });
+
+  it('neither header.actions nor header.themeToggle declared -> no headerEndContent chrome, no host, no Button import', () => {
+    const files = generateProject(construct({ layout: 'fullscreen' }));
+    const app = file(files, 'src/App.tsx');
+    const element = file(files, 'src/element.tsx');
+    expect(app).not.toContain('headerEndContent=');
+    expect(app).not.toContain('export function App(props: { host: HTMLElement })');
+    expect(element).not.toContain('<App host={ctx.element} />');
+    expect(app).not.toContain(', Button');
+  });
 });
 
 describe('shell (B-10)', () => {
@@ -1745,6 +1755,19 @@ describe('shell (B-10)', () => {
     expect(app).toContain(`fallback={${JSON.stringify('AD')}}`);
     expect(app).toMatch(/new CustomEvent\('kai-user-menu'/);
     expect(app).toContain(JSON.stringify('Ada Lovelace — Pro account menu'));
+  });
+
+  it('userMenu-only construct imports NO Button — the userMenu piece uses only Dropdown/Avatar (regression: Button used to be gated on the composed headerEndContent string, not on which piece actually used it)', () => {
+    const app = file(generateProject(construct({ layout: 'fullscreen', shell: { userMenu: { name: 'Ada Lovelace' } } })), 'src/App.tsx');
+    expect(app).toContain(
+      "import { ChatThread, createKaiChat, Dropdown, DropdownTrigger, DropdownContent, DropdownItem, DropdownSeparator, Avatar } from '@kitn.ai/ui/solid';",
+    );
+    // Scoped to the import list / a real usage, not the giant static doc
+    // comment above `export function App` (which mentions "Button" in prose
+    // unconditionally, on every non-custom construct — a bare `.not.toContain
+    // ('Button')` would false-fail on that prose regardless of this fix).
+    expect(app).not.toContain(', Button');
+    expect(app).not.toContain('<Button');
   });
 });
 

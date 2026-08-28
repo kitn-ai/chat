@@ -1113,6 +1113,30 @@ function emitToggleThemeVar(c: Construct, indent: string): string {
  *  element.tsx do. The widget close control keeps its existing local
  *  `dockClose` closure (Dock's own `controllerRef` seam) — untouched by
  *  this rework. */
+/** Whether `header.actions` contributes a piece (non-custom, non-empty
+ *  array). Named separately from the inline `c.layout !== 'custom' &&
+ *  c.header?.actions` check so `emitHeaderEndContentProp` and
+ *  `emitChromeImports` read the exact same boolean rather than one deriving
+ *  it from the other's composed string result — the class of bug that let a
+ *  userMenu-only construct pull in an unused `Button` import (reviewer
+ *  finding: deriving `hasHeaderEnd` from `!!emitHeaderEndContentProp(c)`
+ *  can't tell WHICH piece(s) produced the non-empty result). */
+function hasHeaderActionsChrome(c: Construct): boolean {
+  return c.layout !== 'custom' && !!c.header?.actions?.length;
+}
+
+/** Whether `header.themeToggle` contributes a piece (non-custom). See
+ *  `hasHeaderActionsChrome`'s doc for why this is its own named predicate. */
+function hasThemeToggleChrome(c: Construct): boolean {
+  return c.layout !== 'custom' && c.header?.themeToggle === true;
+}
+
+/** Whether `shell.userMenu` contributes a piece (non-custom). See
+ *  `hasHeaderActionsChrome`'s doc for why this is its own named predicate. */
+function hasUserMenuChrome(c: Construct): boolean {
+  return c.layout !== 'custom' && !!c.shell?.userMenu;
+}
+
 function emitHeaderEndContentProp(c: Construct): string {
   const pieces: string[] = [];
 
@@ -1124,8 +1148,8 @@ function emitHeaderEndContentProp(c: Construct): string {
   //    directly; `label` is construct-authored/untrusted text,
   //    JSON.stringify'd at BOTH interpolation sites (the event detail and
   //    the button's own child text).
-  if (c.layout !== 'custom' && c.header?.actions) {
-    for (const a of c.header.actions) {
+  if (hasHeaderActionsChrome(c)) {
+    for (const a of c.header!.actions!) {
       const variant = a.variant ? ` variant="${a.variant}"` : '';
       pieces.push(
         `<Button${variant} size="sm" onClick={() => props.host.dispatchEvent(new CustomEvent('kai-header-action', { detail: { label: ${JSON.stringify(a.label)} } }))}>{${JSON.stringify(a.label)}}</Button>`,
@@ -1135,7 +1159,7 @@ function emitHeaderEndContentProp(c: Construct): string {
 
   // 2. header.themeToggle: flips the host's `theme` attribute via the
   //    shared `toggleTheme` closure (emitToggleThemeVar).
-  if (c.layout !== 'custom' && c.header?.themeToggle) {
+  if (hasThemeToggleChrome(c)) {
     pieces.push(`<Button variant="ghost" size="sm" aria-label="Toggle theme" onClick={toggleTheme}>Theme</Button>`);
   }
 
@@ -1147,8 +1171,8 @@ function emitHeaderEndContentProp(c: Construct): string {
   //    vocabulary-never-logic seam as header.actions above, since a
   //    construct has no app code to run "Settings"/"Get help"/"Log out"
   //    itself.
-  if (c.layout !== 'custom' && c.shell?.userMenu) {
-    const m = c.shell.userMenu;
+  if (hasUserMenuChrome(c)) {
+    const m = c.shell!.userMenu!;
     const menuLabel = JSON.stringify(`${m.name}${m.plan ? ` — ${m.plan}` : ''} account menu`);
     const initials = JSON.stringify(m.name.slice(0, 2).toUpperCase());
     const item = (id: string, label: string) =>
@@ -1172,15 +1196,18 @@ function emitHeaderEndContentProp(c: Construct): string {
 
 /** Every named import `emitHeaderEndContentProp`/`emitShellPalette*` pieces
  *  need, appended onto the ONE `@kitn.ai/ui/solid` import list — never a
- *  second import statement for the module. Each name is gated on its own
- *  piece actually emitting (the same `noUnusedLocals` discipline
- *  `emitEmptyComponentImport` already follows), so a construct that
- *  declares none of this chrome imports none of these names. */
+ *  second import statement for the module. Each name is gated on the SAME
+ *  per-piece predicate the piece-emitter itself branches on
+ *  (`hasHeaderActionsChrome`/`hasThemeToggleChrome`/`widgetHasHeaderClose`
+ *  for `Button`; `hasUserMenuChrome` for the Dropdown/Avatar set), never on
+ *  `!!emitHeaderEndContentProp(c)` — a composed result string can't say
+ *  WHICH piece produced it, so deriving `Button`'s inclusion from it pulled
+ *  in an unused import whenever only the userMenu piece (no Button) fired
+ *  (reviewer-caught TS6133 under `tsc --strict --noUnusedLocals`). */
 function emitChromeImports(c: Construct): string {
   let names = '';
-  const hasHeaderEnd = !!emitHeaderEndContentProp(c);
-  if (hasHeaderEnd) names += ', Button';
-  if (c.layout !== 'custom' && c.shell?.userMenu) {
+  if (hasHeaderActionsChrome(c) || hasThemeToggleChrome(c) || widgetHasHeaderClose(c)) names += ', Button';
+  if (hasUserMenuChrome(c)) {
     names += ', Dropdown, DropdownTrigger, DropdownContent, DropdownItem, DropdownSeparator, Avatar';
   }
   if (hasShellPalette(c)) names += ', CommandList, Input';
@@ -1195,10 +1222,10 @@ function emitChromeImports(c: Construct): string {
  *  listen for. */
 function emitChromeComment(c: Construct): string {
   const lines: string[] = [];
-  if (c.layout !== 'custom' && c.header?.actions) {
+  if (hasHeaderActionsChrome(c)) {
     lines.push("// header.actions dispatch 'kai-header-action' on the host, detail: { label }.");
   }
-  if (c.layout !== 'custom' && c.shell?.userMenu) {
+  if (hasUserMenuChrome(c)) {
     lines.push("// shell.userMenu dispatches 'kai-user-menu' on the host, detail: { item }.");
   }
   if (hasShellPalette(c)) {
@@ -1758,8 +1785,7 @@ function emitSlots(slots: readonly string[] | undefined, indent: string): string
  *  (CU-1: none of header chrome/composer/shell is wired there — see
  *  emitCustomApp's own "not wired here" list). */
 function needsHost(c: Construct): boolean {
-  if (c.layout === 'custom') return false;
-  return c.header?.themeToggle === true || !!c.header?.actions?.length || !!c.shell?.userMenu;
+  return hasThemeToggleChrome(c) || hasHeaderActionsChrome(c) || hasUserMenuChrome(c);
 }
 
 /** widget.position -> Dock's own `position` prop. A closed DockPosition enum
