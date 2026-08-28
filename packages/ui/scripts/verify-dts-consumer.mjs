@@ -105,6 +105,7 @@ const PROBE_TYPES = {
   './provider': 'CardBridge',
   './diagnostics': 'KaiDevtoolsHook',
   './define': 'WebComponentContext',
+  './construct': 'Construct',
 };
 
 /** Entries whose declarations reach nothing through a RELATIVE specifier, so
