@@ -1,0 +1,21 @@
+Command: pnpm --filter @kitn.ai/ui exec vitest run --project=unit
+Result: 1 failed | 386 passed (387 files); 1 failed | 5450 passed (5451 tests)
+
+ FAIL  |unit| tests/styles/shadow-sheet-scan.test.ts > compiled.css carries a rule for every utility the shipped source references > every generable candidate has its selector in compiled.css
+AssertionError: classes the shipped source (src/** minus {agent-tooling,test-utils,stories} and *.test/*.stories) uses that src/elements/styles.css did not compile; add the directory to its @source list or the token to NOT_A_CLASS with its source: expected [ 'grid-cols-[380px_1fr]', …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "grid-cols-[380px_1fr]",
++   "h-dvh",
++   "max-w-4xl",
++   "max-w-md",
++   "mb-6",
++   "min-h-dvh",
++   "p-8",
++ ]
+
+ ❯ tests/styles/shadow-sheet-scan.test.ts:133:7

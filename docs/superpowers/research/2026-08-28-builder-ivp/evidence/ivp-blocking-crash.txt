@@ -1,0 +1,58 @@
+B-26 IVP could not proceed past step 1 (launching `kai dev --builder`).
+`kai dev --builder` fails to start in every configuration tested — the
+freshly built repo dist, and a real npm-packed-and-installed tarball
+consumed the way a real user would.
+
+Reproduction 1 — repo's own dist, invoked exactly as a consumer would via
+the `kai` bin (node packages/ui/bin/mcp.js dev --builder), from an empty
+scratch cwd:
+
+  $ node /Users/home/Projects/kitn-ai/kitn-chat/packages/ui/bin/mcp.js dev --builder
+  Missing build artifact: /Users/home/Projects/kitn-ai/kitn-chat/packages/ui/dist/assets/builder-page — the builder page ships prebuilt. Run `nx build ui` (or npm run build in packages/ui) and try again.
+
+Reproduction 2 — real consumer install of the packed tarball
+(npm pack --pack-destination, then `npm install file:....tgz` into a fresh
+throwaway app, per cli.test.ts's packedUiTarball pattern), then running the
+installed bin directly:
+
+  $ npm install file:/private/tmp/.../kitn.ai-ui-0.30.0.tgz
+  added 109 packages
+  $ node node_modules/@kitn.ai/ui/bin/mcp.js dev --builder
+  Missing build artifact: .../node_modules/@kitn.ai/ui/dist/assets/builder-page — the builder page ships prebuilt. Run `nx build ui` (or npm run build in packages/ui) and try again.
+
+Root cause (read from source, not guessed): src/agent-tooling/construct/dev.ts
+defines
+
+  export function builderPageDir(): string {
+    return join(dirname(fileURLToPath(import.meta.url)), 'builder-page');
+  }
+
+with the comment "dist/builder-page relative to the BUNDLED cli
+(dist/construct-cli.es.js)" — i.e. the function assumes its own compiled
+module lives directly in dist/, next to dist/builder-page/. That assumption
+is false for the actual Vite output: dev.ts's compiled code is NOT inlined
+into dist/construct-cli.es.js, it is split into its own chunk file at
+dist/assets/dev-BE36ZFZx.js (confirmed via `grep -o "assets/dev-" dist/construct-cli.es.js`,
+which shows construct-cli.es.js dynamically importing that chunk). Inside
+that chunk, import.meta.url resolves to .../dist/assets/dev-BE36ZFZx.js, so
+dirname(...) is dist/assets, and builderPageDir() computes
+dist/assets/builder-page instead of the real dist/builder-page — one
+directory level off. The real dist/builder-page/index.html exists on disk
+the whole time; the code is looking in the wrong place for it.
+
+This is a build-config bug (the CLI's Vite bundle config allows/produces
+chunk-splitting of dev.ts), not a missing-artifact problem, and it is 100%
+reproducible on a stock build with no special flags. It fully blocks B-22:
+`kai dev --builder` cannot serve the Start screen, cannot create a
+construct, cannot show a panel or preview — nothing downstream in the B-26
+checklist (Start screen screenshot, template creation, per-section HMR
+flips, rejection handling, workspace variant picker, hand-edit SSE
+round-trip, plain `kai dev` byte-identical check) could be exercised for
+ANY of the five buildable templates (widget, inAppAssistant, assistant,
+research, workspace), because step 1 of the checklist — launching the
+builder server against an empty dir — fails immediately and exits the
+process (`process.exit(1)`) before any HTTP server binds.
+
+No orphaned processes were left behind (`pgrep -fl "construct-cli|mcp.js dev|vite.*4400|vite.*4401"`
+returned empty after each attempt); no source files were modified during
+this verification pass (`git status --short` is clean).
