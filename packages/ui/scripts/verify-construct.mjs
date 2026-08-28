@@ -250,6 +250,24 @@ function fixtureFor(layout, capKeys, index) {
 }
 
 /**
+ * One cross-axis (kitchen-sink) cell per layout: ALL capabilities crossed
+ * with EVERY applicable top-level key, composed from `fixtureFor` and
+ * `topLevelFixtureFor` — never a hand-built construct literal. Closes the
+ * gap where the two axes were probed independently and their EMIT
+ * INTERACTIONS (e.g. `widget` + `conversations`'s own `createSignal` import
+ * colliding by name with `shell.commandPalette`'s — the duplicate-identifier
+ * class `emitSolidJsImports` exists for) had zero real-compile coverage.
+ */
+function crossAxisFixtureFor(layout) {
+  const capFixture = fixtureFor(layout, capabilityKeys, 'cross');
+  const applicable = topLevelKeys.filter(
+    (k) => !(k in TOP_LEVEL_LAYOUT_SCOPE) || TOP_LEVEL_LAYOUT_SCOPE[k] === layout,
+  );
+  const topFixture = topLevelFixtureFor(layout, applicable, 'cross');
+  return { ...capFixture, ...topFixture, name: `probe-cross-${layout}` };
+}
+
+/**
  * cells: every layout × (none + each capability alone + all of them).
  * The all-capabilities cell per layout is also the one the consumer-bundle
  * leg runs over (one per layout, per the recorded scope decision).
@@ -270,6 +288,11 @@ function buildCells() {
       cells.push({ fixture: topLevelFixtureFor(layout, [key], j), layout, isAllCaps: false });
     });
     cells.push({ fixture: topLevelFixtureFor(layout, applicable, applicable.length), layout, isAllCaps: false });
+
+    // Cross-axis kitchen-sink cell (one per layout): not a consumer-bundle
+    // target (isAllCaps stays false — that leg already runs over the
+    // capability axis's own all-capabilities cell per layout).
+    cells.push({ fixture: crossAxisFixtureFor(layout), layout, isAllCaps: false });
   }
   return cells;
 }
@@ -411,15 +434,23 @@ async function main() {
   const cells = [...buildCells(), ...namedFixtures()];
   // Count, don't restate: derive the printed numbers from the cells actually
   // built, not a closed formula that could drift from buildCells() itself.
-  const capabilityProbeCount = cells.filter(
-    (c) => c.fixture.name.startsWith('probe-') && !c.fixture.name.startsWith('probe-top-'),
-  ).length;
+  // NOTE: this classification is a name-PREFIX coupling — a named fixture
+  // file titled `probe-*.construct.json` (or `probe-top-*`/`probe-cross-*`)
+  // would misclassify here; namedFixtures() cells carry no such prefix today.
+  const crossAxisProbeCount = cells.filter((c) => c.fixture.name.startsWith('probe-cross-')).length;
   const topLevelProbeCount = cells.filter((c) => c.fixture.name.startsWith('probe-top-')).length;
+  const capabilityProbeCount = cells.filter(
+    (c) =>
+      c.fixture.name.startsWith('probe-') &&
+      !c.fixture.name.startsWith('probe-top-') &&
+      !c.fixture.name.startsWith('probe-cross-'),
+  ).length;
   const namedCount = cells.filter((c) => !c.fixture.name.startsWith('probe-')).length;
   console.log(
     `\nverify:construct — ${layouts.length} layouts: ` +
       `${capabilityProbeCount} capability probes (${capabilityKeys.length} capabilities: ${capabilityKeys.join(', ')}) ` +
       `+ ${topLevelProbeCount} top-level probes (${topLevelKeys.length} top-level keys: ${topLevelKeys.join(', ')}) ` +
+      `+ ${crossAxisProbeCount} cross-axis probes (all capabilities × all applicable top-level keys, one per layout) ` +
       `+ ${namedCount} named fixture(s) = ${cells.length} total\n`,
   );
 
