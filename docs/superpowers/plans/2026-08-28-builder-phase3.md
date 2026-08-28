@@ -1904,6 +1904,7 @@ git commit -m "feat(construct): kai dev --builder — second thin server, atomic
 
 - [ ] **Step 1: Full builds + gates (mind the cache caveats)**
 
+<!-- gate-list: partial -- the phase-3-relevant gates run locally at epic end; the required CI `test` job (44 gates — `node packages/ui/scripts/lint-gate-parity.mjs --list`) is the merge verdict -->
 ```bash
 nx build ui --skip-nx-cache
 nx typecheck ui --skip-nx-cache
