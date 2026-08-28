@@ -611,6 +611,7 @@ export function BuilderPanel(props: BuilderPanelProps): JSX.Element {
         <Section title="Provider">
           <Field label="Mode">
             <Select
+              aria-label="Provider mode"
               options={PROVIDER_MODE_OPTIONS}
               value={v().provider?.mode ?? 'mock'}
               onChange={(e) => updateProvider({ mode: e.currentTarget.value as BuilderProviderMode })}
@@ -627,6 +628,7 @@ export function BuilderPanel(props: BuilderPanelProps): JSX.Element {
             </Field>
             <Field label="Wire format">
               <Select
+                aria-label="Wire format"
                 options={PROVIDER_WIRE_OPTIONS}
                 value={v().provider?.wire ?? 'openai'}
                 onChange={(e) => updateProvider({ wire: e.currentTarget.value as BuilderProviderWire })}
@@ -678,6 +680,7 @@ export function BuilderPanel(props: BuilderPanelProps): JSX.Element {
         <Section title="Widget">
           <Field label="Position">
             <Select
+              aria-label="Widget position"
               options={WIDGET_POSITION_OPTIONS}
               value={v().widget?.position ?? 'bottom-end'}
               onChange={(e) => updateWidget({ position: e.currentTarget.value as BuilderWidgetPosition })}
@@ -720,6 +723,7 @@ export function BuilderPanel(props: BuilderPanelProps): JSX.Element {
         </Field>
         <Field label="Mode">
           <Select
+            aria-label="Theme mode"
             options={MODE_OPTIONS}
             value={v().theme?.mode ?? 'system'}
             onChange={(e) => updateTheme({ mode: e.currentTarget.value as BuilderThemeMode })}
@@ -793,6 +797,7 @@ export function BuilderPanel(props: BuilderPanelProps): JSX.Element {
 
         <Field label="History">
           <Select
+            aria-label="History persistence"
             options={HISTORY_OPTIONS}
             value={historyPersistence()}
             onChange={(e) => updateCaps({ history: { persistence: e.currentTarget.value as BuilderHistoryPersistence } })}

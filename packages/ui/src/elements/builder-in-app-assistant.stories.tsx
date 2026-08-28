@@ -482,6 +482,7 @@ function PreviewOnlyControls(props: {
         <div class="flex items-center justify-between gap-3">
           <span class="text-xs font-medium text-foreground">Reveal</span>
           <Select
+            aria-label="Actions reveal"
             options={ACTIONS_REVEAL_OPTIONS}
             value={props.actionsReveal}
             onChange={(e) => props.onActionsRevealChange(e.currentTarget.value as 'always' | 'hover')}
