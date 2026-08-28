@@ -188,10 +188,10 @@ describe('runWizard: the SET of keys it asks/states matches the registry exactly
    * this comment exists: a set difference should never speak for itself.
    */
   const ASK_MESSAGE_TO_KEY: Record<string, string> = {
-    'Header title? (leave blank for none)': 'header',
-    'Accent color? (leave blank for the kit default)': 'theme',
+    'Header title? (clear the field for none)': 'header',
+    'Accent color? (clear the field for the kit default)': 'theme',
     'Show a home/greeting screen?': 'home',
-    'Greeting title? (leave blank for the default)': 'home',
+    'Greeting title? (clear the field for the default)': 'home',
     "Starter prompts (comma-separated, up to 6, blank to keep the template's)": 'capabilities.starters',
     'Allow file attachments?': 'capabilities.attachments',
     'Persist conversation history in this browser?': 'capabilities.history',
@@ -329,8 +329,8 @@ describe("runWizard: template seeding states 'Template'/'Variant' and seeds init
   it('seeds io.text/io.confirm initial values from the template starter (assistant)', async () => {
     const { io, initials } = recordingIo();
     await runWizard('assistant', 'kai-app', io, false);
-    expect(initials['Header title? (leave blank for none)']).toBe('Assistant');
-    expect(initials['Accent color? (leave blank for the kit default)']).toBe('#7c3aed');
+    expect(initials['Header title? (clear the field for none)']).toBe('Assistant');
+    expect(initials['Accent color? (clear the field for the kit default)']).toBe('#7c3aed');
     expect(initials['Allow file attachments?']).toBe(true);
     expect(initials['Persist conversation history in this browser?']).toBe(true);
   });

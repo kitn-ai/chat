@@ -447,11 +447,11 @@ export const WIZARD_REGISTRY: Record<string, RegistryEntry> = {
   },
   theme: {
     status: 'asked',
-    reason: "the accent color is asked; a blank answer keeps the template starter's value. unreadColor and mode are left at their kit defaults — edit the construct file directly for those",
+    reason: "the accent color is asked, prefilled with the template starter's own accent — accepting that prefill keeps it, while clearing the field to a blank answer removes the override (composeConstruct's own rule: '' means no accent, since accepting the prefill is how 'keep' is expressed). unreadColor and mode are left at their kit defaults — edit the construct file directly for those",
   },
   header: {
     status: 'asked',
-    reason: "the header title is asked; a blank answer keeps the template starter's value",
+    reason: "the header title is asked, prefilled with the template starter's own title — accepting that prefill keeps it, while clearing the field to a blank answer removes the title (composeConstruct's own rule: '' means no header title)",
   },
   empty: {
     status: 'not-asked',
@@ -459,7 +459,7 @@ export const WIZARD_REGISTRY: Record<string, RegistryEntry> = {
   },
   home: {
     status: 'asked',
-    reason: "whether to show the home/greeting tab is asked, along with its title; a blank answer keeps the template starter's value",
+    reason: "whether to show the home/greeting tab is asked, along with its title, prefilled with the template starter's own greeting (or the kit default if it has none) — accepting that prefill keeps it, while clearing the field to a blank answer falls back to the kit default greeting",
   },
   capabilities: {
     status: 'asked',
@@ -597,12 +597,12 @@ export async function runWizard(
     );
   }
 
-  const headerTitle = await io.text('Header title? (leave blank for none)', starter.header?.title ?? '');
-  const accent = await io.text('Accent color? (leave blank for the kit default)', starter.theme?.accent ?? '');
+  const headerTitle = await io.text('Header title? (clear the field for none)', starter.header?.title ?? '');
+  const accent = await io.text('Accent color? (clear the field for the kit default)', starter.theme?.accent ?? '');
   const home = await io.confirm('Show a home/greeting screen?', Boolean(starter.home));
   const homeGreeting = home
     ? await io.text(
-        'Greeting title? (leave blank for the default)',
+        'Greeting title? (clear the field for the default)',
         starter.home?.greeting?.title ?? DEFAULT_HOME_GREETING_TITLE,
       )
     : '';
