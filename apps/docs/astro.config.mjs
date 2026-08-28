@@ -75,6 +75,7 @@ export default defineConfig({
               { label: 'Introduction', slug: 'guides/introduction' },
               { label: 'Installation', slug: 'guides/installation' },
               { label: 'Getting Started', slug: 'guides/getting-started' },
+              { label: 'Drop-in widget', slug: 'guides/drop-in-widget' },
               // Tier 1 — use what we ship
               { label: 'Use the chat app', slug: 'guides/use-the-chat-app' },
               { label: 'Use a workspace', slug: 'guides/use-a-workspace' },

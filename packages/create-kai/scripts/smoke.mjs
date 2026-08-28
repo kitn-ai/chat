@@ -20,6 +20,17 @@
  *   node scripts/smoke.mjs --framework all      # every ready framework, in order
  *   node scripts/smoke.mjs --gateway openrouter --framework all   # the wired cells
  *
+ * THE CONSTRUCT LEG (Task 3) IS DELIBERATELY CHEAP AND SEPARATE FROM THE
+ * FRAMEWORK LEGS ABOVE. `--shape widget`/`--shape fullscreen` never call
+ * `generate()` — there is no project to install or build, only a JSON file to
+ * write — so proving it end-to-end needs neither `npm install` nor a pty, just
+ * the built CLI plus the real `ConstructSchema` to validate against. It reads
+ * the schema from the WORKSPACE kit's own `dist/construct.js` rather than the
+ * packed tarball this script pins for the framework legs: the construct format
+ * is Task 1's, published on `@kitn.ai/ui`'s ordinary `./construct` export, not
+ * something `--kit` repoints — so the workspace build is the honest copy to
+ * check against, the same one `wizard.ts`'s tests already validate against.
+ *
  * WHY `--gateway` EXISTS, and what it does NOT prove. The gateway path emits a
  * server route, and a route is the only code create-kai GENERATES rather than
  * copies — so it is the only code with no CI-built starter behind it. Compiling
@@ -55,7 +66,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
 
 const pkgRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -116,6 +127,58 @@ async function main() {
 
     step('building create-kai');
     sh('node', [path.join(pkgRoot, 'scripts/build.mjs')], pkgRoot);
+
+    // ── the construct leg (Task 3, fixed in round 3) — cheap, no install, no pty
+    step('scaffolding a construct (--shape widget --yes)');
+    // DELIBERATELY HYPHEN-LESS. This is the fix round-3 regression pin: the
+    // construct schema's `name` field requires a custom-element tag (must
+    // contain a hyphen), which a plain `validateProjectName`-accepted
+    // directory name like this one does not have to. `create-kai
+    // smokewidgetapp --shape widget --yes` used to write `"name":
+    // "smokewidgetapp"` straight into the file, which the tool's OWN printed
+    // next step (`npx @kitn.ai/ui dev ...`) then rejected — see
+    // `constructTagName` in `src/wizard.ts`. A hyphenated fixture name here
+    // would never have exercised that path; the earlier version of this leg
+    // used `smoke-widget-construct`, which is already a valid tag and let the
+    // bug ship unnoticed by this exact check.
+    const constructName = 'smokewidgetapp';
+    sh(
+      'node',
+      [path.join(pkgRoot, 'dist/index.js'), constructName, '--shape', 'widget', '--yes'],
+      work,
+    );
+    const constructDir = path.join(work, constructName);
+    // The FILE keeps the plain project name — only `Construct.name` inside it
+    // needs the tag rule.
+    const constructFile = path.join(constructDir, `${constructName}.construct.json`);
+    const raw = await readFile(constructFile, 'utf8');
+    if (!raw.endsWith('\n')) {
+      throw new Error(`${constructFile} does not end with a trailing newline`);
+    }
+    const parsed = JSON.parse(raw);
+
+    // `constructTagName`'s own derivation (sanitize, then append a
+    // shape-based suffix) — asserted here as the concrete, expected value
+    // rather than just "some string with a hyphen", so a change to the
+    // derivation rule that quietly stops matching what `--shape widget`
+    // actually produces fails this leg instead of passing on a weaker check.
+    if (parsed.name !== 'smokewidgetapp-widget') {
+      throw new Error(
+        `${constructFile}: expected name "smokewidgetapp-widget", got ${JSON.stringify(parsed.name)}`,
+      );
+    }
+
+    step('validating the emitted construct against the real ConstructSchema');
+    const { validateConstruct } = await import(
+      pathToFileURL(path.join(kitRoot, 'dist/construct.js')).href
+    );
+    const outcome = validateConstruct(parsed);
+    if (!outcome.ok) {
+      throw new Error(
+        `${constructFile} failed validation:\n${JSON.stringify(outcome.problems, null, 2)}`,
+      );
+    }
+    console.log(`\n✓ construct leg: wrote and validated ${path.relative(work, constructFile)} (name: ${parsed.name})`);
 
     const { scriptsToRun } = await loadTs('src/starter-scripts.ts');
 

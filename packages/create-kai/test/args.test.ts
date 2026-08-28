@@ -11,6 +11,12 @@ describe('parseArgs', () => {
     expect(parseArgs(['--framework=react']).framework).toBe('react');
   });
 
+  it('reads --shape, the wizard\'s own axis, distinct from --layout', () => {
+    expect(parseArgs(['--shape', 'widget']).shape).toBe('widget');
+    expect(parseArgs(['--shape=fullscreen']).shape).toBe('fullscreen');
+    expect(parseArgs([]).shape).toBeUndefined();
+  });
+
   it('splits --features on commas', () => {
     expect(parseArgs(['--features', 'conversations,voice']).features).toEqual([
       'conversations',

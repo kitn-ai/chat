@@ -318,6 +318,7 @@ const EXPORT_NOTES = {
   './provider': { agent: true, what: 'The remote-provider element bundle.' },
   './schemas': { agent: true, what: 'The generative-UI card schemas.' },
   './schemas/*': { agent: true, what: 'One card schema JSON file at a time.' },
+  './construct': { agent: true, what: 'The construct format: `ConstructSchema` (Zod), `validateConstruct`, `CONSTRUCT_SCHEMA_URL`. Lets a build-time tool (e.g. a scaffolder) validate a construct against the same schema the `kai` CLI and MCP `construct` tool use.' },
   './element-meta.json': { agent: false, what: 'Tooling manifest of every element API. This pack is rendered from it.' },
   './icon-names.json': { agent: false, what: 'Tooling manifest of icon names.' },
   './package.json': { agent: false, what: 'The manifest itself.' },

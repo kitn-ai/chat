@@ -25,3 +25,19 @@ declare const __KIT_VERSION__: string;
 
 /** This CLI's own version, from its package.json. */
 declare const __CLI_VERSION__: string;
+
+/**
+ * The real `CONSTRUCT_SCHEMA_URL` from the workspace `@kitn.ai/ui/construct`,
+ * substituted here rather than imported at runtime — importing that module
+ * pulls all of `zod` into the CLI bundle (`dist/construct.js` keeps zod
+ * external but is one file with a top-level schema-building side effect that
+ * esbuild cannot tree-shake past), which `src/build-guards.ts`'s
+ * `bundleGraphProblem` bans outright. `scripts/build.mjs` reads the real
+ * constant in its own node process (a devDependency-only import, never
+ * bundled) and substitutes it as a string literal, the same way
+ * `__KIT_RANGE__` above is derived once and handed over finished. Also
+ * defined for `vitest` (see `vitest.config.ts`'s `define`), so
+ * `src/wizard.ts` — which, unlike `index.ts`, IS imported directly by tests —
+ * resolves it there too.
+ */
+declare const __CONSTRUCT_SCHEMA_URL__: string;

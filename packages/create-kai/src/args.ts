@@ -11,6 +11,8 @@ export interface ParsedArgs {
   framework?: string;
   layout?: string;
   widgetStyle?: string;
+  /** the wizard's own shape axis — 'widget' | 'fullscreen' | 'app' — distinct from `layout` */
+  shape?: string;
   /** comma-separated on the command line, split here */
   features?: string[];
   gateway?: string;
@@ -31,6 +33,7 @@ const TAKES_VALUE = new Set([
   '--features',
   '--gateway',
   '--kit',
+  '--shape',
 ]);
 
 export function parseArgs(argv: readonly string[]): ParsedArgs {
@@ -57,6 +60,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       case '--framework': out.framework = value; break;
       case '--layout': out.layout = value; break;
       case '--widget-style': out.widgetStyle = value; break;
+      case '--shape': out.shape = value; break;
       case '--features':
         // `--features ''` and `--features none` both mean "no features", which
         // is a real answer (the bare full-page chat), distinct from omitting it.

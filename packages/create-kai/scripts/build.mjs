@@ -37,6 +37,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
 
+// The workspace kit, imported in THIS SCRIPT'S OWN node process — a
+// devDependency-only import that never reaches the bundle esbuild produces
+// below. `CONSTRUCT_SCHEMA_URL` is substituted as `__CONSTRUCT_SCHEMA_URL__`
+// the same way `derivePin`'s output is substituted as `__KIT_RANGE__`; see
+// `types/globals.d.ts`'s docblock on that constant for why this indirection
+// exists (the module it lives in also builds a zod schema at load time, which
+// `src/build-guards.ts`'s `bundleGraphProblem` bans from the CLI bundle).
+import { CONSTRUCT_SCHEMA_URL } from '@kitn.ai/ui/construct';
+
 import { loadTs as loadTsFrom, loadedTsCacheDir } from './load-ts.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -292,6 +301,7 @@ async function main() {
       // from the other in the CLI, so the pair cannot disagree.
       __KIT_VERSION__: JSON.stringify(kitVersion),
       __CLI_VERSION__: JSON.stringify(cliVersion),
+      __CONSTRUCT_SCHEMA_URL__: JSON.stringify(CONSTRUCT_SCHEMA_URL),
     },
   });
   failIf(guards.bundleGraphProblem(Object.keys(bundled.metafile.inputs)));

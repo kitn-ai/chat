@@ -17,12 +17,12 @@ export interface CliIo {
 
 const defaultIo: CliIo = { log: (s) => console.log(s), error: (s) => console.error(s) };
 
-const USAGE = `usage: kai <command>
+const USAGE = `usage: npx @kitn.ai/ui <command>   (or \`kai <command>\` once @kitn.ai/ui is installed)
 
   kai validate <construct.json>          check a construct, print problems with paths
   kai eject <construct.json> <outDir>    write the generated Solid project (it's yours)
-  kai dev <construct.json>               live preview with reload-on-edit (Task 5)
-  kai compile <construct.json> [outDir]  one self-registering .js (Task 6)
+  kai dev <construct.json>               live preview with reload-on-edit
+  kai compile <construct.json> [outDir]  one self-registering .js
 `;
 
 /** H-3, decide loudly: `home.recentConversation` renders nothing without

@@ -40,6 +40,8 @@ import { generate } from './generate';
 import { LAYOUTS, getLayout, readyLayouts } from './layouts';
 import { detectPackageManager } from './pm';
 import type { Layout, ProjectPlan } from './types';
+import { emitConstruct, runDevPreview, runWizard, shapeAxis } from './wizard';
+import type { ShapeId, WizardIo } from './wizard';
 
 /**
  * The feature ids `--features` accepts — every id at least one ready framework
@@ -141,7 +143,36 @@ async function main(): Promise<number> {
     return fail(`${dir} already exists and is not empty`);
   }
 
-  // ── 2. framework ───────────────────────────────────────────────────────────
+  // ── 2. shape ───────────────────────────────────────────────────────────────
+  //
+  // "What would you like to create?" — a real three-way choice
+  // (widget/fullscreen/app), always asked (see `shapeAxis`'s own header in
+  // `wizard.ts`). `--shape` is a flag override, and `answerAxis` hands an
+  // override straight back to its caller UNVALIDATED (see `axes.ts`'s
+  // `answerAxis`: `if (opts.override !== undefined) return opts.override;`
+  // with no membership check) — so an unknown id would otherwise sail through
+  // to `runWizard`/the framework switch below and fail confusingly deep in
+  // the flow instead of here. Validated against the axis's own option ids,
+  // the same shape `--framework`'s `getFramework(...)` check below takes.
+  const shapes = shapeAxis();
+  if (args.shape !== undefined && !shapes.options.some((o) => o.id === args.shape)) {
+    return fail(
+      `unknown shape '${args.shape}'. Available: ${shapes.options.map((o) => o.id).join(', ')}`,
+    );
+  }
+  const shapeId = (await answerAxis(
+    shapes,
+    { override: args.shape, nonInteractive, fallback: 'app' },
+    clackAxisIo,
+  )) as ShapeId;
+
+  // 'app' → the existing flow below, byte-identical to before this task:
+  // widget/fullscreen route to the construct wizard instead and return here.
+  if (shapeId !== 'app') {
+    return runConstructFlow(shapeId, name, dir, nonInteractive);
+  }
+
+  // ── 3. framework ───────────────────────────────────────────────────────────
   const frameworkId = args.framework ?? (nonInteractive
     ? ZERO_CONFIG.framework
     : await ask(
@@ -369,6 +400,119 @@ async function ask<T>(prompt: Promise<T | symbol>): Promise<T> {
     process.exit(130);
   }
   return value as T;
+}
+
+/**
+ * The widget/fullscreen branch of "what would you like to create?" — composes
+ * a construct (Task 1's `@kitn.ai/ui/construct`) via `runWizard`/`emitConstruct`
+ * instead of running `generate()`'s scaffold flow. Returns the exit code the
+ * way `main()` does, so `main()` can just `return` its result directly.
+ */
+async function runConstructFlow(
+  shape: Exclude<ShapeId, 'app'>,
+  name: string,
+  dir: string,
+  nonInteractive: boolean,
+): Promise<number> {
+  // This CLI's half of `WizardIo` — the clack calls, injected the same way
+  // `clackAxisIo` is: `runWizard` is tested with spies and never touches a
+  // real prompt stream.
+  const wizardIo: WizardIo = {
+    text: (msg, initial) =>
+      ask(p.text({ message: msg, defaultValue: initial ?? '', placeholder: initial })),
+    confirm: (msg, initial) => ask(p.confirm({ message: msg, initialValue: initial })),
+    // A single comma-separated line rather than a repeated prompt, to keep the
+    // whole wizard to one screen — the brief's own call, not a schema
+    // requirement.
+    multilineList: async (msg) => {
+      const raw = await ask(
+        p.text({
+          message: msg,
+          placeholder: 'e.g. Summarize this page, What can you help with?',
+          defaultValue: '',
+        }),
+      );
+      return raw.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 6);
+    },
+    state: stated,
+  };
+
+  const answers = await runWizard(shape, name, wizardIo, nonInteractive);
+
+  const spinner = p.spinner();
+  spinner.start('Writing construct');
+  let result;
+  try {
+    result = await emitConstruct(dir, answers);
+  } catch (error) {
+    spinner.stop('Writing construct failed');
+    return fail(error instanceof Error ? error.message : String(error));
+  }
+  spinner.stop(`Wrote ${pc.cyan(path.relative(process.cwd(), result.file))}`);
+
+  // DECIDE LOUDLY, printed in EVERY mode — including `--yes`/no-TTY, the same
+  // way the framework path's "unasked" feature line is (see that comment
+  // further up) — because this is not prompt furniture, it's a fact about
+  // what the file actually contains. `Construct.name` has to satisfy the
+  // schema's custom-element-tag rule (lowercase, MUST contain a hyphen),
+  // which `validateProjectName`'s directory-naming rules do not require —
+  // so a plain `myapp` writes `myapp-widget` as the construct's own `name`,
+  // even though the directory and the emitted FILENAME both stay `myapp`.
+  // Silently rewriting it was the actual bug this guards: the tool's own
+  // printed next step (`npx @kitn.ai/ui dev ...`) used to reject the file it
+  // had just written, with no explanation anywhere in the output.
+  if (result.constructName !== name) {
+    stated(
+      'Construct name',
+      `${result.constructName} — "${name}" is not a valid custom-element tag; ` +
+        'the directory and file name still use your name as typed',
+    );
+  }
+
+  const relative = path.relative(process.cwd(), dir);
+  const startPreview =
+    !nonInteractive &&
+    (await ask(p.confirm({ message: 'Start the live preview now?', initialValue: true })));
+
+  // Shared by the decline path below AND a failed-preview path further down —
+  // whichever way the user ends up not looking at a running preview, they get
+  // the same fallback command to run by hand.
+  const printFallbackSteps = () => {
+    const steps = [relative ? `cd ${relative}` : null, result.devCommand].filter(Boolean) as string[];
+    p.note(steps.join('\n'), 'Next steps');
+  };
+
+  // Decline → the command lands in the "Next steps" note instead, the same
+  // place the framework path's key/install/run steps go. Never spawned in
+  // non-interactive mode: `startPreview` is `false` there by construction, so
+  // `--yes`/no-TTY runs never launch a long-lived child process unattended.
+  if (!startPreview) {
+    printFallbackSteps();
+  }
+
+  p.outro(
+    [
+      `${pc.dim('Shape:')} ${shape}`,
+      `${pc.dim('File:')}  ${path.basename(result.file)}`,
+    ].join('\n'),
+  );
+
+  if (startPreview) {
+    const outcome = await runDevPreview(result.devCommand, dir, spawn);
+    if (!outcome.ok) {
+      // DECIDE LOUDLY, NEVER SILENTLY. The construct file itself was already
+      // written successfully — the spinner above already confirmed that —
+      // so this still exits 0 rather than reporting the whole command as a
+      // failure; only the LIVE PREVIEW failed to start or crashed. What must
+      // never happen is a QUIET 0: the failure goes to stderr in red, and the
+      // same fallback command the decline branch prints above is printed
+      // again here, so the user always has something to run by hand even
+      // when the automatic handoff didn't work.
+      console.error(pc.red(`\nLive preview failed: ${outcome.message}`));
+      printFallbackSteps();
+    }
+  }
+  return 0;
 }
 
 function fail(message: string): number {

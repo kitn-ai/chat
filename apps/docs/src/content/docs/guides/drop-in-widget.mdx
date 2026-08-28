@@ -1,0 +1,86 @@
+---
+title: Drop-in widget
+description: Answer a few questions or hand-write a construct, preview it live, and compile it to a widget you drop into any page.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The fastest way to a working support widget: describe it in JSON, not code. This guide takes you from nothing to a self-registering script tag.
+
+## Two doors to the same file
+
+Run the wizard and answer a few questions:
+
+```bash
+npm create kai
+```
+
+It asks for a project name first, then what you're building. Pick "Embedded widget" and it writes `<name>.construct.json` in a new directory. Every answer maps onto one JSON key, nothing asked twice and nothing invented. Skip the wizard and hand-write the same file if you'd rather; both paths land on the same construct.
+
+Either way, preview it live:
+
+```bash
+npx @kitn.ai/ui dev widget.construct.json
+```
+
+That works with no install. Once `@kitn.ai/ui` is installed as a dependency, the bare `kai dev widget.construct.json` command works too. Either way it starts a server with reload-on-edit: change the JSON, see the widget update.
+
+## The construct, annotated
+
+Here's a construct using the full widget surface, more than the guided wizard walks you through. The wizard asks for shape, header title, home (on/off, plus a greeting title), starters, attachments, history, and accent color; everything else here (`theme.unreadColor`, `home.recentConversation`, `home.links`) you add by hand. The `$schema` line gives your editor autocomplete for exactly that.
+
+```json
+{
+  "$schema": "https://ui.kitn.ai/schemas/construct/v1.json",
+  "name": "acme-support",
+  "layout": "widget",
+  "provider": { "mode": "mock" },
+  "header": { "title": "Acme Support" },
+  "theme": { "unreadColor": "#38BDF8" },
+  "home": {
+    "greeting": { "title": "How can we help?" },
+    "recentConversation": true,
+    "links": [
+      { "label": "Docs", "href": "https://ui.kitn.ai" },
+      { "label": "Contact us" }
+    ]
+  },
+  "capabilities": {
+    "starters": ["Track my order", "Talk to a human"],
+    "history": { "persistence": "local" },
+    "conversations": true
+  }
+}
+```
+
+- **`$schema`** points editors at the [construct schema](https://ui.kitn.ai/schemas/construct/v1.json) for autocomplete and inline validation, so a typo like `laylout` gets flagged before you run anything.
+- **`layout: "widget"`** makes this a floating launcher over an existing page. Use `"fullscreen"` when the chat is the whole page.
+- **`provider: { mode: "mock" }`** is the keyless path: streamed replies come from a built-in mock model, so you get a working preview with no API key and no backend. Switch to a real endpoint by changing this one object, for example `{ "mode": "endpoint", "url": "/api/chat" }`. See the schema for the full provider shape.
+- **`theme.unreadColor`** tints the launcher's unread badge; every other theme token stays at the kit's default until you set it.
+- **`home`** turns on a Home/Messages tab bar. `recentConversation: true` needs `capabilities.conversations` to have anything to show; `kai validate` warns if you set one without the other. A link without an `href` (like "Contact us" here) is still valid; wire it up to open your own dialog or `mailto:` link later.
+- **`capabilities.history`** persists the thread in `localStorage`; setting it is why `conversations: true` is required alongside it, so there's a list to persist into.
+
+Save it, then check it directly:
+
+```bash
+npx @kitn.ai/ui validate widget.construct.json
+```
+
+## Compile it
+
+Once the preview looks right, compile to a single self-registering file:
+
+```bash
+npx @kitn.ai/ui compile widget.construct.json
+```
+
+This emits `dist-construct/<name>.js`: one file, no externals, that registers a `<kai-chat>`-backed widget when you load it. Drop it into any page with a `<script type="module" src="...">`; the generated source sits alongside it in `dist-construct/source/` if you want to eject and customize further.
+
+<Aside type="tip" title="Building a bigger app">
+The wizard's third choice, "Full app," reaches for a full project scaffold instead of a construct: routing and a shell need more than one JSON file can express. See [Getting Started](/guides/getting-started/) for that path.
+</Aside>
+
+## What's next
+
+- **[Getting Started](/guides/getting-started/)**: wire a `<kai-chat>` by hand, register the elements, stream a reply.
+- **[Theming](/guides/theming/)**: every token beyond `unreadColor`.

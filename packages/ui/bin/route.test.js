@@ -1,11 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { decideEntry, CONSTRUCT_COMMANDS, KNOWN_COMMANDS } from './route.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const binPath = join(__dirname, 'mcp.js');
+const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
+
+describe('package.json bin map (pure)', () => {
+  it('maps both kai-mcp and kai to bin/mcp.js — `kai` is the documented install-time name', () => {
+    expect(pkg.bin['kai-mcp']).toBe('./bin/mcp.js');
+    expect(pkg.bin['kai']).toBe('./bin/mcp.js');
+  });
+});
 
 describe('decideEntry (pure routing decision)', () => {
   it('no args -> mcp (byte-compatible historical behavior)', () => {
