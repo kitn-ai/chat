@@ -134,7 +134,7 @@ function Tool(props: ToolProps) {
           )}
         />
         <CollapsibleContent
-          class="data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down overflow-hidden"
+          class="overflow-hidden"
         >
           <div class="space-y-3 p-3">
             <Show when={input() && Object.keys(input()!).length > 0}>

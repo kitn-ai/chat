@@ -6,7 +6,7 @@ import { createEffect, createSignal, onCleanup, Show, type JSX } from 'solid-js'
 
 /**
  * Shared constructable stylesheet, built once and adopted by every element's
- * shadow root. This avoids duplicating the full compiled kit CSS (~77 KB) as an
+ * shadow root. This avoids duplicating the whole compiled kit sheet as an
  * inline `<style>` in each instance — important now that composing many small
  * elements on a page is a supported pattern. Falls back to `null` where
  * Constructable Stylesheets aren't available, in which case the facade renders

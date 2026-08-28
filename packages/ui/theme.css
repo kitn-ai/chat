@@ -1,12 +1,27 @@
 /* @kitn.ai/ui design system — import after `@import "tailwindcss"`.
-   Defines ONLY namespaced (--color-*) tokens, component keyframes, animation
+   Defines the shadcn-style (--color-*) tokens, component keyframes, animation
    utilities, and the .chat-markdown styles. Contains NO global base/reset rules,
    so importing it restyles nothing on its own — a host opts in via the kit's
    components + classes. Rebrand by overriding the --color-* values (optionally
    scoped to a subtree).
    NOTE: This file is Tailwind-v4 source (requires tailwindcss as a peer). For
    bundler-based apps that don't use Tailwind, import @kitn.ai/ui/theme.tokens.css
-   instead — it is plain compiled CSS with no toolchain requirements. */
+   instead — it is plain compiled CSS with no toolchain requirements.
+
+   THIS FILE IS MERGED INTO THE CONSUMER'S TAILWIND BUILD when they @import it,
+   so everything at global scope here lands in THEIR namespace. What it changes
+   for them (documented in apps/docs/.../guides/theming.mdx, keep the two in sync):
+     - `@custom-variant dark` below switches their `dark:` utilities from
+       prefers-color-scheme to the `.dark` class.
+     - the `--color-*` names merge into their @theme (last import wins).
+     - `--radius-sm/md/lg/xl` re-point Tailwind's stock radius scale at --radius.
+     - `--text-xs/sm/base/lg` are aliased onto the kit's type scale (defaults
+       equal stock Tailwind, so nothing moves until a --kai-text-* token is set).
+   Everything else global carries a `kai-` prefix so it cannot clash by name:
+   every @keyframes is `kai-<name>`, the scrollbar utility is `.kai-scrollbar-thin`.
+   The one unprefixed global class is `.chat-markdown` (public; renaming it is a
+   breaking change). tests/elements/theme-globals.test.ts pins the prefix rule
+   and that every animation reference in src/ resolves to a keyframe here. */
 
 @custom-variant dark (&:is(.dark *));
 
@@ -205,20 +220,18 @@
   --text-base: var(--kai-text-title, 1rem);           --text-base--line-height: calc(1.5 / 1);          /* ≡ text-title */
   --text-lg: var(--kai-text-lg, 1.125rem);            --text-lg--line-height: calc(1.75 / 1.125);       /* 18px — section headings, lg prose */
 
-  @keyframes typing { 0%,100% { transform: translateY(0); opacity: .5 } 50% { transform: translateY(-2px); opacity: 1 } }
-  @keyframes loading-dots { 0%,100% { opacity: 0 } 50% { opacity: 1 } }
-  @keyframes wave { 0%,100% { transform: scaleY(1) } 50% { transform: scaleY(.6) } }
-  @keyframes blink { 0%,100% { opacity: 1 } 50% { opacity: 0 } }
-  @keyframes text-blink { 0%,100% { color: var(--color-primary) } 50% { color: var(--color-muted-foreground) } }
-  @keyframes bounce-dots { 0%,100% { transform: scale(.8); opacity: .5 } 50% { transform: scale(1.2); opacity: 1 } }
-  @keyframes thin-pulse { 0%,100% { transform: scale(.95); opacity: .8 } 50% { transform: scale(1.05); opacity: .4 } }
-  @keyframes pulse-dot { 0%,100% { transform: scale(1); opacity: .8 } 50% { transform: scale(1.5); opacity: 1 } }
-  @keyframes shimmer-text { 0% { background-position: 150% center } 100% { background-position: -150% center } }
-  @keyframes wave-bars { 0%,100% { transform: scaleY(1); opacity: .5 } 50% { transform: scaleY(.6); opacity: 1 } }
-  @keyframes shimmer { 0% { background-position: 200% 50% } 100% { background-position: -200% 50% } }
-  @keyframes spinner-fade { 0% { opacity: 0 } 100% { opacity: 1 } }
-  @keyframes collapsible-down { from { height: 0; opacity: 0 } to { height: var(--kb-collapsible-content-height); opacity: 1 } }
-  @keyframes collapsible-up { from { height: var(--kb-collapsible-content-height); opacity: 1 } to { height: 0; opacity: 0 } }
+  @keyframes kai-typing { 0%,100% { transform: translateY(0); opacity: .5 } 50% { transform: translateY(-2px); opacity: 1 } }
+  @keyframes kai-loading-dots { 0%,100% { opacity: 0 } 50% { opacity: 1 } }
+  @keyframes kai-wave { 0%,100% { transform: scaleY(1) } 50% { transform: scaleY(.6) } }
+  @keyframes kai-blink { 0%,100% { opacity: 1 } 50% { opacity: 0 } }
+  @keyframes kai-text-blink { 0%,100% { color: var(--color-primary) } 50% { color: var(--color-muted-foreground) } }
+  @keyframes kai-bounce-dots { 0%,100% { transform: scale(.8); opacity: .5 } 50% { transform: scale(1.2); opacity: 1 } }
+  @keyframes kai-thin-pulse { 0%,100% { transform: scale(.95); opacity: .8 } 50% { transform: scale(1.05); opacity: .4 } }
+  @keyframes kai-pulse-dot { 0%,100% { transform: scale(1); opacity: .8 } 50% { transform: scale(1.5); opacity: 1 } }
+  @keyframes kai-shimmer-text { 0% { background-position: 150% center } 100% { background-position: -150% center } }
+  @keyframes kai-wave-bars { 0%,100% { transform: scaleY(1); opacity: .5 } 50% { transform: scaleY(.6); opacity: 1 } }
+  @keyframes kai-shimmer { 0% { background-position: 200% 50% } 100% { background-position: -200% 50% } }
+  @keyframes kai-spinner-fade { 0% { opacity: 0 } 100% { opacity: 1 } }
 }
 
 .dark {
@@ -344,21 +357,24 @@
 
 /* Cross-platform thin scrollbar utility (Firefox + WebKit). Used by ScrollArea
    and any scroll region in the SolidJS-component build (web components also get
-   this globally inside their shadow root — see src/elements/styles.css). */
-.scrollbar-thin {
+   this globally inside their shadow root — see src/elements/styles.css).
+   `kai-` prefixed because this file is merged into a consumer's Tailwind build
+   and `.scrollbar-thin` is a name they may well own (no consumer-facing doc ever
+   named the old unprefixed class, so no alias is kept). */
+.kai-scrollbar-thin {
   scrollbar-width: thin;
   scrollbar-color: var(--color-scrollbar-thumb) transparent;
 }
-.scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
-.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
-.scrollbar-thin::-webkit-scrollbar-thumb {
+.kai-scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+.kai-scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+.kai-scrollbar-thin::-webkit-scrollbar-thumb {
   background-color: var(--color-scrollbar-thumb);
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-.scrollbar-thin::-webkit-scrollbar-thumb:hover { background-color: var(--color-scrollbar-thumb-hover); }
-.scrollbar-thin::-webkit-scrollbar-corner { background: transparent; }
+.kai-scrollbar-thin::-webkit-scrollbar-thumb:hover { background-color: var(--color-scrollbar-thumb-hover); }
+.kai-scrollbar-thin::-webkit-scrollbar-corner { background: transparent; }
 
 /* Surface utilities — `bg-surface` / `bg-surface-strong` paint the opaque,
    theme-derived surface tokens (see --color-surface above). Defined explicitly

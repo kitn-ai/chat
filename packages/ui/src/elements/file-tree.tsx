@@ -48,7 +48,7 @@ defineWebComponent<Props, Events>('kai-file-tree', {
         'min-height': '0',
       }}
     >
-      <div class="overflow-auto scrollbar-thin py-1.5" style={{ 'min-height': '0' }}>
+      <div class="overflow-auto kai-scrollbar-thin py-1.5" style={{ 'min-height': '0' }}>
         <FileTree
           files={props.files}
           activeFile={props.activeFile}

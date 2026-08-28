@@ -31,14 +31,22 @@ The kit's appearance is driven entirely by **CSS custom properties** defined in 
 | `--color-sidebar` | Conversation sidebar background |
 | `--color-code-foreground` | Inline code text and chip accent |
 
-Border radii are controlled by `--radius` (default `0.6rem`); `--radius-sm`, `--radius-md`, `--radius-lg`, and `--radius-xl` derive from it automatically.
+Border radii are controlled by `--radius` (default `0.6rem`); `--radius-sm`, `--radius-md`, `--radius-lg`, and `--radius-xl` derive from it. Those four are Tailwind's own radius names, so in a Tailwind build that imports `theme.css` they also become what `rounded-sm` through `rounded-xl` mean. See [what theme.css changes](#what-themecss-changes-in-a-tailwind-build).
 
 ## Import the stylesheet
 
-The kit injects its own scoped CSS into each component's Shadow DOM automatically — the `kai-*` elements need no import at all. Import `theme.css` when you want the same `--color-*` tokens for your own markup or for the light-DOM SolidJS components:
+The kit injects its own scoped CSS into each component's Shadow DOM. The `kai-*` elements need no import at all, and the lightest way to retheme them is the [`--kai-color-*` tokens](#namespaced-overrides---kai-color-) with no stylesheet.
+
+Two files ship for when you want the same `--color-*` tokens on your own markup or the light-DOM SolidJS components. Pick by what your build does with CSS:
+
+| File | Is | Reach for it when |
+|---|---|---|
+| `@kitn.ai/ui/theme.tokens.css` | Plain CSS: a `:root` block, a `.dark` block, the kit's keyframes and two classes | You want the token names for your own CSS and nothing touching your Tailwind config. The default for Tailwind apps too, unless you want the kit's scale. |
+| `@kitn.ai/ui/theme.css` | Tailwind v4 *source*: an `@theme` block, a `@custom-variant`, `@utility` rules | You run Tailwind and want to opt in to the kit's scale wholesale: its colors as your utilities, its radius and type scale, class-based dark mode. |
 
 ```js
-import '@kitn.ai/ui/theme.css';
+import '@kitn.ai/ui/theme.tokens.css';   // plain CSS, any bundler
+import '@kitn.ai/ui/theme.css';          // Tailwind v4 source, only when Tailwind compiles it
 ```
 
 Or via CDN:
@@ -47,11 +55,41 @@ Or via CDN:
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@kitn.ai/ui/dist/theme.tokens.css">
 ```
 
-`theme.css` is Tailwind v4 *source* — its tokens live in an `@theme` block a plain `<link>` discards whole, so it only works when Tailwind processes your CSS. `theme.tokens.css` is the compiled plain-CSS build meant for exactly this CDN case.
+A plain `<link>` can't use `theme.css`: the browser discards its `@theme` block whole, so no tokens land. `theme.tokens.css` is generated from it on every build and never drifts.
 
-<Aside type="caution" title="Tailwind v4: theme.css can override your own tokens">
-The components need no CSS import - they are shadow-isolated. Import `theme.css` (via a bundler whose build runs Tailwind over it) only for the shadcn-style unprefixed `--color-*` path. In a Tailwind v4 app those generic names merge into your `@theme` and can override your own `bg-primary`, `bg-card`, and friends (last import wins) - and the same is true of the [type scale](#typography), which re-points `text-xs` / `text-sm` / `text-base` / `text-lg`. Prefer the namespaced `--kai-color-*` tokens below (no import), or - if you do import `theme.css` - import it **before** your own token overrides.
-</Aside>
+## What theme.css changes in a Tailwind build
+
+`theme.css` is `@import`ed into *your* Tailwind build, so it edits your theme, not only the kit's. Everything it changes:
+
+| Declaration in `theme.css` | Effect on your build |
+|---|---|
+| `@custom-variant dark (&:is(.dark *))` | Your `dark:` utilities switch from `prefers-color-scheme` to the `.dark` class. Until something adds `.dark` to an ancestor, every `dark:` rule you already have stops matching. `theme.tokens.css` does not do this. |
+| `--color-*` in `@theme` | Merge into your `@theme` under the shadcn names. The last import wins, so a `--color-primary` you already define is replaced unless yours comes later. |
+| `--radius-sm` / `-md` / `-lg` / `-xl` | Re-pointed at the kit's `--radius` (`0.6rem`): `--radius-lg: var(--radius)`, `-sm: calc(var(--radius) - 4px)`, `-md: calc(var(--radius) - 2px)`, `-xl: calc(var(--radius) + 4px)`. Your `rounded-*` utilities follow, so `rounded-lg` is `0.6rem` instead of Tailwind's `0.5rem`. |
+| `--text-xs` / `-sm` / `-base` / `-lg` | Aliased onto the kit's [type scale](#typography). The defaults equal stock Tailwind, so nothing moves until you set a `--kai-text-*` token, and then your `text-sm` moves with it. |
+| `@utility bg-surface`, `bg-hover`, `bg-selected`, `bg-*-soft` | New utilities in your build. Additive, they collide with nothing Tailwind ships. |
+| `@keyframes kai-*`, `.kai-scrollbar-thin`, `.chat-markdown` | Global names, listed [below](#global-names-the-kit-owns). |
+
+`theme.tokens.css` skips the first row and the `@utility` row. It still declares the same `--color-*`, `--radius-*` and `--text-*` names on `:root`, and Tailwind v4 utilities read those variables at runtime, so the radius values above change under it as well. If you want none of the kit's scale, import neither file and theme through `--kai-*`.
+
+Import whichever file you choose **before** your own `@theme` and token overrides so yours win.
+
+### Global names the kit owns
+
+Both files put these in your page's global scope. Every one is prefixed except `.chat-markdown`, which is public and stays as it is.
+
+| Name | What it is |
+|---|---|
+| `@keyframes kai-typing`, `@keyframes kai-blink`, `@keyframes kai-shimmer`, `@keyframes kai-spinner-fade`, and the rest | The kit's animations. Every keyframe name starts with `kai-`. |
+| `.kai-scrollbar-thin` | Thin scrollbar styling used by the scroll regions in the SolidJS components |
+| `.chat-markdown` | The markdown body: headings, lists, code, tables, links. Style it to restyle rendered markdown in the light-DOM components. |
+
+### The host page reaches in
+
+Shadow DOM stops selectors, not inheritance or units.
+
+- **`rem` is the page's.** Every size in the kit is in `rem`, and `rem` resolves against your `<html>` font-size inside a shadow root too. A page that sets `html { font-size: 62.5% }` renders the kit at 62.5% of its intended size. Undo it on the elements you mount, or set `--kai-text-*` in `px`.
+- **Inherited text properties leak in.** Each element pins `font-family`, `font-size`, `line-height` and `letter-spacing` on its host. Other inherited properties, `text-align`, `text-transform`, `font-weight` and `white-space` among them, come through from whatever wraps the element. A centered or uppercased container centers or uppercases the chat. Reset them on the element (`kai-chat { text-align: start; text-transform: none; }`) when the wrapper's styling is not meant for it.
 
 ## Override tokens
 
@@ -97,6 +135,8 @@ For your own markup and the light-DOM Solid components, toggle the `dark` class 
 ```js
 document.documentElement.classList.toggle('dark');
 ```
+
+That class does not reach the elements. If your app owns dark mode through `.dark`, set `theme="dark"` on the elements alongside it, or they keep following the OS while the page around them goes dark.
 
 The `.dark` selector in `theme.css` redefines every `--color-*` token for dark surfaces. Override inside `.dark` to customize the dark-mode palette:
 
@@ -161,7 +201,7 @@ The **Tailwind twin** column is what makes that global. Tailwind v4 generates `t
 Line-heights are unitless ratios. Bump a size and the leading follows it.
 
 <Aside type="caution" title="This reaches your app too">
-If you import `theme.css` into your own Tailwind build, the re-point applies to **your** `text-sm` too. Deliberate: kit and app move together on one scale. But it does mean a `--kai-text-*` override is not sandboxed to `kai-*` elements.
+If you import `theme.css` into your own Tailwind build, the re-point applies to **your** `text-sm` too. Deliberate: kit and app move together on one scale. It does mean a `--kai-text-*` override is not sandboxed to `kai-*` elements. Import `theme.tokens.css` instead, or neither, if that is not what you want; the full list of what `theme.css` changes is [above](#what-themecss-changes-in-a-tailwind-build).
 </Aside>
 
 Message and markdown body copy rides the same scale. `proseSize` picks which rung a message renders at (`sm`, the default, is `--kai-text-body`); the token sets how big that rung is. Headings, lists and code inside the markdown block are sized in `em`, so they follow. See [Appearance settings](#appearance-settings) for `proseSize`.

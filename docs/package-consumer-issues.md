@@ -106,16 +106,23 @@ hatches prominently: `codeHighlight={false}` on `<kai-chat>` and `configureCodeH
 
 ---
 
-## P3 — Issue 9: `theme.css` token names + global keyframes can collide in a Tailwind v4 consumer
+## P3 — Issue 9: `theme.css` rewrites a Tailwind v4 consumer's theme (tokens, dark variant, scales, globals)
 
 **Symptom.** A consumer who imports the optional `@kitn.ai/ui/theme.css` into a Tailwind v4 build finds their
 own `bg-primary` / `bg-card` / etc. utilities change color — our generic `--color-*` token names merged into
-their `@theme` and the last `@import` wins.
+their `@theme` and the last `@import` wins. The field test found three more effects the docs never named:
+their `dark:` utilities stop matching (the file's `@custom-variant dark (&:is(.dark *))` silently switches the
+consumer from `prefers-color-scheme` to class-based dark), their `rounded-lg` moves from `0.5rem` to `0.6rem`
+(`--radius-sm/md/lg/xl` re-point Tailwind's stock radius scale at the kit's `--radius`), and `text-sm` in their
+own markup follows any `--kai-text-*` override (`--text-xs/sm/base/lg` are aliased onto the kit's type scale;
+the theming guide called that a feature without saying it edits the consumer's scale).
 
-**Root cause.** `theme.css` defines shadcn-style **unprefixed** `--color-*` tokens (plus a few generic global
-`@keyframes` — `blink` / `wave` / `shimmer` / `pulse-dot` — and a `.scrollbar-thin` utility). Tailwind v4
+**Root cause.** `theme.css` defines shadcn-style **unprefixed** `--color-*` tokens, Tailwind's own
+`--radius-*` / `--text-*` names, a `@custom-variant dark`, and, before this fix, fourteen generic global
+`@keyframes` — `blink` / `wave` / `shimmer` / `pulse-dot` / … — and a `.scrollbar-thin` utility. Tailwind v4
 treats in-scope `--color-*` custom properties as `@theme` entries, so importing our sheet overrides any
-same-named consumer token. The global keyframes / `.scrollbar-thin` could likewise clash by name.
+same-named consumer token. `dist/theme.tokens.css` hoisted all fourteen keyframes and `.scrollbar-thin` into
+the `<link>` consumer's global scope too.
 
 **Why component usage is safe.** Consumers who only *use* the `kai-*` web components are unaffected — everything
 is shadow-isolated, inherited props are pinned at `:host`, and a consumer's global CSS / Tailwind preflight /
@@ -123,15 +130,32 @@ is shadow-isolated, inherited props are pinned at `:host`, and a consumer's glob
 only happens when you import `theme.css` into your own build. The default path (no import; theme via the
 namespaced `--kai-color-*`) avoids all of it.
 
-**Recommended fix.**
-- *Consumer guidance (shipped in docs):* prefer theming via the namespaced `--kai-color-*` tokens (no import);
-  if you do import `theme.css`, import it **before** your own token overrides so yours win. No CSS import is
-  needed for the components themselves.
-- *Upstream (planned):* namespace the global `@keyframes` (`blink` / `wave` / `shimmer` / `pulse-dot`) and the
-  `.scrollbar-thin` utility to a `kai-*` prefix so they can't clash by name. The `--color-*` token names stay
-  generic by design (the shadcn-compat surface) but already alias through `--kai-color-*` for the no-collision path.
+**Fix (shipped).**
+- *Globals prefixed:* every `@keyframes` in `theme.css` is now `kai-<name>` (`kai-blink`, `kai-shimmer`,
+  `kai-spinner-fade`, …) and `.scrollbar-thin` is `.kai-scrollbar-thin`. The `collapsible-down` / `-up` pair
+  was deleted rather than prefixed: it shadowed tw-animate-css's keyframes of the same name, and both were dead
+  (`CollapsibleContent` in `src/ui/collapsible.tsx` puts the caller's class on an inner div that carries no
+  `data-state`, so the `data-[state=*]:animate-*` classes on `tool.tsx` / `chain-of-thought.tsx` never matched;
+  the visible collapse is the grid-template-rows transition). Those classes are gone too. No alias for the old
+  names: no consumer-facing doc ever named one.
+  `.chat-markdown` stays, unprefixed, as the one public class (renaming it is a breaking change) and is now
+  documented as a global the kit owns. `tests/elements/theme-globals.test.ts` pins the prefix rule and that
+  every `animate-[…]` / `animate-*` reference in `src/` resolves to a declared keyframe — the one thing the
+  Tailwind compiler does not check.
+- *Documented* (`guides/theming.mdx` "What theme.css changes in a Tailwind build", pointer from
+  `installation.mdx`): the dark-variant switch, the `--color-*` merge, the radius and text re-points, the
+  `@utility` additions, the global names, and which of those `theme.tokens.css` also carries (it skips the
+  variant and the utilities but still sets the same `--radius-*` / `--text-*` variables on `:root`, which
+  Tailwind utilities read at runtime). `theme.tokens.css` is the recommended default for Tailwind consumers
+  who do not want the kit's scale; `theme.css` is framed as opting into it. Also documented: `rem` resolves
+  against the host `<html>` font-size inside shadow roots, inherited text properties the elements do not pin
+  (`text-align`, `text-transform`, `font-weight`, `white-space`) leak in, and class-based-dark apps must set
+  `theme="dark"` on the elements.
+- The `--color-*` token names stay generic by design (the shadcn-compat surface) and alias through
+  `--kai-color-*` for the no-collision path. The dark variant, radius and text re-points stay too; they are the
+  opt-in the file now says it is.
 
-**Affected:** `theme.css` (keyframe + `.scrollbar-thin` rename), `apps/docs/src/content/docs/guides/theming.mdx`, `apps/docs/src/content/docs/guides/installation.mdx`.
+**Affected:** `theme.css`, `dist/theme.tokens.css` (derived), `src/components/loader.tsx` / `text-shimmer.tsx` / `tool.tsx` / `chain-of-thought.tsx` / `artifact.tsx`, `src/ui/scroll-area.tsx`, `src/elements/file-tree.tsx`, `apps/docs/src/content/docs/guides/theming.mdx`, `apps/docs/src/content/docs/guides/installation.mdx`, `docs/coupling-map.md` (§4 keyframes ↔ references, §9 theme.css ↔ the consumer's `@theme`).
 
 ---
 

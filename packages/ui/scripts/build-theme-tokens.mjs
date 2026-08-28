@@ -6,7 +6,7 @@
 // import AND applies no tokens (browsers ignore `@theme {}`). This emits the
 // same tokens as plain CSS so a host page can `<link>` it: the `@theme` block
 // becomes `:root {}`, its `@keyframes` are hoisted to top level, and the already-
-// plain `.dark` / `.chat-markdown` / `.scrollbar-thin` rules are kept verbatim.
+// plain `.dark` / `.chat-markdown` / `.kai-scrollbar-thin` rules are kept verbatim.
 //
 // theme.css stays the single source of truth; run on every build.
 
@@ -52,7 +52,7 @@ const themeAt = src.indexOf('@theme');
 if (themeAt === -1) throw new Error('no @theme block in theme.css');
 const themeOpen = src.indexOf('{', themeAt);
 const { body: themeBody, end: themeEnd } = matchBraces(src, themeOpen);
-// .dark / .chat-markdown / .scrollbar-thin / .kai-elevation — already plain CSS;
+// .dark / .chat-markdown / .kai-scrollbar-thin / .kai-elevation — already plain CSS;
 // drop the trailing `@utility` blocks (Tailwind-source directives, inert here).
 const afterTheme = stripUtilities(src.slice(themeEnd + 1));
 

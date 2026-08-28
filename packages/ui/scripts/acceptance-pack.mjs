@@ -306,6 +306,7 @@ const EXPORT_NOTES = {
   './autoloader': { agent: true, what: 'Opt-in DOM autoloader: watches the document and imports each element on demand as a `<kai-*>` tag appears.' },
   './theme.css': { agent: true, what: 'The design-token stylesheet. Import it through a build that runs Tailwind over it, or link it directly on a no-build page.' },
   './theme.tokens.css': { agent: true, what: 'The pre-built token sheet — plain CSS custom properties, no Tailwind step required.' },
+  './solid.css': { agent: true, what: 'The stylesheet for the SolidJS components: `theme.css` plus the base and form-control rules, `tw-animate-css` and the typography plugin the `kai-*` elements carry in their shadow roots. Tailwind source; import it after `@import "tailwindcss"` and install the two optional peers.' },
   './react': { agent: true, what: 'Typed React wrappers (`Chat`, `Message`, …) plus `useKaiChat`. Sets array/object props for you as properties.' },
   './solid': { agent: true, what: 'The SolidJS entry with the server build wired up.' },
   './state': { agent: true, what: 'I/O-free helpers over `ChatMessage[]`: `createAssistantStream`, `appendTextPart`, `upsertToolPart`.' },

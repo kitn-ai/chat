@@ -3421,7 +3421,13 @@ describe('scaffold — solid', () => {
   it('carries the Tailwind setup the components actually need', async () => {
     const f = front(await emit());
     expect(f).toContain('@import "tailwindcss"');
-    expect(f).toContain('@import "@kitn.ai/ui/theme.css"');
+    // solid.css, not theme.css: theme.css is tokens only, and a Solid app compiling
+    // its own Tailwind would otherwise ship without the form-control rules,
+    // tw-animate-css and the typography plugin. Pinned by
+    // tests/styles/solid-css-contract.test.ts on the stylesheet side.
+    expect(f).toContain('@import "@kitn.ai/ui/solid.css"');
+    expect(f).not.toContain('@import "@kitn.ai/ui/theme.css"');
+    expect(f).toContain('tw-animate-css @tailwindcss/typography');
     expect(f).toContain('@source "../node_modules/@kitn.ai/ui"');
   });
 

@@ -19,7 +19,7 @@ export function ScrollArea(props: ScrollAreaProps) {
   return (
     // tabindex=0 keeps the scroll region reachable by keyboard when it has no
     // focusable descendants (WCAG 2.1.1 — axe `scrollable-region-focusable`).
-    <div tabindex={0} class={cn(overflow(), 'scrollbar-thin', local.class)} {...rest}>
+    <div tabindex={0} class={cn(overflow(), 'kai-scrollbar-thin', local.class)} {...rest}>
       {local.children}
     </div>
   );

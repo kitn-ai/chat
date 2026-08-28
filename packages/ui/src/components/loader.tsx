@@ -85,7 +85,7 @@ export function ClassicLoader(props: ClassicLoaderProps) {
         <For each={Array.from({ length: 12 }, (_, i) => i)}>
           {(i) => (
             <div
-              class="bg-primary absolute animate-[spinner-fade_1.2s_linear_infinite] rounded-full"
+              class="bg-primary absolute animate-[kai-spinner-fade_1.2s_linear_infinite] rounded-full"
               style={{
                 top: '0',
                 left: '50%',
@@ -113,7 +113,7 @@ export function PulseLoader(props: PulseLoaderProps) {
   const sizeClasses = { sm: 'size-4', md: 'size-5', lg: 'size-6' };
   return (
     <div class={cn('relative', sizeClasses[size()], props.class)}>
-      <div class="border-primary absolute inset-0 animate-[thin-pulse_1.5s_ease-in-out_infinite] rounded-full border-2" />
+      <div class="border-primary absolute inset-0 animate-[kai-thin-pulse_1.5s_ease-in-out_infinite] rounded-full border-2" />
       <span class="sr-only">Loading</span>
     </div>
   );
@@ -127,7 +127,7 @@ export function PulseDotLoader(props: PulseDotLoaderProps) {
   return (
     <div
       class={cn(
-        'bg-primary animate-[pulse-dot_1.2s_ease-in-out_infinite] rounded-full',
+        'bg-primary animate-[kai-pulse-dot_1.2s_ease-in-out_infinite] rounded-full',
         sizeClasses[size()],
         props.class
       )}
@@ -149,7 +149,7 @@ export function DotsLoader(props: DotsLoaderProps) {
         {(i) => (
           <div
             class={cn(
-              'bg-primary animate-[bounce-dots_1.4s_ease-in-out_infinite] rounded-full',
+              'bg-primary animate-[kai-bounce-dots_1.4s_ease-in-out_infinite] rounded-full',
               dotSizes[size()]
             )}
             style={{ 'animation-delay': `${i * 160}ms` }}
@@ -173,7 +173,7 @@ export function TypingLoader(props: TypingLoaderProps) {
         {(i) => (
           <div
             class={cn(
-              'bg-primary animate-[typing_1s_infinite] rounded-full',
+              'bg-primary animate-[kai-typing_1s_infinite] rounded-full',
               dotSizes[size()]
             )}
             style={{ 'animation-delay': `${i * 250}ms` }}
@@ -202,7 +202,7 @@ export function WaveLoader(props: WaveLoaderProps) {
         {(i) => (
           <div
             class={cn(
-              'bg-primary animate-[wave_1s_ease-in-out_infinite] rounded-full',
+              'bg-primary animate-[kai-wave_1s_ease-in-out_infinite] rounded-full',
               barWidths[size()]
             )}
             style={{
@@ -229,7 +229,7 @@ export function BarsLoader(props: BarsLoaderProps) {
         {(i) => (
           <div
             class={cn(
-              'bg-primary h-full animate-[wave-bars_1.2s_ease-in-out_infinite]',
+              'bg-primary h-full animate-[kai-wave-bars_1.2s_ease-in-out_infinite]',
               barWidths[size()]
             )}
             style={{ 'animation-delay': `${i * 0.2}s` }}
@@ -255,7 +255,7 @@ export function TerminalLoader(props: TerminalLoaderProps) {
           its "Thinking" text purely in --color-foreground/--color-muted-foreground,
           with no brand color at all; matches that precedent. */}
       <span class={cn('text-foreground font-mono', textSizes[size()])}>{'>'}</span>
-      <div class={cn('bg-primary animate-[blink_1s_step-end_infinite]', cursorSizes[size()])} />
+      <div class={cn('bg-primary animate-[kai-blink_1s_step-end_infinite]', cursorSizes[size()])} />
       <span class="sr-only">Loading</span>
     </div>
   );
@@ -269,7 +269,7 @@ export function TextBlinkLoader(props: TextBlinkLoaderProps) {
   return (
     <div
       class={cn(
-        'animate-[text-blink_2s_ease-in-out_infinite] font-medium',
+        'animate-[kai-text-blink_2s_ease-in-out_infinite] font-medium',
         textSizes[size()],
         props.class
       )}
@@ -289,7 +289,7 @@ export function TextShimmerLoader(props: TextShimmerLoaderProps) {
       class={cn(
         'bg-[linear-gradient(to_right,var(--color-muted-foreground)_40%,var(--color-foreground)_60%,var(--color-muted-foreground)_80%)]',
         'bg-size-[200%_auto] bg-clip-text font-medium text-transparent',
-        'animate-[shimmer_4s_infinite_linear]',
+        'animate-[kai-shimmer_4s_infinite_linear]',
         textSizes[size()],
         props.class
       )}
@@ -313,9 +313,9 @@ export function TextDotsLoader(props: TextDotsLoaderProps) {
         {props.text ?? 'Thinking'}
       </span>
       <span class="inline-flex">
-        <span class="text-foreground animate-[loading-dots_1.4s_infinite_0.2s]">.</span>
-        <span class="text-foreground animate-[loading-dots_1.4s_infinite_0.4s]">.</span>
-        <span class="text-foreground animate-[loading-dots_1.4s_infinite_0.6s]">.</span>
+        <span class="text-foreground animate-[kai-loading-dots_1.4s_infinite_0.2s]">.</span>
+        <span class="text-foreground animate-[kai-loading-dots_1.4s_infinite_0.4s]">.</span>
+        <span class="text-foreground animate-[kai-loading-dots_1.4s_infinite_0.6s]">.</span>
       </span>
     </div>
   );

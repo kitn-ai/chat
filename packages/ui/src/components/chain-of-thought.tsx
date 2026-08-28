@@ -87,7 +87,7 @@ function ChainOfThoughtContent(props: ChainOfThoughtContentProps) {
   return (
     <CollapsibleContent
       class={cn(
-        'text-popover-foreground data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down overflow-hidden',
+        'text-popover-foreground overflow-hidden',
         props.class
       )}
     >

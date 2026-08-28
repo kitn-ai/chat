@@ -55,12 +55,12 @@ function SettingsContent() {
 
   return (
     <div class="flex h-full min-h-0 w-full overflow-hidden text-foreground">
-      <aside class="w-56 shrink-0 overflow-y-auto border-r border-border bg-surface p-3 scrollbar-thin">
+      <aside class="w-56 shrink-0 overflow-y-auto border-r border-border bg-surface p-3 kai-scrollbar-thin">
         <h2 class="px-2 pb-2 text-sm font-semibold text-foreground">Settings</h2>
         <Nav items={CATEGORIES} value={active()} onItemSelect={setActive} />
       </aside>
 
-      <div class="min-w-0 flex-1 overflow-y-auto p-6 scrollbar-thin">
+      <div class="min-w-0 flex-1 overflow-y-auto p-6 kai-scrollbar-thin">
         <div class="flex max-w-2xl flex-col gap-8">
           <SettingsGroup heading="General" description="How the app looks and behaves for you.">
             <SettingItem

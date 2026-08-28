@@ -52,7 +52,7 @@ const meta = {
   },
   args: { files: FILES, activeFile: 'src/app.ts', onSelect: fn() },
   render: (args) => (
-    <div class="w-64 h-80 overflow-auto rounded-lg border border-border scrollbar-thin">
+    <div class="w-64 h-80 overflow-auto rounded-lg border border-border kai-scrollbar-thin">
       <FileTree
         files={args.files}
         activeFile={args.activeFile}
@@ -95,7 +95,7 @@ export const Interactive: Story = {
     const [active, setActive] = createSignal('src/lib/format.ts');
     return (
       <div class="flex flex-col gap-2">
-        <div class="w-64 h-80 overflow-auto rounded-lg border border-border scrollbar-thin">
+        <div class="w-64 h-80 overflow-auto rounded-lg border border-border kai-scrollbar-thin">
           <FileTree files={FILES} activeFile={active()} onSelect={(p) => setActive(p)} />
         </div>
         <span class="text-sm text-muted-foreground">
