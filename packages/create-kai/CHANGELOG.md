@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.3.0](https://github.com/kitn-ai/ui/compare/create-kai-v0.2.2...create-kai-v0.3.0) (2026-08-28)
+
+
+### Features
+
+* npm create kai wizard, kai bin alias, public construct schema export ([cd37677](https://github.com/kitn-ai/ui/commit/cd376770c7b270f6282d6a270b69cdf380a8168a))
+
+
+### Bug Fixes
+
+* **create-kai:** '.' and path positionals scaffold with a basename-derived name ([e872b33](https://github.com/kitn-ai/ui/commit/e872b331df5c7b9efe265a766c27bab37f169e3d))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @kitn.ai/ui bumped to 0.29.0
+
 ## [0.2.2](https://github.com/kitn-ai/ui/compare/create-kai-v0.2.1...create-kai-v0.2.2) (2026-08-27)
 
 
