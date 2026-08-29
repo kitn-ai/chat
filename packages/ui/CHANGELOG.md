@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.31.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.30.0...@kitn.ai/ui-v0.31.0) (2026-08-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* template registry, phase-1 construct vocabulary, and the visual builder (kai dev --builder) ([#350](https://github.com/kitn-ai/ui/issues/350))
+
+### Features
+
+* template registry, phase-1 construct vocabulary, and the visual builder (kai dev --builder) ([#350](https://github.com/kitn-ai/ui/issues/350)) ([1b0c014](https://github.com/kitn-ai/ui/commit/1b0c01440c25c744dde7bfbedd9340ced5cbc77e))
+
+
+### Bug Fixes
+
+* **builder:** dark-by-default builder + starters (widget excepted), restore token imports in the page CSS pipeline ([#351](https://github.com/kitn-ai/ui/issues/351)) ([7a7bfbe](https://github.com/kitn-ai/ui/commit/7a7bfbe8d6cb3357958d33c8c836972bc35df232))
+* **ui:** builder story a11y failures from the design-suite merge ([#348](https://github.com/kitn-ai/ui/issues/348)) ([0f84de7](https://github.com/kitn-ai/ui/commit/0f84de7ebb4f61ee91028638388a54791c607075))
+
 ## [0.30.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.29.0...@kitn.ai/ui-v0.30.0) (2026-08-28)
 
 
