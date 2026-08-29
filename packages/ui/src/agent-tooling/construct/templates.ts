@@ -104,6 +104,7 @@ const COMPOSER_TRIGGERS: TemplateControlSection = {
   paths: ['composer.triggers.slash', 'composer.triggers.mention'],
 };
 const SHELL: TemplateControlSection = { id: 'shell', paths: ['shell.commandPalette', 'shell.userMenu'] };
+const CARDS: TemplateControlSection = { id: 'cards', paths: ['cards'] };
 const PROVIDER: TemplateControlSection = { id: 'provider', paths: ['provider'] };
 
 // ── Support widget — owner-widget fixture lineage (B-14), de-branded ────────
@@ -282,7 +283,14 @@ export const TEMPLATES: readonly TemplateEntry[] = [
     description: 'An assistant docked inside your existing app.',
     availability: 'buildable',
     starter: inAppAssistantStarter,
-    controls: [IDENTITY, THEME, HEADER, ASIDE, CAPABILITIES, PROVIDER],
+    // Design-parity fix wave (2026-08-29 audit): the story's In-app
+    // assistant panel shows Composer triggers, Message actions and a
+    // read-only Cards list, none of which were wired here even though the
+    // vocabulary and the panel machinery both already exist (proven working
+    // on Workspace/Assistant/Research). Voice/Reveal-mode/Rail-placement
+    // stay absent — those are the story's own labeled preview-only,
+    // T-5-deferred fields with no construct vocabulary at all.
+    controls: [IDENTITY, THEME, HEADER, ASIDE, COMPOSER_TRIGGERS, CAPABILITIES, MESSAGE_ACTIONS, CARDS, PROVIDER],
   },
   {
     id: 'assistant',
@@ -290,7 +298,11 @@ export const TEMPLATES: readonly TemplateEntry[] = [
     description: 'A full-page assistant with a history of past conversations.',
     availability: 'buildable',
     starter: assistantStarter,
-    controls: [IDENTITY, THEME, HEADER, EMPTY, CAPABILITIES, MESSAGE_ACTIONS, PROVIDER],
+    // Design-parity fix wave: the story's Assistant panel shows an App
+    // chrome / Shell section (Command palette toggle, User menu) that
+    // wasn't wired here — same already-working vocabulary as Workspace's
+    // SHELL section.
+    controls: [IDENTITY, THEME, HEADER, SHELL, EMPTY, CAPABILITIES, MESSAGE_ACTIONS, PROVIDER],
   },
   {
     id: 'research',

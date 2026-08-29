@@ -168,6 +168,38 @@ function HistoryEditor(props: FieldEditorProps): JSX.Element {
   );
 }
 
+/**
+ * Cards — READ-ONLY (mirrors the legacy stub panel's own Cards section in
+ * builder-panel.tsx, wired here for the derived panel as part of the
+ * 2026-08-29 design-parity fix wave). A card is declared with a full JSON
+ * Schema + `x-kai-*` widget/format/mask hints that this panel has no editor
+ * for and isn't building one this round — showing nothing here would
+ * silently drop a real part of the construct from view, which is worse
+ * than an honest "not yet editable" (CLAUDE.md: decide loudly). Each row
+ * shows the schema's own `title` when present, falling back to the
+ * tool-facing `name`.
+ */
+function CardsEditor(props: FieldEditorProps): JSX.Element {
+  const cards = () => (getAtPath(props.value, props.path) as Construct['cards']) ?? [];
+  return (
+    <Show
+      when={cards().length > 0}
+      fallback={<p class="text-xs text-muted-foreground">No cards declared.</p>}
+    >
+      <div class="flex flex-col gap-1.5" data-builder-cards-list>
+        <For each={cards()}>
+          {(card) => (
+            <div class="rounded-lg border border-border/70 bg-surface px-2.5 py-1.5 text-xs text-foreground">
+              {typeof card.schema?.title === 'string' ? (card.schema.title as string) : card.name}
+            </div>
+          )}
+        </For>
+      </div>
+      <p class="mt-1.5 text-xs text-muted-foreground">Read-only for now — card editing is a later round.</p>
+    </Show>
+  );
+}
+
 function messageActionsEditor(role: 'user' | 'assistant'): (props: FieldEditorProps) => JSX.Element {
   const catalog = role === 'user' ? USER_ACTION_CATALOG : ASSISTANT_ACTION_CATALOG;
   const legend = role === 'user' ? 'Your messages' : 'Assistant messages';
@@ -183,15 +215,27 @@ function messageActionsEditor(role: 'user' | 'assistant'): (props: FieldEditorPr
       return [...enabledRows, ...restRows];
     };
     return (
-      <ActionRowPicker
-        legend={legend}
-        catalog={catalog}
-        rows={rows()}
-        onChange={(next) => {
-          const ids = next.filter((r) => r.enabled).map((r) => r.id);
-          props.write(setAtPath(props.value, props.path, ids));
-        }}
-      />
+      // The role-group heading (design parity fix): `ActionRowPicker`'s own
+      // `legend` prop is an `aria-label` only — no visible text — so a
+      // panel with BOTH roles' pickers back-to-back (Research, Assistant,
+      // Workspace all wire both) rendered as one flat unlabeled list with
+      // two "Copy" rows and nothing distinguishing them. The design story
+      // (builder-assistant.stories.tsx) never relied on the component to
+      // show this on its own — it wraps each picker in its own visible
+      // `<span>` label. Matching that exact wrapper here, once, fixes every
+      // template that reuses this editor.
+      <div class="flex flex-col gap-1.5">
+        <span class="text-xs font-medium text-foreground">{legend}</span>
+        <ActionRowPicker
+          legend={legend}
+          catalog={catalog}
+          rows={rows()}
+          onChange={(next) => {
+            const ids = next.filter((r) => r.enabled).map((r) => r.id);
+            props.write(setAtPath(props.value, props.path, ids));
+          }}
+        />
+      </div>
     );
   };
 }
@@ -522,6 +566,7 @@ export const FIELD_OVERRIDES: Record<string, (props: FieldEditorProps) => JSX.El
   'shell.userMenu': UserMenuEditor,
   'home': HomeEditor,
   'provider': ProviderEditor,
+  'cards': CardsEditor,
 };
 
 // The generic derived field (B-25 a11y baked in — real label/for, generated
@@ -650,6 +695,6 @@ const SECTION_TITLES: Record<string, string> = {
   identity: 'Identity', theme: 'Theme', header: 'Header', empty: 'Empty state',
   home: 'Home', capabilities: 'Capabilities', messageActions: 'Message actions',
   sources: 'Sources', widget: 'Widget', aside: 'Aside', composerTriggers: 'Composer triggers',
-  shell: 'Shell', provider: 'Provider',
+  shell: 'Shell', provider: 'Provider', cards: 'Cards',
 };
 function sectionTitle(id: string): string { return SECTION_TITLES[id] ?? id; }
