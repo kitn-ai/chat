@@ -17,6 +17,23 @@ import type { Construct, ConstructProblem } from '../agent-tooling/construct/sch
 import { createEditGuard } from './edit-guard';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
+import { Dialog } from '../ui/dialog';
+
+// The AI/UI brand magenta — matches builder-start.stories.tsx's own
+// BRAND_STYLE exactly (design-parity fix wave, 2026-08-29 audit item 3a).
+// `builder-start.tsx` stays token-only (`var(--color-primary)` inside the
+// illustrations, `border-primary`/`ring-primary` on the card) — the kit's
+// own default `--color-primary` is a neutral near-black/near-white (a
+// white-label component library; a real construct sets its own accent), so
+// wherever BuilderStart renders as a standalone "pick a template" screen
+// (this page's Start screen AND its Switch-template overlay) it needs the
+// same one-off "and here, brand it" the story already does. Setting
+// `--color-primary` directly, not `--kai-color-primary`: the indirection
+// (`theme.css`'s `--color-primary: var(--kai-color-primary, <fallback>)`)
+// only re-resolves where `--color-primary` itself is DECLARED
+// (`:root`/`:host`/`.dark`), so setting the indirection var on a descendant
+// div never reaches it — see the story's own comment for the full story.
+const BRAND_STYLE = { '--color-primary': '#EC2295' } as const;
 
 type Screen =
   | { step: 'start' }
@@ -209,9 +226,18 @@ export function App() {
         </div>
       </Show>
       <Show when={screen().step === 'start'}>
-        <main class="mx-auto max-w-4xl p-8">
-          <h1 class="mb-1 text-lg font-semibold">Start a construct</h1>
-          <p class="mb-6 text-sm text-muted-foreground">Pick a template. You will get a live preview and a construct file you own.</p>
+        {/* Layout/spacing/grid matched to builder-start.stories.tsx's
+            `StartDemo` (design-parity fix wave item 3a): max-w-6xl (was
+            max-w-4xl — the story's wider canvas is what lets the 3-column
+            grid breathe instead of feeling squeezed), the same
+            flex-col/gap-6/py-10 rhythm instead of ad hoc mb-* spacing, and
+            the brand accent below. BuilderStart itself is unchanged —
+            already shared with the story; this was page-level CSS only. */}
+        <main class="mx-auto flex max-w-6xl flex-col gap-6 py-10" style={BRAND_STYLE}>
+          <div class="flex flex-col gap-1">
+            <h1 class="text-xl font-semibold text-foreground">Start a construct</h1>
+            <p class="text-sm text-muted-foreground">Pick a template. You will get a live preview and a construct file you own.</p>
+          </div>
           <BuilderStart templates={BUILDABLE_BUILDER_TEMPLATES} value={pickedId()} onSelect={onPick} />
         </main>
       </Show>
@@ -227,10 +253,20 @@ export function App() {
         {(_) => {
           const s = screen() as Extract<Screen, { step: 'name' }>;
           return (
-            <main class="mx-auto flex max-w-md flex-col gap-3 p-8">
-              <label for="construct-name" class="text-sm font-medium">Element name</label>
-              <Input id="construct-name" value={name()} onValueInput={setName} placeholder="acme-support" />
-              <p class="text-xs text-muted-foreground">The emitted custom-element tag: lowercase, with a hyphen (e.g. acme-support).</p>
+            // No design story models this step (it exists only because the
+            // real builder writes an actual file to disk and needs a name
+            // up front — audit item 4). Item 3c: give it the Start screen's
+            // own title/description rhythm and tokens rather than a bare
+            // label, kept minimal since there's a single field.
+            <main class="mx-auto flex max-w-md flex-col gap-6 py-10">
+              <div class="flex flex-col gap-1">
+                <h1 class="text-xl font-semibold text-foreground">Name your element</h1>
+                <p class="text-sm text-muted-foreground">The emitted custom-element tag: lowercase, with a hyphen (e.g. acme-support).</p>
+              </div>
+              <div class="flex flex-col gap-1.5">
+                <label for="construct-name" class="text-xs font-medium text-foreground">Element name</label>
+                <Input id="construct-name" value={name()} onValueInput={setName} placeholder="acme-support" />
+              </div>
               <For each={problems()}>{(p) => <p role="alert" class="text-xs text-destructive">{p.path}: {p.message}</p>}</For>
               <div class="flex gap-2">
                 <Button variant="outline" onClick={() => setScreen({ step: 'start' })}>Back</Button>
@@ -247,13 +283,6 @@ export function App() {
               <span class="text-sm font-semibold">{template().name}</span>
               <Button variant="ghost" size="sm" onClick={() => setConfirmSwitch(true)}>Switch template</Button>
             </div>
-            <Show when={confirmSwitch()}>
-              <div class="flex flex-col gap-2 border-b border-border bg-muted p-3" role="alertdialog" aria-label="Switch template">
-                <p class="text-xs">Switching resets this construct to the new template's starter. Your name is kept; everything else is replaced.</p>
-                <BuilderStart templates={BUILDABLE_BUILDER_TEMPLATES} onSelect={(id) => switchTemplate(id)} />
-                <Button variant="outline" size="sm" onClick={() => setConfirmSwitch(false)}>Cancel</Button>
-              </div>
-            </Show>
             <DerivedBuilderPanel value={construct()!} onChange={onEdit} template={template()} problems={problems()} />
           </div>
           <Show when={previewUrl()} fallback={<p class="p-8 text-sm text-muted-foreground">Preview starting…</p>}>
@@ -261,6 +290,26 @@ export function App() {
           </Show>
         </div>
       </Show>
+      {/* Switch-template overlay (design-parity fix wave item 3b): was the
+          exact same 6-card grid squeezed into the 280px sidebar column,
+          descriptions clipping off the right edge — an oversight, not a
+          deliberate compact variant (builder-start.tsx's own module comment
+          says Start IS meant to be the shared entry surface everywhere it's
+          reused). Reuses BuilderStart at the Start screen's own story-scale
+          treatment via `ui/dialog`'s Dialog, same brand accent, instead of
+          a second cramped layout invented for this one spot. */}
+      <Dialog
+        open={confirmSwitch()}
+        onOpenChange={setConfirmSwitch}
+        header="Switch template"
+        class="max-w-5xl"
+        footer={<Button variant="outline" size="sm" onClick={() => setConfirmSwitch(false)}>Cancel</Button>}
+      >
+        <p class="mb-4 text-sm text-muted-foreground">Switching resets this construct to the new template's starter. Your name is kept; everything else is replaced.</p>
+        <div style={BRAND_STYLE}>
+          <BuilderStart templates={BUILDABLE_BUILDER_TEMPLATES} onSelect={(id) => switchTemplate(id)} />
+        </div>
+      </Dialog>
     </div>
   );
 }

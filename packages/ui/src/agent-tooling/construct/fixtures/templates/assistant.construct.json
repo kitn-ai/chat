@@ -10,7 +10,7 @@
   },
   "theme": {
     "accent": "#7c3aed",
-    "mode": "system"
+    "mode": "dark"
   },
   "empty": {
     "title": "What can I help with?",

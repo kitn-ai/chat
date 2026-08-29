@@ -104,6 +104,19 @@ describe('bespoke editor accessible names (B-25 regression coverage)', () => {
     expect(screen.getByRole('group', { name: 'Assistant messages' })).toBeInTheDocument();
   });
 
+  it('MessageActionsEditor: the role label is also VISIBLE text, not aria-label only (design-parity fix — two role groups back to back used to render as one flat unlabeled list)', () => {
+    render(() => <Controlled template={tpl('research')} />);
+    expect(screen.getByText('Your messages')).toBeVisible();
+    expect(screen.getByText('Assistant messages')).toBeVisible();
+  });
+
+  it('CardsEditor: renders read-only, honest about no editor (design-parity fix — in-app assistant now wires the Cards section)', () => {
+    render(() => <Controlled template={tpl('inAppAssistant')} />);
+    // inAppAssistantStarter declares no cards — the honest "decide loudly"
+    // fallback, not a silently empty section.
+    expect(screen.getByText('No cards declared.')).toBeInTheDocument();
+  });
+
   it('SlashTriggersEditor / MentionTriggersEditor: row inputs reachable by label', () => {
     render(() => <Controlled template={tpl('workspace')} />);
     expect(screen.getByLabelText('slash command 1 label')).toBeInTheDocument();

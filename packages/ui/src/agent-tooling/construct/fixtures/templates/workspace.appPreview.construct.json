@@ -21,7 +21,7 @@
   },
   "theme": {
     "accent": "#ea580c",
-    "mode": "system"
+    "mode": "dark"
   },
   "shell": {
     "commandPalette": true,

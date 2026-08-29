@@ -67,6 +67,15 @@ describe('registry shape (B-13 / C-4)', () => {
       for (const s of t.controls) expect(s.paths.length, `${t.id}/${s.id}`).toBeGreaterThan(0);
     }
   });
+
+  it('design-parity fix wave (2026-08-29): inAppAssistant carries composerTriggers/messageActions/cards, assistant carries shell — sections the design story shows that were missing from the registry wiring', () => {
+    const inAppAssistant = buildableTemplates().find((t) => t.id === 'inAppAssistant')!;
+    expect(inAppAssistant.controls.map((s) => s.id)).toEqual(
+      expect.arrayContaining(['composerTriggers', 'messageActions', 'cards']),
+    );
+    const assistant = buildableTemplates().find((t) => t.id === 'assistant')!;
+    expect(assistant.controls.map((s) => s.id)).toEqual(expect.arrayContaining(['shell']));
+  });
 });
 
 describe('starter content rules (B-14 / B-4)', () => {
@@ -81,6 +90,17 @@ describe('starter content rules (B-14 / B-4)', () => {
   it("Research states its defining fact in its own JSON: sources: { strip: true }", () => {
     const research = buildableTemplates().find((t) => t.id === 'research')!;
     expect(research.starter.capabilities?.sources).toEqual({ strip: true });
+  });
+
+  it('every buildable starter ships theme.mode: "dark" EXCEPT widget, which stays "system" (owner ruling, dark round — an embedded widget follows its host site, not its own preference)', () => {
+    for (const t of buildableTemplates()) {
+      const all = [t.starter, ...(t.variants ?? []).map((v) => v.starter)];
+      for (const s of all) {
+        expect(s.theme?.mode, `${t.id}${s === t.starter ? '' : ' variant'}`).toBe(
+          t.id === 'widget' ? 'system' : 'dark',
+        );
+      }
+    }
   });
 });
 

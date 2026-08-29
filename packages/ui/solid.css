@@ -26,8 +26,23 @@
    the kit styles its own shadow roots. If you only want the tokens, import
    theme.css instead and opt into the rest yourself.
 
-   Guarded by tests/styles/solid-css-contract.test.ts. */
+   Guarded by tests/styles/solid-css-contract.test.ts.
+
+   ORDER IS LOAD-BEARING: every @import must come before any other statement
+   (CSS spec, @charset/empty @layer excepted) or it is silently DROPPED — not
+   an error, no output difference to eyeball, just gone. @tailwindcss/node's
+   own compile() (what the contract test above and the CLI's `tailwindcss`
+   binary use to build compiled.css) tolerates an out-of-order @import; a
+   plain Vite + @tailwindcss/postcss pipeline (e.g. a light-DOM Solid app's
+   own build, or this kit's src/builder-app) does not, and drops it — this
+   file used to put @plugin between two @imports, which silently dropped
+   theme.css AND kit-base.css from any consumer on that stricter pipeline:
+   every --color-* token gone, so anything reading one (a component's own
+   inline `style={{ stroke: 'var(--color-border)' }}`, not a Tailwind class —
+   Tailwind's dead-CSS-variable elimination doesn't know JS reads it) renders
+   as if the variable were never declared. Keep every @import above every
+   @plugin/@theme/@source/other statement in this file. */
 @import "tw-animate-css";
-@plugin "@tailwindcss/typography";
 @import "./theme.css";
 @import "./kit-base.css";
+@plugin "@tailwindcss/typography";
