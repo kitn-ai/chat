@@ -139,7 +139,14 @@ const DEFAULT_CONSTRUCT: BuilderConstruct = {
   layout: 'aside',
   provider: { mode: 'endpoint', url: '/api/chat', wire: 'openai' },
   header: { title: 'Ops Console' },
-  theme: { accent: '#0ea5e9', mode: 'system' },
+  // Dark-by-default (owner ruling, dark round — templates.ts's own
+  // inAppAssistantStarter): the design contract's demo state predated that
+  // ruling and drifted stale (design-parity audit, 2026-08-29). This stub
+  // panel's Mode select isn't wired to a visual dark toggle (same as every
+  // template here except Workspace, which got a dedicated round for that),
+  // so this brings the SEED STATE back in line with the product's actual
+  // default rather than changing what renders.
+  theme: { accent: '#0ea5e9', mode: 'dark' },
   capabilities: {
     starters: ['Deploy payments to production', 'Check the canary status'],
     attachments: { accept: ['image/*', 'application/pdf'] },

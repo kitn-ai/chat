@@ -136,7 +136,14 @@ const DEFAULT_CONSTRUCT: BuilderConstruct = {
   layout: 'fullscreen',
   provider: { mode: 'endpoint', url: '/api/chat', wire: 'openai' },
   header: { title: 'Assistant' },
-  theme: { accent: '#7c3aed', mode: 'system' },
+  // Dark-by-default (owner ruling, dark round — templates.ts's own
+  // assistantStarter): the design contract's demo state predated that
+  // ruling and drifted stale (design-parity audit, 2026-08-29). This stub
+  // panel's Mode select isn't wired to a visual dark toggle (same as every
+  // template here except Workspace, which got a dedicated round for that),
+  // so this brings the SEED STATE back in line with the product's actual
+  // default rather than changing what renders.
+  theme: { accent: '#7c3aed', mode: 'dark' },
   capabilities: {
     starters: ['Draft the Q3 board update', 'Summarize a document', 'Compare two options'],
     attachments: { accept: ['image/*', 'application/pdf'] },
