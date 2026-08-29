@@ -674,7 +674,17 @@ describe('composeConstruct: template seeding (B-17a)', () => {
     const out = composeConstruct(answers) as { header?: { title?: string }; theme?: { accent?: string; mode: string } };
     expect(out.header?.title).toBe('My Bot');
     expect(out.theme?.accent).toBeUndefined();
-    expect(out.theme?.mode).toBe('system'); // mode survives an accent clear
+    // mode survives an accent clear — asserted against the assistant
+    // template's OWN starter mode (read live off the registry), not a
+    // hardcoded literal: see the dark-by-default ruling test below.
+    const assistant = buildableTemplates().find((t) => t.id === 'assistant')!;
+    expect(out.theme?.mode).toBe(assistant.starter.theme?.mode);
+  });
+
+  it('dark-by-default ruling: every buildable starter ships theme.mode "dark" EXCEPT widget, which keeps "system" (an embedded widget follows its host site, not its own preference)', () => {
+    for (const t of buildableTemplates()) {
+      expect(t.starter.theme?.mode, t.id).toBe(t.id === 'widget' ? 'system' : 'dark');
+    }
   });
 
   it('history off strips history AND conversations (the schema forbids the orphan)', () => {
