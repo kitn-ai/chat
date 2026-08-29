@@ -336,3 +336,27 @@ export function buildableTemplates(): readonly BuildableTemplate[] {
 export function templateById(id: TemplateId): TemplateEntry | undefined {
   return TEMPLATES.find((t) => t.id === id);
 }
+
+/**
+ * Derive a buildable template's family from a LOADED construct's own shape
+ * (T-3 forbids a template key in the file, so there is nothing else to read
+ * this from). Layout is the discriminant for four of the five buildable
+ * families; `fullscreen` splits further on `capabilities.sources` being
+ * present, the research template's one defining fact (see researchStarter's
+ * comment). `custom` and any unrecognized shape return undefined — the
+ * caller falls back to a neutral label rather than guessing.
+ */
+export function inferTemplateId(c: Construct): BuildableTemplateId | undefined {
+  switch (c.layout) {
+    case 'widget':
+      return 'widget';
+    case 'aside':
+      return 'inAppAssistant';
+    case 'split':
+      return 'workspace';
+    case 'fullscreen':
+      return c.capabilities?.sources ? 'research' : 'assistant';
+    default:
+      return undefined;
+  }
+}

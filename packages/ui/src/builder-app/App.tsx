@@ -12,7 +12,7 @@ import { createSignal, createResource, onMount, onCleanup, Show, For } from 'sol
 import { BuilderStart, BUILDABLE_BUILDER_TEMPLATES, type BuilderTemplateId } from '../components/builder-start';
 import { WorkspaceVariantPicker, type WorkspaceVariantId } from '../components/builder-workspace-variants';
 import { DerivedBuilderPanel } from '../components/builder-panel-derived';
-import { buildableTemplates, type BuildableTemplate } from '../agent-tooling/construct/templates';
+import { buildableTemplates, templateById, inferTemplateId, type BuildableTemplate } from '../agent-tooling/construct/templates';
 import type { Construct, ConstructProblem } from '../agent-tooling/construct/schema';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -54,22 +54,43 @@ export function App() {
   onMount(async () => {
     const state = await (await fetch('/api/state')).json();
     if (state.phase === 'panel') {
-      setConstruct(state.construct as Construct);
+      const loaded = state.construct as Construct;
+      setConstruct(loaded);
       setPreviewUrl(state.previewUrl);
-      // With an existing file there is no picked template: default to the
-      // scratch manifest, which edits the common sections. (Recorded
-      // decision — a construct file carries no template id, and guessing
-      // one from shape would be a silent decision.)
+      // The header label is DERIVED from the loaded construct's own shape
+      // (inferTemplateId) rather than defaulting to the scratch manifest —
+      // a construct file carries no template id, but its layout/capabilities
+      // shape is enough to place it back into its family (or fall back to a
+      // neutral label built from its own name, never "Scratch").
+      setTemplate(templateForLoadedConstruct(loaded));
       setScreen({ step: 'panel' });
     }
     const events = new EventSource('/api/events');
     events.addEventListener('construct', async () => {
-      const raw = await (await fetch('/api/construct')).json();
-      setConstruct(raw as Construct);
+      const raw = (await (await fetch('/api/construct')).json()) as Construct;
+      setConstruct(raw);
+      setTemplate(templateForLoadedConstruct(raw));
       setProblems([]);
     });
     onCleanup(() => events.close());
   });
+
+  /** A loaded construct carries no template id (T-3), so the header label is
+   *  derived from the construct's own shape via inferTemplateId — fixing the
+   *  reload bug where the panel kept showing the in-memory Start-screen pick
+   *  ("Scratch") regardless of what was actually loaded. An unrecognized
+   *  shape (layout: 'custom', or anything inferTemplateId can't place) falls
+   *  back to a neutral label built from the construct's own name rather than
+   *  guessing — SCRATCH_TEMPLATE's controls manifest still applies since it
+   *  is the generic common-sections editor. */
+  const templateForLoadedConstruct = (c: Construct): BuildableTemplate => {
+    const id = inferTemplateId(c);
+    if (id) {
+      const entry = templateById(id);
+      if (entry && entry.availability === 'buildable') return entry;
+    }
+    return { ...SCRATCH_TEMPLATE, name: c.name };
+  };
 
   const templateFor = (id: BuilderTemplateId): BuildableTemplate =>
     id === 'scratch' ? SCRATCH_TEMPLATE : buildableTemplates().find((t) => t.id === id) ?? SCRATCH_TEMPLATE;

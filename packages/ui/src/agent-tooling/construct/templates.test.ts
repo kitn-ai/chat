@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { ConstructSchema, CONSTRUCT_SCHEMA_URL } from './schema';
-import { TEMPLATES, buildableTemplates, templateById } from './templates';
+import { TEMPLATES, buildableTemplates, templateById, inferTemplateId } from './templates';
 
 const starterCases = buildableTemplates().flatMap((t) => [
   { name: t.id, starter: t.starter },
@@ -81,6 +81,19 @@ describe('starter content rules (B-14 / B-4)', () => {
   it("Research states its defining fact in its own JSON: sources: { strip: true }", () => {
     const research = buildableTemplates().find((t) => t.id === 'research')!;
     expect(research.starter.capabilities?.sources).toEqual({ strip: true });
+  });
+});
+
+describe('inferTemplateId derives the family from a loaded construct\'s own shape (T-3: no template key in the file)', () => {
+  it('every buildable starter (and every variant starter) infers back to its own template id', () => {
+    for (const { name, starter } of starterCases) {
+      const templateId = name.split('.')[0] as ReturnType<typeof inferTemplateId>;
+      expect(inferTemplateId(starter), name).toBe(templateId);
+    }
+  });
+
+  it('layout: custom or an unrecognized shape infers undefined, not a guess', () => {
+    expect(inferTemplateId({ $schema: CONSTRUCT_SCHEMA_URL, name: 'x', layout: 'custom', provider: { mode: 'mock' }, slots: [{ name: 'pane', component: 'div' }] } as never)).toBeUndefined();
   });
 });
 
