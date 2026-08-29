@@ -1,5 +1,12 @@
 <!doctype html>
-<html lang="en">
+<!-- class="dark" (owner ruling, dark-round): the kit resolves dark mode via
+     a plain `.dark` class ancestor — theme.css's `@custom-variant dark
+     (&:is(.dark *))` — not prefers-color-scheme, so nothing turns dark
+     without it. The builder's own chrome (this shell) is dark by default;
+     the PREVIEW iframe's app is a separate document with its own theme,
+     driven by each starter's `theme.mode` in templates.ts (dark for every
+     buildable template except widget, which follows the host site). -->
+<html lang="en" class="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
