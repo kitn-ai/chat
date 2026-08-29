@@ -276,7 +276,10 @@ const DEFAULT_CONSTRUCT: BuilderConstruct = {
   layout: 'split',
   provider: { mode: 'endpoint', url: '/api/chat', wire: 'openai' },
   header: { title: 'Workspace' },
-  theme: { accent: '#ea580c', mode: 'system' },
+  // orange-700, not -600: the accent paints the preview's primary buttons, and
+  // white 12px text on #ea580c is 3.55:1 — under axe's 4.5:1 minimum. #c2410c
+  // clears it (~5:1) while keeping the same orange identity.
+  theme: { accent: '#c2410c', mode: 'system' },
   capabilities: {
     starters: ['Build a pricing table', 'Add a dark mode toggle'],
     attachments: { accept: ['image/*'] },
@@ -856,6 +859,7 @@ function HeaderActionsSection(props: {
             <div class="flex items-center gap-1.5 rounded-md border border-border/70 bg-surface px-2 py-1.5">
               <span class="flex-1 truncate text-xs font-medium text-foreground">{action.label}</span>
               <Select
+                aria-label={`${action.label} variant`}
                 options={HEADER_VARIANT_OPTIONS}
                 value={action.variant}
                 onChange={(e) => setVariant(i(), e.currentTarget.value as HeaderButtonVariant)}
@@ -876,7 +880,7 @@ function HeaderActionsSection(props: {
       </div>
       <div class="flex items-center gap-1.5">
         <Input value={draftLabel()} onValueInput={setDraftLabel} placeholder="Button label" class="flex-1 text-xs" />
-        <Select options={HEADER_VARIANT_OPTIONS} value={draftVariant()} onChange={(e) => setDraftVariant(e.currentTarget.value as HeaderButtonVariant)} class="text-xs" />
+        <Select aria-label="New action variant" options={HEADER_VARIANT_OPTIONS} value={draftVariant()} onChange={(e) => setDraftVariant(e.currentTarget.value as HeaderButtonVariant)} class="text-xs" />
         <Button type="button" variant="outline" size="sm" onClick={add}>Add</Button>
       </div>
     </section>

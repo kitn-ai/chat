@@ -176,7 +176,10 @@ export function BuilderStart(props: BuilderStartProps): JSX.Element {
                   local to this one block, so it tightens only this pairing
                   without touching `ui/card.tsx`'s shared spacing. */}
               <div class="flex flex-col gap-1">
-                <h3 class="text-sm font-semibold text-foreground">{template.name}</h3>
+                {/* h2, not h3: the start screen's own page heading is an h1
+                    ("Choose a starting point"), and these card titles sit
+                    directly under it — h3 skips a level (axe heading-order). */}
+                <h2 class="text-sm font-semibold text-foreground">{template.name}</h2>
                 {/* `text-sm`, not `text-xs` (owner amendment) — bumped up a
                     notch for readability at the larger card size; `leading-
                     snug` keeps line-height comfortable at the new size

@@ -451,8 +451,8 @@ function ModesSection(props: {
         <For each={props.modes}>
           {(mode, i) => (
             <div class="flex items-center gap-1.5 rounded-md border border-border/70 bg-surface px-2 py-1.5">
-              <Input value={mode.label} onValueInput={(v) => setLabel(mode.id, v)} class="w-28 shrink-0 text-xs" />
-              <Select options={SHAPE_OPTIONS} value={mode.shape} onChange={(e) => setShape(mode.id, e.currentTarget.value as ModeShape)} class="flex-1 text-xs" />
+              <Input aria-label={`${mode.label} label`} value={mode.label} onValueInput={(v) => setLabel(mode.id, v)} class="w-28 shrink-0 text-xs" />
+              <Select aria-label={`${mode.label} shape`} options={SHAPE_OPTIONS} value={mode.shape} onChange={(e) => setShape(mode.id, e.currentTarget.value as ModeShape)} class="flex-1 text-xs" />
               <Button type="button" variant="ghost" size="icon-sm" aria-label={`Move ${mode.label} up`} disabled={i() === 0} onClick={() => move(i(), -1)}>
                 <ChevronUp size={12} aria-hidden="true" />
               </Button>
@@ -468,7 +468,7 @@ function ModesSection(props: {
       </div>
       <div class="flex items-center gap-1.5">
         <Input value={draftLabel()} onValueInput={setDraftLabel} placeholder="Mode label" class="flex-1 text-xs" />
-        <Select options={SHAPE_OPTIONS} value={draftShape()} onChange={(e) => setDraftShape(e.currentTarget.value as ModeShape)} class="text-xs" />
+        <Select aria-label="New mode shape" options={SHAPE_OPTIONS} value={draftShape()} onChange={(e) => setDraftShape(e.currentTarget.value as ModeShape)} class="text-xs" />
         <Button type="button" variant="outline" size="sm" onClick={add}>Add</Button>
       </div>
       <p class="text-xs text-muted-foreground">
