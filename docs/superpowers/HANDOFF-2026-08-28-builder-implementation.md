@@ -77,3 +77,30 @@ too).
   non-schema stub state; migrating them onto DerivedBuilderPanel is a
   recorded follow-up.
 - Screens gallery (general-UI docs round) unchanged from the prior handoff.
+
+## Owner feedback rounds (2026-08-29, merged as #351 → 7a7bfbe8)
+
+- Dark-by-default: builder UI dark; every buildable starter `theme.mode:
+  'dark'` EXCEPT widget (owner ruling — embedded widgets follow the host).
+  Registry data only, schema default untouched.
+- Blank Start illustrations root-caused: a `@plugin` between `@import`s
+  silently dropped the token imports on the page's Vite pipeline (the CLI
+  path tolerated it — why Storybook never showed it). Fixed in solid.css +
+  elements/styles.css; compiled.css byte-identical.
+- **Design-parity round** (owner: the real builder must look like the
+  Labs/Builder stories — they are the binding contract). Audit + fixes in
+  `docs/superpowers/research/2026-08-29-builder-design-parity/` (report +
+  before/after pairs): registry manifests wired the designed sections the
+  schema already supports (inAppAssistant: cards/triggers/messageActions;
+  assistant: shell), role-group headers restored on the actions picker,
+  Start/switch-template/name-step brought to the story language
+  (switch-template = story-scale Dialog), stale-light stories re-seeded
+  dark. Cards section is READ-ONLY for now (no JSON-Schema card editor —
+  loud, recorded). Zero vocabulary gaps: everything absent is absent by
+  T-5 ruling.
+- Process lesson: the phase-3 spec treated the design stories as
+  "component groundwork" instead of the binding visual contract, and every
+  reviewer verified against the spec — the parity gap shipped to the owner
+  before anyone compared pixels against the stories. Next visual build:
+  the spec names the stories as the acceptance surface and the IVP
+  compares against them.
