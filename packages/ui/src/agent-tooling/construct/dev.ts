@@ -366,7 +366,16 @@ export async function devBuilder(
       }
       if (req.method === 'GET' && url === '/api/construct') {
         if (!abs) return send(404, { problems: [{ path: '', message: 'no construct yet' }] });
-        return send(200, JSON.parse(readFileSync(abs, 'utf8')));
+        const onDisk = JSON.parse(readFileSync(abs, 'utf8'));
+        // F5 (builder-page fix wave): validate server-side rather than in the
+        // page bundle — validateConstruct pulls zod, which dev.ts (a Node
+        // script) already carries, but the browser bundle does not, and this
+        // route only fires for an EXTERNAL hand-edit relayed by the SSE
+        // 'construct' event, so the file on disk can be invalid mid-edit.
+        // Additive `problems` field only, so a valid file's response is
+        // byte-identical to before.
+        const checked = validateConstruct(onDisk);
+        return send(200, checked.ok ? onDisk : { ...onDisk, problems: checked.problems });
       }
       if (req.method === 'GET' && url === '/api/events') return hub.attach(res);
       if (req.method === 'POST' && url === '/api/construct') {

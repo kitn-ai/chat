@@ -8,7 +8,7 @@
  * writes nothing — the last-good preview stands), and external hand-edits
  * flow back in through the SSE 'construct' event the watcher broadcasts.
  */
-import { createSignal, createResource, onMount, onCleanup, Show, For } from 'solid-js';
+import { createSignal, onMount, onCleanup, Show, For } from 'solid-js';
 import { BuilderStart, BUILDABLE_BUILDER_TEMPLATES, type BuilderTemplateId } from '../components/builder-start';
 import { WorkspaceVariantPicker, type WorkspaceVariantId } from '../components/builder-workspace-variants';
 import { DerivedBuilderPanel } from '../components/builder-panel-derived';
@@ -50,28 +50,61 @@ export function App() {
   const [pickedId, setPickedId] = createSignal<BuilderTemplateId | undefined>();
   const [name, setName] = createSignal('');
   const [confirmSwitch, setConfirmSwitch] = createSignal(false);
+  // F1: one persistent banner across every server round-trip site (load,
+  // SSE refetch, create, edit). Server-down (fetch throws) or a non-422
+  // non-2xx response sets it; the NEXT successful round-trip on ANY of
+  // those sites clears it — a 422 is a validation rejection, not a server
+  // problem, so it never touches this signal.
+  const [serverError, setServerError] = createSignal<string | undefined>();
 
   onMount(async () => {
-    const state = await (await fetch('/api/state')).json();
-    if (state.phase === 'panel') {
-      const loaded = state.construct as Construct;
-      setConstruct(loaded);
-      setPreviewUrl(state.previewUrl);
-      // The header label is DERIVED from the loaded construct's own shape
-      // (inferTemplateId) rather than defaulting to the scratch manifest —
-      // a construct file carries no template id, but its layout/capabilities
-      // shape is enough to place it back into its family (or fall back to a
-      // neutral label built from its own name, never "Scratch").
-      setTemplate(templateForLoadedConstruct(loaded));
-      setScreen({ step: 'panel' });
+    try {
+      const res = await fetch('/api/state');
+      if (!res.ok) throw new Error(`GET /api/state → ${res.status}`);
+      const state = await res.json();
+      if (state.phase === 'panel') {
+        const loaded = state.construct as Construct;
+        setConstruct(loaded);
+        setPreviewUrl(state.previewUrl);
+        // The header label is DERIVED from the loaded construct's own shape
+        // (inferTemplateId) rather than defaulting to the scratch manifest —
+        // a construct file carries no template id, but its layout/capabilities
+        // shape is enough to place it back into its family (or fall back to a
+        // neutral label built from its own name, never "Scratch").
+        setTemplate(templateForLoadedConstruct(loaded));
+        setScreen({ step: 'panel' });
+      }
+      setServerError(undefined);
+    } catch {
+      setServerError("can't reach the builder server");
     }
+
     const events = new EventSource('/api/events');
+    events.onopen = () => setServerError(undefined);
     events.addEventListener('construct', async () => {
-      const raw = (await (await fetch('/api/construct')).json()) as Construct;
-      setConstruct(raw);
-      setTemplate(templateForLoadedConstruct(raw));
-      setProblems([]);
+      try {
+        const res = await fetch('/api/construct');
+        if (!res.ok) throw new Error(`GET /api/construct → ${res.status}`);
+        const body = (await res.json()) as (Construct & { problems?: ConstructProblem[] });
+        // F5: the file on disk can be invalid mid external-hand-edit. The
+        // SERVER validates (dev.ts already carries zod; the page bundle does
+        // not) and adds a `problems` field rather than the page pulling in
+        // validateConstruct itself. On an invalid file, surface the problems
+        // and keep the last-good construct/preview standing instead of
+        // clobbering them with the bad shape.
+        if (body.problems) {
+          setProblems(body.problems);
+        } else {
+          setConstruct(body as Construct);
+          setTemplate(templateForLoadedConstruct(body as Construct));
+          setProblems([]);
+        }
+        setServerError(undefined);
+      } catch {
+        setServerError("can't reach the builder server");
+      }
     });
+    events.onerror = () => setServerError("can't reach the builder server");
     onCleanup(() => events.close());
   });
 
@@ -105,32 +138,62 @@ export function App() {
   };
 
   const create = async (variantId?: WorkspaceVariantId) => {
-    const res = await fetch('/api/create', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ templateId: pickedId(), variantId, name: name() }),
-    });
-    const body = await res.json();
-    if (!res.ok) { setProblems(body.problems ?? []); return; }
-    setTemplate(templateFor(pickedId()!));
-    setConstruct(body.construct as Construct);
-    setPreviewUrl(body.previewUrl);
-    setProblems([]);
-    setScreen({ step: 'panel' });
+    try {
+      const res = await fetch('/api/create', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ templateId: pickedId(), variantId, name: name() }),
+      });
+      if (res.status === 422) {
+        setProblems(((await res.json()).problems as ConstructProblem[] | undefined) ?? []);
+        setServerError(undefined); // reachable — this is a validation rejection, not a server problem
+        return;
+      }
+      if (!res.ok) throw new Error(`POST /api/create → ${res.status}`);
+      const body = await res.json();
+      setTemplate(templateFor(pickedId()!));
+      setConstruct(body.construct as Construct);
+      setPreviewUrl(body.previewUrl);
+      setProblems([]);
+      setServerError(undefined);
+      setScreen({ step: 'panel' });
+    } catch {
+      setServerError('save failed');
+    }
   };
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  // F2: each edit's POST can outlive the next one (slow network, a burst of
+  // keystrokes past the debounce). A monotonic request id — bumped the
+  // instant a new POST starts — lets a response recognize it has been
+  // superseded and drop itself instead of overwriting newer problems with a
+  // stale validation result.
+  let editRequestId = 0;
   const onEdit = (next: Construct) => {
     setConstruct(next); // optimistic — the panel stays live while typing
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(async () => {
-      const res = await fetch('/api/construct', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(next),
-      });
-      if (res.status === 422) setProblems((await res.json()).problems ?? []);
-      else setProblems([]);
+      const requestId = ++editRequestId;
+      try {
+        const res = await fetch('/api/construct', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(next),
+        });
+        if (requestId !== editRequestId) return; // a newer edit superseded this one
+        if (res.status === 422) {
+          setProblems(((await res.json()).problems as ConstructProblem[] | undefined) ?? []);
+          setServerError(undefined);
+        } else if (!res.ok) {
+          throw new Error(`POST /api/construct → ${res.status}`);
+        } else {
+          setProblems([]);
+          setServerError(undefined);
+        }
+      } catch {
+        if (requestId !== editRequestId) return;
+        setServerError('save failed');
+      }
     }, 300);
   };
 
@@ -147,6 +210,14 @@ export function App() {
 
   return (
     <div class="min-h-dvh bg-background text-foreground">
+      {/* F1: one persistent banner over every screen — server-down or a
+       *  non-422 write failure needs to be visible no matter which step the
+       *  page is on, not just inside the panel. */}
+      <Show when={serverError()}>
+        <div role="alert" class="sticky top-0 z-10 border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-center text-sm text-destructive dark:bg-destructive/15 dark:text-red-400">
+          {serverError()}
+        </div>
+      </Show>
       <Show when={screen().step === 'start'}>
         <main class="mx-auto max-w-4xl p-8">
           <h1 class="mb-1 text-lg font-semibold">Start a construct</h1>
