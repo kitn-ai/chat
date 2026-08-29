@@ -82,6 +82,17 @@ describe('starter content rules (B-14 / B-4)', () => {
     const research = buildableTemplates().find((t) => t.id === 'research')!;
     expect(research.starter.capabilities?.sources).toEqual({ strip: true });
   });
+
+  it('every buildable starter ships theme.mode: "dark" EXCEPT widget, which stays "system" (owner ruling, dark round — an embedded widget follows its host site, not its own preference)', () => {
+    for (const t of buildableTemplates()) {
+      const all = [t.starter, ...(t.variants ?? []).map((v) => v.starter)];
+      for (const s of all) {
+        expect(s.theme?.mode, `${t.id}${s === t.starter ? '' : ' variant'}`).toBe(
+          t.id === 'widget' ? 'system' : 'dark',
+        );
+      }
+    }
+  });
 });
 
 describe('inferTemplateId derives the family from a loaded construct\'s own shape (T-3: no template key in the file)', () => {

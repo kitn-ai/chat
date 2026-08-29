@@ -10,7 +10,7 @@
   },
   "theme": {
     "accent": "#0ea5e9",
-    "mode": "system"
+    "mode": "dark"
   },
   "aside": {
     "position": "end",

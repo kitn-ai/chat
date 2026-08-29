@@ -144,7 +144,12 @@ const inAppAssistantStarter: Construct = {
   layout: 'aside',
   provider: { mode: 'mock' },
   header: { title: 'Assistant' },
-  theme: { accent: '#0ea5e9', mode: 'system' },
+  // Dark-by-default (owner ruling, dark round): every buildable starter
+  // EXCEPT widget ships mode: 'dark' — widget is embedded in a host site and
+  // follows IT, not its own preference (T-3: this is registry data, not a
+  // schema default; 'system' stays the schema's own default for anyone
+  // hand-authoring a construct).
+  theme: { accent: '#0ea5e9', mode: 'dark' },
   // codegen's own defaults, stated so the geometry is visible/editable.
   aside: { position: 'end', width: '380px' },
   capabilities: {
@@ -161,7 +166,9 @@ const assistantStarter: Construct = {
   layout: 'fullscreen',
   provider: { mode: 'mock' },
   header: { title: 'Assistant' },
-  theme: { accent: '#7c3aed', mode: 'system' },
+  // Dark-by-default (owner ruling, dark round) — see inAppAssistantStarter's
+  // note above.
+  theme: { accent: '#7c3aed', mode: 'dark' },
   empty: {
     title: 'What can I help with?',
     description: 'Ask anything, or start from a suggestion below.',
@@ -181,7 +188,9 @@ const researchStarter: Construct = {
   layout: 'fullscreen',
   provider: { mode: 'mock' },
   header: { title: 'Research' },
-  theme: { accent: '#0f766e', mode: 'system' },
+  // Dark-by-default (owner ruling, dark round) — see inAppAssistantStarter's
+  // note above.
+  theme: { accent: '#0f766e', mode: 'dark' },
   capabilities: {
     starters: ['How does the wire adapter work?', 'What are message parts?'],
     attachments: { accept: ['application/pdf'] },
@@ -231,7 +240,10 @@ const workspaceBase: Construct = {
       { label: 'Deploy', variant: 'default' },
     ],
   },
-  theme: { accent: '#ea580c', mode: 'system' },
+  // Dark-by-default (owner ruling, dark round) — see inAppAssistantStarter's
+  // note above. Both variants below spread ...workspaceBase without
+  // overriding theme, so this covers artifactPreview and appPreview too.
+  theme: { accent: '#ea580c', mode: 'dark' },
   shell: { commandPalette: true, userMenu: { name: 'Ada', plan: 'Pro' } },
   composer: workspaceTriggers,
   capabilities: {
