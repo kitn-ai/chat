@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync as readF, writeFileSync as writeF, readdirSyn
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import { mkdirSync } from 'node:fs';
-import { workDirFor, installKey, regenerate, regenTurn, handleConstructPut, createEventHub, serveBuilderAsset, listenLoopbackOnly, resolveBuilderPageDir } from './dev';
+import { workDirFor, installKey, regenerate, regenTurn, handleConstructPut, shapeConstructGetResponse, createEventHub, serveBuilderAsset, listenLoopbackOnly, resolveBuilderPageDir } from './dev';
 import { generateProject, type GeneratedFile } from './codegen';
 import { validateConstruct } from './schema';
 
@@ -143,6 +143,20 @@ describe('kai dev --builder internals (B-22)', () => {
     expect((onDisk.theme as Record<string, unknown>).mode).toBeUndefined();
     expect(readF(abs, 'utf8').endsWith('\n')).toBe(true);
     expect(readdirSync(dir)).toEqual(['demo.construct.json']); // tmp renamed away
+  });
+
+  it('shapeConstructGetResponse: a valid on-disk construct is returned byte-identical, no problems field', () => {
+    const shaped = shapeConstructGetResponse(goodRaw) as Record<string, unknown>;
+    expect(shaped).toEqual(goodRaw);
+    expect('problems' in shaped).toBe(false);
+  });
+
+  it('shapeConstructGetResponse: an invalid on-disk construct (external hand-edit mid-write) carries the raw JSON PLUS problems', () => {
+    const bad = { ...goodRaw, layout: 'sidebar' }; // not one of the schema's layout enum values
+    const shaped = shapeConstructGetResponse(bad) as { layout: string; problems: Array<{ path: string }> };
+    expect(shaped.layout).toBe('sidebar'); // the raw file content is preserved, not discarded
+    expect(shaped.problems.length).toBeGreaterThan(0);
+    expect(shaped.problems.some((p) => p.path === 'layout')).toBe(true);
   });
 
   it('event hub broadcasts to attached responses as SSE frames', () => {

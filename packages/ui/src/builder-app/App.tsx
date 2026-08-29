@@ -14,6 +14,7 @@ import { WorkspaceVariantPicker, type WorkspaceVariantId } from '../components/b
 import { DerivedBuilderPanel } from '../components/builder-panel-derived';
 import { buildableTemplates, templateById, inferTemplateId, type BuildableTemplate } from '../agent-tooling/construct/templates';
 import type { Construct, ConstructProblem } from '../agent-tooling/construct/schema';
+import { createEditGuard } from './edit-guard';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 
@@ -164,36 +165,25 @@ export function App() {
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   // F2: each edit's POST can outlive the next one (slow network, a burst of
-  // keystrokes past the debounce). A monotonic request id — bumped the
-  // instant a new POST starts — lets a response recognize it has been
-  // superseded and drop itself instead of overwriting newer problems with a
-  // stale validation result.
-  let editRequestId = 0;
+  // keystrokes past the debounce). createEditGuard's monotonic request id,
+  // bumped the instant a new submit() starts, drops a response that arrives
+  // after a newer edit already superseded it — see edit-guard.ts and its
+  // test for the out-of-order case this guards against.
+  const submitEdit = createEditGuard((next) =>
+    fetch('/api/construct', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(next),
+    }),
+  );
   const onEdit = (next: Construct) => {
     setConstruct(next); // optimistic — the panel stays live while typing
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(async () => {
-      const requestId = ++editRequestId;
-      try {
-        const res = await fetch('/api/construct', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(next),
-        });
-        if (requestId !== editRequestId) return; // a newer edit superseded this one
-        if (res.status === 422) {
-          setProblems(((await res.json()).problems as ConstructProblem[] | undefined) ?? []);
-          setServerError(undefined);
-        } else if (!res.ok) {
-          throw new Error(`POST /api/construct → ${res.status}`);
-        } else {
-          setProblems([]);
-          setServerError(undefined);
-        }
-      } catch {
-        if (requestId !== editRequestId) return;
-        setServerError('save failed');
-      }
+      const outcome = await submitEdit(next);
+      if (!outcome) return; // stale — a newer edit's outcome already applied
+      setProblems(outcome.problems);
+      setServerError(outcome.serverError);
     }, 300);
   };
 
