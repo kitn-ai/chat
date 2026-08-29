@@ -1,0 +1,20 @@
+Command: pnpm --filter @kitn.ai/ui exec vitest run --project=unit
+(full suite, after fixing this verifier's own evidence README's two
+unmarked gate-list blocks with <!-- gate-list: partial -- ... --> markers)
+
+ Test Files  387 passed (387)
+      Tests  5454 passed (5454)
+   Start at  17:43:16
+   Duration  74.00s
+
+PASS, full suite. (Interleaved stderr about HTMLCanvasElement.getContext
+"Not implemented" from jsdom is pre-existing noise from audio-visualizer /
+pdf-preview tests that intentionally probe the unimplemented canvas API —
+it is not a test failure; the summary line above is authoritative.)
+
+Note for the record: the one failure seen between the two runs
+(tests/scripts/gate-parity-guard-wiring.test.ts) was never a defect in the
+implementer's fix commits — it was this verifier's own first-pass evidence
+commit (72ea2336) adding an unmarked gate-shaped table/fenced-block to
+README.md, caught by the repo's own gate-parity-guard-wiring test. Fixed in
+this evidence commit, not in application source.

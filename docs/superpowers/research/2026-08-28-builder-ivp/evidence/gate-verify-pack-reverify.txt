@@ -1,0 +1,12 @@
+Command: cd packages/ui && pnpm run verify:pack
+(re-run after fresh `nx build ui --skip-nx-cache` at HEAD a5d8a814)
+
+> @kitn.ai/ui@0.30.0 verify:pack
+> node scripts/verify-pack-weight.mjs --self-test && node scripts/verify-pack-weight.mjs
+
+✓ verify-pack-weight self-test: 3 case(s) behave as specified.
+✓ pack weight (npm 10.9.8): 614 files, 9.56 MiB unpacked (ceiling 9.85 MiB); every non-dist file over 64.0 KiB is one of the 3 allowlisted.
+
+PASS. Ceiling raised 9.49 -> 9.85 MiB in a5d8a814 (owner-approved margin
+rule per the commit); actual unpacked size unchanged at 9.56 MiB, now well
+under the new ceiling.

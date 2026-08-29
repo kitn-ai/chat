@@ -1,0 +1,13 @@
+Command: pnpm --filter @kitn.ai/ui exec vitest run --project=unit tests/styles/shadow-sheet-scan.test.ts
+(re-run after fresh `nx build ui --skip-nx-cache` at HEAD f4c4390e/a5d8a814)
+
+ RUN  v4.1.2 /Users/home/Projects/kitn-ai/kitn-chat/packages/ui
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  17:42:01
+   Duration  460ms
+
+PASS. The fix in f4c4390e (add src/builder-app to the shadow-sheet @source
+list) resolves the missing compiled.css utility classes
+(grid-cols-[380px_1fr], h-dvh, max-w-4xl, max-w-md, mb-6, min-h-dvh, p-8).
