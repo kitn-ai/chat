@@ -38,8 +38,16 @@
    optional peer the consumer installs. */
 @import "tw-animate-css";
 @import "../../theme.css";
-@plugin "@tailwindcss/typography";
 @import "../../kit-base.css";
+/* @plugin AFTER every @import, not between them — CSS spec requires every
+   @import to precede any other statement (@charset/empty @layer excepted) or
+   it is silently DROPPED, with no build error and nothing to eyeball. The
+   `tailwindcss` CLI (@tailwindcss/node under the hood, what build:css uses to
+   produce compiled.css) tolerates the old order; a plain Vite +
+   @tailwindcss/postcss pipeline does not — see solid.css's matching note,
+   where this exact ordering silently dropped kit-base.css for any consumer
+   on that stricter pipeline. */
+@plugin "@tailwindcss/typography";
 
 @source "../components";
 @source "../ui";
