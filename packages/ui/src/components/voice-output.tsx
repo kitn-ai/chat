@@ -2,6 +2,7 @@ import { splitProps, Show, createSignal, createEffect, on, onCleanup } from 'sol
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
 import { Tooltip } from '../ui/tooltip';
+import { hasSpeechSynthesis, cancelSpeech, speakUtterance, pauseSpeech, resumeSpeech } from '../primitives/speech';
 
 /** Imperative handle exposed via `controllerRef` — surfaces the playback controls
  *  so the `<kai-voice-output>` facade can forward them as instance methods. Both
@@ -44,11 +45,6 @@ export interface VoiceOutputProps {
   controllerRef?: (controller: VoiceOutputController) => void;
 }
 
-/** True when the browser exposes the Web Speech synthesis API. */
-function hasSpeechSynthesis(): boolean {
-  return typeof window !== 'undefined' && 'speechSynthesis' in window;
-}
-
 export function VoiceOutput(props: VoiceOutputProps) {
   const [local] = splitProps(props, ['text', 'disabled', 'class']);
   const [isSpeaking, setIsSpeaking] = createSignal(false);
@@ -81,7 +77,7 @@ export function VoiceOutput(props: VoiceOutputProps) {
   // playback to start (W4 symptom 3).
   function speakNative() {
     if (!hasSpeechSynthesis() || !local.text) return;
-    window.speechSynthesis.cancel();
+    cancelSpeech();
     utterance = new SpeechSynthesisUtterance(local.text);
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
@@ -99,7 +95,7 @@ export function VoiceOutput(props: VoiceOutputProps) {
         message: `Speech synthesis error: ${code}`,
       });
     };
-    window.speechSynthesis.speak(utterance);
+    speakUtterance(utterance);
   }
 
   // Model path: await onSynthesize(text) → play the Blob via an <Audio>.
@@ -151,20 +147,20 @@ export function VoiceOutput(props: VoiceOutputProps) {
         audio.pause();
         audio.currentTime = 0;
       }
-    } else if (hasSpeechSynthesis()) {
-      window.speechSynthesis.cancel();
+    } else {
+      cancelSpeech();
     }
     setIsSpeaking(false);
   }
 
   function pause() {
     if (props.onSynthesize) audio?.pause();
-    else if (hasSpeechSynthesis()) window.speechSynthesis.pause();
+    else pauseSpeech();
   }
 
   function resume() {
     if (props.onSynthesize) void audio?.play();
-    else if (hasSpeechSynthesis()) window.speechSynthesis.resume();
+    else resumeSpeech();
   }
 
   function handleClick() {

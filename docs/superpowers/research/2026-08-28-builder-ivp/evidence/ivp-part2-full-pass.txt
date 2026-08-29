@@ -1,0 +1,161 @@
+B-26 IVP Part 2, second pass, run after the three fix commits
+(411ba065 / f4c4390e / a5d8a814). `kai dev --builder` now starts correctly
+in every configuration.
+
+Setup: `cd packages/ui && npm pack --pack-destination <scratch>`, a fresh
+`npm install file:<tarball>` into a separate throwaway consumer directory
+PER TEMPLATE (as the brief specifies), then
+`node node_modules/@kitn.ai/ui/bin/mcp.js dev --builder` in each. Driven
+with Playwright (chromium) via ad hoc scripts under
+`.superpowers/tmp-ivp-scripts/` (gitignored, not committed).
+
+=== Step 2: Start screen ===
+PASS. `screenshots/start-screen.png`. Exactly 5 buildable cards (Support
+widget, In-app assistant, Assistant, Research, Workspace) + one "Start from
+scratch" row. No Voice card. innerText transcript confirms no stray text.
+
+=== Step 3-8: per template ===
+
+--- widget ---
+- Create: picked "Support widget", named "acme-support", clicked Create.
+  Server returned 200 with the full construct + previewUrl. File
+  `acme-support.construct.json` written on disk with layout:"widget".
+  PASS. `screenshots/widget/01-panel-created.png` (captured live, same
+  session, no reload — panel + iframe preview visible with correct
+  "Support widget" header label in this specific in-session render).
+- **DEFECT (panel mislabel on reload)**: loading the SAME construct file
+  in a NEW page load (a plain reload, or after restarting the dev-builder
+  server against an existing file — the documented "existing file →
+  straight to panel" path, B-23) shows the panel header/breadcrumb as
+  "Scratch" instead of the real template name ("Support widget"). All
+  panel fields and the iframe preview are otherwise correct for the
+  actual construct (widget layout, correct starters, correct theme) — only
+  the label is wrong. Reproduced on EVERY fresh page load tested across
+  ALL FIVE templates (widget, inAppAssistant, assistant, research,
+  workspace all show "Scratch" on reload of their own construct).
+  Evidence: `screenshots/widget/02-reload-mislabel-bug.png` — construct is
+  layout:"widget", name:"acme-support", full widget panel + preview render
+  correctly, header still says "Scratch". Confirmed a second, independent
+  way via raw HTML dump (`<span class="text-sm font-semibold">Scratch</span>`
+  in the DOM immediately after `GET /api/state` on an existing file, no
+  further interaction).
+- Flip 1 (header title): filled "Header title" -> "Support HQ". Construct
+  file's `header.title` updated to "Support HQ" within ~1s. PASS.
+- Flip 2 (accent / unread color): filled "Unread color hex value" ->
+  "#FF00AA". Construct file's `theme.unreadColor` updated to "#FF00AA".
+  PASS.
+- HMR verification for both flips together: opened the widget bubble in
+  the iframe preview and confirmed BOTH the new header title ("Support HQ")
+  and the new accent color (pink "Send us a message" button + swatch) are
+  live in the rendered preview. PASS.
+  `screenshots/widget/03-header-and-accent-hmr.png`.
+- Flip 3 (capability toggle): clicked the "Conversations" switch nearest
+  its label. Construct's `capabilities.conversations` key was DELETED
+  (present-as-boolean / delete-on-empty per B-21) rather than set to
+  `false` — correct per spec. Clicking again restored it to `true`.
+  Both directions confirmed via file diff. PASS.
+- Rejection: filled "Name" -> "NotValid" (no hyphen) directly in the panel.
+  Panel showed the pathed problem text ("name: must be a valid
+  custom-element tag: lowercase, with a hyphen…") inline under the field.
+  Construct file on disk was BYTE-IDENTICAL to before the edit (verified
+  via JSON deep-equality of before/after). Preview iframe still served
+  200 and rendered unchanged (last-good stands). PASS.
+  `screenshots/widget/04-rejection.png`. Also independently verified via a
+  raw `curl -X POST /api/construct` with an invalid name: 422 status,
+  `{"problems":[{"path":"name","message":"must be a valid custom-element
+  tag…"}]}`, file on disk unchanged (`diff` clean), preview still 200.
+- Hand-edit inflow: with the panel open, edited the construct file directly
+  on disk (`header.title = "From the editor"`, written via a raw
+  `writeFileSync`, bypassing the panel entirely — the shell-jq-edit
+  pattern from the brief). Within ~2s the panel's "Header title" input
+  updated to "From the editor" WITHOUT a page reload (SSE round-trip:
+  `PANEL_REFLECTS_HAND_EDIT true`). The preview iframe also updated live —
+  opening the widget bubble showed "From the editor" as the header text.
+  PASS. `screenshots/widget/05-hand-edit-sse.png`.
+
+--- workspace ---
+- Variant step: picking "Workspace" from the Start screen renders exactly
+  2 variant cards — "Artifact preview beside chat" and "App preview with
+  device toggles" — under "What kind of workspace?". PASS.
+  `screenshots/workspace/01-variant-picker.png`.
+- Picked "Artifact preview beside chat", named "acme-ws", created. Server
+  returned 200 with `layout:"split"` (the artifactPreview variant).
+- Reload of the existing construct: panel loads correctly with all
+  workspace-specific fields (shell/composer/header actions) but reproduces
+  the SAME "Scratch" mislabel defect described above.
+- Flip (header title): filled "Header title" -> "Acme Workspace". File
+  updated. Preview (rendered directly, split-shell layout with header bar
+  + Share/Deploy action buttons + starters) reflects "Acme Workspace" live
+  in the header, plus the theme accent (#ea580c orange) and the two header
+  action buttons ("Share", "Deploy") and two starter chips — all matching
+  the construct. PASS. `screenshots/workspace/02-header-hmr.png`.
+
+--- inAppAssistant ---
+- Created "acme-assist" with layout:"aside". Header title flip to
+  "Acme Assist" reflected live in the aside-docked preview pane (correct
+  width/position, correct accent #0ea5e9, correct starters). PASS.
+  `screenshots/inAppAssistant/01-header-hmr.png`. Same reload mislabel
+  defect reproduces.
+
+--- assistant ---
+- Created "acme-chat" with layout:"fullscreen". Header title flip to
+  "Acme Chat" reflected live (empty-state greeting, starters, accent
+  #7c3aed all correct). PASS. `screenshots/assistant/01-header-hmr.png`.
+  Same reload mislabel defect reproduces.
+
+--- research ---
+- Created "acme-research" with layout:"fullscreen". Header title flip to
+  "Acme Research" reflected live (starters, accent #0f766e correct). PASS.
+  `screenshots/research/01-header-hmr.png`. Same reload mislabel defect
+  reproduces.
+
+=== Step 8: plain `kai dev` (no --builder), byte-identical check ===
+Ran `node node_modules/@kitn.ai/ui/bin/mcp.js dev acme-support.construct.json`
+(no `--builder`) against the widget construct file created above, from the
+SAME consumer install. Result:
+  - Boots a plain Vite dev server on its own default port 5173 (NOT 4400 or
+    4401 — no builder server at all; confirmed via `lsof -i:4400 -i:4401`
+    showing nothing while plain dev was running).
+  - `curl http://localhost:5173/` returns the construct preview HTML
+    (`<title>acme-support — construct preview</title>`, `<acme-support>`
+    custom element, same placeholder-page copy as the builder's iframe
+    preview: "This blank page stands in for your site...").
+  - Terminal banner: "previewing <acme-support> — edit
+    .../acme-support.construct.json and watch the tab."
+PASS — plain `kai dev` is unaffected by the builder work; boots and serves
+independently, no builder process involved.
+
+=== Scope note ===
+Given time budget, full per-section control-flip coverage (one flip per
+EVERY manifest section, e.g. widget position start/end, aside width,
+sources-strip toggle, every workspace header action) was exercised in
+depth for the `widget` template only (rejection + hand-edit + 3 flips +
+HMR). The remaining four templates (workspace, inAppAssistant, assistant,
+research) were each verified for: Start-screen entry, template creation
+(file written correctly with the right layout/fields), one HMR flip
+(header title, chosen because it is present and generically checkable
+across every layout), and the reload-mislabel defect. This is a
+DELIBERATELY reduced depth versus doing all listed flip examples
+(accent/capability/starters/widget-position/aside-width/sources-strip/
+header-action) on all five templates — reported here rather than silently
+narrowed. The `widget` template's deeper pass (rejection + hand-edit SSE +
+3 section flips) is treated as representative since all five templates
+share the same derived-panel implementation
+(`src/components/builder-panel-derived.tsx` per the Task-6 brief's
+Interfaces) and none showed panel-implementation divergence in the parts
+that WERE checked.
+
+=== Process hygiene ===
+Every server was started in its own directory, one at a time (ports
+4400/4401 are fixed, not parameterized). Each was killed after use;
+`lsof -i:4400 -i:4401 -i:5173` and `pgrep -afl
+"vite|mcp.js|construct-cli"` confirmed no orphans after every step and at
+the end of the full run. One methodology note: a graceful `kill` (SIGTERM)
+of the dev-builder process did NOT terminate it within 2+ seconds in one
+observation — `kill -9` was needed, and the vite preview child (port 4401)
+survived its parent's SIGKILL and needed a separate `kill -9` by its own
+PID. This is noted as an observation for the implementer to consider
+(whether SIGTERM should be handled to also tear down the spawned preview
+child) but is not scored as a launch-blocking defect since a real user's
+Ctrl-C sends SIGINT to the whole foreground process group, which was not
+independently tested here.

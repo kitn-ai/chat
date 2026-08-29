@@ -14,7 +14,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { runCli, homeRecentConversationWarning } from './cli';
+import { runCli, homeRecentConversationWarning, parseDevArgs } from './cli';
 import { validateConstruct } from './schema';
 
 const good = { name: 'acme-support', layout: 'widget', provider: { mode: 'mock' } };
@@ -283,4 +283,18 @@ describe('kai CLI', () => {
     },
     240_000,
   );
+});
+
+describe('kai dev --builder flag parse (B-22/B-23)', () => {
+  it('plain dev: path positional, no builder', () => {
+    expect(parseDevArgs(['demo.construct.json'])).toEqual({ uiSpec: undefined, builder: false, path: 'demo.construct.json' });
+  });
+  it('--builder with no path is legal (the Start screen), with a path goes straight to the panel', () => {
+    expect(parseDevArgs(['--builder'])).toEqual({ uiSpec: undefined, builder: true, path: undefined });
+    expect(parseDevArgs(['--builder', 'demo.construct.json'])).toEqual({ uiSpec: undefined, builder: true, path: 'demo.construct.json' });
+    expect(parseDevArgs(['demo.construct.json', '--builder'])).toEqual({ uiSpec: undefined, builder: true, path: 'demo.construct.json' });
+  });
+  it('--ui composes with --builder, same parse dev/compile already use', () => {
+    expect(parseDevArgs(['--builder', '--ui', 'file:/x.tgz', 'demo.construct.json'])).toEqual({ uiSpec: 'file:/x.tgz', builder: true, path: 'demo.construct.json' });
+  });
 });

@@ -152,8 +152,8 @@ async function main(): Promise<number> {
 
   // ── 2. shape ───────────────────────────────────────────────────────────────
   //
-  // "What would you like to create?" — a real three-way choice
-  // (widget/fullscreen/app), always asked (see `shapeAxis`'s own header in
+  // "What would you like to create?" — the template list + scratch + app,
+  // derived from the registry, always asked (see `shapeAxis`'s own header in
   // `wizard.ts`). `--shape` is a flag override, and `answerAxis` hands an
   // override straight back to its caller UNVALIDATED (see `axes.ts`'s
   // `answerAxis`: `if (opts.override !== undefined) return opts.override;`
@@ -174,7 +174,8 @@ async function main(): Promise<number> {
   )) as ShapeId;
 
   // 'app' → the existing flow below, byte-identical to before this task:
-  // widget/fullscreen route to the construct wizard instead and return here.
+  // every template and 'scratch' route to the construct wizard instead and
+  // return here.
   if (shapeId !== 'app') {
     return runConstructFlow(shapeId, name, dir, nonInteractive);
   }

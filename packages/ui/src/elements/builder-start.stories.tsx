@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { createSignal, Show } from 'solid-js';
-import { BuilderStart, type BuilderTemplateId } from '../components/builder-start';
+import { BuilderStart, BUILDER_TEMPLATES, type BuilderTemplateId } from '../components/builder-start';
 import { WorkspaceVariantPicker, type WorkspaceVariantId } from '../components/builder-workspace-variants';
 
 // Labs/Builder: "Start" - T-7
@@ -64,7 +64,7 @@ function StartDemo() {
         <h1 class="text-xl font-semibold text-foreground">Choose a starting point</h1>
         <p class="text-sm text-muted-foreground">Pick the kind of chat you are building. You can change this later.</p>
       </div>
-      <BuilderStart value={selected()} onSelect={setSelected} />
+      <BuilderStart templates={BUILDER_TEMPLATES} value={selected()} onSelect={setSelected} />
     </div>
   );
 }
@@ -81,7 +81,7 @@ export const Preselected: Story = {
     const [selected, setSelected] = createSignal<BuilderTemplateId | undefined>('research');
     return (
       <div class="mx-auto max-w-6xl py-10" style={BRAND_STYLE}>
-        <BuilderStart value={selected()} onSelect={setSelected} />
+        <BuilderStart templates={BUILDER_TEMPLATES} value={selected()} onSelect={setSelected} />
       </div>
     );
   },
@@ -133,7 +133,7 @@ export const TwoStepFlow: Story = {
             <h1 class="text-xl font-semibold text-foreground">Choose a starting point</h1>
             <p class="text-sm text-muted-foreground">Pick the kind of chat you are building. You can change this later.</p>
           </div>
-          <BuilderStart value={template()} onSelect={selectTemplate} />
+          <BuilderStart templates={BUILDER_TEMPLATES} value={template()} onSelect={selectTemplate} />
           <Show when={template() && template() !== 'workspace'}>
             <p class="text-sm text-muted-foreground">Continuing to {template()}...</p>
           </Show>

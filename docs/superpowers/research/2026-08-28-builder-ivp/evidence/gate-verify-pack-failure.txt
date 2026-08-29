@@ -1,0 +1,44 @@
+Command: cd packages/ui && pnpm run verify:pack
+
+✓ verify-pack-weight self-test: 3 case(s) behave as specified.
+
+✗ pack weight:
+
+  - unpacked size 9.56 MiB exceeds the 9.49 MiB ceiling (over by 0.07 MiB).
+
+    Find what grew:  npm pack --dry-run --ignore-scripts --json | ...
+    Then either drop it from `files`, or raise MAX_UNPACKED_BYTES in
+    scripts/verify-pack-weight.mjs with a note on what grew and why.
+
+ ELIFECYCLE  Command failed with exit code 1.
+
+Ceiling constant checked directly:
+  packages/ui/scripts/verify-pack-weight.mjs:362:
+  const MAX_UNPACKED_BYTES = 9.49 * 1024 * 1024;
+
+Largest pack entries (npm pack --dry-run --ignore-scripts --json), attributing
+the growth to this epic's new artifact:
+  869.4KB dist/solid-6dzhO8Kl.js
+  752.2KB dist/solid-CKcSJurd.js
+  736.0KB dist/register-impl-DQTDIOW1.js
+  669.8KB dist/index.js
+  602.5KB dist/custom-elements.json
+  590.1KB dist/index.server.js
+  565.7KB dist/mcp.es.js
+  450.7KB src/elements/element-meta.json
+  317.4KB dist/elements.d.ts
+  312.8KB llms-full.txt
+  197.2KB dist/builder-page/assets/index-B0ms5q-z.js   <- NEW this epic
+  176.8KB dist/typescript-RycA9KXf.js
+  172.0KB dist/react/index.d.ts
+  171.4KB dist/tsx-B8rCNbgL.js
+  170.7KB dist/javascript-C25yR2R2.js
+  164.1KB frameworks/react/index.tsx
+  ...
+  73.5KB  dist/builder-page/assets/index-CeZ9V_DN.css  <- NEW this epic
+
+`du -sh dist/builder-page` = 280K total (index.html + assets/{js,css}).
+280K is close to, and plausibly the direct cause of, the 0.07 MiB (~72K)
+overage once compression/packing accounting is applied on top of whatever
+headroom existed pre-epic. Per the task brief: reported, NOT fixed and the
+ceiling NOT raised by this verifier.

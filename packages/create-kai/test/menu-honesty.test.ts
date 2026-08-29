@@ -34,6 +34,9 @@ import { readyFrameworks } from '../src/frameworks';
 import { generate } from '../src/generate';
 import { readyLayouts } from '../src/layouts';
 import type { ProjectPlan } from '../src/types';
+import { CONSTRUCT_SCHEMA_URL, ConstructSchema } from '@kitn.ai/ui/construct';
+import { composeConstruct, runWizard, shapeAxis } from '../src/wizard';
+import type { ShapeId } from '../src/wizard';
 
 const TEMPLATE_ROOT = path.resolve(__dirname, '../dist/templates');
 
@@ -260,4 +263,30 @@ describe('an axis with one possible answer is stated, not taken in silence', () 
   it('governs every select axis the CLI has', () => {
     expect(cliAxes(readyFrameworks()[0]).map((a) => a.id)).toEqual(['layout', 'gateway']);
   });
+});
+
+describe('every shape the axis offers actually composes (the wizard-side menu-honesty rule)', () => {
+  const constructShapes = shapeAxis()
+    .options.map((o) => o.id)
+    .filter((id): id is Exclude<ShapeId, 'app'> => id !== 'app');
+
+  it('offers at least one construct shape, so the loop below is not vacuous', () => {
+    expect(constructShapes.length).toBeGreaterThan(0);
+  });
+
+  for (const shape of constructShapes) {
+    it(`${shape}: the non-interactive answers compose a construct the REAL schema accepts`, async () => {
+      const io = {
+        text: async () => '',
+        confirm: async () => false,
+        multilineList: async () => [],
+        state: () => {},
+      };
+      const answers = await runWizard(shape, 'menu-app', io, true);
+      const construct = composeConstruct(answers) as { $schema?: string };
+      const parsed = ConstructSchema.safeParse(construct);
+      expect(parsed.success, parsed.success ? '' : JSON.stringify(parsed.error.issues, null, 2)).toBe(true);
+      expect(construct.$schema).toBe(CONSTRUCT_SCHEMA_URL);
+    });
+  }
 });

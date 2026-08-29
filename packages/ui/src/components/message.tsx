@@ -346,6 +346,11 @@ export interface MessageBodyProps {
   /** `'always'` (default) keeps the bar visible; `'hover'` reveals it on parent
    *  `.group` hover. */
   actionsReveal?: 'always' | 'hover';
+  /** Skip the citations row that consecutive `source` parts collapse into
+   *  (`part="citations"`). The parts STAY in `parts` — the wire encoder
+   *  still needs them, in order — only the rendering is skipped. Default
+   *  absent/false: today's rendering, byte-for-byte (B-8). */
+  hideSources?: boolean;
   /** Fired with the built-in name or custom id when an action is clicked. */
   onAction?: (id: string) => void;
   /** The currently-active feedback vote, so the bar can mark like/dislike and
@@ -476,7 +481,9 @@ function partAs<T extends MessagePart['type']>(
  * state (copied, feedback vote) is owned above and passed in.
  */
 function MessageBody(props: MessageBodyProps) {
-  const groups = createMemo(() => groupMessageParts(props.parts));
+  const groups = createMemo(() =>
+    groupMessageParts(props.parts).filter((g) => !(props.hideSources === true && g.kind === 'sources')),
+  );
   return (
     <>
       {/* before-body (inject): a per-message header above everything else. */}

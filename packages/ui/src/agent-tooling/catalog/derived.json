@@ -905,6 +905,24 @@
           "fn": false
         },
         {
+          "name": "userActions",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "assistantActions",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "hideSources",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
           "name": "accept",
           "scalar": true,
           "optional": true,

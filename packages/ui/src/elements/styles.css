@@ -46,6 +46,7 @@
 @source "../elements";
 @source "../primitives";
 @source "../utils";
+@source "../builder-app";
 @source not "../**/*.stories.tsx";
 @source not "../**/*.test.tsx";
 @source not "../**/*.test.ts";

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Tool } from './types';
 import { validateConstruct, CONSTRUCT_SCHEMA_URL } from '../../construct/schema';
+import { buildableTemplates, type BuildableTemplateId } from '../../construct/templates';
 
 /**
  * construct — turn-by-turn authoring of a kitn construct (one JSON file → one
@@ -38,22 +39,63 @@ const inputSchema = z
   })
   .strict();
 
+/** Intent → template, checked in specificity order (widget's own regex kept
+ *  from the pre-registry version of this function, now word-boundary
+ *  anchored). A match is STATED, per this tool's existing stated/questions
+ *  convention; no match returns the buildable list and asks which.
+ *  Story-only templates are never offered (menu-honesty).
+ *
+ *  Every alternative is wrapped in `\b(?:…)\b` — an UNANCHORED substring
+ *  match is a false positive waiting to happen ("resources" implying
+ *  research off a bare `sources?\b`, "japanese" implying workspace off a
+ *  bare `pane`, "console" matching inside an unrelated word) and a stated
+ *  "implied by your request" that wasn't is the opposite of menu-honesty.
+ *  `\b` sits on the whole alternation, not per-word, so a multi-token
+ *  alternative like `side.?by.?side` still gets one boundary check at each
+ *  end of its full match. */
+const INTENT_PATTERNS: readonly { id: BuildableTemplateId; re: RegExp }[] = [
+  { id: 'widget', re: /\b(?:widget|embed|bubble|corner|launcher)\b/i },
+  { id: 'research', re: /\b(?:research|search|cite|citation|sources?)\b/i },
+  { id: 'workspace', re: /\b(?:workspace|split|pane|artifact|side.?by.?side|preview)\b/i },
+  { id: 'inAppAssistant', re: /\b(?:aside|dock|in.?app|copilot|console|sidebar)\b/i },
+  { id: 'assistant', re: /\b(?:assistant|chat\s*(?:app|bot)|full.?screen)\b/i },
+];
+
 function starterFor(intent: string) {
-  // Derive what the intent already implies; ask only what it leaves open.
-  const impliesWidget = /widget|embed|bubble|corner|launcher/i.test(intent);
+  const templates = buildableTemplates();
   const name = 'my-chat'; // real-choice: always ask for the tag name (it is theirs)
+  const tagQuestion = `What should the element tag be? (kebab-case, e.g. "acme-support"; using "${name}" until you say)`;
+
+  const match = INTENT_PATTERNS.find((p) => p.re.test(intent));
+  const template = match ? templates.find((t) => t.id === match.id) : undefined;
+
+  if (!template) {
+    return {
+      construct: {
+        $schema: CONSTRUCT_SCHEMA_URL,
+        name,
+        layout: 'fullscreen',
+        provider: { mode: 'mock' },
+      },
+      stated: [
+        'no template implied — starting from a bare fullscreen construct. Templates available:',
+        ...templates.map((t) => `  · ${t.id} — ${t.name}: ${t.description}`),
+      ],
+      questions: [
+        tagQuestion,
+        'Which template fits? (name one of the ids above, or keep the bare construct)',
+      ],
+    };
+  }
+
+  const construct = structuredClone(template.starter) as Record<string, unknown>;
+  construct.name = name;
   return {
-    construct: {
-      $schema: CONSTRUCT_SCHEMA_URL,
-      name,
-      layout: 'widget',
-      provider: { mode: 'mock' },
-    },
-    stated: impliesWidget ? ['layout: widget (implied by your request)'] : [],
-    questions: [
-      `What should the element tag be? (kebab-case, e.g. "acme-support"; using "${name}" until you say)`,
-      ...(impliesWidget ? [] : ['Layout: widget, fullscreen, aside, split, or custom?']),
+    construct,
+    stated: [
+      `template: ${template.id} (${template.name}) — implied by your request; every field below is yours to edit`,
     ],
+    questions: [tagQuestion],
   };
 }
 

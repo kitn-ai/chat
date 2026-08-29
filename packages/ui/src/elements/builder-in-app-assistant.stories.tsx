@@ -13,7 +13,6 @@ import {
   ASSISTANT_ACTION_CATALOG,
   DEFAULT_USER_ACTION_ROWS,
   DEFAULT_ASSISTANT_ACTION_ROWS,
-  SPEAK_CUSTOM_ACTION,
   ActionRowPicker,
 } from '../components/builder-message-actions';
 import {
@@ -98,26 +97,20 @@ import type { ChatMessage, ChatMessageAction, CustomAction } from './chat-types'
 //    is entirely a caller-curation concern, never enforced by the
 //    component. This story enforces it by curation: two separate catalogs,
 //    below, one per role, each independently ordered and toggled.
-//  - "Read aloud (speak)" is a SIXTH row, on the assistant catalog only,
-//    marked `proposed: true` (a muted "Proposed" tag in the picker — see
-//    `ActionRowPicker`). `'speak'` is not a `ChatMessageAction` value today
-//    — voice OUTPUT exists as a separate element (`kai-voice-output`), not
-//    as a message action id. Kit-tier proposal: add `'speak'` to
-//    `ChatMessageAction`, backed by `kai-voice-output`, so a host can wire
-//    an actual read-aloud without inventing a `CustomAction`. When the row
-//    is enabled here, the preview appends a REAL `CustomAction` (`{ id:
-//    'speak', label: 'Read aloud (speak)', icon: 'volume-2' }` — `volume-2`
-//    is already a curated icon in `ui/action-icons.ts`'s registry) so the
-//    button actually renders in the live preview; clicking it does
-//    nothing — no fake TTS is ever wired, per instruction.
-//  - Construct-vocabulary candidate updated accordingly from Round A2's
-//    single-array sketch to a role-scoped shape: `capabilities.
-//    messageActions: { user: ChatMessageAction[]; assistant:
-//    (ChatMessageAction | 'speak')[] }` — two ordered arrays, one per role,
-//    mirroring the component tier's own per-message role split rather than
-//    inventing a construct-level concept the component doesn't have.
+//  - "Read aloud" is a SIXTH row, on the assistant catalog only. `'speak'`
+//    is a real `ChatMessageAction` value, backed by the kit's own
+//    SpeechSynthesis mechanics (`primitives/speech.ts`, shared with
+//    `kai-voice-output`) via the shared action-bar click router
+//    (`primitives/message-feedback.ts`). When the row is enabled here, the
+//    preview appends `'speak'` like any other built-in action id — no
+//    `CustomAction` shim needed.
+//  - Construct-vocabulary candidate: `capabilities.messageActions: { user:
+//    ChatMessageAction[]; assistant: ChatMessageAction[] }` — two ordered
+//    arrays, one per role, mirroring the component tier's own per-message
+//    role split rather than inventing a construct-level concept the
+//    component doesn't have.
 // UserActionId/AssistantActionId/the two catalogs/their defaults/
-// SPEAK_CUSTOM_ACTION/ActionRowPicker moved to `components/builder-message-
+// ActionRowPicker moved to `components/builder-message-
 // actions.tsx` (T-1 build-out cross-cutting refactor) so the Assistant and
 // Research templates can reuse the same role-scoped, ordered picker instead
 // of forking it. See that module's own doc comment for the full model.
@@ -526,9 +519,8 @@ function InAppAssistantBuilderDemo(): JSX.Element {
   const [viewport, setViewport] = createSignal<BuilderViewport>('desktop');
 
   // Resolve each role's row state into the ORDERED array the component tier
-  // actually takes — filtering to enabled rows, in row order, mapping the
-  // proposed `speak` row to a real `CustomAction` (never a fake `speak`
-  // `ChatMessageAction`, since that id doesn't exist in the kit today).
+  // actually takes — filtering to enabled rows, in row order. `'speak'` is
+  // a real `ChatMessageAction` id, so it needs no special-casing here.
   const userActions = createMemo<ChatMessageAction[]>(() =>
     userActionRows()
       .filter((r) => r.enabled)
@@ -537,7 +529,7 @@ function InAppAssistantBuilderDemo(): JSX.Element {
   const assistantActions = createMemo<(ChatMessageAction | CustomAction)[]>(() =>
     assistantActionRows()
       .filter((r) => r.enabled)
-      .map((r) => (r.id === 'speak' ? SPEAK_CUSTOM_ACTION : r.id)),
+      .map((r) => r.id),
   );
 
   return (

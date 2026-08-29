@@ -15,7 +15,6 @@ import {
   ASSISTANT_ACTION_CATALOG,
   DEFAULT_USER_ACTION_ROWS,
   DEFAULT_ASSISTANT_ACTION_ROWS,
-  SPEAK_CUSTOM_ACTION,
   ActionRowPicker,
 } from '../components/builder-message-actions';
 import {
@@ -1058,7 +1057,7 @@ function WorkspaceBuilderDemo(): JSX.Element {
 
   const userActions = createMemo<ChatMessageAction[]>(() => userActionRows().filter((r) => r.enabled).map((r) => r.id));
   const assistantActions = createMemo<(ChatMessageAction | CustomAction)[]>(() =>
-    assistantActionRows().filter((r) => r.enabled).map((r) => (r.id === 'speak' ? SPEAK_CUSTOM_ACTION : r.id)),
+    assistantActionRows().filter((r) => r.enabled).map((r) => r.id),
   );
 
   // Owner feedback round — a REAL dark toggle in the header, kept in sync

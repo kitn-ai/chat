@@ -1,0 +1,75 @@
+{
+  "$schema": "https://ui.kitn.ai/schemas/construct/v1.json",
+  "name": "artifact-workspace",
+  "layout": "split",
+  "provider": {
+    "mode": "mock"
+  },
+  "header": {
+    "title": "Workspace",
+    "themeToggle": true,
+    "actions": [
+      {
+        "label": "Share",
+        "variant": "outline"
+      },
+      {
+        "label": "Deploy",
+        "variant": "default"
+      }
+    ]
+  },
+  "theme": {
+    "accent": "#ea580c",
+    "mode": "system"
+  },
+  "shell": {
+    "commandPalette": true,
+    "userMenu": {
+      "name": "Ada",
+      "plan": "Pro"
+    }
+  },
+  "composer": {
+    "triggers": {
+      "slash": [
+        {
+          "id": "summarize",
+          "label": "summarize",
+          "description": "Summarize the thread so far"
+        },
+        {
+          "id": "translate",
+          "label": "translate",
+          "description": "Translate the last message"
+        }
+      ],
+      "mention": [
+        {
+          "id": "researcher",
+          "label": "researcher",
+          "description": "Hands off to the research agent"
+        },
+        {
+          "id": "coder",
+          "label": "coder",
+          "description": "Hands off to the coding agent"
+        }
+      ]
+    }
+  },
+  "capabilities": {
+    "starters": [
+      "Build a pricing table",
+      "Add a dark mode toggle"
+    ],
+    "attachments": {
+      "accept": [
+        "image/*"
+      ]
+    },
+    "history": {
+      "persistence": "local"
+    }
+  }
+}

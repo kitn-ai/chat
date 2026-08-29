@@ -21,6 +21,7 @@ const ICONS: Record<string, IconComponent> = {
   dislike: ThumbsDown,
   regenerate: RefreshCw,
   edit: Pencil,
+  speak: Volume2,
   // common custom icons
   share: Share,
   bookmark: Bookmark,
@@ -50,4 +51,5 @@ export const BUILTIN_ACTION_LABEL: Record<ChatMessageAction, string> = {
   dislike: 'Dislike',
   regenerate: 'Regenerate',
   edit: 'Edit',
+  speak: 'Read aloud',
 };

@@ -2,7 +2,7 @@ import { type JSX, type Component, For } from 'solid-js';
 import { Copy, ThumbsUp, ThumbsDown, RefreshCw, Pencil, Volume2, ChevronUp, ChevronDown } from 'lucide-solid';
 import { Switch } from '../ui/switch';
 import { Button } from '../ui/button';
-import type { ChatMessageAction, CustomAction } from '../elements/chat-types';
+import type { ChatMessageAction } from '../elements/chat-types';
 
 /**
  * The role-scoped, ordered message-action picker — extracted from
@@ -20,14 +20,13 @@ import type { ChatMessageAction, CustomAction } from '../elements/chat-types';
  * role-appropriateness via two independent catalogs, one per role, each
  * independently ordered and toggled.
  *
- * `'speak'` (read-aloud) is a kit-tier PROPOSAL, not a real
- * `ChatMessageAction` value — voice OUTPUT exists as a separate element
- * (`kai-voice-output`), not as a message-action id. When the row is
- * enabled, callers should append `SPEAK_CUSTOM_ACTION` (a real, clickable,
- * no-op `CustomAction`) rather than inventing a fake `ChatMessageAction`.
+ * `'speak'` (read-aloud) is a real `ChatMessageAction` (elements/
+ * chat-actions.ts) backed by the kit's own SpeechSynthesis mechanics
+ * (primitives/speech.ts, shared with `kai-voice-output`) via the shared
+ * action-bar click router (primitives/message-feedback.ts).
  */
 export type UserActionId = Extract<ChatMessageAction, 'edit' | 'copy'>;
-export type AssistantActionId = ChatMessageAction | 'speak';
+export type AssistantActionId = ChatMessageAction;
 
 export interface ActionRowDef<TId extends string> {
   id: TId;
@@ -36,8 +35,6 @@ export interface ActionRowDef<TId extends string> {
    *  each built-in id to, so the picker's icons match what the real action
    *  bar renders. */
   icon: Component<{ class?: string }>;
-  /** Not a real `ChatMessageAction` today — see the module doc comment. */
-  proposed?: boolean;
 }
 
 export interface ActionRowState<TId extends string> {
@@ -55,13 +52,12 @@ export const ASSISTANT_ACTION_CATALOG: readonly ActionRowDef<AssistantActionId>[
   { id: 'like', label: 'Like', icon: ThumbsUp },
   { id: 'dislike', label: 'Dislike', icon: ThumbsDown },
   { id: 'regenerate', label: 'Regenerate', icon: RefreshCw },
-  { id: 'speak', label: 'Read aloud (speak)', icon: Volume2, proposed: true },
+  { id: 'speak', label: 'Read aloud', icon: Volume2 },
 ];
 
 /** Owner defaults (Round A3): "Your messages" starts with only Edit on;
  *  "Assistant messages" starts with Copy/Like/Dislike on, Regenerate and
- *  the proposed Speak row off. Row ORDER here is also the default
- *  enabled-action order. */
+ *  Speak off. Row ORDER here is also the default enabled-action order. */
 export const DEFAULT_USER_ACTION_ROWS: ActionRowState<UserActionId>[] = [
   { id: 'edit', enabled: true },
   { id: 'copy', enabled: false },
@@ -75,16 +71,10 @@ export const DEFAULT_ASSISTANT_ACTION_ROWS: ActionRowState<AssistantActionId>[] 
   { id: 'speak', enabled: false },
 ];
 
-/** The real `CustomAction` a preview should append when the proposed Speak
- *  row is enabled — a genuine, clickable (no-op) button, never faked
- *  audio. `volume-2` is already a curated icon in `ui/action-icons.ts`'s
- *  registry. */
-export const SPEAK_CUSTOM_ACTION: CustomAction = { id: 'speak', label: 'Read aloud (speak)', icon: 'volume-2' };
-
 /**
  * One role's ordered, toggleable action list — a vertical list of rows
- * (icon + label + a "Proposed" tag when the row is one + up/down reorder
- * buttons + an enable switch). Row ORDER is the array order, and doubles
+ * (icon + label + up/down reorder buttons + an enable switch). Row ORDER
+ * is the array order, and doubles
  * as the enabled-action order once filtered — no separate "priority"
  * field, because the component tier has no separate concept either.
  *
@@ -122,11 +112,6 @@ export function ActionRowPicker<TId extends string>(props: {
             <div class="flex items-center gap-2 rounded-md border border-border/70 bg-surface px-2 py-1.5">
               {Icon ? <Icon class="size-3.5 shrink-0 text-muted-foreground" /> : null}
               <span class="flex-1 truncate text-xs font-medium text-foreground">{label}</span>
-              {definition?.proposed ? (
-                <span class="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  Proposed
-                </span>
-              ) : null}
               <div class="flex shrink-0 items-center gap-0.5">
                 <Button
                   type="button"

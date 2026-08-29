@@ -1610,3 +1610,178 @@ describe('home (Task 5)', () => {
     expect(app).toContain('closeConversationsList');
   });
 });
+
+describe('aside geometry (B-2)', () => {
+  it('defaults preserve the pre-B-2 emit: end edge, 380px, border-inline-start', () => {
+    const app = file(generateProject(construct({ layout: 'aside' })), 'src/App.tsx');
+    expect(app).toContain("'inset-inline-end': '0'");
+    expect(app).toContain('width: "380px"');
+    expect(app).toContain("'border-inline-start': '1px solid var(--kai-color-border)'");
+  });
+
+  it('position start flips the docked edge, the divider edge, and the mobile reset', () => {
+    const app = file(generateProject(construct({ layout: 'aside', aside: { position: 'start', width: '320px' } })), 'src/App.tsx');
+    expect(app).toContain("'inset-inline-start': '0'");
+    expect(app).toContain('width: "320px"');
+    expect(app).toContain("'border-inline-end': '1px solid var(--kai-color-border)'");
+    expect(app).toContain('border-inline-end: 0');
+  });
+
+  it('a hostile width cannot break out of the style object', () => {
+    const hostile = "380px' }} onClick={() => alert(1)} x={{ y: '";
+    const app = file(generateProject(construct({ layout: 'aside', aside: { width: hostile } })), 'src/App.tsx');
+    expect(app).toContain(`width: ${JSON.stringify(hostile)}`);
+    expect(app).not.toContain("width: '380px' }} onClick");
+  });
+});
+
+describe('capabilities.messageActions (B-3)', () => {
+  it('threads role arrays onto ChatThread, whole-array JSON.stringify', () => {
+    const app = file(generateProject(construct({
+      capabilities: { messageActions: { user: ['edit', 'copy'], assistant: ['copy', 'like', 'speak'] } },
+    })), 'src/App.tsx');
+    expect(app).toContain(' userActions={["edit","copy"]}');
+    expect(app).toContain(' assistantActions={["copy","like","speak"]}');
+  });
+  it('absent messageActions emits neither prop', () => {
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    expect(app).not.toContain('userActions=');
+    expect(app).not.toContain('assistantActions=');
+  });
+});
+
+describe('capabilities.sources (B-4 — strip is the citations STRIP, a noun)', () => {
+  it('strip: false hides the row (hideSources={true})', () => {
+    const app = file(generateProject(construct({ capabilities: { sources: { strip: false } } })), 'src/App.tsx');
+    expect(app).toContain(' hideSources={true}');
+  });
+  it('strip: true and the absent key emit nothing — the kit default IS the on state', () => {
+    expect(file(generateProject(construct({ capabilities: { sources: { strip: true } } })), 'src/App.tsx')).not.toContain('hideSources');
+    expect(file(generateProject(construct()), 'src/App.tsx')).not.toContain('hideSources');
+  });
+});
+
+describe('composer.triggers (B-5)', () => {
+  it('maps slash/mention onto ChatThread triggers with the kit char/kind pairs', () => {
+    const app = file(generateProject(construct({
+      composer: { triggers: { slash: [{ id: 'help', label: 'Help' }], mention: [{ id: 'docs', label: 'Docs', description: 'Search docs' }] } },
+    })), 'src/App.tsx');
+    expect(app).toContain(
+      ` triggers={${JSON.stringify([
+        { char: '/', kind: 'command', items: [{ id: 'help', label: 'Help' }] },
+        { char: '@', kind: 'mention', items: [{ id: 'docs', label: 'Docs', description: 'Search docs' }] },
+      ])}}`,
+    );
+  });
+  it('absent composer emits no triggers prop', () => {
+    expect(file(generateProject(construct()), 'src/App.tsx')).not.toContain('triggers=');
+  });
+});
+
+describe('header.themeToggle + header.actions (B-10)', () => {
+  it('themeToggle emits a headerEndContent Button flipping the host theme attribute, host passed via the facade', () => {
+    const files = generateProject(construct({ layout: 'fullscreen', header: { themeToggle: true } }));
+    const app = file(files, 'src/App.tsx');
+    const element = file(files, 'src/element.tsx');
+    expect(element).toContain('<App host={ctx.element} />');
+    expect(app).toContain('export function App(props: { host: HTMLElement })');
+    expect(app).toContain('aria-label="Toggle theme"');
+    expect(app).toMatch(/setAttribute\('theme'/);
+  });
+
+  it('header.actions emit variant-threaded Buttons dispatching kai-header-action with the stringified label', () => {
+    const app = file(generateProject(construct({
+      layout: 'fullscreen',
+      header: { actions: [{ label: 'Docs', variant: 'ghost' }, { label: 'Share' }] },
+    })), 'src/App.tsx');
+    expect(app).toContain('variant="ghost"');
+    expect(app).toContain(`new CustomEvent('kai-header-action', { detail: { label: ${JSON.stringify('Docs')} } })`);
+    expect(app).toContain(`{${JSON.stringify('Share')}}`);
+  });
+
+  it('a hostile action label cannot break out of the emitted source', () => {
+    // NOTE: JSON.stringify(hostile) itself literally contains the substring
+    // 'onClick={alert(1)}' (JSON.stringify escapes quotes/backslashes/control
+    // characters, not braces or parens) — so a bare `.not.toContain('onClick=
+    // {alert(1)}')` would be unsatisfiable by ANY implementation once the
+    // sibling assertion requires the escaped form verbatim. The real
+    // invariant (mirrored from the aside-geometry hostile test above) is that
+    // the label's own double quotes stay ESCAPED, so it can never close the
+    // JS string literal early and let the rest run as live JSX/attribute
+    // syntax — checked here as the absence of the UNESCAPED breakout
+    // signature a naive template-literal interpolation would produce.
+    const hostile = `Docs" onClick={alert(1)} x="`;
+    const app = file(generateProject(construct({ layout: 'fullscreen', header: { actions: [{ label: hostile }] } })), 'src/App.tsx');
+    expect(app).toContain(JSON.stringify(hostile));
+    expect(app).not.toContain('label: "Docs" onClick={alert(1)} x=""');
+  });
+
+  it('neither header.actions nor header.themeToggle declared -> no headerEndContent chrome, no host, no Button import', () => {
+    const files = generateProject(construct({ layout: 'fullscreen' }));
+    const app = file(files, 'src/App.tsx');
+    const element = file(files, 'src/element.tsx');
+    expect(app).not.toContain('headerEndContent=');
+    expect(app).not.toContain('export function App(props: { host: HTMLElement })');
+    expect(element).not.toContain('<App host={ctx.element} />');
+    expect(app).not.toContain(', Button');
+  });
+});
+
+describe('shell (B-10)', () => {
+  it('commandPalette emits the Mod+K overlay with CommandList + Input and menu-honest entries', () => {
+    const app = file(generateProject(construct({ layout: 'fullscreen', shell: { commandPalette: true } })), 'src/App.tsx');
+    expect(app).toContain('CommandList');
+    expect(app).toContain('Focus composer');
+    // Menu-honesty: no dead entries — conversations/themeToggle are off here.
+    expect(app).not.toContain('New conversation');
+    expect(app).not.toContain('Toggle theme');
+  });
+
+  it('palette entries derive from what the construct enables', () => {
+    const app = file(generateProject(construct({
+      layout: 'fullscreen',
+      header: { themeToggle: true },
+      shell: { commandPalette: true },
+      capabilities: { conversations: true, history: { persistence: 'local' } },
+    })), 'src/App.tsx');
+    expect(app).toContain('New conversation');
+    expect(app).toContain('Toggle theme');
+    expect(app).toContain('startNewConversation');
+  });
+
+  it('userMenu emits the Dropdown+Avatar recipe dispatching kai-user-menu, name/plan stringified', () => {
+    const app = file(generateProject(construct({ layout: 'fullscreen', shell: { userMenu: { name: 'Ada Lovelace', plan: 'Pro' } } })), 'src/App.tsx');
+    expect(app).toContain('<Dropdown>');
+    expect(app).toContain(`fallback={${JSON.stringify('AD')}}`);
+    expect(app).toMatch(/new CustomEvent\('kai-user-menu'/);
+    expect(app).toContain(JSON.stringify('Ada Lovelace — Pro account menu'));
+  });
+
+  it('userMenu-only construct imports NO Button — the userMenu piece uses only Dropdown/Avatar (regression: Button used to be gated on the composed headerEndContent string, not on which piece actually used it)', () => {
+    const app = file(generateProject(construct({ layout: 'fullscreen', shell: { userMenu: { name: 'Ada Lovelace' } } })), 'src/App.tsx');
+    expect(app).toContain(
+      "import { ChatThread, createKaiChat, Dropdown, DropdownTrigger, DropdownContent, DropdownItem, DropdownSeparator, Avatar } from '@kitn.ai/ui/solid';",
+    );
+    // Scoped to the import list / a real usage, not the giant static doc
+    // comment above `export function App` (which mentions "Button" in prose
+    // unconditionally, on every non-custom construct — a bare `.not.toContain
+    // ('Button')` would false-fail on that prose regardless of this fix).
+    expect(app).not.toContain(', Button');
+    expect(app).not.toContain('<Button');
+  });
+});
+
+it('is deterministic across the full phase-1 vocabulary', () => {
+  const full = () => construct({
+    layout: 'aside',
+    aside: { position: 'start', width: '320px' },
+    header: { title: 'Acme', themeToggle: true, actions: [{ label: 'Docs', variant: 'ghost' }] },
+    composer: { triggers: { slash: [{ id: 'help', label: 'Help' }] } },
+    shell: { commandPalette: true, userMenu: { name: 'Ada' } },
+    capabilities: {
+      messageActions: { user: ['edit'], assistant: ['copy', 'speak'] },
+      sources: { strip: false },
+    },
+  });
+  expect(generateProject(full())).toEqual(generateProject(full()));
+});

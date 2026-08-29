@@ -123,4 +123,33 @@ describe('createMessageFeedback', () => {
       dispose();
     });
   });
+
+  describe("built-in 'speak' action (B-7a)", () => {
+    it('speaks the message text through SpeechSynthesis (cancel-then-speak) and emits', () => {
+      const speak = vi.fn();
+      const cancel = vi.fn();
+      vi.stubGlobal('speechSynthesis', { speak, cancel });
+      vi.stubGlobal('SpeechSynthesisUtterance', class { constructor(public text: string) {} });
+      const emit = vi.fn();
+      const feedback = createMessageFeedback({ emit });
+      feedback.handleAction(
+        { id: 'm1', parts: [{ type: 'text', text: 'hello world' }] },
+        'speak',
+      );
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(speak).toHaveBeenCalledTimes(1);
+      expect((speak.mock.calls[0][0] as { text: string }).text).toBe('hello world');
+      expect(emit).toHaveBeenCalledWith({ messageId: 'm1', action: 'speak' });
+      vi.unstubAllGlobals();
+    });
+
+    it('no-ops the speech (but still emits) where SpeechSynthesis is absent', () => {
+      const emit = vi.fn();
+      const feedback = createMessageFeedback({ emit });
+      expect(() =>
+        feedback.handleAction({ id: 'm2', parts: [{ type: 'text', text: 'x' }] }, 'speak'),
+      ).not.toThrow();
+      expect(emit).toHaveBeenCalledWith({ messageId: 'm2', action: 'speak' });
+    });
+  });
 });
