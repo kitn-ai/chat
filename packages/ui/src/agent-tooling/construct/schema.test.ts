@@ -600,7 +600,7 @@ describe('shell (B-5/10a)', () => {
 });
 
 describe('CROSS_FIELD_RULES (B-20)', () => {
-  it('is the exported, named-rule form of the superRefine body: twelve rules, unique ids, in source order', async () => {
+  it('is the exported, named-rule form of the superRefine body: sixteen rules, unique ids, in source order', async () => {
     const { CROSS_FIELD_RULES } = await import('./schema');
     const ids = CROSS_FIELD_RULES.map((r) => r.id);
     expect(ids).toEqual([
@@ -616,8 +616,101 @@ describe('CROSS_FIELD_RULES (B-20)', () => {
       'conversations-need-history',
       'home-link-urls',
       'history-endpoint-url',
+      'work-surface-layout-scope',
+      'work-surface-url',
+      'work-surface-code-url',
+      'work-surface-code-view',
     ]);
     expect(new Set(ids).size).toBe(ids.length);
     for (const r of CROSS_FIELD_RULES) expect(r.paths.length, r.id).toBeGreaterThan(0);
+  });
+});
+
+describe('workSurface (2026-08-30 — the split pane gets vocabulary)', () => {
+  const splitBase = { name: 'build-workspace', layout: 'split', provider: { mode: 'mock' } } as const;
+
+  it('accepts the full shape on layout: split', () => {
+    expect(
+      validateConstruct({
+        ...splitBase,
+        workSurface: {
+          kind: 'preview',
+          url: '/work-surface.html',
+          codeUrl: '/work-surface-source.html',
+          chrome: { deviceToggle: true, urlBar: true, openInNewTab: true, expand: true, codeView: true },
+        },
+      }).ok,
+    ).toBe(true);
+  });
+
+  it('accepts the minimum: kind + url', () => {
+    expect(validateConstruct({ ...splitBase, workSurface: { kind: 'artifact', url: '/work-surface.html' } }).ok).toBe(true);
+  });
+
+  it('requires url — an optional url reproduces the empty pane this key exists to remove', () => {
+    expect(validateConstruct({ ...splitBase, workSurface: { kind: 'artifact' } }).ok).toBe(false);
+  });
+
+  it('rejects an unknown kind and an unknown key at both levels (vocabulary is closed)', () => {
+    expect(validateConstruct({ ...splitBase, workSurface: { kind: 'browser', url: '/x' } }).ok).toBe(false);
+    expect(validateConstruct({ ...splitBase, workSurface: { kind: 'artifact', url: '/x', width: '50%' } }).ok).toBe(false);
+    expect(validateConstruct({ ...splitBase, workSurface: { kind: 'artifact', url: '/x', chrome: { zoom: true } } }).ok).toBe(false);
+  });
+
+  it('rejects workSurface on every non-split layout — loud, pathed, mirroring widget/aside', () => {
+    for (const layout of ['widget', 'fullscreen', 'aside', 'custom'] as const) {
+      const out = validateConstruct({
+        name: 'acme-support',
+        layout,
+        provider: { mode: 'mock' },
+        ...(layout === 'custom' ? { slots: ['header'] } : {}),
+        workSurface: { kind: 'artifact', url: '/work-surface.html' },
+      });
+      expect(out.ok, layout).toBe(false);
+      if (!out.ok) {
+        expect(out.problems.find((p) => p.path === 'workSurface')?.message).toBe(
+          '"workSurface" is only valid on layout: "split"',
+        );
+      }
+    }
+  });
+
+  it('rejects a javascript: url — it reaches an iframe src', () => {
+    const out = validateConstruct({ ...splitBase, workSurface: { kind: 'artifact', url: 'javascript:alert(1)' } });
+    expect(out.ok).toBe(false);
+    if (!out.ok) {
+      expect(out.problems.find((p) => p.path === 'workSurface.url')?.message).toBe(
+        'url must be an http(s)/mailto or relative URL — no javascript:/data: schemes',
+      );
+    }
+  });
+
+  it('rejects a data: codeUrl — same sink, same policy', () => {
+    const out = validateConstruct({
+      ...splitBase,
+      workSurface: { kind: 'artifact', url: '/x.html', codeUrl: 'data:text/html,<script>1</script>', chrome: { codeView: true } },
+    });
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.problems.some((p) => p.path === 'workSurface.codeUrl')).toBe(true);
+  });
+
+  it('codeView without codeUrl is rejected — a tab with nothing behind it is a dead affordance', () => {
+    const out = validateConstruct({ ...splitBase, workSurface: { kind: 'artifact', url: '/x.html', chrome: { codeView: true } } });
+    expect(out.ok).toBe(false);
+    if (!out.ok) {
+      expect(out.problems.find((p) => p.path === 'workSurface.codeUrl')?.message).toBe(
+        '"chrome.codeView" requires a codeUrl — the Code tab needs source to read',
+      );
+    }
+  });
+
+  it('codeUrl without codeView is rejected too — both directions loud, the history-endpoint-url precedent', () => {
+    const out = validateConstruct({ ...splitBase, workSurface: { kind: 'artifact', url: '/x.html', codeUrl: '/src.html' } });
+    expect(out.ok).toBe(false);
+    if (!out.ok) {
+      expect(out.problems.find((p) => p.path === 'workSurface.codeUrl')?.message).toBe(
+        'codeUrl is only valid with "chrome.codeView": true',
+      );
+    }
   });
 });

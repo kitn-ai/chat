@@ -401,6 +401,52 @@
       },
       "additionalProperties": false
     },
+    "workSurface": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "artifact",
+            "preview"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "codeUrl": {
+          "type": "string",
+          "minLength": 1
+        },
+        "chrome": {
+          "type": "object",
+          "properties": {
+            "deviceToggle": {
+              "type": "boolean"
+            },
+            "urlBar": {
+              "type": "boolean"
+            },
+            "openInNewTab": {
+              "type": "boolean"
+            },
+            "expand": {
+              "type": "boolean"
+            },
+            "codeView": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "kind",
+        "url"
+      ],
+      "additionalProperties": false
+    },
     "shell": {
       "type": "object",
       "properties": {

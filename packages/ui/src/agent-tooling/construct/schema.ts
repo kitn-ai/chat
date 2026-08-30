@@ -385,6 +385,72 @@ export const ConstructSchema = z
       })
       .strict()
       .optional(),
+    /** Layout-scoped work-surface pane, `layout: 'split'` only (superRefine
+     *  below, mirroring `widget`/`aside`). Fills the split's main region,
+     *  which otherwise reserves a column and renders nothing — the defect
+     *  this key exists to remove. Emitted as `<slot name="pane">` FALLBACK
+     *  content, so a consumer projecting their own pane still WINS (native
+     *  slot semantics: assigned nodes replace fallback).
+     *
+     *  Backed by `components/work-surface.tsx`'s `WorkSurface`, promoted from
+     *  `elements/builder-workspace.stories.tsx` — the approved design AND a
+     *  working implementation. Every key below is one real affordance that
+     *  component ships; an affordance with no mechanism is not here.
+     *
+     *  TOP-LEVEL, not a capability: it is layout chrome, the same class as
+     *  `widget`/`aside`, and the placement is forced by the gate as well —
+     *  `scripts/verify-construct.mjs` can only layout-scope TOP-LEVEL keys
+     *  (`TOP_LEVEL_LAYOUT_SCOPE`); a capability valid only on `split` would
+     *  make every non-split capability cell fail validation.
+     *
+     *  `sandbox` is deliberately NOT exposed — the same reasoning
+     *  `ArtifactCardData` already records: a surface someone else authored
+     *  must not be able to widen its own sandbox. */
+    workSurface: z
+      .object({
+        /** What the pane FRAMES it as. `'preview'` fills the canvas edge to
+         *  edge (a browser preview); `'artifact'` centers the content in a
+         *  bordered card on the muted backdrop (a framed artifact). Also
+         *  picks the iframe's accessible title. It does NOT imply any
+         *  chrome: every affordance below is stated explicitly, so what the
+         *  builder panel shows and what the pane renders can never disagree. */
+        kind: z.enum(['artifact', 'preview']),
+        /** What the pane frames. REQUIRED — an optional url reproduces
+         *  exactly the empty pane this round exists to remove. Reaches an
+         *  iframe `src`, so isSafeUrl in superRefine below, the same shape
+         *  as `widget.launcherIcon` / `empty.icon`. */
+        url: z.string().min(1),
+        /** What the Code tab frames. Coupled to `chrome.codeView` in BOTH
+         *  directions (superRefine below): a tab with no source is a dead
+         *  affordance, and a source with no tab is unreachable. Same url
+         *  policy as `url`. */
+        codeUrl: z.string().min(1).optional(),
+        /** Per-affordance toolbar chrome. Each key is ONE affordance
+         *  `WorkSurface` really ships; absent means OFF, the same
+         *  off-by-default convention as every capability in this file. */
+        chrome: z
+          .object({
+            /** Desktop/tablet/mobile canvas widths, scoping the PREVIEW
+             *  branch only (never the Code view) — Lovable's own rule,
+             *  carried through the story. */
+            deviceToggle: z.boolean().optional(),
+            /** The read-only address bar (lock icon + address text). */
+            urlBar: z.boolean().optional(),
+            /** The open-in-new-tab button. */
+            openInNewTab: z.boolean().optional(),
+            /** The expand toggle. Collapses the chat rail via
+             *  WorkspaceShell's own controlled `startCollapsed` — NOT the
+             *  kai-resizable maximize protocol, which WorkspaceShell does
+             *  not carry (recorded in the story's own module comment). */
+            expand: z.boolean().optional(),
+            /** The Preview|Code segmented toggle. Requires `codeUrl`. */
+            codeView: z.boolean().optional(),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
     /** Construct-wide shell chrome (10a): both members reuse REAL kit
      *  pieces — command.tsx's CommandList behind a codegen-emitted overlay
      *  (opened on Mod+K; entries DERIVE from what this construct enables —
@@ -641,6 +707,71 @@ export const CROSS_FIELD_RULES: readonly CrossFieldRule[] = [
           code: z.ZodIssueCode.custom,
           path: ['capabilities', 'history', 'url'],
           message: 'url is only valid with "endpoint" persistence',
+        });
+      }
+    },
+  },
+  {
+    id: 'work-surface-layout-scope',
+    paths: ['layout', 'workSurface'],
+    check: (construct, ctx) => {
+      if (construct.workSurface && construct.layout !== 'split') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['workSurface'],
+          message: '"workSurface" is only valid on layout: "split"',
+        });
+      }
+    },
+  },
+  {
+    id: 'work-surface-url',
+    paths: ['workSurface.url'],
+    check: (construct, ctx) => {
+      if (construct.workSurface && !isSafeUrl(construct.workSurface.url)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['workSurface', 'url'],
+          message: 'url must be an http(s)/mailto or relative URL — no javascript:/data: schemes',
+        });
+      }
+    },
+  },
+  {
+    id: 'work-surface-code-url',
+    paths: ['workSurface.codeUrl'],
+    check: (construct, ctx) => {
+      const codeUrl = construct.workSurface?.codeUrl;
+      if (codeUrl && !isSafeUrl(codeUrl)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['workSurface', 'codeUrl'],
+          message: 'codeUrl must be an http(s)/mailto or relative URL — no javascript:/data: schemes',
+        });
+      }
+    },
+  },
+  {
+    id: 'work-surface-code-view',
+    paths: ['workSurface.codeUrl', 'workSurface.chrome.codeView'],
+    check: (construct, ctx) => {
+      const ws = construct.workSurface;
+      if (!ws) return;
+      // Both directions loud, exactly like history-endpoint-url: a Code tab
+      // with nothing behind it is a dead affordance, and a source with no tab
+      // is unreachable. Neither is a state to guess a fix for.
+      if (ws.chrome?.codeView && !ws.codeUrl) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['workSurface', 'codeUrl'],
+          message: '"chrome.codeView" requires a codeUrl — the Code tab needs source to read',
+        });
+      }
+      if (ws.codeUrl && !ws.chrome?.codeView) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['workSurface', 'codeUrl'],
+          message: 'codeUrl is only valid with "chrome.codeView": true',
         });
       }
     },

@@ -173,14 +173,19 @@ import type { ChatMessage, ChatMessageAction, CustomAction } from './chat-types'
 //  - The SPLIT FRAME ITSELF fits today's schema cleanly: `layout: 'split'`
 //    already exists in `BuilderLayoutKind` and codegen has a real emission
 //    for it. The frame is construct-expressible NOW.
-//  - What CANNOT be expressed: the pane's CONTENT (unchanged from the
-//    first round), the pane's OWN CHROME (device toggle / URL bar / open-
-//    in-tab / expand / Preview-Code, all preview-only signals below), the
-//    app header's ACTIONS, and all four composer knobs (chips, menu,
-//    attachments-applying, mic). Every control this round added past
-//    Identity/Provider/Theme/Capabilities is preview-only, writing to
-//    local signals, never to `BuilderConstruct` — the Raw JSON section
-//    never reflects any of it, which is the honest tell.
+//  - CLOSED 2026-08-30 (`workSurface`, see schema.ts): the pane's OWN CHROME
+//    is construct vocabulary now — `workSurface.chrome.deviceToggle` /
+//    `urlBar` / `openInNewTab` / `expand` / `codeView`, plus `kind` and a
+//    required `url` — and the app header's ACTIONS have been
+//    `header.actions` since T-5 shipped, so that half of this note was
+//    already stale before this round.
+//  - STILL NOT EXPRESSIBLE: the pane's CONTENT beyond a url (a construct
+//    cannot author the framed document — model-produced artifacts need a
+//    `kind` on `cards`, a card->pane route, and a mock responder that
+//    scripts a tool call, none of which exist), and all four composer knobs
+//    (chips, menu, attachments-applying, mic). Those controls still write to
+//    local signals only, never to `BuilderConstruct` — the Raw JSON section
+//    not reflecting them is the honest tell.
 //
 // Panel: the Assistant template's set minus the persistent sidebar
 // (Workspace's own basis — v0/lovable/split-workspace — has no
@@ -638,9 +643,10 @@ function WorkSurfaceSection(props: {
         </div>
       </div>
       <p class="text-xs text-muted-foreground">
-        Preview-only — construct.v1 has no work-surface/pane key at all (T-5, see this file's module doc comment). The split frame is
-        construct-expressible today (`layout: 'split'`); its content and every toolbar affordance above are not. Turning off Code view
-        removes the Preview|Code toggle entirely — a preview-only workspace, not just a disabled control.
+        These map onto real construct vocabulary as of 2026-08-30 — <code>workSurface.kind</code>, <code>url</code> and{' '}
+        <code>chrome.*</code> (see <code>schema.ts</code>). This story drives the same <code>WorkSurface</code> component the
+        emitted app does, with stub content in place of a framed url. Turning off Code view removes the Preview|Code toggle
+        entirely — a preview-only workspace, not just a disabled control.
       </p>
     </section>
   );

@@ -79,6 +79,30 @@ describe('WorkSurface — promoted from builder-workspace.stories.tsx', () => {
     open.mockRestore();
   });
 
+  it('showOpenInNewTab with NO src renders no button at all — an affordance with nothing behind it is not an affordance', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const { container } = render(() => (
+      <WorkSurface preview={<div>stub</div>} showOpenInNewTab showDeviceToggle />
+    ));
+    // Paired against a vacuous pass: the toolbar really did render, and the
+    // device toggle asked for alongside it IS there — the one button with no
+    // document behind it is the only thing missing.
+    expect(container.querySelector('[data-kai-work-surface-toolbar]')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Pane device' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Open in new tab')).not.toBeInTheDocument();
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
+  it('the same flag WITH a src renders it and wires it — the update case the stale case is paired against', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    render(() => <WorkSurface src="/work-surface.html" preview={<div>stub</div>} showOpenInNewTab showUrlBar />);
+    expect(screen.getByLabelText('Open in new tab')).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Open in new tab'));
+    expect(open).toHaveBeenCalled();
+    open.mockRestore();
+  });
+
   it('renders `preview` content instead of an iframe when no src is given (the story\'s stub path)', () => {
     const { container } = render(() => <WorkSurface preview={<div data-stub>stub</div>} />);
     expect(container.querySelector('[data-stub]')).toBeInTheDocument();

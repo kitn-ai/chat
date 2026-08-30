@@ -643,8 +643,11 @@ export function DerivedBuilderPanel(props: DerivedBuilderPanelProps): JSX.Elemen
     for (const [, vis] of Object.entries(RULE_VISIBILITY)) {
       if (vis.treatment !== 'hide-section') continue;
       // The rule's precondition: the section's key is layout-scoped; hide
-      // unless the construct's layout matches the section id.
-      if (props.value.layout !== vis.section) hidden.add(vis.section);
+      // unless the construct's layout matches the scope the rule STATES.
+      // Never `vis.section` — that only ever worked because `widget` and
+      // `aside` are named after their layouts, and `workSurface`/`split` is
+      // not (2026-08-30).
+      if (props.value.layout !== vis.layout) hidden.add(vis.section);
     }
     return hidden;
   };

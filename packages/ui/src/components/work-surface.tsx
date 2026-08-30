@@ -124,6 +124,8 @@ export interface WorkSurfaceProps {
 
   showDeviceToggle?: boolean;
   showUrlBar?: boolean;
+  /** Asks for the open-in-new-tab button. It renders only when there is also
+   *  a `src` to open — see the Show at its site. */
   showOpenInNewTab?: boolean;
   showExpand?: boolean;
   /** `false` REMOVES the Preview|Code toggle entirely (the story's own rule),
@@ -199,7 +201,16 @@ export function WorkSurface(props: WorkSurfaceProps): JSX.Element {
           </div>
         </Show>
 
-        <Show when={props.showOpenInNewTab}>
+        {/* `src` as well as the flag: open-in-new-tab opens the framed
+            document, and with no `src` there is no `Artifact`, so no
+            `controller` — the button would render and do NOTHING. Asking for
+            the affordance is not the same as having something behind it, and
+            this repo's menu-honesty rule is that an affordance with nothing
+            behind it must not render at all (2026-08-30). The construct
+            schema makes `workSurface.url` REQUIRED for the same reason, so
+            an emitted app never reaches this branch; the story's stub path
+            does. */}
+        <Show when={props.showOpenInNewTab && props.src}>
           <Button
             type="button"
             variant="ghost"

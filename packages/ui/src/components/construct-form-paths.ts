@@ -181,7 +181,12 @@ export function controlKindFor(node: z.ZodType): ControlKind {
 // ── visibility registry (B-20) ──────────────────────────────────────────────
 
 export type RuleVisibility =
-  | { treatment: 'hide-section'; section: string }
+  // `layout` is EXPLICIT and not inferred from `section`. The panel used to
+  // compare the section id against the construct's layout name, which worked
+  // only because the `widget` and `aside` sections happen to be NAMED after
+  // their layouts. A `workSurface` section scoped to layout `split` breaks
+  // that coincidence, so the scope is stated.
+  | { treatment: 'hide-section'; section: string; layout: string }
   | { treatment: 'disable-with-reason'; path: string; reason: string }
   | { treatment: 'show-requires'; path: string }
   | { treatment: 'reject-only' };
@@ -195,8 +200,8 @@ export const RULE_VISIBILITY: Record<string, RuleVisibility> = {
   'slots-unique': { treatment: 'reject-only' },
   'custom-layout-needs-slots': { treatment: 'reject-only' },
   'split-pane-slot-collision': { treatment: 'reject-only' },
-  'widget-layout-scope': { treatment: 'hide-section', section: 'widget' },
-  'aside-layout-scope': { treatment: 'hide-section', section: 'aside' },
+  'widget-layout-scope': { treatment: 'hide-section', section: 'widget', layout: 'widget' },
+  'aside-layout-scope': { treatment: 'hide-section', section: 'aside', layout: 'aside' },
   'message-actions-unique': { treatment: 'reject-only' },
   'launcher-icon-url': { treatment: 'reject-only' },
   'empty-icon-url': { treatment: 'reject-only' },
@@ -212,4 +217,8 @@ export const RULE_VISIBILITY: Record<string, RuleVisibility> = {
   },
   'home-link-urls': { treatment: 'reject-only' },
   'history-endpoint-url': { treatment: 'show-requires', path: 'capabilities.history.url' },
+  'work-surface-layout-scope': { treatment: 'hide-section', section: 'workSurface', layout: 'split' },
+  'work-surface-url': { treatment: 'reject-only' },
+  'work-surface-code-url': { treatment: 'reject-only' },
+  'work-surface-code-view': { treatment: 'show-requires', path: 'workSurface.codeUrl' },
 };
