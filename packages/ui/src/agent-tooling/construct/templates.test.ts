@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import type { Construct } from './schema';
 import { ConstructSchema, CONSTRUCT_SCHEMA_URL } from './schema';
 import { TEMPLATES, buildableTemplates, templateById, inferTemplateId } from './templates';
 
@@ -153,6 +154,41 @@ describe('starter content rules (B-14 / B-4)', () => {
         );
       }
     }
+  });
+
+  it('the two Workspace variants differ in what the PANE LOOKS LIKE, not just in name and prompts (W-12)', () => {
+    const ws = buildableTemplates().find((t) => t.id === 'workspace')!;
+    const artifact = ws.variants!.find((v) => v.id === 'artifactPreview')!.starter;
+    const app = ws.variants!.find((v) => v.id === 'appPreview')!.starter;
+
+    expect(artifact.workSurface?.kind).toBe('artifact');
+    expect(app.workSurface?.kind).toBe('preview');
+
+    expect(artifact.workSurface?.chrome).toEqual({
+      deviceToggle: false, urlBar: false, openInNewTab: false, expand: true,
+    });
+    expect(app.workSurface?.chrome).toEqual({
+      deviceToggle: true, urlBar: true, openInNewTab: true, expand: true,
+    });
+
+    // The tell that this is a real difference and not a renamed one.
+    expect(JSON.stringify(artifact.workSurface)).not.toBe(JSON.stringify(app.workSurface));
+  });
+
+  it('the two variants emit DIFFERENT Artifact/WorkSurface props, not merely a different name', async () => {
+    const { generateProject } = await import('./codegen');
+    const ws = buildableTemplates().find((t) => t.id === 'workspace')!;
+    const appOf = (starter: Construct) =>
+      generateProject(starter).find((f) => f.path === 'src/App.tsx')!.code;
+    const a = appOf(ws.variants!.find((v) => v.id === 'artifactPreview')!.starter);
+    const b = appOf(ws.variants!.find((v) => v.id === 'appPreview')!.starter);
+
+    expect(a).toContain('showDeviceToggle={false}');
+    expect(b).toContain('showDeviceToggle={true}');
+    expect(a).toContain('variant="artifact"');
+    expect(b).toContain('variant="preview"');
+    expect(a).toContain('iframeTitle={"Work surface"}');
+    expect(b).toContain('iframeTitle={"App preview"}');
   });
 });
 

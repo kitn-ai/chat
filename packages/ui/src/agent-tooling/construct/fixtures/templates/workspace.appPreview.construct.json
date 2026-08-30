@@ -27,12 +27,12 @@
     "description": "Describe it, and it takes shape in the work surface beside this chat."
   },
   "workSurface": {
-    "kind": "artifact",
+    "kind": "preview",
     "url": "/work-surface.html",
     "chrome": {
-      "deviceToggle": false,
-      "urlBar": false,
-      "openInNewTab": false,
+      "deviceToggle": true,
+      "urlBar": true,
+      "openInNewTab": true,
       "expand": true
     }
   },

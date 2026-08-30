@@ -357,11 +357,25 @@ const workspaceBase: Construct = {
 const workspaceArtifactPreview: Construct = {
   ...workspaceBase,
   name: 'artifact-workspace',
+  // A clean framed surface: one expand control, no browser chrome. The
+  // difference from appPreview below is what the two variant CARDS promise,
+  // and until 2026-08-30 the two starters delivered none of it.
+  workSurface: {
+    kind: 'artifact',
+    url: '/work-surface.html',
+    chrome: { deviceToggle: false, urlBar: false, openInNewTab: false, expand: true },
+  },
 };
 
 const workspaceAppPreview: Construct = {
   ...workspaceBase,
   name: 'app-workspace',
+  // Full browser chrome: device toggle, address bar, open-in-new-tab, expand.
+  workSurface: {
+    kind: 'preview',
+    url: '/work-surface.html',
+    chrome: { deviceToggle: true, urlBar: true, openInNewTab: true, expand: true },
+  },
   capabilities: {
     ...workspaceBase.capabilities,
     starters: ['Build a landing page for a coffee shop', 'Make the hero work on mobile'],
