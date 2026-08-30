@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync as readF, writeFileSync as writeF, readdirSyn
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import { mkdirSync } from 'node:fs';
-import { workDirFor, installKey, regenerate, regenTurn, handleConstructPut, shapeConstructGetResponse, createEventHub, serveBuilderAsset, listenLoopbackOnly, resolveBuilderPageDir, probePort, handleCreate, starterFor, previewFields, waitUntilListening, announceBoot } from './dev';
+import { workDirFor, installKey, regenerate, regenTurn, handleConstructPut, shapeConstructGetResponse, createEventHub, serveBuilderAsset, listenLoopbackOnly, resolveBuilderPageDir, listenWithPortFallback, portInUseNotice, probePort, handleCreate, starterFor, previewFields, waitUntilListening, announceBoot } from './dev';
 import { generateProject, type GeneratedFile } from './codegen';
 import { validateConstruct } from './schema';
 
@@ -427,5 +427,87 @@ describe('probePort asks the same question the browser will (found in the real r
     const port = typeof addr === 'object' && addr !== null ? addr.port : 0;
     await new Promise<void>((r) => server.close(() => r()));
     expect(await probePort(port)).toBe(false);
+  });
+});
+
+describe('a taken builder port fails helpfully, not with an EADDRINUSE stack (owner-hit)', () => {
+  it('steps to the next free port, says which and why, and reports the port it ACTUALLY bound', async () => {
+    const squatter = createServer();
+    const builder = createServer();
+    try {
+      await new Promise<void>((r) => squatter.listen(0, '127.0.0.1', r));
+      const addr = squatter.address();
+      const taken = typeof addr === 'object' && addr !== null ? addr.port : 0;
+
+      const errors: string[] = [];
+      const bound = await listenWithPortFallback(builder, taken, { log: () => {}, error: (s: string) => errors.push(s) });
+
+      expect(bound).toBe(taken + 1);
+      const boundAddr = builder.address();
+      expect(typeof boundAddr === 'object' && boundAddr !== null ? boundAddr.port : 0).toBe(taken + 1);
+      // Still loopback-only after the retry — the fallback goes THROUGH
+      // listenLoopbackOnly, it does not reimplement the bind.
+      expect(typeof boundAddr === 'object' && boundAddr !== null ? boundAddr.address : '').toBe('127.0.0.1');
+      // Actionable: the busy port, the likely cause, and the command that names it.
+      expect(errors[0]).toBe(portInUseNotice(taken, taken + 1));
+      expect(errors[0]).toContain('another `kai dev --builder`');
+      expect(errors[0]).toContain(`lsof -nP -iTCP:${taken}`);
+    } finally {
+      squatter.close();
+      builder.close();
+    }
+  });
+
+  it('steps off a port held on the OTHER loopback family too — binding 127.0.0.1 would have succeeded (found in the real run)', async () => {
+    // Vite binds [::1] and nothing on 127.0.0.1. An EADDRINUSE-only fallback
+    // therefore binds happily on top of a live preview server, and which one
+    // `localhost` reaches is down to DNS ordering.
+    const squatter = createServer();
+    const builder = createServer();
+    try {
+      await new Promise<void>((r, j) => { squatter.once('error', j); squatter.listen(0, '::1', r); });
+      const addr = squatter.address();
+      const taken = typeof addr === 'object' && addr !== null ? addr.port : 0;
+
+      const errors: string[] = [];
+      const bound = await listenWithPortFallback(builder, taken, { log: () => {}, error: (s: string) => errors.push(s) });
+      expect(bound).not.toBe(taken);
+      expect(errors[0]).toContain(`port ${taken} is already in use`);
+    } finally {
+      squatter.close();
+      builder.close();
+    }
+  });
+
+  it('gives up with a readable message rather than an errno once every attempt is taken', async () => {
+    const squatter = createServer();
+    const builder = createServer();
+    try {
+      await new Promise<void>((r) => squatter.listen(0, '127.0.0.1', r));
+      const addr = squatter.address();
+      const taken = typeof addr === 'object' && addr !== null ? addr.port : 0;
+      await expect(
+        listenWithPortFallback(builder, taken, { log: () => {}, error: () => {} }, { attempts: 1 }),
+      ).rejects.toThrow(/is in use[\s\S]*lsof/);
+    } finally {
+      squatter.close();
+      builder.close();
+    }
+  });
+
+  it('binds first time when the port is free, with no notice printed', async () => {
+    const builder = createServer();
+    try {
+      const errors: string[] = [];
+      const bound = await listenWithPortFallback(builder, 0, { log: () => {}, error: (s: string) => errors.push(s) });
+      expect(errors).toEqual([]);
+      // Port 0 means "any": the resolved value is the port really bound, not
+      // the 0 we asked for — the caller derives the preview port from it.
+      const addr = builder.address();
+      expect(bound).toBe(typeof addr === 'object' && addr !== null ? addr.port : -1);
+      expect(bound).toBeGreaterThan(0);
+    } finally {
+      builder.close();
+    }
   });
 });

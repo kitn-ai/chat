@@ -389,6 +389,95 @@ export function listenLoopbackOnly(server: import('node:http').Server, port: num
   server.listen(port, '127.0.0.1', onListening);
 }
 
+/** What a taken builder port SHOULD say. An EADDRINUSE here is not an
+ *  exceptional condition, it is the ordinary consequence of leaving a builder
+ *  running in another terminal — and it used to surface as a raw Node stack
+ *  trace, which names the errno and not one thing the reader can act on. */
+export function portInUseNotice(taken: number, next: number): string {
+  return (
+    `port ${taken} is already in use — another \`kai dev --builder\` is probably still running ` +
+    `(\`lsof -nP -iTCP:${taken} -sTCP:LISTEN\` names it). Trying ${next} instead.`
+  );
+}
+
+export function portsExhaustedMessage(from: number, to: number): string {
+  return (
+    `every port from ${from} to ${to} is in use. Stop the other \`kai dev --builder\` ` +
+    `(\`lsof -nP -iTCP:${from} -sTCP:LISTEN\` names it) and try again.`
+  );
+}
+
+/**
+ * Bind the builder server, stepping to the next port when one is taken rather
+ * than dying with an EADDRINUSE stack (owner-hit). Vite-style: say which port
+ * was busy and which one we moved to, then carry on. Built ON TOP of
+ * `listenLoopbackOnly` rather than beside it, so the loopback-only guarantee —
+ * this server writes files and spawns processes on POST — stays in one place
+ * and keeps its own test.
+ *
+ * Resolves with the port actually bound; the CALLER must use that number
+ * rather than the one it asked for.
+ */
+export async function listenWithPortFallback(
+  server: import('node:http').Server,
+  startPort: number,
+  io: CliIo,
+  opts: { attempts?: number; isTaken?: (port: number) => Promise<boolean> } = {},
+): Promise<number> {
+  const attempts = Math.max(1, opts.attempts ?? 10);
+  // Pre-check BOTH loopback families, not just EADDRINUSE. Binding
+  // 127.0.0.1:4401 SUCCEEDS while something already holds [::1]:4401 — they
+  // are different sockets — so an EADDRINUSE-only fallback happily lands the
+  // builder on the port a Vite preview is already serving `localhost` from,
+  // and which one a browser reaches is then down to DNS ordering. Observed in
+  // the real run, with a second builder started beside a live first one.
+  const isTaken = opts.isTaken ?? ((p: number) => probePort(p));
+  let port = startPort;
+  for (let tried = 1; ; tried++) {
+    // Port 0 means "any free port" — never something to skip.
+    let busy = port !== 0 && (await isTaken(port));
+    if (!busy) busy = (await tryListenLoopback(server, port)) === 'taken';
+    if (!busy) {
+      // Read the port back off the socket rather than trusting the number we
+      // asked for: with port 0 they differ, and the caller derives the preview
+      // port from this answer.
+      const addr = server.address();
+      return typeof addr === 'object' && addr !== null ? addr.port : port;
+    }
+    if (tried >= attempts) throw new Error(portsExhaustedMessage(startPort, port));
+    io.error(portInUseNotice(port, port + 1));
+    port += 1;
+  }
+}
+
+/** One bind attempt: 'ok', 'taken', or a rejection for anything that is not a
+ *  port collision (a permissions error must not be retried nine times). */
+function tryListenLoopback(server: import('node:http').Server, port: number): Promise<'ok' | 'taken'> {
+  return new Promise<'ok' | 'taken'>((done, fail) => {
+    let settled = false;
+    const cleanup = (): void => {
+      server.off('error', onError);
+      server.off('listening', onListening);
+    };
+    const onListening = (): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      done('ok');
+    };
+    const onError = (err: NodeJS.ErrnoException): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (err.code === 'EADDRINUSE') done('taken');
+      else fail(err);
+    };
+    server.on('error', onError);
+    server.on('listening', onListening);
+    listenLoopbackOnly(server, port, () => {});
+  });
+}
+
 const ASSET_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -480,7 +569,10 @@ export async function devBuilder(
 ): Promise<never> {
   const io = opts.io ?? { log: (s: string) => console.log(s), error: (s: string) => console.error(s) };
   const port = opts.port ?? 4400;
-  const previewPort = opts.previewPort ?? 4401;
+  // Derived from the port we ACTUALLY bind, not the one we asked for: when the
+  // builder steps off a taken 4400 onto 4401, a hard-coded preview port would
+  // collide with the builder itself. Filled in once the bind resolves, below.
+  let previewPort = opts.previewPort ?? port + 1;
   let pageDir: string;
   try {
     pageDir = builderPageDir();
@@ -630,10 +722,17 @@ export async function devBuilder(
       return send(400, { problems: [{ path: '', message: err instanceof Error ? err.message : String(err) }] });
     }
   });
-  await new Promise<void>((listening) => listenLoopbackOnly(server, port, listening));
-  io.log(`kai builder at http://localhost:${port}/ — the construct file stays yours.`);
-  // AFTER the bind: the builder url reaches the terminal before the first npm
-  // install starts, instead of behind it.
+  let bound: number;
+  try {
+    bound = await listenWithPortFallback(server, port, io);
+  } catch (err) {
+    io.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
+  if (opts.previewPort === undefined) previewPort = bound + 1;
+  io.log(`kai builder at http://localhost:${bound}/ — the construct file stays yours.`);
+  // AFTER the bind, so the preview port is derived from the port we really got
+  // and the builder url is on screen before the first npm install starts.
   if (abs) bootInBackground(abs);
   return new Promise<never>(() => {});
 }
