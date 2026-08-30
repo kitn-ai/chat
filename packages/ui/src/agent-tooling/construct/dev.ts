@@ -15,10 +15,15 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { existsSync, readFileSync, renameSync, watch, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { accentContrastNotice, generateProject, writeProject, type GeneratedFile, type GenerateOptions } from './codegen';
+import { generateProject, writeProject, type GeneratedFile, type GenerateOptions } from './codegen';
 import { validateConstruct, type Construct, type ConstructProblem } from './schema';
 import { buildableTemplates } from './templates';
-import type { CliIo } from './cli';
+// ONE notice list, shared with the CLI (cli.ts's `generationNotices`) rather
+// than a second copy here — this file prints the same set twice (first run and
+// every regen), which is exactly how the pair got out of sync before.
+// cli.ts never statically imports this module (its `dev`/`compile` cases use
+// `await import('./dev')`), so this direction adds no module cycle.
+import { generationNotices, type CliIo } from './cli';
 
 export function workDirFor(name: string, root: string): string {
   return join(root, '.kai', name);
@@ -73,8 +78,7 @@ export function regenTurn(
       return;
     }
     io.log('construct changed — regenerated; Vite will hot-update the tab.');
-    const notice = accentContrastNotice(out.construct);
-    if (notice) io.log(notice);
+    for (const n of generationNotices(out.construct)) io.log(n);
   } catch (err) {
     io.error(`regen failed (${err instanceof Error ? err.message : String(err)}) — last good preview stays up`);
   }
@@ -117,8 +121,7 @@ export async function dev(
   const dir = workDirFor(first.construct.name, process.cwd());
   const files = generateProject(first.construct, { uiSpec: opts.uiSpec });
   writeProject(files, dir);
-  const firstNotice = accentContrastNotice(first.construct);
-  if (firstNotice) io.log(firstNotice);
+  for (const n of generationNotices(first.construct)) io.log(n);
 
   await ensureInstalled(dir, files, io);
 

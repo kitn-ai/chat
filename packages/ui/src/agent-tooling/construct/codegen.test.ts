@@ -1695,7 +1695,13 @@ describe('header.themeToggle + header.actions (B-10)', () => {
       header: { actions: [{ label: 'Docs', variant: 'ghost' }, { label: 'Share' }] },
     })), 'src/App.tsx');
     expect(app).toContain('variant="ghost"');
-    expect(app).toContain(`new CustomEvent('kai-header-action', { detail: { label: ${JSON.stringify('Docs')} } })`);
+    // The dispatch moved behind ONE shared `dispatchHeaderAction` closure
+    // (S-11: it also carries the once-per-label DEV reminder), so each Button
+    // passes its stringified label to that seam instead of composing its own
+    // CustomEvent inline. The event itself is unchanged — asserted at the
+    // closure, which is now the single site that constructs it.
+    expect(app).toContain(`onClick={() => dispatchHeaderAction(${JSON.stringify('Docs')})}`);
+    expect(app).toContain("new CustomEvent('kai-header-action', { detail: { label } })");
     expect(app).toContain(`{${JSON.stringify('Share')}}`);
   });
 
@@ -1784,4 +1790,107 @@ it('is deterministic across the full phase-1 vocabulary', () => {
     },
   });
   expect(generateProject(full())).toEqual(generateProject(full()));
+});
+
+describe('workSurface — the split pane renders (2026-08-30)', () => {
+  const ws = (over: Record<string, unknown> = {}) =>
+    construct({
+      layout: 'split',
+      workSurface: { kind: 'artifact', url: '/work-surface.html', chrome: { expand: true }, ...over },
+    } as never);
+
+  it('imports WorkSurface only when workSurface is declared (the emitted project runs noUnusedLocals)', () => {
+    expect(file(generateProject(ws()), 'src/App.tsx')).toContain(', WorkSurface');
+    expect(file(generateProject(construct({ layout: 'split' })), 'src/App.tsx')).not.toContain('WorkSurface');
+  });
+
+  it('emits the surface as <slot name="pane"> FALLBACK, so a consumer projection still wins', () => {
+    const app = file(generateProject(ws()), 'src/App.tsx');
+    expect(app).toMatch(/<slot name="pane">[^]*<WorkSurface[^]*<\/slot>/);
+    expect(app).toContain('projection WINS');
+  });
+
+  it('follows the story: chat is the resizable START rail, the surface fills the main region', () => {
+    const app = file(generateProject(ws()), 'src/App.tsx');
+    expect(app).toContain('startWidth={360}');
+    expect(app).toContain('startMinWidth={280}');
+    expect(app).toContain('startMaxWidth={520}');
+    expect(app).toMatch(/start=\{[^]*<ChatThread/);
+  });
+
+  it('threads url, kind and every chrome flag through as real props', () => {
+    const app = file(
+      generateProject(ws({ kind: 'preview', chrome: { deviceToggle: true, urlBar: true, openInNewTab: true, expand: true } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('src={"/work-surface.html"}');
+    expect(app).toContain('variant="preview"');
+    expect(app).toContain('iframeTitle={"App preview"}');
+    expect(app).toContain('showDeviceToggle={true}');
+    expect(app).toContain('showUrlBar={true}');
+    expect(app).toContain('showOpenInNewTab={true}');
+    expect(app).toContain('showExpand={true}');
+    expect(app).toContain('showCodeView={false}');
+  });
+
+  it('kind: artifact gets the framed-card look and its own iframe title', () => {
+    const app = file(generateProject(ws()), 'src/App.tsx');
+    expect(app).toContain('variant="artifact"');
+    expect(app).toContain('iframeTitle={"Work surface"}');
+  });
+
+  it('an absent chrome key emits false — off-by-default, never an implicit prop', () => {
+    const app = file(generateProject(ws({ chrome: undefined })), 'src/App.tsx');
+    expect(app).toContain('showDeviceToggle={false}');
+    expect(app).toContain('showExpand={false}');
+  });
+
+  it('expand is wired to WorkspaceShell.startCollapsed, the mechanism the story ruled on', () => {
+    const app = file(generateProject(ws()), 'src/App.tsx');
+    expect(app).toContain('const [surfaceExpanded, setSurfaceExpanded] = createSignal(false)');
+    expect(app).toContain('startCollapsed={surfaceExpanded()}');
+    expect(app).toContain('onExpandedChange={setSurfaceExpanded}');
+  });
+
+  it('codeView threads codeSrc through', () => {
+    const app = file(generateProject(ws({ codeUrl: '/src.html', chrome: { codeView: true } })), 'src/App.tsx');
+    expect(app).toContain('showCodeView={true}');
+    expect(app).toContain('codeSrc={"/src.html"}');
+  });
+
+  it('emits public/work-surface.html at a CONSTANT path for a relative url — never derived from construct text', () => {
+    expect(generateProject(ws()).map((f) => f.path)).toContain('public/work-surface.html');
+    const html = file(generateProject(ws()), 'public/work-surface.html');
+    expect(html).toContain('Your work surface');
+    expect(file(generateProject(ws({ kind: 'preview' })), 'public/work-surface.html')).toContain('Your app preview');
+  });
+
+  it('does NOT emit the placeholder for an absolute url — that page is somebody else\'s', () => {
+    expect(generateProject(ws({ url: 'https://example.com/app' })).map((f) => f.path)).not.toContain(
+      'public/work-surface.html',
+    );
+  });
+
+  it('a path-traversal url cannot move the write target — the filename is a constant', () => {
+    const files = generateProject(ws({ url: '/../../etc/passwd' }));
+    expect(files.filter((f) => f.path.startsWith('public/')).map((f) => f.path)).toEqual(['public/work-surface.html']);
+  });
+
+  it('split WITHOUT workSurface: the empty pane no longer reserves a column', () => {
+    const app = file(generateProject(construct({ layout: 'split' })), 'src/App.tsx');
+    expect(app).toContain('<slot name="pane" />');
+    expect(app).toContain('paneProjected()');
+    expect(app).toContain('MutationObserver');
+    expect(app).toContain('end={paneProjected()');
+  });
+
+  it('header actions carry a once-per-label DEV reminder naming the seam', () => {
+    const app = file(
+      generateProject(construct({ header: { title: 'X', actions: [{ label: 'Share' }] } } as never)),
+      'src/App.tsx',
+    );
+    expect(app).toContain('import.meta.env.DEV');
+    expect(app).toContain("addEventListener('kai-header-action'");
+    expect(app).toContain('dispatchHeaderAction');
+  });
 });

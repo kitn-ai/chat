@@ -198,6 +198,10 @@ export function generateProject(construct: Construct, opts: GenerateOptions = {}
     { path: 'src/App.tsx', code: emitApp(construct) },
   ];
   if (construct.cards) files.push({ path: 'src/cards.ts', code: emitCardsRegistry(construct.cards) });
+  const ws = workSurfaceOf(construct);
+  if (ws && workSurfaceUrlIsRelative(ws.url)) {
+    files.push({ path: WORK_SURFACE_PAGE, code: emitWorkSurfacePage(construct) });
+  }
   return files;
 }
 
@@ -715,7 +719,7 @@ ${emitHistorySetup(c)}
 //     widgetHasConversationsChrome/emitDockOnOpenChangeProp's docs. Wired only
 //     for \`widget\`, the one layout with something that closes/reopens at all.
 ${emitChromeComment(c)}export function App(${needsHost(c) ? 'props: { host: HTMLElement }' : ''}) {
-${emitToggleThemeVar(c, '  ')}${emitDockCloseVar(c, '  ')}${emitChatControllerVar(c, '  ')}${emitConversationsSignalsVar(c, '  ')}${emitShellPaletteVars(c, '  ')}  return (
+${emitToggleThemeVar(c, '  ')}${emitDockCloseVar(c, '  ')}${emitChatControllerVar(c, '  ')}${emitConversationsSignalsVar(c, '  ')}${emitShellPaletteVars(c, '  ')}${emitPaneProbeVar(c, '  ')}${emitWorkSurfaceVars(c, '  ')}${emitHeaderActionDispatchVar(c, '  ')}  return (
 ${hasShellPalette(c) ? '    <>\n' : ''}${emitLayoutOpen(c)}${emitSlots(c.slots, '      ')}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitHeaderProp(c)}${emitHeaderEndContentProp(c)}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitReasoningOpenProp(c)}${emitMessageActionsProps(c)}${emitHideSourcesProp(c)}${emitTriggersProp(c)}${emitEmptyContentProp(c)}${emitCardTypesProp(c)}${emitHomeProp(c)}${emitConversationsProps(c)}${emitChatControllerRefProp(c)}${emitChatThreadUnreadProps(c)} />
 ${emitLayoutClose(c)}${emitShellPaletteOverlay(c)}${hasShellPalette(c) ? '    </>\n' : ''}  );
 }
@@ -1137,6 +1141,34 @@ function hasUserMenuChrome(c: Construct): boolean {
   return c.layout !== 'custom' && !!c.shell?.userMenu;
 }
 
+/** header.actions dispatch `kai-header-action` and nothing in the emitted app
+ *  listens — clicking Share/Deploy in a builder preview does nothing. That is
+ *  the dead-affordance class T-5 ruling 3 rejected `voice` for, so it is
+ *  STATED rather than left to be discovered.
+ *
+ *  It is a once-per-label REMINDER, not a detection: the DOM has no API that
+ *  reports whether a listener is attached (`dispatchEvent`'s return value only
+ *  reports preventDefault(), which no listener is obliged to call), so a
+ *  "nobody is listening" claim would be false on correct code. DEV only —
+ *  `import.meta.env.DEV`, and the emitted tsconfig already carries
+ *  `types: ['vite/client']`. */
+function emitHeaderActionDispatchVar(c: Construct, indent: string): string {
+  if (!hasHeaderActionsChrome(c)) return '';
+  return `${indent}// Each header action dispatches 'kai-header-action' on the host and nothing
+${indent}// here handles it — that is the consumer's seam, by design (vocabulary
+${indent}// never logic). The DEV line below is a one-time reminder per label, NOT a
+${indent}// listener check: the DOM cannot report whether a listener exists.
+${indent}const warnedHeaderActions = new Set<string>();
+${indent}const dispatchHeaderAction = (label: string) => {
+${indent}  if (import.meta.env.DEV && !warnedHeaderActions.has(label)) {
+${indent}    warnedHeaderActions.add(label);
+${indent}    console.warn(\`[${c.name}] header action "\${label}" dispatched 'kai-header-action' on the host. Nothing happens until your app listens: el.addEventListener('kai-header-action', (e) => …).\`);
+${indent}  }
+${indent}  props.host.dispatchEvent(new CustomEvent('kai-header-action', { detail: { label } }));
+${indent}};
+`;
+}
+
 function emitHeaderEndContentProp(c: Construct): string {
   const pieces: string[] = [];
 
@@ -1152,7 +1184,7 @@ function emitHeaderEndContentProp(c: Construct): string {
     for (const a of c.header!.actions!) {
       const variant = a.variant ? ` variant="${a.variant}"` : '';
       pieces.push(
-        `<Button${variant} size="sm" onClick={() => props.host.dispatchEvent(new CustomEvent('kai-header-action', { detail: { label: ${JSON.stringify(a.label)} } }))}>{${JSON.stringify(a.label)}}</Button>`,
+        `<Button${variant} size="sm" onClick={() => dispatchHeaderAction(${JSON.stringify(a.label)})}>{${JSON.stringify(a.label)}}</Button>`,
       );
     }
   }
@@ -1438,8 +1470,19 @@ function needsCreateEffect(c: Construct): boolean {
 function emitSolidJsImports(c: Construct): string {
   const names: string[] = [];
   if (needsCreateEffect(c)) names.push('createEffect');
-  if (widgetHasConversationsChrome(c) || hasShellPalette(c)) names.push('createSignal');
-  if (hasShellPalette(c)) names.push('Show', 'onMount', 'onCleanup');
+  if (
+    widgetHasConversationsChrome(c) ||
+    hasShellPalette(c) ||
+    splitNeedsPaneProbe(c) ||
+    workSurfaceOf(c)?.chrome?.expand
+  ) {
+    names.push('createSignal');
+  }
+  // `Show` splits out of the onMount/onCleanup group: the pane probe needs the
+  // lifecycle helpers but no `Show`, and the emitted project's own
+  // `noUnusedLocals` is what catches a mistake in either direction.
+  if (hasShellPalette(c)) names.push('Show');
+  if (hasShellPalette(c) || splitNeedsPaneProbe(c)) names.push('onMount', 'onCleanup');
   if (names.length === 0) return '';
   return `import { ${names.join(', ')} } from 'solid-js';\n`;
 }
@@ -1704,7 +1747,10 @@ function emitLayoutImport(c: Construct): string {
     case 'widget':
       return `, Dock${hasLauncherIcon(c) ? ', DockLauncherImage' : ''}`;
     case 'split':
-      return ', WorkspaceShell';
+      // `WorkSurface` only when the construct declares one — the emitted
+      // project runs `noUnusedLocals`, so an unconditional import would break
+      // every bare split.
+      return workSurfaceOf(c) ? ', WorkspaceShell, WorkSurface' : ', WorkspaceShell';
     case 'fullscreen':
     case 'aside':
       return '';
@@ -1784,8 +1830,34 @@ function emitSlots(slots: readonly string[] | undefined, indent: string): string
  *  entries live entirely inside App's own Solid tree. Excludes `custom`
  *  (CU-1: none of header chrome/composer/shell is wired there — see
  *  emitCustomApp's own "not wired here" list). */
+/** `layout: 'split'` with no `workSurface`: the emitted App needs the host to
+ *  see whether anything is projected into the pane (see emitLayoutOpen's split
+ *  case for why the light DOM and not a slotchange listener). */
+function splitNeedsPaneProbe(c: Construct): boolean {
+  return c.layout === 'split' && !c.workSurface;
+}
+
+/** The `paneProjected` signal + its MutationObserver, declared inside App()
+ *  for the same instance-isolation reason as every other var-emitter here. */
+function emitPaneProbeVar(c: Construct, indent: string): string {
+  if (!splitNeedsPaneProbe(c)) return '';
+  return `${indent}// Does the consumer project anything into <slot name="pane">? Read the
+${indent}// HOST's own light-DOM children: that is observable whether or not the
+${indent}// column (and with it the <slot>) is currently mounted, so it cannot
+${indent}// deadlock the way a slotchange listener on an unmounted slot would.
+${indent}const [paneProjected, setPaneProjected] = createSignal(false);
+${indent}onMount(() => {
+${indent}  const sync = () => setPaneProjected(props.host.querySelector(':scope > [slot="pane"]') !== null);
+${indent}  const observer = new MutationObserver(sync);
+${indent}  observer.observe(props.host, { childList: true });
+${indent}  sync();
+${indent}  onCleanup(() => observer.disconnect());
+${indent}});
+`;
+}
+
 function needsHost(c: Construct): boolean {
-  return hasThemeToggleChrome(c) || hasHeaderActionsChrome(c) || hasUserMenuChrome(c);
+  return hasThemeToggleChrome(c) || hasHeaderActionsChrome(c) || hasUserMenuChrome(c) || splitNeedsPaneProbe(c);
 }
 
 /** widget.position -> Dock's own `position` prop. A closed DockPosition enum
@@ -1828,6 +1900,118 @@ function emitDockDefaultOpen(c: Construct): string {
   return w?.defaultOpen === true ? ' defaultOpen={true}' : '';
 }
 
+// ── workSurface: the split layout's rendering pane ───────────────────────────
+
+/** The construct's declared work surface, or undefined. Layout-narrowed once,
+ *  here, so every call site below reads plainly. */
+function workSurfaceOf(c: Construct): NonNullable<Construct['workSurface']> | undefined {
+  return c.layout === 'split' ? c.workSurface : undefined;
+}
+
+/** `kind` -> the two things it really decides: how `WorkSurface` frames its
+ *  content, and the framed document's accessible title. It decides NO chrome:
+ *  every chrome affordance is stated explicitly in the construct, so what the
+ *  builder panel shows and what the pane renders can never disagree (a
+ *  kind-dependent default cannot be expressed in the panel's own
+ *  ANCHORED_BOOLEAN_DEFAULTS, and a panel that misreports a switch is exactly
+ *  the menu-honesty failure this format's rules reject). */
+const WORK_SURFACE_IFRAME_TITLE: Record<'artifact' | 'preview', string> = {
+  artifact: 'Work surface',
+  preview: 'App preview',
+};
+
+/** Declares the signal `WorkSurface`'s expand toggle writes and
+ *  `WorkspaceShell`'s controlled `startCollapsed` reads. A SIGNAL, not a
+ *  closure variable: both are read reactively every render. Gated on
+ *  `chrome.expand` — no toggle, nothing to declare, and the emitted project
+ *  runs `noUnusedLocals`. */
+function emitWorkSurfaceVars(c: Construct, indent: string): string {
+  return workSurfaceOf(c)?.chrome?.expand
+    ? `${indent}// workSurface.chrome.expand -> WorkspaceShell's own CONTROLLED startCollapsed
+${indent}// (collapse the chat rail, click again to restore). NOT the kai-resizable
+${indent}// maximize protocol: WorkspaceShell does not forward maximizedIndex/
+${indent}// onMaximizeChange — see components/work-surface.tsx's doc comment.
+${indent}const [surfaceExpanded, setSurfaceExpanded] = createSignal(false);\n`
+    : '';
+}
+
+/** The `<WorkSurface …>` element itself. `url`/`codeUrl` are construct-authored
+ *  untrusted text (isSafeUrl'd at authoring time by schema.ts's superRefine),
+ *  so both are JSON.stringify'd into real JS string-literal expressions here,
+ *  never raw JSX attribute strings. Every chrome flag is emitted EXPLICITLY,
+ *  true or false, so the gating decision is visible in the eject artifact
+ *  rather than inferred from an absent prop — the same convention
+ *  `webSearch={false}`/`voice={false}` already follow above. */
+function emitWorkSurface(c: Construct, indent: string): string {
+  const ws = workSurfaceOf(c);
+  if (!ws) return '';
+  const chrome = ws.chrome ?? {};
+  const flag = (name: string, on: boolean | undefined): string => `${indent}  ${name}={${on === true}}\n`;
+  return (
+    `${indent}<WorkSurface\n` +
+    `${indent}  src={${JSON.stringify(ws.url)}}\n` +
+    `${indent}  variant="${ws.kind}"\n` +
+    `${indent}  iframeTitle={${JSON.stringify(WORK_SURFACE_IFRAME_TITLE[ws.kind])}}\n` +
+    (chrome.urlBar ? `${indent}  urlLabel={${JSON.stringify(ws.url)}}\n` : '') +
+    (ws.codeUrl ? `${indent}  codeSrc={${JSON.stringify(ws.codeUrl)}}\n` : '') +
+    flag('showDeviceToggle', chrome.deviceToggle) +
+    flag('showUrlBar', chrome.urlBar) +
+    flag('showOpenInNewTab', chrome.openInNewTab) +
+    flag('showExpand', chrome.expand) +
+    flag('showCodeView', chrome.codeView) +
+    (chrome.expand
+      ? `${indent}  expanded={surfaceExpanded()}\n${indent}  onExpandedChange={setSurfaceExpanded}\n`
+      : '') +
+    `${indent}/>\n`
+  );
+}
+
+/** Whether `workSurface.url` points at something this project should SHIP.
+ *  Relative only: an absolute url is somebody else's page and writing a
+ *  placeholder for it would be a lie. */
+function workSurfaceUrlIsRelative(url: string): boolean {
+  return !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url) && !url.startsWith('//');
+}
+
+/** The starting page a relative `workSurface.url` frames, so a builder preview
+ *  renders something real with no network at all.
+ *
+ *  THE FILENAME IS A CONSTANT, never derived from `url`: deriving a WRITE PATH
+ *  from construct-authored text would open a path-traversal sink that does not
+ *  exist today. `writeProject`'s manifest pruning deletes this file on its own
+ *  when `workSurface` is removed.
+ *
+ *  Styling is hard-coded and self-contained, not tokens: this document loads
+ *  inside a sandboxed iframe with no `allow-same-origin`, so it cannot see the
+ *  host's custom properties at all. */
+const WORK_SURFACE_PAGE = 'public/work-surface.html';
+
+function emitWorkSurfacePage(c: Construct): string {
+  const ws = workSurfaceOf(c)!;
+  const headline = ws.kind === 'artifact' ? 'Your work surface' : 'Your app preview';
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${headline}</title>
+  </head>
+  <body style="margin: 0; background: #f8fafc; color: #0f172a; font: 15px/1.6 system-ui, -apple-system, sans-serif;">
+    <main style="max-width: 34rem; margin: 0 auto; padding: 3.5rem 1.5rem;">
+      <h1 style="margin: 0 0 0.5rem; font-size: 1.125rem; font-weight: 600;">${headline}</h1>
+      <p style="margin: 0 0 1rem; color: #64748b;">
+        This placeholder ships with the construct so the pane renders offline, with no network and no backend.
+      </p>
+      <p style="margin: 0; color: #64748b;">
+        Replace it by pointing <code>workSurface.url</code> at your own page &mdash; or project your own markup as a
+        <code>&lt;slot name="pane"&gt;</code> child of the element, which wins over this pane entirely.
+      </p>
+    </main>
+  </body>
+</html>
+`;
+}
+
 function emitLayoutOpen(c: Construct): string {
   switch (c.layout) {
     case 'widget':
@@ -1854,13 +2038,35 @@ function emitLayoutOpen(c: Construct): string {
       <style>{\`@media (max-width: 480px) { [data-kai-layout="aside"] { inset: 0; width: auto; height: auto; ${borderSide}: 0; } }\`}</style>
 `;
     }
-    case 'split':
+    case 'split': {
+      const ws = workSurfaceOf(c);
       // drawerBelow: split's mobile takeover is the kit's OWN WorkspaceShell
       // capability (components/workspace-shell.tsx), not hand-rolled CSS — wiring
       // it here is composition-over-reauthoring, not a media-query duplicate. 480
       // matches Dock's own breakpoint (ui/dock.tsx:229) so every layout takes over
       // at the same viewport width.
-      return `    <div style={{ height: '100dvh' }}>\n      <WorkspaceShell class="h-full" drawerBelow={480} end={\n        <div style={{ height: '100%', overflow: 'auto' }}>\n          <slot name="pane" />\n        </div>\n      }>\n`;
+      if (!ws) {
+        // No work surface: the end pane is a PURE PROJECTION SEAM. It must not
+        // reserve a column around nothing — WorkspaceShell's own `showAside`
+        // is `!!props.end`, and a wrapper div is truthy even when nothing is
+        // projected, which is exactly the empty column this round removes.
+        // The check reads the LIGHT DOM (the host's own [slot="pane"]
+        // children), not the <slot>: a slot inside a collapsed column is
+        // unmounted, so a slotchange listener there could never fire itself
+        // back on. Only ELEMENTS can carry a slot attribute, so an element
+        // query is the whole test for a NAMED slot.
+        return `    <div style={{ height: '100dvh' }}>\n      <WorkspaceShell class="h-full" drawerBelow={480} end={paneProjected() ? (\n        <div style={{ height: '100%', overflow: 'auto' }}>\n          <slot name="pane" />\n        </div>\n      ) : undefined}>\n`;
+      }
+      // With a work surface the split INVERTS (owner ruling, and what
+      // builder-workspace.stories.tsx has always shipped): the chat is the
+      // resizable START rail at the story's own 360/280/520, and the surface
+      // fills WorkspaceShell's larger MAIN region. A bare split keeps the old
+      // arrangement above so consumer `<slot name="pane">` projection is
+      // untouched.
+      return `    <div style={{ height: '100dvh' }}>\n      <WorkspaceShell class="h-full" drawerBelow={480} startWidth={360} startMinWidth={280} startMaxWidth={520}${
+        ws.chrome?.expand ? ' startCollapsed={surfaceExpanded()}' : ''
+      } start={\n        <div style={{ height: '100%', 'min-height': '0', display: 'flex', 'flex-direction': 'column' }}>\n`;
+    }
     case 'custom':
       return ''; // unreachable — see the block comment above
   }
@@ -1874,15 +2080,25 @@ function emitLayoutClose(c: Construct): string {
       return `    </div>\n`;
     case 'aside':
       return `    </aside>\n`;
-    case 'split':
-      // The end pane (WorkspaceShell's `end`, opened above) is a fixed,
-      // always-present projection point for `split` specifically (Task 12) —
-      // orthogonal to Task 13's generic `slots` field, which still emits
-      // above the chat pane the same as every other non-custom layout (see
-      // emitApp). WorkspaceShell supplies its own real draggable splitter
-      // between the two, so there is no hand-rolled two-column math left to
-      // close here.
-      return `      </WorkspaceShell>\n    </div>\n`;
+    case 'split': {
+      const ws = workSurfaceOf(c);
+      if (!ws) {
+        // The end pane (WorkspaceShell's `end`, opened above) is the `split`
+        // layout's projection point (Task 12) — orthogonal to Task 13's
+        // generic `slots` field, which still emits above the chat pane the
+        // same as every other non-custom layout (see emitApp). WorkspaceShell
+        // supplies its own real draggable splitter between the two, so there
+        // is no hand-rolled two-column math left to close here.
+        return `      </WorkspaceShell>\n    </div>\n`;
+      }
+      // The chat is the resizable START rail and the work surface fills the
+      // MAIN region — WorkspaceShell makes `children` the larger of the two,
+      // which is the arrangement builder-workspace.stories.tsx ships and the
+      // owner approved. The surface is <slot name="pane"> FALLBACK content:
+      // native slot semantics mean an assigned node replaces it, so a
+      // consumer's own projection still WINS.
+      return `        </div>\n      }>\n        {/* Your own <slot name="pane"> projection WINS over this: assigned nodes\n            replace fallback content. The construct's work surface is the\n            DEFAULT, not an override. Declared \`slots\` still render inside the\n            chat rail above the thread — the same relative position they hold\n            in every other layout. */}\n        <slot name="pane">\n${emitWorkSurface(c, '          ')}        </slot>\n      </WorkspaceShell>\n    </div>\n`;
+    }
     case 'custom':
       return ''; // unreachable — see the block comment above
   }

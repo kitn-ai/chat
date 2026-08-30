@@ -40,6 +40,33 @@ export function homeRecentConversationWarning(construct: Construct): string | nu
   return null;
 }
 
+/** Decide loudly (W-6): the work surface is slot FALLBACK, so a consumer
+ *  projecting their own pane REPLACES it. That is the intended behaviour and
+ *  the one thing a reader cannot infer from the construct file alone. */
+export function workSurfaceProjectionNotice(construct: Construct): string | null {
+  if (!construct.workSurface) return null;
+  return 'note: workSurface renders as <slot name="pane"> fallback — a child with slot="pane" projected by the consumer replaces it.';
+}
+
+/** The other half, equally loud: a split with no work surface has no second
+ *  column until something is projected. Silence here is what made the empty
+ *  pane look like a bug rather than a choice. */
+export function splitWithoutWorkSurfaceNotice(construct: Construct): string | null {
+  if (construct.layout !== 'split' || construct.workSurface) return null;
+  return 'note: layout "split" with no workSurface — the pane stays hidden until a child with slot="pane" is projected. Add a workSurface to render one.';
+}
+
+/** Every generation-time notice, in one order, for whichever host prints them
+ *  (validate · eject · dev's first run and every regen). One list, so a new
+ *  notice reaches all of them rather than the two somebody remembered. */
+export function generationNotices(construct: Construct): string[] {
+  return [
+    accentContrastNotice(construct),
+    workSurfaceProjectionNotice(construct),
+    splitWithoutWorkSurfaceNotice(construct),
+  ].filter((n): n is string => n !== null);
+}
+
 export function loadConstruct(path: string, io: CliIo): Construct | null {
   const abs = resolve(path);
   let raw: string;
@@ -93,6 +120,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       io.log(`valid construct: <${construct.name}> (layout: ${construct.layout}, provider: ${construct.provider.mode})`);
       const warning = homeRecentConversationWarning(construct);
       if (warning) io.log(warning);
+      for (const n of generationNotices(construct)) io.log(n);
       return 0;
     }
     case 'eject': {
@@ -108,8 +136,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       if (overwritten.length > 0) {
         io.log(`overwriting ${overwritten.length} existing file(s)`);
       }
-      const notice = accentContrastNotice(construct);
-      if (notice) io.log(notice);
+      for (const n of generationNotices(construct)) io.log(n);
       io.log(`ejected <${construct.name}> to ${resolve(outDir)} — npm install && npm run dev. The source is yours.`);
       return 0;
     }

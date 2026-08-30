@@ -14,7 +14,13 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { runCli, homeRecentConversationWarning, parseDevArgs } from './cli';
+import {
+  runCli,
+  homeRecentConversationWarning,
+  parseDevArgs,
+  workSurfaceProjectionNotice,
+  splitWithoutWorkSurfaceNotice,
+} from './cli';
 import { validateConstruct } from './schema';
 
 const good = { name: 'acme-support', layout: 'widget', provider: { mode: 'mock' } };
@@ -296,5 +302,31 @@ describe('kai dev --builder flag parse (B-22/B-23)', () => {
   });
   it('--ui composes with --builder, same parse dev/compile already use', () => {
     expect(parseDevArgs(['--builder', '--ui', 'file:/x.tgz', 'demo.construct.json'])).toEqual({ uiSpec: 'file:/x.tgz', builder: true, path: 'demo.construct.json' });
+  });
+});
+
+describe('work-surface notices (decide loudly)', () => {
+  it('states that projection wins when a workSurface is declared', () => {
+    const c = validateConstruct({
+      name: 'build-workspace', layout: 'split', provider: { mode: 'mock' },
+      workSurface: { kind: 'artifact', url: '/work-surface.html' },
+    });
+    if (!c.ok) throw new Error('fixture invalid');
+    expect(workSurfaceProjectionNotice(c.construct)).toContain('slot name="pane"');
+    expect(splitWithoutWorkSurfaceNotice(c.construct)).toBeNull();
+  });
+
+  it('states that a bare split has no pane until something is projected', () => {
+    const c = validateConstruct({ name: 'bare-split', layout: 'split', provider: { mode: 'mock' } });
+    if (!c.ok) throw new Error('fixture invalid');
+    expect(splitWithoutWorkSurfaceNotice(c.construct)).toContain('stays hidden');
+    expect(workSurfaceProjectionNotice(c.construct)).toBeNull();
+  });
+
+  it('says nothing on a layout that has no pane at all', () => {
+    const c = validateConstruct({ name: 'acme-support', layout: 'widget', provider: { mode: 'mock' } });
+    if (!c.ok) throw new Error('fixture invalid');
+    expect(workSurfaceProjectionNotice(c.construct)).toBeNull();
+    expect(splitWithoutWorkSurfaceNotice(c.construct)).toBeNull();
   });
 });
