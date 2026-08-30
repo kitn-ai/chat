@@ -6,15 +6,47 @@
     "mode": "mock"
   },
   "header": {
-    "title": "Assistant"
+    "title": "Assistant",
+    "themeToggle": true
   },
   "theme": {
-    "accent": "#0ea5e9",
     "mode": "dark"
   },
   "aside": {
     "position": "end",
     "width": "380px"
+  },
+  "empty": {
+    "title": "What can I help with?",
+    "description": "Ask about this page, or anything else."
+  },
+  "composer": {
+    "triggers": {
+      "slash": [
+        {
+          "id": "summarize",
+          "label": "summarize",
+          "description": "Summarize the thread so far"
+        },
+        {
+          "id": "explain",
+          "label": "explain",
+          "description": "Explain the current page"
+        }
+      ],
+      "mention": [
+        {
+          "id": "docs",
+          "label": "docs",
+          "description": "Search the documentation"
+        },
+        {
+          "id": "support",
+          "label": "support",
+          "description": "Hand off to a person"
+        }
+      ]
+    }
   },
   "capabilities": {
     "starters": [
@@ -29,6 +61,18 @@
     },
     "history": {
       "persistence": "local"
+    },
+    "conversations": true,
+    "reasoning": "full",
+    "messageActions": {
+      "user": [
+        "edit"
+      ],
+      "assistant": [
+        "copy",
+        "like",
+        "dislike"
+      ]
     }
   }
 }

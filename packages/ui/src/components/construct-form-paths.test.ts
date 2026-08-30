@@ -72,7 +72,21 @@ describe('delete-on-empty (B-21)', () => {
 
   it('an empty string deletes the key (all schema strings are min(1))', () => {
     const next = setAtPath(assistant, 'header.title', '');
-    expect(getAtPath(next, 'header')).toBeUndefined(); // title was header's only member
+    expect(getAtPath(next, 'header.title')).toBeUndefined();
+    // The assistant starter's header also carries themeToggle (2026-08-30
+    // default-on round), so the parent legitimately survives — pruning is
+    // proven below on a header whose title really IS its only member.
+    expect(getAtPath(next, 'header')).toEqual({ themeToggle: true });
+  });
+
+  it('emptying a header whose title is its only member prunes the header itself', () => {
+    const base = validateConstruct({
+      name: 'acme-y', layout: 'fullscreen', provider: { mode: 'mock' },
+      header: { title: 'Hi' },
+    });
+    if (!base.ok) throw new Error('fixture invalid');
+    const next = setAtPath(base.construct, 'header.title', '');
+    expect(getAtPath(next, 'header')).toBeUndefined();
   });
 });
 

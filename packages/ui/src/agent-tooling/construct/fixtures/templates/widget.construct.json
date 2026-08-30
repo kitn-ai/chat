@@ -9,7 +9,6 @@
     "title": "Support"
   },
   "theme": {
-    "unreadColor": "#38BDF8",
     "mode": "system"
   },
   "empty": {
@@ -48,6 +47,17 @@
     "history": {
       "persistence": "local"
     },
-    "conversations": true
+    "conversations": true,
+    "reasoning": "full",
+    "messageActions": {
+      "user": [
+        "edit"
+      ],
+      "assistant": [
+        "copy",
+        "like",
+        "dislike"
+      ]
+    }
   }
 }
