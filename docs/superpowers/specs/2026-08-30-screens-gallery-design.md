@@ -344,8 +344,10 @@ template-registry row is the model):
     (`lucide-solid` joins the consumer-project devDependencies the same way
     the route hosts did — a real dep, never a `declare module` stub.)
   - `verify-pack-weight`: the generated JSON rides into the MCP bundle;
-    expected growth is tens of KB against a 13.5 MiB ceiling — if it trips,
-    that is a real conversation, not a silent raise.
+    expected growth is tens of KB against whatever ceiling `pnpm --filter
+    @kitn.ai/ui run verify:pack` currently enforces (`MAX_UNPACKED_BYTES` in
+    `verify-pack-weight.mjs` — never restate the figure here, it moves) —
+    if it trips, that is a real conversation, not a silent raise.
 - **Coupling-map §4 gains a row**: source of truth `src/screens/*.tsx` +
   `screens/registry.ts`; derived by the story file, the docs preview/source
   islands, and `gen-screen-recipes.mjs`; adding a screen re-fires the story

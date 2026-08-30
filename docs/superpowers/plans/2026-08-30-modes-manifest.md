@@ -1970,6 +1970,7 @@ Implements R3a–R3e and spec complications 3 and 9.
 
 - [ ] **3.8 Typecheck + full unit suite + the emitted project.**
 
+  <!-- gate-list: partial -- a mid-plan checkpoint for task 3 only; the merge verdict is the required CI `test` job, not this subset -->
   ```
   pnpm --filter @kitn.ai/ui run typecheck
   pnpm --filter @kitn.ai/ui exec vitest run --project=unit
@@ -2604,6 +2605,7 @@ Implements R4a–R4c and spec complication 6.
 
 - [ ] **4.11 Typecheck, unit suite, and the builder page build.**
 
+  <!-- gate-list: partial -- a mid-plan checkpoint for task 4 only; the merge verdict is the required CI `test` job, not this subset -->
   ```
   pnpm --filter @kitn.ai/ui run typecheck
   pnpm --filter @kitn.ai/ui exec vitest run --project=unit
@@ -3318,6 +3320,7 @@ Implements R5a–R5c and R6's remaining gates; resolves spec complications 7 and
 
 - [ ] **5.9 Run every gate this task touches.**
 
+  <!-- gate-list: partial -- the gates task 5 touches, not the required CI `test` job's full gate set -->
   ```
   pnpm --filter @kitn.ai/ui exec vitest run --project=unit
   pnpm --filter create-kai test
@@ -3438,6 +3441,7 @@ Implements R6's docs obligations and R7's "each decided loudly" record.
 
 - [ ] **6.8 Whole-arc gate sweep before opening the PR.** Every required check, from the repo root, in the foreground:
 
+  <!-- gate-list: partial -- the arc's own pre-PR checklist, a hand-picked subset; the required CI `test` job (44 gates -- `node packages/ui/scripts/lint-gate-parity.mjs --list`) is the merge verdict -->
   ```
   pnpm --filter @kitn.ai/ui run typecheck
   pnpm --filter @kitn.ai/ui exec vitest run --project=unit

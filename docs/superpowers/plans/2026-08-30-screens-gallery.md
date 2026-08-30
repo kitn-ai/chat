@@ -1841,6 +1841,7 @@ Save every screenshot and the Playwright output under `docs/superpowers/research
 
 - [ ] **Step 3: Full gate sweep before calling the arc done**
 
+<!-- gate-list: partial -- the arc's own pre-done checklist, a hand-picked subset; the required CI `test` job (44 gates -- `node packages/ui/scripts/lint-gate-parity.mjs --list`) is the merge verdict -->
 ```
 cd packages/ui && npm run typecheck
 pnpm --filter @kitn.ai/ui exec vitest run --project=unit

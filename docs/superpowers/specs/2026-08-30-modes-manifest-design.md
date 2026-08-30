@@ -481,7 +481,8 @@ Files: `construct/schema.ts` (ModeSchema; `layout`/`provider` →
 `.optional()`; cross-field rules `modes-or-surface`, `modes-unique-ids`,
 `modes-unique-files`), `construct/schema.test.ts` (accept/reject matrix:
 manifest valid; each illegal-beside-modes key's message; file-path
-rejections — absolute, `..`, subdir, wrong extension; min 2/max 6; dup
+rejections — absolute, `..`, subdir, wrong extension; the `ModeSchema`
+`min(2)`/`max(6)` bounds (R1a's menu-honesty/bounded-list rationale); dup
 ids/files; the no-layout-no-modes rejection),
 `src/components/construct-form-paths.ts` (RULE_VISIBILITY entries + reason
 comments). Regenerate `construct.v1.schema.json` via build:api.
