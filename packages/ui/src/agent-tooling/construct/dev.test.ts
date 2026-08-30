@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync as readF, writeFileSync as writeF, readdirSyn
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import { mkdirSync } from 'node:fs';
-import { workDirFor, installKey, regenerate, regenTurn, handleConstructPut, shapeConstructGetResponse, createEventHub, serveBuilderAsset, listenLoopbackOnly, resolveBuilderPageDir } from './dev';
+import { workDirFor, installKey, regenerate, regenTurn, handleConstructPut, shapeConstructGetResponse, createEventHub, serveBuilderAsset, listenLoopbackOnly, resolveBuilderPageDir, probePort, handleCreate, starterFor, previewFields, waitUntilListening, announceBoot } from './dev';
 import { generateProject, type GeneratedFile } from './codegen';
 import { validateConstruct } from './schema';
 
@@ -210,6 +210,22 @@ describe('kai dev --builder internals (B-22)', () => {
     }
   });
 
+  it('event hub broadcasts a payload when one is given, and the payload-free events keep their exact `data: {}` frame', () => {
+    const hub = createEventHub();
+    const frames: string[] = [];
+    hub.attach({
+      writeHead: () => {},
+      write: (chunk: string) => { frames.push(chunk); return true; },
+      on: () => {},
+    } as never);
+    hub.broadcast('construct');
+    hub.broadcast('preview', { previewUrl: 'http://localhost:4401/' });
+    // 'construct' predates payloads and the page's listener ignores its data —
+    // pinned so adding the payload arg cannot quietly change that frame.
+    expect(frames).toContain('event: construct\ndata: {}\n\n');
+    expect(frames).toContain('event: preview\ndata: {"previewUrl":"http://localhost:4401/"}\n\n');
+  });
+
   it('listenLoopbackOnly binds 127.0.0.1, never the unspecified address', async () => {
     const server = createServer();
     try {
@@ -219,5 +235,197 @@ describe('kai dev --builder internals (B-22)', () => {
     } finally {
       server.close();
     }
+  });
+});
+
+// ── create → respond → boot in the background (owner-found, 2026-08-30) ──────
+// The defect: POST /api/create did the whole boot (npm install + spawning
+// Vite) INSIDE the request, so the page showed nothing for ~28s warm and
+// minutes cold. These pin the two halves of the fix — the request stops at
+// "the file is on disk", and the boot announces itself over SSE afterwards.
+describe('POST /api/create responds before the boot (B-22 background boot)', () => {
+  it('handleCreate writes the construct file and returns it — no boot involved', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-create-'));
+    const out = handleCreate({ templateId: 'scratch', name: 'acme-support' }, dir);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.target).toBe(join(dir, 'acme-support.construct.json'));
+    expect(JSON.parse(readF(out.target, 'utf8'))).toEqual({
+      name: 'acme-support',
+      layout: 'fullscreen',
+      provider: { mode: 'mock' },
+    });
+    expect(readdirSync(dir)).toEqual(['acme-support.construct.json']); // atomic tmp renamed away
+  });
+
+  it('handleCreate REJECTS an invalid name and writes NOTHING — same validate-then-write contract as handleConstructPut', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-create-'));
+    const out = handleCreate({ templateId: 'scratch', name: 'NoHyphenHere' }, dir);
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.problems.some((p) => p.path === 'name')).toBe(true);
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
+  it('handleCreate writes pretty JSON with a trailing newline, like every other write doorway', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-create-'));
+    const out = handleCreate({ templateId: 'scratch', name: 'acme-support' }, dir);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    const text = readF(out.target, 'utf8');
+    expect(text.endsWith('\n')).toBe(true);
+    expect(text).toContain('\n  "layout"');
+  });
+
+  it('starterFor picks the VARIANT starter when one is named, and the family starter otherwise', () => {
+    const base = starterFor({ templateId: 'workspace', name: 'acme-support' }) as Record<string, unknown>;
+    const variant = starterFor({ templateId: 'workspace', variantId: 'appPreview', name: 'acme-support' }) as Record<string, unknown>;
+    expect(base.name).toBe('acme-support');
+    expect(variant.name).toBe('acme-support');
+    // The two Workspace variants are genuinely different starting points
+    // (builder-workspace-variants.tsx), so the variant must not collapse back
+    // onto the family starter.
+    expect(variant).not.toEqual(base);
+  });
+
+  it('previewFields: the pending/ready/error states are three distinguishable answers, one derivation for /api/state and /api/create', () => {
+    expect(previewFields({ status: 'starting' })).toEqual({
+      previewUrl: undefined,
+      previewPending: true,
+      previewError: undefined,
+    });
+    expect(previewFields({ status: 'ready', url: 'http://localhost:4401/' })).toEqual({
+      previewUrl: 'http://localhost:4401/',
+      previewPending: false,
+      previewError: undefined,
+    });
+    expect(previewFields({ status: 'error', message: 'npm install exited 1' })).toEqual({
+      previewUrl: undefined,
+      previewPending: false,
+      previewError: 'npm install exited 1',
+    });
+    // 'idle' is "no construct yet" — not pending, so the page does not sit on
+    // a placeholder waiting for an announcement that will never come.
+    expect(previewFields({ status: 'idle' }).previewPending).toBe(false);
+  });
+
+  it('the create RESPONSE SHAPE is the construct plus previewPending — no previewUrl, because nothing is listening yet', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-create-'));
+    const out = handleCreate({ templateId: 'scratch', name: 'acme-support' }, dir);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    const body = { construct: out.construct, ...previewFields({ status: 'starting' }) };
+    // JSON.stringify drops the undefined keys, which is the shape the page reads.
+    expect(JSON.parse(JSON.stringify(body))).toEqual({
+      construct: { name: 'acme-support', layout: 'fullscreen', provider: { mode: 'mock' } },
+      previewPending: true,
+    });
+  });
+
+  it('announceBoot broadcasts `preview` with the url once the boot resolves', async () => {
+    const events: Array<{ event: string; data: unknown }> = [];
+    const state = await announceBoot(
+      async () => 'http://localhost:4401/',
+      { broadcast: (event, data) => events.push({ event, data }) },
+      { log: () => {}, error: () => {} },
+    );
+    expect(events).toEqual([{ event: 'preview', data: { previewUrl: 'http://localhost:4401/' } }]);
+    expect(state).toEqual({ status: 'ready', url: 'http://localhost:4401/' });
+  });
+
+  it('announceBoot reports a FAILED boot loudly — an SSE `preview-error` plus the terminal, never a silent hang', async () => {
+    const events: Array<{ event: string; data: unknown }> = [];
+    const errors: string[] = [];
+    const state = await announceBoot(
+      async () => {
+        throw new Error('npm install exited 1');
+      },
+      { broadcast: (event, data) => events.push({ event, data }) },
+      { log: () => {}, error: (s: string) => errors.push(s) },
+    );
+    expect(events).toEqual([{ event: 'preview-error', data: { message: 'npm install exited 1' } }]);
+    expect(state).toEqual({ status: 'error', message: 'npm install exited 1' });
+    expect(errors.some((e) => e.includes('npm install exited 1'))).toBe(true);
+  });
+
+  it('announceBoot never throws at its caller — it runs detached, so a rejection has nowhere to go', async () => {
+    await expect(
+      announceBoot(
+        () => Promise.reject(new Error('boom')),
+        { broadcast: () => {} },
+        { log: () => {}, error: () => {} },
+      ),
+    ).resolves.toEqual({ status: 'error', message: 'boom' });
+  });
+});
+
+describe('waitUntilListening (the preview url is announced only when Vite is really up)', () => {
+  it('polls until the port answers, then resolves ok', async () => {
+    let attempts = 0;
+    const out = await waitUntilListening(async () => ++attempts >= 3, { sleep: async () => {}, intervalMs: 0 });
+    expect(out).toEqual({ ok: true });
+    expect(attempts).toBe(3);
+  });
+
+  it('gives up with a reason rather than hanging forever', async () => {
+    let clock = 0;
+    const out = await waitUntilListening(async () => false, {
+      timeoutMs: 1_000,
+      intervalMs: 250,
+      sleep: async () => { clock += 250; },
+      now: () => clock,
+    });
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.reason).toContain('did not start');
+  });
+
+  it('a DEAD preview server is reported as itself, immediately, not as a timeout minutes later', async () => {
+    let dead: string | undefined;
+    const out = await waitUntilListening(
+      async () => {
+        dead = 'the preview server exited with code 1 before it started listening';
+        return false;
+      },
+      { sleep: async () => {}, abort: () => dead, intervalMs: 0 },
+    );
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.reason).toContain('exited with code 1');
+  });
+});
+
+describe('probePort asks the same question the browser will (found in the real run)', () => {
+  it('is UP when the server binds IPv6 loopback only — Vite 6 does exactly this', async () => {
+    const server = createServer();
+    try {
+      await new Promise<void>((r, j) => { server.once('error', j); server.listen(0, '::1', r); });
+      const addr = server.address();
+      const port = typeof addr === 'object' && addr !== null ? addr.port : 0;
+      // The url the builder announces is http://localhost:<port>/, which the
+      // browser resolves under either family. An IPv4-only probe waits out the
+      // whole timeout here and then reports a RUNNING server as failed to start.
+      expect(await probePort(port)).toBe(true);
+    } finally {
+      server.close();
+    }
+  });
+
+  it('is UP when the server binds IPv4 loopback only', async () => {
+    const server = createServer();
+    try {
+      await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+      const addr = server.address();
+      const port = typeof addr === 'object' && addr !== null ? addr.port : 0;
+      expect(await probePort(port)).toBe(true);
+    } finally {
+      server.close();
+    }
+  });
+
+  it('is DOWN when nothing is listening', async () => {
+    const server = createServer();
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const addr = server.address();
+    const port = typeof addr === 'object' && addr !== null ? addr.port : 0;
+    await new Promise<void>((r) => server.close(() => r()));
+    expect(await probePort(port)).toBe(false);
   });
 });

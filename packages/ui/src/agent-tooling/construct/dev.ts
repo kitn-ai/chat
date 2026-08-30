@@ -10,6 +10,7 @@
  */
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { connect } from 'node:net';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { existsSync, readFileSync, renameSync, watch, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve } from 'node:path';
@@ -196,7 +197,15 @@ export function shapeConstructGetResponse(onDisk: unknown): unknown {
   return checked.ok ? onDisk : { ...(onDisk as Record<string, unknown>), problems: checked.problems };
 }
 
-export function createEventHub(): { attach: (res: ServerResponse) => void; broadcast: (event: string) => void } {
+export interface EventHub {
+  attach: (res: ServerResponse) => void;
+  /** `data` is optional so the pre-existing payload-free events ('construct')
+   *  keep emitting the exact `data: {}` frame they always have — only the
+   *  preview events below carry a body. */
+  broadcast: (event: string, data?: unknown) => void;
+}
+
+export function createEventHub(): EventHub {
   const clients = new Set<ServerResponse>();
   return {
     attach(res) {
@@ -209,10 +218,166 @@ export function createEventHub(): { attach: (res: ServerResponse) => void; broad
       clients.add(res);
       res.on('close', () => clients.delete(res));
     },
-    broadcast(event) {
-      for (const res of clients) res.write(`event: ${event}\ndata: {}\n\n`);
+    broadcast(event, data) {
+      const frame = `event: ${event}\ndata: ${JSON.stringify(data ?? {})}\n\n`;
+      for (const res of clients) res.write(frame);
     },
   };
+}
+
+// ── create → respond → boot in the background ───────────────────────────────
+// POST /api/create used to do the ENTIRE boot (codegen + `npm install` +
+// spawning Vite + waiting for it) inside the request, and only then respond.
+// The page had nothing to show for ~28s on a warm cache and minutes on a cold
+// one — no pending state, a live Create button, no progress: a silent
+// decision, and the loudest possible version of one. The request now stops at
+// the point where the DURABLE state exists (the construct file is on disk,
+// which is the whole B-22 state model) and the slow half runs detached,
+// announcing itself over the SSE hub the 'construct' event already uses.
+
+/** What the page's preview area is showing, and the one thing every
+ *  state-bearing response has to agree about. Modelled as a state rather than
+ *  a nullable url so "not started", "starting", and "failed" are three
+ *  distinguishable answers — a bare `previewUrl: undefined` cannot tell the
+ *  page whether to wait or to give up. */
+export type PreviewState =
+  | { status: 'idle' }
+  | { status: 'starting' }
+  | { status: 'ready'; url: string }
+  | { status: 'error'; message: string };
+
+/** The preview fields carried by GET /api/state and POST /api/create alike —
+ *  one derivation, so the two routes can never disagree. */
+export function previewFields(preview: PreviewState): {
+  previewUrl?: string;
+  previewPending: boolean;
+  previewError?: string;
+} {
+  return {
+    previewUrl: preview.status === 'ready' ? preview.url : undefined,
+    previewPending: preview.status === 'starting',
+    previewError: preview.status === 'error' ? preview.message : undefined,
+  };
+}
+
+export interface CreateRequestBody {
+  templateId?: string;
+  variantId?: string;
+  name?: string;
+}
+
+/** The starting JSON a template (or a variant of one) seeds — T-3's own rule:
+ *  a template IS a starter construct, and the picker writes it. */
+export function starterFor(body: CreateRequestBody): unknown {
+  const template = buildableTemplates().find((t) => t.id === body.templateId);
+  return body.templateId === 'scratch' || !template
+    ? { name: body.name, layout: 'fullscreen', provider: { mode: 'mock' } }
+    : {
+        ...(template.variants?.find((v) => v.id === body.variantId)?.starter ?? template.starter),
+        name: body.name,
+      };
+}
+
+/** POST /api/create's SYNCHRONOUS half: derive the starter, validate it, and
+ *  — only then — write it. Identical validate-then-write semantics to
+ *  `handleConstructPut` (a rejection writes nothing), and deliberately free of
+ *  the boot so the route can respond the instant the file exists. */
+export function handleCreate(
+  body: CreateRequestBody,
+  cwd: string,
+): { ok: true; construct: unknown; target: string } | { ok: false; problems: ConstructProblem[] } {
+  const starter = starterFor(body);
+  const validated = validateConstruct(starter);
+  if (!validated.ok) return { ok: false, problems: validated.problems };
+  // Safe to interpolate: the schema's own TAG_RE has already constrained the
+  // name to a lowercase hyphenated custom-element tag, so there is no
+  // separator or traversal segment left in it by this line.
+  const target = resolve(cwd, `${validated.construct.name}.construct.json`);
+  atomicWriteJson(target, starter);
+  return { ok: true, construct: starter, target };
+}
+
+/** Poll until the spawned preview server is ACTUALLY listening — spawning
+ *  Vite and announcing its url in the same tick is a lie the iframe pays for
+ *  (a connection-refused page it never retries). `probe`, `sleep` and `now`
+ *  are injectable so the loop, the timeout and the abort are unit-testable
+ *  without spawning anything. `abort` is how a Vite that DIED gets reported as
+ *  itself instead of as a timeout minutes later. */
+export async function waitUntilListening(
+  probe: () => Promise<boolean>,
+  opts: {
+    timeoutMs?: number;
+    intervalMs?: number;
+    abort?: () => string | undefined;
+    sleep?: (ms: number) => Promise<void>;
+    now?: () => number;
+  } = {},
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const timeoutMs = opts.timeoutMs ?? 180_000;
+  const intervalMs = opts.intervalMs ?? 250;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((done) => setTimeout(done, ms)));
+  const now = opts.now ?? Date.now;
+  const started = now();
+  for (;;) {
+    const aborted = opts.abort?.();
+    if (aborted) return { ok: false, reason: aborted };
+    if (await probe()) return { ok: true };
+    if (now() - started >= timeoutMs) {
+      return { ok: false, reason: `the preview server did not start within ${Math.round(timeoutMs / 1000)}s` };
+    }
+    await sleep(intervalMs);
+  }
+}
+
+/** A TCP connect against one host — cheaper and more honest than an HTTP GET,
+ *  since "listening" is exactly the question. */
+export function probeHost(port: number, host: string): Promise<boolean> {
+  return new Promise<boolean>((done) => {
+    const socket = connect({ port, host });
+    let settled = false;
+    const finish = (ok: boolean): void => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      done(ok);
+    };
+    socket.once('connect', () => finish(true));
+    socket.once('error', () => finish(false));
+    socket.setTimeout(1_000, () => finish(false));
+  });
+}
+
+/** BOTH loopback families, and up if EITHER answers.
+ *
+ *  Found in the real run, not in review: Vite 6 binds `[::1]` and nothing on
+ *  `127.0.0.1`, so an IPv4-only probe waits out the entire timeout against a
+ *  preview server that has been serving happily the whole time — the page then
+ *  reports "the preview server did not start" about a running server. The url
+ *  we announce is `http://localhost:<port>/`, which the browser resolves under
+ *  either family, so the probe has to ask the same question the browser will. */
+export function probePort(port: number, hosts: readonly string[] = ['127.0.0.1', '::1']): Promise<boolean> {
+  return Promise.all(hosts.map((host) => probeHost(port, host))).then((answers) => answers.some(Boolean));
+}
+
+/** Run a boot detached from the request that triggered it and ANNOUNCE the
+ *  outcome — the url on success, the message on failure. Never throws and
+ *  never resolves silently: a boot that dies with nothing on the wire is the
+ *  same silent hang this whole change exists to remove. */
+export async function announceBoot(
+  boot: () => Promise<string>,
+  hub: Pick<EventHub, 'broadcast'>,
+  io: CliIo,
+): Promise<PreviewState> {
+  try {
+    const url = await boot();
+    hub.broadcast('preview', { previewUrl: url });
+    return { status: 'ready', url };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    io.error(`preview failed to start — ${message}`);
+    hub.broadcast('preview-error', { message });
+    return { status: 'error', message };
+  }
 }
 
 /** The ONE listen call for the builder server, extracted so the loopback
@@ -326,17 +491,18 @@ export async function devBuilder(
 
   const hub = createEventHub();
   let abs = constructPath ? resolve(constructPath) : undefined;
-  // previewUrl is handed straight to the builder page, which iframes it
+  // The preview url is handed straight to the builder page, which iframes it
   // unguarded (no isSafeUrl check on the consuming side) — its trust story
   // lives HERE: it is never model- or consumer-supplied, only ever this
   // process's OWN spawned `npm run dev` Vite server on localhost, on a port
   // this same function chose. There is no injection surface between "we
   // spawned this" and "we iframe it".
-  let previewUrl: string | undefined;
+  let preview: PreviewState = { status: 'idle' };
 
-  const boot = async (absPath: string): Promise<void> => {
+  const boot = async (absPath: string): Promise<string> => {
     const readRaw = (): unknown => JSON.parse(readFileSync(absPath, 'utf8'));
-    const first = validateConstruct(readRaw());
+    const initialText = readFileSync(absPath, 'utf8');
+    const first = validateConstruct(JSON.parse(initialText));
     if (!first.ok) {
       for (const p of first.problems) io.error(`  ${p.path || '(root)'}: ${p.message}`);
       throw new Error('construct invalid');
@@ -352,19 +518,61 @@ export async function devBuilder(
       regenTurn(readRaw, { write: writeProject }, dir, { uiSpec: opts.uiSpec }, io);
       hub.broadcast('construct'); // hand-edits flow into the open builder
     });
+    // The panel is now LIVE for the whole of the install above (that is the
+    // point of booting in the background), so the file can have moved on since
+    // the generateProject a few lines up. Catch up once, after the watcher is
+    // attached — the two windows overlap, so no edit can fall between them.
+    // Guarded on the text actually changing so a boot with no edits does not
+    // print a misleading "construct changed" line.
+    if (readFileSync(absPath, 'utf8') !== initialText) {
+      regenTurn(readRaw, { write: writeProject }, dir, { uiSpec: opts.uiSpec }, io);
+    }
     const vite = spawn('npm', ['run', 'dev', '--', '--port', String(previewPort), '--strictPort'], {
       cwd: dir,
       stdio: 'inherit',
+    });
+    let viteDied: string | undefined;
+    vite.on('exit', (code) => {
+      viteDied ??= `the preview server exited with code ${code} before it started listening`;
     });
     const killVite = () => vite.kill();
     process.once('exit', killVite);
     process.once('SIGINT', killVite);
     process.once('SIGTERM', killVite);
-    previewUrl = `http://localhost:${previewPort}/`;
-    io.log(`previewing <${first.construct.name}> at ${previewUrl}`);
+    // Announce the url only once something is actually accepting connections
+    // on that port: the page iframes it the moment it hears about it, and an
+    // iframe pointed at a refused connection stays broken — it does not retry.
+    const listening = await waitUntilListening(() => probePort(previewPort), { abort: () => viteDied });
+    if (!listening.ok) throw new Error(listening.reason);
+    const url = `http://localhost:${previewPort}/`;
+    io.log(`previewing <${first.construct.name}> at ${url}`);
+    return url;
   };
 
-  if (abs) await boot(abs);
+  /** Boot detached, then park the outcome where /api/state can report it. */
+  const bootInBackground = (absPath: string): void => {
+    preview = { status: 'starting' };
+    void announceBoot(() => boot(absPath), hub, io).then((next) => {
+      preview = next;
+    });
+  };
+
+  if (abs) {
+    // Fail fast on a construct path that is not a construct — same contract as
+    // dev()'s own first validate. Only the SLOW half of the boot moves into the
+    // background (below, after the bind); a bad argument still exits before a
+    // server is ever offered.
+    try {
+      const initial = validateConstruct(JSON.parse(readFileSync(abs, 'utf8')));
+      if (!initial.ok) {
+        for (const p of initial.problems) io.error(`  ${p.path || '(root)'}: ${p.message}`);
+        process.exit(1);
+      }
+    } catch (err) {
+      io.error(`cannot read ${abs}: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  }
 
   const server = createServer(async (req, res) => {
     const send = (code: number, body: unknown): void => {
@@ -375,7 +583,12 @@ export async function devBuilder(
       const url = req.url ?? '/';
       if (req.method === 'GET' && url === '/api/state') {
         return send(200, abs
-          ? { phase: 'panel', constructPath: abs, construct: JSON.parse(readFileSync(abs, 'utf8')), previewUrl }
+          ? {
+              phase: 'panel',
+              constructPath: abs,
+              construct: JSON.parse(readFileSync(abs, 'utf8')),
+              ...previewFields(preview),
+            }
           : { phase: 'start' });
       }
       if (req.method === 'GET' && url === '/api/construct') {
@@ -390,21 +603,17 @@ export async function devBuilder(
       }
       if (req.method === 'POST' && url === '/api/create') {
         if (abs) return send(409, { problems: [{ path: '', message: 'a construct already exists in this session' }] });
-        const body = (await readJsonBody(req)) as { templateId?: string; variantId?: string; name?: string };
-        const template = buildableTemplates().find((t) => t.id === body.templateId);
-        const starter: unknown = body.templateId === 'scratch' || !template
-          ? { name: body.name, layout: 'fullscreen', provider: { mode: 'mock' } }
-          : {
-              ...(template.variants?.find((v) => v.id === body.variantId)?.starter ?? template.starter),
-              name: body.name,
-            };
-        const validated = validateConstruct(starter);
-        if (!validated.ok) return send(422, { problems: validated.problems });
-        const target = resolve(process.cwd(), `${body.name}.construct.json`);
-        atomicWriteJson(target, starter);
-        abs = target;
-        await boot(target);
-        return send(200, { previewUrl, construct: starter });
+        const out = handleCreate((await readJsonBody(req)) as CreateRequestBody, process.cwd());
+        if (!out.ok) return send(422, { problems: out.problems });
+        // The construct file IS the state (B-22), so the moment it is on disk
+        // the session is real: publish it, respond, and let the boot catch up
+        // over SSE. Setting `abs` before responding is what makes the panel
+        // immediately usable — POST /api/construct works while Vite installs.
+        abs = out.target;
+        preview = { status: 'starting' };
+        send(200, { construct: out.construct, ...previewFields(preview) });
+        bootInBackground(out.target);
+        return;
       }
       const asset = serveBuilderAsset(url, pageDir);
       if (asset) {
@@ -421,6 +630,10 @@ export async function devBuilder(
       return send(400, { problems: [{ path: '', message: err instanceof Error ? err.message : String(err) }] });
     }
   });
-  listenLoopbackOnly(server, port, () => io.log(`kai builder at http://localhost:${port}/ — the construct file stays yours.`));
+  await new Promise<void>((listening) => listenLoopbackOnly(server, port, listening));
+  io.log(`kai builder at http://localhost:${port}/ — the construct file stays yours.`);
+  // AFTER the bind: the builder url reaches the terminal before the first npm
+  // install starts, instead of behind it.
+  if (abs) bootInBackground(abs);
   return new Promise<never>(() => {});
 }

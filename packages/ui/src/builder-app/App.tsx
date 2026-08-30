@@ -47,6 +47,11 @@ export const BRAND_STYLE = { '--color-primary': '#EC2295' } as const;
  *  step is what let them drift; deriving them cannot. */
 const canvas = (width: 'max-w-6xl' | 'max-w-md'): string => `mx-auto flex ${width} flex-col gap-6 py-10`;
 
+/** The honest version of a preview that is not up yet. Exported so the test
+ *  asserts the string the page actually renders rather than a copy of it. */
+export const PREVIEW_STARTING_MESSAGE =
+  'Starting the preview — installing dependencies, this can take a minute on the first run.';
+
 type Screen =
   | { step: 'start' }
   | { step: 'variant'; templateId: 'workspace' }
@@ -71,11 +76,27 @@ const SCRATCH_TEMPLATE: BuildableTemplate = {
   ],
 };
 
+/** SSE frames carry JSON; a malformed one must not take the listener (and with
+ *  it every later event) down. */
+function readEventData<T>(e: Event): Partial<T> {
+  try {
+    return JSON.parse((e as MessageEvent).data || '{}') as Partial<T>;
+  } catch {
+    return {};
+  }
+}
+
 export function App() {
   const [screen, setScreen] = createSignal<Screen>({ step: 'start' });
   const [template, setTemplate] = createSignal<BuildableTemplate>(SCRATCH_TEMPLATE);
   const [construct, setConstruct] = createSignal<Construct | undefined>();
   const [previewUrl, setPreviewUrl] = createSignal<string | undefined>();
+  // The preview boots in the BACKGROUND now (dev.ts: POST /api/create responds
+  // as soon as the construct file exists), so the panel has to be able to say
+  // "not yet, and here is why" rather than showing a blank pane for ~28s.
+  const [previewPending, setPreviewPending] = createSignal(false);
+  const [previewError, setPreviewError] = createSignal<string | undefined>();
+  const [creating, setCreating] = createSignal(false);
   const [problems, setProblems] = createSignal<readonly ConstructProblem[]>([]);
   const [pickedId, setPickedId] = createSignal<BuilderTemplateId | undefined>();
   const [name, setName] = createSignal('');
@@ -96,6 +117,8 @@ export function App() {
         const loaded = state.construct as Construct;
         setConstruct(loaded);
         setPreviewUrl(state.previewUrl);
+        setPreviewPending(Boolean(state.previewPending));
+        setPreviewError(state.previewError);
         // The header label is DERIVED from the loaded construct's own shape
         // (inferTemplateId) rather than defaulting to the scratch manifest —
         // a construct file carries no template id, but its layout/capabilities
@@ -134,6 +157,23 @@ export function App() {
         setServerError("can't reach the builder server");
       }
     });
+    // The other half of the background boot: the server announces the preview
+    // when Vite is genuinely listening, over the same hub the 'construct'
+    // event already uses. Until then the panel is live and the preview pane
+    // says so.
+    events.addEventListener('preview', (e) => {
+      const url = readEventData<{ previewUrl?: string }>(e).previewUrl;
+      if (!url) return;
+      setPreviewUrl(url);
+      setPreviewPending(false);
+      setPreviewError(undefined);
+    });
+    events.addEventListener('preview-error', (e) => {
+      const message = readEventData<{ message?: string }>(e).message ?? 'the preview server failed to start';
+      setPreviewPending(false);
+      setPreviewError(message);
+      setServerError(`preview failed to start — ${message}`);
+    });
     events.onerror = () => setServerError("can't reach the builder server");
     onCleanup(() => events.close());
   });
@@ -168,6 +208,8 @@ export function App() {
   };
 
   const create = async (variantId?: WorkspaceVariantId) => {
+    if (creating()) return;
+    setCreating(true);
     try {
       const res = await fetch('/api/create', {
         method: 'POST',
@@ -183,12 +225,20 @@ export function App() {
       const body = await res.json();
       setTemplate(templateFor(pickedId()!));
       setConstruct(body.construct as Construct);
+      // The server responds the moment the construct file exists, so
+      // previewUrl is normally absent here and `previewPending` is the truth:
+      // go STRAIGHT to the panel (the file is the state — B-22) and let the
+      // preview pane be honest about what is still happening behind it.
       setPreviewUrl(body.previewUrl);
+      setPreviewPending(Boolean(body.previewPending));
+      setPreviewError(undefined);
       setProblems([]);
       setServerError(undefined);
       setScreen({ step: 'panel' });
     } catch {
       setServerError('save failed');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -291,7 +341,9 @@ export function App() {
               <For each={problems()}>{(p) => <p role="alert" class="text-xs text-destructive">{p.path}: {p.message}</p>}</For>
               <div class="flex gap-2">
                 <Button variant="outline" onClick={() => setScreen({ step: 'start' })}>Back</Button>
-                <Button onClick={() => create(s.variantId)}>Create</Button>
+                <Button disabled={creating()} onClick={() => create(s.variantId)}>
+                  {creating() ? 'Creating…' : 'Create'}
+                </Button>
               </div>
             </main>
           );
@@ -301,12 +353,45 @@ export function App() {
         <div class="grid h-dvh grid-cols-[380px_1fr]">
           <div class="flex flex-col overflow-y-auto border-r border-border">
             <div class="flex items-center justify-between border-b border-border p-3">
-              <span class="text-sm font-semibold">{template().name}</span>
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-semibold">{template().name}</span>
+                {/* The panel is usable before the preview exists, so the fact
+                    that one is still coming belongs here, next to the thing
+                    that IS ready — not only in the empty pane beside it. */}
+                <Show when={previewPending()}>
+                  <span class="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">preview starting…</span>
+                </Show>
+              </div>
               <Button variant="ghost" size="sm" onClick={() => setConfirmSwitch(true)}>Switch template</Button>
             </div>
             <DerivedBuilderPanel value={construct()!} onChange={onEdit} template={template()} problems={problems()} />
           </div>
-          <Show when={previewUrl()} fallback={<p class="p-8 text-sm text-muted-foreground">Preview starting…</p>}>
+          {/* The preview boots behind the panel, so this pane has to SAY what
+              is happening rather than sit blank for the length of an npm
+              install — and it has to say it while the panel beside it stays
+              fully editable (edits go to the construct file; the watcher picks
+              them up the moment Vite is up). */}
+          <Show
+            when={previewUrl()}
+            fallback={
+              <div class="flex h-full flex-col items-center justify-center gap-2 p-8 text-center" data-preview-placeholder>
+                <Show
+                  when={previewError()}
+                  fallback={
+                    <>
+                      <p class="text-sm text-muted-foreground">{PREVIEW_STARTING_MESSAGE}</p>
+                      <p class="max-w-sm text-xs text-muted-foreground">
+                        Keep editing — every change is written to your construct file and shows up as soon as the preview is running.
+                      </p>
+                    </>
+                  }
+                >
+                  <p role="alert" class="text-sm text-destructive dark:text-red-400">Preview failed to start — {previewError()}</p>
+                  <p class="max-w-sm text-xs text-muted-foreground">Your construct file is safe on disk. Check the terminal running <code>kai dev --builder</code> for the full output.</p>
+                </Show>
+              </div>
+            }
+          >
             <iframe title="preview" src={previewUrl()} class="h-full w-full border-0" />
           </Show>
         </div>
