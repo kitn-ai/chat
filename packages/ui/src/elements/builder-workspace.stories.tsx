@@ -1,11 +1,13 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { type JSX, createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
-import { Code2, Globe, Monitor, Tablet, Smartphone, Lock, ExternalLink, Maximize2, Minimize2, Plus, ChevronUp, ChevronDown, X, Search, Sun, Moon } from 'lucide-solid';
+import { Plus, ChevronUp, ChevronDown, X, Sun, Moon } from 'lucide-solid';
 import { BuilderPanel, type BuilderConstruct } from '../components/builder-panel';
 import { BuilderLayout, type BuilderViewport } from '../components/builder-layout';
 import { resolveAccentWrapperStyle } from '../components/builder-preview';
 import { ChatThread } from '../components/chat-thread';
 import { WorkspaceShell } from '../components/workspace-shell';
+import { WorkSurface } from '../components/work-surface';
+import type { ArtifactTab } from '../components/artifact';
 import { mix, StubStatTile, StubCodeBlock } from '../components/builder-skeleton';
 import {
   type UserActionId,
@@ -40,7 +42,6 @@ import { Dropdown, DropdownTrigger, DropdownContent, DropdownItem } from '../ui/
 import { Separator } from '../ui/separator';
 import { Tooltip } from '../ui/tooltip';
 import { renderIcon } from '../ui/icon';
-import { cn } from '../utils/cn';
 import type { ChatMessage, ChatMessageAction, CustomAction } from './chat-types';
 
 // Labs/Builder/Workspace — T-1 build-out (docs/superpowers/specs/
@@ -65,9 +66,14 @@ import type { ChatMessage, ChatMessageAction, CustomAction } from './chat-types'
 // affordances on `Labs/Apps`'s Lovable and v0 stories, read closely before
 // building any of this rather than guessed at:
 //
-// 1. WORK-PANE HEADER (`WorkPane`'s toolbar) mirrors Lovable's browser
-//    chrome (`elements/lovable.stories.tsx`'s preview toolbar, read line by
-//    line): a device toggle (desktop/tablet/mobile, segmented, scoped to
+// 1. WORK-PANE CHROME. PROMOTED 2026-08-30 into the real component
+//    `components/work-surface.tsx` (`WorkSurface`) — this story now RENDERS
+//    that component instead of holding its own copy, so the approved design
+//    and the shipped product cannot drift. Everything below is the recorded
+//    reasoning for the design it carries; the component's own doc comment
+//    repeats it at the code. It mirrors Lovable's browser chrome
+//    (`elements/lovable.stories.tsx`'s preview toolbar, read line by line):
+//    a device toggle (desktop/tablet/mobile, segmented, scoped to
 //    the PANE's own canvas only — independent of `BuilderLayout`'s outer
 //    builder-chrome viewport chips, which scale the whole builder frame) ·
 //    a read-only URL bar (lock icon + fake domain text, Lovable's own
@@ -183,8 +189,6 @@ import type { ChatMessage, ChatMessageAction, CustomAction } from './chat-types'
 // Composer (chips + menu + attach/mic), and the shared Message actions
 // picker.
 
-type PaneDevice = 'desktop' | 'tablet' | 'mobile';
-type PaneKind = 'preview' | 'code';
 type HeaderButtonVariant = 'primary' | 'secondary' | 'ghost';
 
 interface HeaderActionRow {
@@ -212,19 +216,10 @@ interface ComposerMenuEntry {
 let nextRowId = 1;
 const newRowId = (prefix: string): string => `${prefix}-${nextRowId++}`;
 
-const PANE_DEVICES: readonly { id: PaneDevice; label: string; Icon: typeof Monitor }[] = [
-  { id: 'desktop', label: 'Desktop', Icon: Monitor },
-  { id: 'tablet', label: 'Tablet', Icon: Tablet },
-  { id: 'mobile', label: 'Mobile', Icon: Smartphone },
-];
-
-/** Lovable's own `DEVICE_W` shape (`lovable.stories.tsx`) — the preview
- *  canvas gets a max-width and centers; the device toggle scales only the
- *  pane's PREVIEW content, never the Code view (mirroring Lovable, whose
- *  device toggle only ever wraps its `tab() === 'preview'` branch). */
-const PANE_DEVICE_W: Record<PaneDevice, string> = { desktop: '100%', tablet: '834px', mobile: '390px' };
-
-const PANE_KIND_OPTIONS: readonly RadioOption<PaneKind>[] = [
+/** The pane-kind radio in the panel. The pane's own device list and canvas
+ *  widths now live on the promoted component (`components/work-surface.tsx`'s
+ *  `DEVICES` / `WORK_SURFACE_DEVICE_WIDTHS`) — one definition, not a copy. */
+const PANE_KIND_OPTIONS: readonly RadioOption<ArtifactTab>[] = [
   { value: 'preview', label: 'Preview', description: 'Rendered-output skeleton' },
   { value: 'code', label: 'Code', description: 'Code view — StubCodeBlock' },
 ];
@@ -294,7 +289,7 @@ const DEFAULT_CONSTRUCT: BuilderConstruct = {
  *  convention: Sun while dark — "tap for light" — Moon while light), never
  *  "dark mode"/"light mode" text. `NAMED_ICONS` (`ui/icon.tsx`) already
  *  carries both `sun`/`moon`; imported directly here (`lucide-solid`) the
- *  same way this file already imports `Lock`/`ExternalLink`/etc. rather
+ *  same way this file already imports `Plus`/`ChevronDown`/etc. rather
  *  than reused through the string-keyed `renderIcon` helper, since the
  *  icon is fixed, not data-driven. */
 function ThemeToggleButton(props: { dark: boolean; onToggle: () => void }): JSX.Element {
@@ -386,165 +381,6 @@ function AppHeader(props: {
   );
 }
 
-/** The work pane's browser-chrome toolbar, mirroring Lovable's preview
- *  toolbar order (device toggle · URL bar · open-in-new-tab · Preview|Code,
- *  Preview first) plus the owner-amended Expand control near the tab
- *  toggle (v0/kai-artifact's own ordering) — every item individually
- *  optional via the `show*` flags. */
-function WorkPaneToolbar(props: {
-  showDeviceToggle: boolean;
-  device: PaneDevice;
-  onDeviceChange: (d: PaneDevice) => void;
-  showUrlBar: boolean;
-  showOpenInNewTab: boolean;
-  showExpand: boolean;
-  expanded: boolean;
-  onExpandedChange: (v: boolean) => void;
-  showCodeView: boolean;
-  kind: PaneKind;
-  onKindChange: (k: PaneKind) => void;
-}): JSX.Element {
-  return (
-    <div class="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3" style={{ 'background-color': mix('--color-muted', 20) }} data-builder-work-pane-toolbar>
-      <Show when={props.showDeviceToggle}>
-        <div class="flex items-center gap-0.5 rounded-lg bg-muted p-0.5" role="group" aria-label="Pane device">
-          <For each={PANE_DEVICES}>
-            {(d) => (
-              <button
-                type="button"
-                aria-label={d.label}
-                aria-pressed={props.device === d.id}
-                class={cn('grid size-7 place-items-center rounded-md transition-colors', props.device === d.id ? 'bg-surface text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
-                onClick={() => props.onDeviceChange(d.id)}
-              >
-                <d.Icon size={14} aria-hidden="true" />
-              </button>
-            )}
-          </For>
-        </div>
-      </Show>
-
-      <Show when={props.showUrlBar}>
-        <div class="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5">
-          <Lock size={13} class="shrink-0 text-muted-foreground" aria-hidden="true" />
-          <span class="truncate font-mono text-xs text-muted-foreground">preview--build-workspace.kitn.app</span>
-        </div>
-      </Show>
-      <Show when={!props.showUrlBar}>
-        <div class="min-w-0 flex-1" />
-      </Show>
-
-      <Show when={props.showOpenInNewTab}>
-        <Button type="button" variant="ghost" size="icon-sm" aria-label="Open in new tab">
-          <ExternalLink size={14} aria-hidden="true" />
-        </Button>
-      </Show>
-
-      <Show when={props.showExpand}>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={props.expanded ? 'Restore split' : 'Expand work pane'}
-          aria-pressed={props.expanded}
-          onClick={() => props.onExpandedChange(!props.expanded)}
-        >
-          {props.expanded ? <Minimize2 size={14} aria-hidden="true" /> : <Maximize2 size={14} aria-hidden="true" />}
-        </Button>
-      </Show>
-
-      <Show when={props.showCodeView}>
-        <div class="flex items-center gap-0.5 rounded-lg bg-muted p-0.5" role="group" aria-label="Pane kind">
-          <button
-            type="button"
-            class={cn('flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors', props.kind === 'preview' ? 'bg-surface text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
-            aria-pressed={props.kind === 'preview'}
-            onClick={() => props.onKindChange('preview')}
-          >
-            <Globe size={13} aria-hidden="true" />
-            Preview
-          </button>
-          <button
-            type="button"
-            class={cn('flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors', props.kind === 'code' ? 'bg-surface text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
-            aria-pressed={props.kind === 'code'}
-            onClick={() => props.onKindChange('code')}
-          >
-            <Code2 size={13} aria-hidden="true" />
-            Code
-          </button>
-        </div>
-      </Show>
-    </div>
-  );
-}
-
-function WorkPane(props: {
-  showDeviceToggle: boolean;
-  showUrlBar: boolean;
-  showOpenInNewTab: boolean;
-  showExpand: boolean;
-  showCodeView: boolean;
-  kind: PaneKind;
-  onKindChange: (k: PaneKind) => void;
-  expanded: boolean;
-  onExpandedChange: (v: boolean) => void;
-}): JSX.Element {
-  const [device, setDevice] = createSignal<PaneDevice>('desktop');
-  const effectiveKind = createMemo<PaneKind>(() => (props.showCodeView ? props.kind : 'preview'));
-
-  // Owner feedback round: the artifact viewport (the area surrounding/
-  // behind the previewed content — both the preview AND code panes, per
-  // `WorkPane`'s single shared root below) sits on a MUTED background,
-  // matching `elements/lovable.stories.tsx`'s own real preview surface
-  // (its RIGHT `<section>`, read line by line: `bg-muted/30` around the
-  // toolbar+canvas, with the toolbar bar itself staying `bg-background`
-  // and the actual preview content card `bg-background`-bordered ON TOP
-  // of the muted backdrop — read again below). A plain `bg-muted/30`
-  // Tailwind opacity-modifier class is NOT used here even though it's
-  // the literal token Lovable uses: `builder-skeleton.tsx`'s own module
-  // doc comment (read before touching this) already flagged this exact
-  // class of arbitrary/opacity Tailwind string as non-deterministic in
-  // THIS story's live Storybook dev server, and prescribes `mix()`
-  // (real `color-mix()`, no compile step to race) as the fix every
-  // other skeleton token in this file already uses — so the SAME
-  // real color, expressed the way this file's own precedent already
-  // established, not a fresh literal class string.
-  return (
-    <div class="flex h-full min-w-0 flex-1 flex-col" style={{ 'background-color': mix('--color-muted', 30) }} data-builder-work-pane data-builder-pane-kind={effectiveKind()}>
-      <WorkPaneToolbar
-        showDeviceToggle={props.showDeviceToggle}
-        device={device()}
-        onDeviceChange={setDevice}
-        showUrlBar={props.showUrlBar}
-        showOpenInNewTab={props.showOpenInNewTab}
-        showExpand={props.showExpand}
-        expanded={props.expanded}
-        onExpandedChange={props.onExpandedChange}
-        showCodeView={props.showCodeView}
-        kind={effectiveKind()}
-        onKindChange={props.onKindChange}
-      />
-      <div class="min-h-0 flex-1 overflow-auto p-5">
-        {effectiveKind() === 'code' ? (
-          <StubCodeBlock lines={12} class="max-w-2xl" />
-        ) : (
-          <div class="mx-auto h-full transition-all duration-300" style={{ 'max-width': PANE_DEVICE_W[device()] }}>
-            <div class="flex h-full flex-col gap-4">
-              <div class="grid grid-cols-3 gap-3">
-                <StubStatTile class="h-28" />
-                <StubStatTile class="h-28" />
-                <StubStatTile class="h-28" />
-              </div>
-              <div class="flex-1 rounded-xl border border-border" style={{ 'background-color': mix('--color-surface', 30) }} />
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /** The v0-style composer `+` menu — see the module doc comment's COMPOSER
  *  note for why this composes `Dropdown`/`DropdownTrigger`/`DropdownContent`/
  *  `DropdownItem` directly (the real primitives `model-switcher.tsx` also
@@ -613,8 +449,8 @@ function ComposerExtras(props: {
 
 function WorkspacePreview(props: {
   construct: BuilderConstruct;
-  paneKind: PaneKind;
-  onPaneKindChange: (k: PaneKind) => void;
+  paneKind: ArtifactTab;
+  onPaneKindChange: (k: ArtifactTab) => void;
   chrome: { showDeviceToggle: boolean; showUrlBar: boolean; showOpenInNewTab: boolean; showExpand: boolean; showCodeView: boolean };
   expanded: boolean;
   onExpandedChange: (v: boolean) => void;
@@ -727,16 +563,32 @@ function WorkspacePreview(props: {
             </div>
           }
         >
-          <WorkPane
+          {/* The REAL promoted component (`components/work-surface.tsx`), not a
+              local copy of it. The story keeps its STUB CONTENT — the chrome is
+              what got promoted; what the pane frames still comes from whoever
+              mounts it (here: skeleton tiles; an emitted construct: a url). */}
+          <WorkSurface
             showDeviceToggle={props.chrome.showDeviceToggle}
             showUrlBar={props.chrome.showUrlBar}
+            urlLabel="preview--build-workspace.kitn.app"
             showOpenInNewTab={props.chrome.showOpenInNewTab}
             showExpand={props.chrome.showExpand}
             showCodeView={props.chrome.showCodeView}
-            kind={props.paneKind}
-            onKindChange={props.onPaneKindChange}
+            tab={props.paneKind}
+            onTabChange={props.onPaneKindChange}
             expanded={props.expanded}
             onExpandedChange={props.onExpandedChange}
+            preview={
+              <div class="flex h-full flex-col gap-4">
+                <div class="grid grid-cols-3 gap-3">
+                  <StubStatTile class="h-28" />
+                  <StubStatTile class="h-28" />
+                  <StubStatTile class="h-28" />
+                </div>
+                <div class="flex-1 rounded-xl border border-border" style={{ 'background-color': mix('--color-surface', 30) }} />
+              </div>
+            }
+            code={<StubCodeBlock lines={12} class="max-w-2xl" />}
           />
         </WorkspaceShell>
       </div>
@@ -745,8 +597,8 @@ function WorkspacePreview(props: {
 }
 
 function WorkSurfaceSection(props: {
-  kind: PaneKind;
-  onKindChange: (v: PaneKind) => void;
+  kind: ArtifactTab;
+  onKindChange: (v: ArtifactTab) => void;
   showDeviceToggle: boolean;
   onShowDeviceToggleChange: (v: boolean) => void;
   showUrlBar: boolean;
@@ -761,7 +613,7 @@ function WorkSurfaceSection(props: {
   return (
     <section class="flex flex-col gap-3 border-b border-border p-4">
       <h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Work surface</h3>
-      <RadioGroup<PaneKind> options={PANE_KIND_OPTIONS} value={props.kind} label="Pane kind" onChange={props.onKindChange} />
+      <RadioGroup<ArtifactTab> options={PANE_KIND_OPTIONS} value={props.kind} label="Pane kind" onChange={props.onKindChange} />
       <div class="flex flex-col gap-2 pt-1">
         <span class="text-xs font-medium text-foreground">Toolbar chrome</span>
         <div class="flex items-center justify-between gap-3">
@@ -1030,7 +882,7 @@ function MessageActionsSection(props: {
 
 function WorkspaceBuilderDemo(): JSX.Element {
   const [construct, setConstruct] = createSignal<BuilderConstruct>(DEFAULT_CONSTRUCT);
-  const [paneKind, setPaneKind] = createSignal<PaneKind>('preview');
+  const [paneKind, setPaneKind] = createSignal<ArtifactTab>('preview');
   const [showDeviceToggle, setShowDeviceToggle] = createSignal(true);
   const [showUrlBar, setShowUrlBar] = createSignal(true);
   const [showOpenInNewTab, setShowOpenInNewTab] = createSignal(true);
