@@ -170,3 +170,48 @@ ChatThread per-role default actions · `composerStart`/`composerEnd` props ·
 Deferred with shapes recorded: voice (all of it) · conversations
 `{persistent}` · research answerTabs/media/relatedQuestions · workSurface ·
 composer chips/menu/contextPills. Parked for owner: `modes[]` (+ Settings).
+
+## Amendment — 2026-08-30 (supervisor, owner-approved)
+
+**Ruling 8's `workSurface` DEFER is PARTIALLY REVERSED.** The deferral failed
+its own test: the criterion used to ADOPT everywhere else in this package is
+"a real mechanism exists at the component tier; only the construct-level
+switch is missing," and for the split pane that was true. The cost of the
+mistake was visible the first time the owner ran the builder: `layout:
+'split'` emits `<slot name="pane">` for a consumer to fill, so the Workspace
+template previewed as a chat beside an empty column, and the two workspace
+variants differed only in name and starters — a picker offering a choice
+that changed almost nothing.
+
+ADOPTED (design: `2026-08-30-worksurface-and-starter-defaults.md`):
+top-level `workSurface: { kind: 'artifact' | 'preview'; url; chrome?
+{ urlBar, openInNewTab, expand } }`, layout-scoped to `split`, `url`
+required and isSafeUrl'd, emitted as slot FALLBACK so consumer projection
+still wins. Top-level rather than a capability because `verify:construct`
+can only layout-scope top-level keys.
+
+STILL DEFERRED, now with named reasons rather than a blanket: `deviceToggle`
+(no kit mechanism — the only device switcher is the unexported builder-
+internal `BuilderViewport`), `codeView` (needs `files[]` a construct has no
+honest source for), and model-produced artifacts in the pane (`MessagePart`
+has no `artifact` variant, `cards[]` has no `kind`, and every starter is
+`mock` with no scripted tool calls).
+
+**Starter defaults (owner ruling).** Everything free and reversible ships ON
+in builder starters so people can see what exists and switch it off;
+anything needing a backend or landing on an invoice stays OFF with a panel
+hint. Correction to the line as first drawn: `conversations` + `local`
+history is FREE and stays on — only `endpoint` persistence and an `endpoint`
+provider cross it.
+
+**Starter accents (owner ruling).** Starters no longer pre-commit anyone's
+brand: `theme.accent` is omitted everywhere (the kit's own `--color-primary`
+is a legible neutral in both modes — verified against theme.css), as is the
+widget's `unreadColor`. The builder's own magenta chrome is product identity
+and is explicitly out of scope. Bonus: the orange starter accent was already
+an a11y liability at 3.55:1 for white-on-accent text.
+
+**Open, needs the owner:** the "App preview with device toggles" variant
+card now names an affordance the vocabulary cannot express. Menu-honesty
+says the label changes or the mechanism gets built; recorded, not silently
+shipped.
