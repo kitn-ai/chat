@@ -33,7 +33,19 @@ import { Dialog } from '../ui/dialog';
 // only re-resolves where `--color-primary` itself is DECLARED
 // (`:root`/`:host`/`.dark`), so setting the indirection var on a descendant
 // div never reaches it — see the story's own comment for the full story.
-const BRAND_STYLE = { '--color-primary': '#EC2295' } as const;
+export const BRAND_STYLE = { '--color-primary': '#EC2295' } as const;
+
+/** The pre-panel canvas, shared by every step before the panel takes over the
+ *  viewport. It exists as ONE function because the variant and name steps
+ *  shipped without it: the variant picker was `max-w-4xl p-8` with no brand
+ *  style, so the owner's own run showed a black-and-white picker whose cards
+ *  were visibly narrower than the Start screen's — the picker component is
+ *  already at Step 1's scale (`builder-workspace-variants.tsx`: same `h-44`
+ *  media, same `sm:grid-cols-2 lg:grid-cols-3` grid, per an explicit owner
+ *  correction recorded there), so the smaller cards were purely this page's
+ *  narrower container squeezing a 3-column grid. Restating the classes per
+ *  step is what let them drift; deriving them cannot. */
+const canvas = (width: 'max-w-6xl' | 'max-w-md'): string => `mx-auto flex ${width} flex-col gap-6 py-10`;
 
 type Screen =
   | { step: 'start' }
@@ -233,7 +245,7 @@ export function App() {
             flex-col/gap-6/py-10 rhythm instead of ad hoc mb-* spacing, and
             the brand accent below. BuilderStart itself is unchanged —
             already shared with the story; this was page-level CSS only. */}
-        <main class="mx-auto flex max-w-6xl flex-col gap-6 py-10" style={BRAND_STYLE}>
+        <main class={canvas('max-w-6xl')} style={BRAND_STYLE} data-builder-step="start">
           <div class="flex flex-col gap-1">
             <h1 class="text-xl font-semibold text-foreground">Start a construct</h1>
             <p class="text-sm text-muted-foreground">Pick a template. You will get a live preview and a construct file you own.</p>
@@ -242,7 +254,12 @@ export function App() {
         </main>
       </Show>
       <Show when={screen().step === 'variant'}>
-        <main class="mx-auto max-w-4xl p-8">
+        {/* Same canvas and same brand accent as Start (owner-found, live run:
+            "just black and white, no design colors like the first screen and
+            the panels looked smaller"). It was `max-w-4xl p-8` with no
+            BRAND_STYLE — a 3-column grid in a 4xl container is what shrank the
+            cards; the picker itself was already at Step 1's scale. */}
+        <main class={canvas('max-w-6xl')} style={BRAND_STYLE} data-builder-step="variant">
           <WorkspaceVariantPicker
             onBack={() => setScreen({ step: 'start' })}
             onSelect={(variantId) => { setName(templateFor('workspace').starter.name); setScreen({ step: 'name', templateId: 'workspace', variantId }); }}
@@ -257,8 +274,12 @@ export function App() {
             // real builder writes an actual file to disk and needs a name
             // up front — audit item 4). Item 3c: give it the Start screen's
             // own title/description rhythm and tokens rather than a bare
-            // label, kept minimal since there's a single field.
-            <main class="mx-auto flex max-w-md flex-col gap-6 py-10">
+            // label, kept minimal since there's a single field. The WIDTH
+            // stays max-w-md deliberately (one input; a 6xl canvas around a
+            // lone text field reads as a mistake) — the brand accent was the
+            // real omission here, and it is what colors the field's focus
+            // ring and the Create button to match the two screens before it.
+            <main class={canvas('max-w-md')} style={BRAND_STYLE} data-builder-step="name">
               <div class="flex flex-col gap-1">
                 <h1 class="text-xl font-semibold text-foreground">Name your element</h1>
                 <p class="text-sm text-muted-foreground">The emitted custom-element tag: lowercase, with a hyphen (e.g. acme-support).</p>
