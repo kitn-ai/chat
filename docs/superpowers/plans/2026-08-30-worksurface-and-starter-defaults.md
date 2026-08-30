@@ -1584,6 +1584,7 @@ Expected: PASS. The pre-existing split tests at `codegen.test.ts:614-620` and `6
 
 - [ ] **Step 10: Full suite, typecheck, emitted-code guards**
 
+<!-- gate-list: partial -- step 10's local sweep (unit, emitted, typecheck); the required CI `test` job (44 gates -- `node packages/ui/scripts/lint-gate-parity.mjs --list`) is the merge verdict -->
 ```bash
 pnpm --filter @kitn.ai/ui exec vitest run --project=unit
 pnpm --filter @kitn.ai/ui exec vitest run --project=emitted
@@ -2398,6 +2399,7 @@ npx nx build ui
 
 - [ ] **Step 2: Run every gate this round moves, in the foreground, and paste the raw output**
 
+<!-- gate-list: partial -- the gates this round's changes touch, not the required CI `test` job's full 44-gate set (`node packages/ui/scripts/lint-gate-parity.mjs --list`) -->
 ```bash
 pnpm --filter @kitn.ai/ui exec vitest run --project=unit
 pnpm --filter @kitn.ai/ui exec vitest run --project=emitted
@@ -2473,6 +2475,7 @@ Expected: `## feat/modes-and-screens...origin/feat/modes-and-screens [ahead N]` 
 
 ## Gate consequences, in one place
 
+<!-- gate-list: partial -- maps a kind of change to the gate it moves; not an enumeration of the required CI `test` job's full gate set -->
 | Change | Gate that moves | What it does if you skip it |
 |---|---|---|
 | New top-level schema key | `verify:construct`'s `TOP_LEVEL_VALUES` + `TOP_LEVEL_LAYOUT_SCOPE` | Hard failure naming the key (`missingValuers`) — by design. Without the scope entry, every non-split cell would carry an invalid `workSurface`. |

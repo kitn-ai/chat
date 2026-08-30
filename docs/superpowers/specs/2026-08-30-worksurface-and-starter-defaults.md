@@ -529,6 +529,7 @@ is required before `verify:construct` / `verify:scaffold` / the MCP tests.**
 
 ## Gate consequences, in one place
 
+<!-- gate-list: partial -- maps a kind of change to the gate it moves; not an enumeration of the required CI `test` job's full gate set -->
 | Change | Gate that moves | What it does if you skip it |
 |---|---|---|
 | New top-level schema key | `verify:construct` `TOP_LEVEL_VALUES` + `TOP_LEVEL_LAYOUT_SCOPE` | Hard failure naming the key (`missingValuers`) — by design |
