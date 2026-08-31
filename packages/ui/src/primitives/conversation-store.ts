@@ -11,6 +11,11 @@
  * fetchStore (the recast of codegen.ts's emitHistorySetup endpoint behavior —
  * same key shapes, same x-kai-user-id header, same decide-loudly failure
  * mode, now reusable instead of inlined per-construct).
+ *
+ * Reachable two ways, deliberately: the package root (bundler consumers) and
+ * the self-contained `@kitn.ai/ui/stores` entry (dist/stores.js, zero bare
+ * imports) for no-bundler/CDN pages, which cannot load the solid-importing
+ * root bundle — see src/stores/index.ts for the decision record.
  */
 import type { ConversationSummary } from '../types';
 import type { ChatMessage } from '../elements/chat-types';

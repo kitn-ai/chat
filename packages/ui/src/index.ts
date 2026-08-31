@@ -42,6 +42,11 @@ export { configureCodeHighlighting, isCodeHighlightingEnabled } from './primitiv
 export type { CodeHighlightingOptions } from './primitives/highlighter';
 export { configurePdfPreview, isPdfPreviewEnabled } from './primitives/pdf-preview';
 export type { PdfPreviewOptions } from './primitives/pdf-preview';
+// Also surfaced as the self-contained `@kitn.ai/ui/stores` entry (src/stores/
+// index.ts has the decision record): this root bundle bare-imports solid-js,
+// so a no-bundler CDN page can't load it — the stores subpath is the raw-URL
+// route to the same module. Keep BOTH: removing these re-exports would break
+// every existing bundler consumer for no gain.
 export { localStorageStore, fetchStore, byRecency, isConversationUnread, LEGACY_THREAD_MIGRATED_TITLE } from './primitives/conversation-store';
 export type { ConversationStore } from './primitives/conversation-store';
 
