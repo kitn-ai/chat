@@ -345,26 +345,37 @@ export function App() {
   };
 
   // ---- Theme-studio takeover ----------------------------------------------
+  // The studio is a control RAIL beside the user's REAL preview now (owner-
+  // ruled DX rework 2026-08-31): its live kai-theme-change stream writes
+  // theme.tokens through the same onEdit → POST path every panel control uses,
+  // so the preview re-themes via the normal file→HMR loop — the construct FILE
+  // stays the single source of truth, nothing paints into the preview
+  // directly. Semantics, made visible in the button labels: Apply/Done keeps
+  // what the stream wrote; Cancel restores the snapshot taken at open.
+  /** theme.tokens + theme.accent as they stood when the takeover opened — what
+   *  Cancel writes back (through the same path; the preview un-themes via the
+   *  same file→HMR loop). */
+  let themeSnapshot: { accent?: string; tokens?: unknown } | undefined;
   const openThemeStudio = async () => {
+    const t = construct()?.theme as { accent?: string; tokens?: unknown } | undefined;
+    themeSnapshot = { accent: t?.accent, tokens: t?.tokens };
     setThemeStudio(true);
-    if (themeStudioAvailable()) return; // probed good earlier this session
-    try {
-      const res = await fetch('/theme-studio/');
-      setThemeStudioAvailable(res.ok);
-    } catch {
-      setThemeStudioAvailable(false);
+    if (!themeStudioAvailable()) {
+      try {
+        const res = await fetch('/theme-studio/');
+        setThemeStudioAvailable(res.ok);
+      } catch {
+        setThemeStudioAvailable(false);
+      }
     }
   };
-  /** 'kai-theme-apply' hands us full light/dark --kai-* token maps. The
-   *  construct schema's `theme.tokens` (landing in this same round) holds the
-   *  whole payload; `theme.accent` keeps getting the applied primary for
-   *  back-compat (tokens win over accent downstream). The flush is awaited so
-   *  the toast reports what actually happened: on a rejection (a dist whose
-   *  schema predates theme.tokens, or an invalid payload) fall back to the
-   *  accent-only write and SAY the full palette wasn't saved — decide loudly. */
-  const applyStudioTheme = async (payload: { light?: Record<string, string>; dark?: Record<string, string>; radius?: string; fonts?: Record<string, string> }) => {
-    const c = construct();
-    if (!c) return;
+  type StudioPayload = { light?: Record<string, string>; dark?: Record<string, string>; radius?: string; fonts?: Record<string, string> };
+  /** A studio payload (full light/dark --kai-* maps + radius/fonts) as the
+   *  construct's theme: everything into `theme.tokens`, with `theme.accent`
+   *  kept in sync from the applied primary for back-compat (tokens win over
+   *  accent downstream). The cast keeps this compiling on either side of the
+   *  schema round that added `tokens`; the server's validation is the gate. */
+  const themeFromPayload = (c: Construct, payload: StudioPayload): Construct['theme'] => {
     const accent = payload.light?.['--kai-color-primary'];
     const tokens = {
       ...(payload.light && Object.keys(payload.light).length ? { light: payload.light } : {}),
@@ -372,14 +383,33 @@ export function App() {
       ...(payload.radius ? { radius: payload.radius } : {}),
       ...(payload.fonts && Object.keys(payload.fonts).length ? { fonts: payload.fonts } : {}),
     };
-    // The cast keeps this compiling on either side of the schema round that
-    // adds `tokens` to Construct['theme']; the server's validation is the real
-    // gate, and its rejection is handled below rather than swallowed.
-    const fullTheme = { ...c.theme, mode: c.theme?.mode ?? 'system', ...(accent ? { accent } : {}), tokens } as Construct['theme'];
-    onEdit({ ...c, theme: fullTheme });
+    return { ...c.theme, mode: c.theme?.mode ?? 'system', ...(accent ? { accent } : {}), tokens } as Construct['theme'];
+  };
+  /** kai-theme-change — the studio's live stream. Routed straight into onEdit,
+   *  which IS the ~300ms debounce (one POST per settled drag): a burst of
+   *  slider frames costs one file write, and the preview re-themes through
+   *  HMR like every other control. */
+  const onStudioChange = (payload: StudioPayload): void => {
+    const c = construct();
+    if (!c || !themeStudio()) return;
+    onEdit({ ...c, theme: themeFromPayload(c, payload) });
+  };
+  /** 'kai-theme-apply' (the studio's Apply button) = Done: write the final
+   *  payload, keep it, close. The flush is awaited so the toast reports what
+   *  actually happened: on a rejection (a dist whose schema predates
+   *  theme.tokens, or an invalid payload) fall back to the accent-only write
+   *  and SAY the full palette wasn't saved — decide loudly. The takeover
+   *  closes on any kept outcome and stays open on a hard failure. */
+  const applyStudioTheme = async (payload: StudioPayload) => {
+    const c = construct();
+    if (!c) return;
+    const accent = payload.light?.['--kai-color-primary'];
+    onEdit({ ...c, theme: themeFromPayload(c, payload) });
     await flushSave();
     if (problems().length === 0 && !serverError()) {
       raiseToast('Theme applied', 'success');
+      themeSnapshot = undefined;
+      setThemeStudio(false);
       return;
     }
     const detail = problems().map((p) => `${p.path}: ${p.message}`).join('; ') || serverError() || 'the server rejected the write';
@@ -389,6 +419,8 @@ export function App() {
       await flushSave();
       if (problems().length === 0 && !serverError()) {
         raiseToast("Couldn't save the full palette — kept the accent color", 'warning', detail);
+        themeSnapshot = undefined;
+        setThemeStudio(false);
       } else {
         raiseToast('Theme not saved', 'error', detail);
       }
@@ -396,17 +428,45 @@ export function App() {
       raiseToast('Theme not saved', 'error', detail);
     }
   };
+  /** The bar's Done — no payload of its own: the live stream already wrote
+   *  everything; just flush whatever is still inside the debounce window. */
+  const doneThemeStudio = async () => {
+    await flushSave();
+    if (problems().length > 0 || serverError()) {
+      const detail = problems().map((p) => `${p.path}: ${p.message}`).join('; ') || serverError() || 'the server rejected the write';
+      raiseToast('Theme not saved', 'error', detail);
+      return; // stay open — closing would silently discard the user's read on the failure
+    }
+    raiseToast('Theme applied', 'success');
+    themeSnapshot = undefined;
+    setThemeStudio(false);
+  };
+  /** Cancel (the bar's button AND the studio's kai-theme-close): restore the
+   *  snapshot through the same write path. Unchanged-since-open closes
+   *  silently — there is nothing to discard, and a toast would claim there was. */
+  const cancelThemeStudio = async () => {
+    setThemeStudio(false);
+    const snap = themeSnapshot;
+    themeSnapshot = undefined;
+    const c = construct();
+    if (!c || !snap) return;
+    const cur = c.theme as { accent?: string; tokens?: unknown } | undefined;
+    if (JSON.stringify({ a: cur?.accent, t: cur?.tokens }) === JSON.stringify({ a: snap.accent, t: snap.tokens })) return;
+    const theme = { ...(c.theme ?? {}), mode: c.theme?.mode ?? 'system' } as Record<string, unknown>;
+    if (snap.accent === undefined) delete theme.accent; else theme.accent = snap.accent;
+    if (snap.tokens === undefined) delete theme.tokens; else theme.tokens = snap.tokens;
+    onEdit({ ...c, theme: theme as Construct['theme'] });
+    await flushSave();
+    raiseToast('Theme changes discarded', 'info');
+  };
   onMount(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== window.location.origin) return; // the studio is same-origin; everything else is noise
       const data = e.data as { type?: unknown } | null;
       if (!data || typeof data !== 'object') return;
-      if (data.type === 'kai-theme-close') setThemeStudio(false);
-      else if (data.type === 'kai-theme-apply') void applyStudioTheme(data as Parameters<typeof applyStudioTheme>[0]);
-      // 'kai-theme-change' (the studio's live-preview stream) has nowhere to
-      // land here: the preview iframe is the generated app on its own origin
-      // and follows the construct FILE, so unpersisted changes stay the
-      // studio's own preview. Apply is the moment anything persists.
+      if (data.type === 'kai-theme-close') void cancelThemeStudio(); // close = Cancel, loudly decided
+      else if (data.type === 'kai-theme-apply') void applyStudioTheme(data as StudioPayload);
+      else if (data.type === 'kai-theme-change') onStudioChange(data as StudioPayload);
     };
     // Captured at setup: teardown can run after the test harness tore the DOM
     // globals down, so the cleanup must not reach for bare `window` (same
@@ -415,6 +475,37 @@ export function App() {
     win.addEventListener('message', onMessage);
     onCleanup(() => win.removeEventListener('message', onMessage));
   });
+
+  /** The REAL preview pane — the generated app's own Vite server, or the
+   *  honest still-starting/failed placeholder. ONE definition because the
+   *  theme takeover shows the same real preview beside the studio rail: the
+   *  whole point of the rework is that devs theme their actual app, so the
+   *  pane (and its not-ready states) must be the same one the panel shows. */
+  const PreviewPane = () => (
+    <Show
+      when={previewUrl()}
+      fallback={
+        <div class="flex h-full flex-col items-center justify-center gap-2 p-8 text-center" data-preview-placeholder>
+          <Show
+            when={previewError()}
+            fallback={
+              <>
+                <p class="text-sm text-muted-foreground">{PREVIEW_STARTING_MESSAGE}</p>
+                <p class="max-w-sm text-xs text-muted-foreground">
+                  Keep editing — every change is written to your construct file and shows up as soon as the preview is running.
+                </p>
+              </>
+            }
+          >
+            <p role="alert" class="text-sm text-destructive dark:text-red-400">Preview failed to start — {previewError()}</p>
+            <p class="max-w-sm text-xs text-muted-foreground">Your construct file is safe on disk. Check the terminal running <code>kai dev --builder</code> for the full output.</p>
+          </Show>
+        </div>
+      }
+    >
+      <iframe title="preview" src={previewUrl()} class="h-full w-full border-0" />
+    </Show>
+  );
 
   return (
     <div class="min-h-dvh bg-background text-foreground">
@@ -514,12 +605,18 @@ export function App() {
             when={!themeStudio()}
             fallback={
               /* Full takeover (owner's choice): the studio replaces the whole
-                 canvas + sidebar under the header; Back returns to the builder.
-                 The studio also closes itself via postMessage 'kai-theme-close'. */
+                 canvas + sidebar under the header — but as a control RAIL
+                 beside the REAL preview, so devs theme their actual app live.
+                 Bar semantics match the studio's own embed buttons: Done keeps
+                 what the live stream wrote, Cancel restores the open-time
+                 snapshot (the studio's kai-theme-close = Cancel too). */
               <div class="flex min-h-0 flex-1 flex-col" data-theme-studio-takeover>
                 <div class="flex items-center justify-between border-b border-border px-4 py-2">
                   <span class="text-sm font-medium">Theme builder</span>
-                  <Button variant="outline" size="sm" onClick={() => setThemeStudio(false)}>Back to builder</Button>
+                  <div class="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => void cancelThemeStudio()}>Cancel</Button>
+                    <Button size="sm" onClick={() => void doneThemeStudio()}>Done</Button>
+                  </div>
                 </div>
                 <Show
                   when={themeStudioAvailable() !== false}
@@ -533,14 +630,25 @@ export function App() {
                   }
                 >
                   <Show when={themeStudioAvailable()} fallback={<div class="flex flex-1 items-center justify-center"><p class="text-sm text-muted-foreground">Opening theme studio…</p></div>}>
-                    <iframe
-                      title="theme studio"
-                      src="/theme-studio/?embed=1"
-                      class="min-h-0 w-full flex-1 border-0"
-                      /* Seed the studio with the construct's current theme once
-                         it is listening. Same-origin route, explicit origin. */
-                      on:load={(e) => e.currentTarget.contentWindow?.postMessage({ type: 'kai-theme-init', theme: construct()?.theme ?? {} }, window.location.origin)}
-                    />
+                    <div class="grid min-h-0 flex-1 grid-cols-[420px_1fr]">
+                      <div class="min-h-0 border-r border-border">
+                        <iframe
+                          title="theme studio"
+                          src="/theme-studio/?embed=1"
+                          class="h-full w-full border-0"
+                          /* Seed the studio with the construct's current theme once
+                             it is listening. Same-origin route, explicit origin.
+                             Seeding also opens the studio's change stream (it
+                             holds the stream until init so kit defaults never
+                             overwrite the construct's real theme). */
+                          on:load={(e) => e.currentTarget.contentWindow?.postMessage({ type: 'kai-theme-init', theme: construct()?.theme ?? {} }, window.location.origin)}
+                        />
+                      </div>
+                      {/* The user's ACTUAL app — same pane, same not-ready states,
+                          as the panel view; it may still be booting when the
+                          takeover opens. */}
+                      <PreviewPane />
+                    </div>
                   </Show>
                 </Show>
               </div>
@@ -579,30 +687,8 @@ export function App() {
                   is happening rather than sit blank for the length of an npm
                   install — and it has to say it while the panel beside it stays
                   fully editable (edits go to the construct file; the watcher picks
-                  them up the moment Vite is up). */}
-              <Show
-                when={previewUrl()}
-                fallback={
-                  <div class="flex h-full flex-col items-center justify-center gap-2 p-8 text-center" data-preview-placeholder>
-                    <Show
-                      when={previewError()}
-                      fallback={
-                        <>
-                          <p class="text-sm text-muted-foreground">{PREVIEW_STARTING_MESSAGE}</p>
-                          <p class="max-w-sm text-xs text-muted-foreground">
-                            Keep editing — every change is written to your construct file and shows up as soon as the preview is running.
-                          </p>
-                        </>
-                      }
-                    >
-                      <p role="alert" class="text-sm text-destructive dark:text-red-400">Preview failed to start — {previewError()}</p>
-                      <p class="max-w-sm text-xs text-muted-foreground">Your construct file is safe on disk. Check the terminal running <code>kai dev --builder</code> for the full output.</p>
-                    </Show>
-                  </div>
-                }
-              >
-                <iframe title="preview" src={previewUrl()} class="h-full w-full border-0" />
-              </Show>
+                  them up the moment Vite is up). Shared with the theme takeover. */}
+              <PreviewPane />
             </div>
           </Show>
         </div>

@@ -68,6 +68,7 @@ function stubServer(opts: {
           });
     }
     if (url === '/api/construct') return jsonResponse(200, { ok: true });
+    if (url === '/theme-studio/') return jsonResponse(200, {}); // availability probe for the takeover
     throw new Error(`unstubbed ${url}`);
   });
   vi.stubGlobal('fetch', fetchStub);
@@ -258,7 +259,7 @@ describe('builder page — create goes straight to the panel (owner defect 2)', 
     expect(screen.queryByTitle('preview')).not.toBeInTheDocument();
   });
 
-  it('a reload AFTER the boot shows the iframe, no placeholder', async () => {
+  it('a reload AFTER the boot shows the iframe, no placeholder — via the shared PreviewPane', async () => {
     stubServer({
       state: {
         phase: 'panel',
@@ -271,5 +272,123 @@ describe('builder page — create goes straight to the panel (owner defect 2)', 
     render(() => <App />);
     expect(await screen.findByTitle('preview')).toHaveAttribute('src', 'http://localhost:4401/');
     expect(screen.queryByText(PREVIEW_STARTING_MESSAGE)).not.toBeInTheDocument();
+  });
+});
+
+/** The theme-studio takeover: a control rail beside the REAL preview, live-
+ *  theming through the construct file (owner-ruled DX rework 2026-08-31).
+ *  postMessage frames are dispatched exactly as the browser would deliver the
+ *  studio iframe's posts: same-origin MessageEvents on window. */
+describe('builder page — theme-studio takeover themes the REAL app through the file', () => {
+  const post = (data: unknown): void => {
+    window.dispatchEvent(new MessageEvent('message', { data, origin: window.location.origin }));
+  };
+  /** Loaded panel state with a preview already up, plus an existing accent so
+   *  Cancel has something real to restore. */
+  const panelState = {
+    phase: 'panel',
+    constructPath: '/tmp/acme-support.construct.json',
+    construct: { name: 'acme-support', layout: 'fullscreen', theme: { mode: 'system', accent: '#112233' }, provider: { mode: 'mock' } },
+    previewUrl: 'http://localhost:4401/',
+    previewPending: false,
+  };
+  const CHANGE = { type: 'kai-theme-change', light: { '--kai-color-primary': '#ff0000' }, dark: { '--kai-color-primary': '#aa0000' }, radius: '0.5rem' };
+
+  async function openTakeover(state: Json = panelState): Promise<ReturnType<typeof stubServer>> {
+    const server = stubServer({ state });
+    render(() => <App />);
+    fireEvent.click(await screen.findByRole('button', { name: /Advanced/ }));
+    await screen.findByTitle('theme studio');
+    return server;
+  }
+  /** POSTs to /api/construct, parsed. */
+  const writes = (calls: Array<{ url: string; body?: unknown }>): Json[] =>
+    calls.filter((c) => c.url === '/api/construct' && c.body).map((c) => c.body as Json);
+
+  it('opens as a RAIL (embed iframe) beside the REAL preview iframe, with Done and Cancel in the bar', async () => {
+    await openTakeover();
+    const studio = screen.getByTitle('theme studio');
+    expect(studio).toHaveAttribute('src', '/theme-studio/?embed=1');
+    // The real preview — the same pane the panel shows — sits beside the rail.
+    expect(screen.getByTitle('preview')).toHaveAttribute('src', 'http://localhost:4401/');
+    expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+  });
+
+  it('a takeover opened BEFORE the preview is up shows the same honest placeholder, not a blank pane', async () => {
+    await openTakeover({ ...panelState, previewUrl: undefined, previewPending: true });
+    expect(screen.getByTitle('theme studio')).toBeInTheDocument();
+    expect(screen.getByText(PREVIEW_STARTING_MESSAGE)).toBeInTheDocument();
+    expect(screen.queryByTitle('preview')).not.toBeInTheDocument();
+  });
+
+  it('kai-theme-change writes theme.tokens through the debounced POST /api/construct path', async () => {
+    const { calls } = await openTakeover();
+    post(CHANGE);
+    await waitFor(() => expect(writes(calls).length).toBeGreaterThan(0), { timeout: 2000 });
+    const theme = writes(calls).at(-1)!.theme as Json;
+    expect((theme.tokens as Json).light).toEqual({ '--kai-color-primary': '#ff0000' });
+    expect((theme.tokens as Json).radius).toBe('0.5rem');
+    expect(theme.accent).toBe('#ff0000'); // back-compat accent tracks the applied primary
+  });
+
+  it('a burst of change frames costs ONE write (the onEdit debounce is the ~300ms gate)', async () => {
+    const { calls } = await openTakeover();
+    for (let i = 0; i < 5; i++) post({ ...CHANGE, light: { '--kai-color-primary': `#ff000${i}` } });
+    await waitFor(() => expect(writes(calls).length).toBeGreaterThan(0), { timeout: 2000 });
+    expect(writes(calls)).toHaveLength(1);
+    expect(((writes(calls)[0].theme as Json).tokens as Json).light).toEqual({ '--kai-color-primary': '#ff0004' });
+  });
+
+  it('kai-theme-close = CANCEL: restores the open-time snapshot through the same write path, toasts "Theme changes discarded"', async () => {
+    const { calls } = await openTakeover();
+    post(CHANGE);
+    await waitFor(() => expect(writes(calls).length).toBe(1), { timeout: 2000 });
+    post({ type: 'kai-theme-close' });
+    await waitFor(() => expect(writes(calls).length).toBe(2), { timeout: 2000 });
+    const restored = writes(calls).at(-1)!.theme as Json;
+    expect(restored.accent).toBe('#112233'); // the snapshot's accent is back
+    expect(restored.tokens).toBeUndefined(); // and the takeover's tokens are gone
+    expect(await screen.findByText('Theme changes discarded')).toBeInTheDocument();
+    expect(screen.queryByTitle('theme studio')).not.toBeInTheDocument();
+  });
+
+  it('kai-theme-close with NOTHING changed closes silently — no restore write, no "discarded" toast', async () => {
+    const { calls } = await openTakeover();
+    post({ type: 'kai-theme-close' });
+    await waitFor(() => expect(screen.queryByTitle('theme studio')).not.toBeInTheDocument());
+    await flush();
+    expect(writes(calls)).toHaveLength(0);
+    expect(screen.queryByText('Theme changes discarded')).not.toBeInTheDocument();
+  });
+
+  it('kai-theme-apply = DONE: keeps the applied tokens, toasts "Theme applied", closes the takeover', async () => {
+    const { calls } = await openTakeover();
+    post({ ...CHANGE, type: 'kai-theme-apply' });
+    await waitFor(() => expect(writes(calls).length).toBeGreaterThan(0), { timeout: 2000 });
+    expect(((writes(calls).at(-1)!.theme as Json).tokens as Json).light).toEqual({ '--kai-color-primary': '#ff0000' });
+    expect(await screen.findByText('Theme applied')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTitle('theme studio')).not.toBeInTheDocument());
+    // Back on the panel, nothing was rolled back.
+    expect(screen.getByTitle('preview')).toBeInTheDocument();
+  });
+
+  it('the bar\'s Done keeps live-streamed state and toasts, without needing a payload of its own', async () => {
+    const { calls } = await openTakeover();
+    post(CHANGE);
+    await waitFor(() => expect(writes(calls).length).toBe(1), { timeout: 2000 });
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(await screen.findByText('Theme applied')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTitle('theme studio')).not.toBeInTheDocument());
+    expect(writes(calls)).toHaveLength(1); // the stream's write stands; Done added none
+  });
+
+  it('a cross-origin message is ignored entirely', async () => {
+    const { calls } = await openTakeover();
+    window.dispatchEvent(new MessageEvent('message', { data: CHANGE, origin: 'https://evil.example' }));
+    await flush();
+    await new Promise((r) => setTimeout(r, 400)); // past the debounce window
+    expect(writes(calls)).toHaveLength(0);
+    expect(screen.getByTitle('theme studio')).toBeInTheDocument();
   });
 });

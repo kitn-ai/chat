@@ -354,6 +354,14 @@ const isEmbedded = (): boolean =>
   typeof window !== 'undefined' &&
   (new URLSearchParams(window.location.search).has('embed') || window.parent !== window);
 
+/** Rail layout: `?embed=1` EXACTLY — not the inside-an-iframe heuristic above
+ *  (Storybook/docs iframes must keep the full showroom). With the flag, the
+ *  studio hides its own showroom and renders as a narrow control rail: the
+ *  builder puts the user's REAL preview beside it, so the showroom would be a
+ *  fake app next to the actual one. Without the flag the layout is untouched. */
+const isRail = (): boolean =>
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('embed');
+
 interface ThemeExtras { radius: number; fontBase: string; fontCode: string; tracking: number; shadow: string; text: TextScale }
 
 /** Build paste-ready CSS: full light set on :root (+ radius/type scale/font/
@@ -452,6 +460,14 @@ export default function ThemeStudio() {
 
   // ── Embed mode: payload + messaging (contract documented above) ────────────
   const embed = isEmbedded();
+  const rail = isRail();
+  // Rail mode streams changes only AFTER the host's kai-theme-init has seeded
+  // state: before that the studio holds the kit DEFAULT palette, and streaming
+  // it would overwrite the construct's real theme in the ~300ms before init
+  // lands. The builder posts init on iframe load, so this gate opens at once;
+  // a rail host that never seeds gets no stream (its side of the contract).
+  // Non-rail embeds keep the original stream-from-ready behavior.
+  const [seeded, setSeeded] = createSignal(!rail);
   const themePayload = (): ThemePayload => {
     const rootExtras: Record<string, string> = {};
     const scale = textScale();
@@ -477,7 +493,7 @@ export default function ThemeStudio() {
   if (embed) {
     createEffect(() => {
       const payload = themePayload(); // read first so every knob is tracked
-      if (!ready()) return;
+      if (!ready() || !seeded()) return;
       window.parent.postMessage({ type: 'kai-theme-change', ...payload }, window.location.origin);
     });
   }
@@ -507,6 +523,7 @@ export default function ThemeStudio() {
     ensureFont(fontBase());
     ensureFont(fontCode());
     setPreset('Custom');
+    setSeeded(true); // host state is in — the rail's change stream may open
   };
 
   // Apply the active palette + radius onto the canvas wrapper. Custom properties
@@ -696,6 +713,13 @@ export default function ThemeStudio() {
       doc.removeEventListener('keydown', onKey);
       if (embed) win.removeEventListener('message', onHostMessage);
     });
+    // Rail mode renders no showroom: nothing to mount, no element bundle to
+    // load — the rail is tokens/tabs/presets only.
+    if (rail) {
+      setReady(true);
+      onCleanup(() => clearTimeout(streamTimer));
+      return;
+    }
     await loadKit();
     if (chatHost) {
       customElements.upgrade(chatHost);
@@ -804,9 +828,17 @@ export default function ThemeStudio() {
   );
 
   return (
-    <div class="theme-studio-root not-content my-4 flex flex-col overflow-hidden rounded-xl border border-line bg-surface lg:h-[82vh] lg:min-h-[660px]">
-      {/* Full-width toolbar: theme selector (left) · mode + actions (right) */}
-      <div class="flex items-center justify-between gap-3 border-b border-line px-3 py-2.5">
+    <div
+      class="theme-studio-root not-content flex flex-col overflow-hidden border-line bg-surface"
+      classList={{
+        'my-4 rounded-xl border lg:h-[82vh] lg:min-h-[660px]': !rail,
+        // Rail: the iframe IS the frame — fill it, no chrome of our own.
+        'h-dvh': rail,
+      }}
+    >
+      {/* Full-width toolbar: theme selector (left) · mode + actions (right).
+          In the rail (~400px) the row wraps rather than clipping. */}
+      <div class="flex items-center justify-between gap-3 border-b border-line px-3 py-2.5" classList={{ 'flex-wrap': rail }}>
         {/* Theme selector — searchable dropdown of the kit default + tweakcn presets */}
         <div ref={themeMenu} class="relative">
           <button
@@ -874,7 +906,7 @@ export default function ThemeStudio() {
         </div>
 
         {/* Mode + actions */}
-        <div class="flex items-center gap-1.5">
+        <div class="flex items-center gap-1.5" classList={{ 'flex-wrap justify-end': rail }}>
           <div class="inline-flex overflow-hidden rounded-md border border-line text-xs">
             <button type="button" class="px-2.5 py-1 transition-colors" classList={{ 'bg-ink text-bg': mode() ==='light', 'text-ink-2': mode() !== 'light' }} onClick={() => setMode('light')}>Light</button>
             <button type="button" class="px-2.5 py-1 transition-colors" classList={{ 'bg-ink text-bg': mode() ==='dark', 'text-ink-2': mode() !== 'dark' }} onClick={() => setMode('dark')}>Dark</button>
@@ -884,16 +916,26 @@ export default function ThemeStudio() {
           <button type="button" onClick={openSave} class="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-xs text-ink-2 transition-colors hover:bg-ink/5"><IconSave class="h-3.5 w-3.5" /><span class="hidden sm:inline">Save</span></button>
           <button type="button" onClick={() => setCodeOpen(true)} class="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink transition-colors hover:bg-ink/5"><IconCode class="h-3.5 w-3.5" />Code</button>
           <Show when={embed}>
-            <button type="button" onClick={() => postToHost('kai-theme-apply')} class="flex items-center gap-1.5 rounded-md bg-ink px-2.5 py-1 text-xs font-semibold text-bg transition-opacity hover:opacity-90"><IconCheck class="h-3.5 w-3.5" />Apply to builder</button>
-            <button type="button" onClick={postClose} aria-label="Close theme studio" class="flex size-6 items-center justify-center rounded-md border border-line text-ink-3 transition-colors hover:bg-ink/5 hover:text-ink"><IconClose class="h-3.5 w-3.5" /></button>
+            {/* Semantics are visible in the labels (owner ruling): Apply = keep
+                what the live stream wrote (kai-theme-apply → the host's Done);
+                Cancel = kai-theme-close → the host restores its snapshot. */}
+            <button type="button" onClick={() => postToHost('kai-theme-apply')} class="flex items-center gap-1.5 rounded-md bg-ink px-2.5 py-1 text-xs font-semibold text-bg transition-opacity hover:opacity-90"><IconCheck class="h-3.5 w-3.5" />Apply</button>
+            <button type="button" onClick={postClose} class="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-xs text-ink-2 transition-colors hover:bg-ink/5 hover:text-ink"><IconClose class="h-3.5 w-3.5" />Cancel</button>
           </Show>
         </div>
       </div>
 
       {/* Body: inspector · canvas */}
       <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
-        {/* Inspector — Colors / Typography / Other tabs */}
-        <div class="flex w-full shrink-0 flex-col overflow-auto border-b border-line lg:w-[380px] lg:border-b-0 lg:border-r">
+        {/* Inspector — Colors / Typography / Other tabs. In rail mode there is
+            no canvas beside it, so it takes the whole width and height. */}
+        <div
+          class="flex w-full flex-col overflow-auto"
+          classList={{
+            'shrink-0 border-b border-line lg:w-[380px] lg:border-b-0 lg:border-r': !rail,
+            'min-h-0 flex-1': rail,
+          }}
+        >
           <div class="sticky top-0 z-10 flex items-center gap-1 border-b border-line bg-surface px-3 py-2">
             <For each={[['colors', 'Colors'], ['typography', 'Typography'], ['other', 'Other']] as const}>
               {([id, label]) => (
@@ -1027,7 +1069,11 @@ export default function ThemeStudio() {
           </Show>
         </div>
 
-        {/* Canvas */}
+        {/* Canvas — the showroom. Hidden entirely in rail mode: the builder
+            puts the user's REAL app preview beside the rail instead, so the
+            token-application effect above no-ops (canvasEl stays unset) and
+            the theme travels only through the postMessage stream. */}
+        <Show when={!rail}>
         <div ref={canvasEl} classList={{ dark: mode() === 'dark' }} class="relative min-w-0 flex-1 overflow-auto">
           <Show when={!ready()}>
             <div class="absolute inset-0 z-20 grid place-items-center text-sm text-ink/55">Loading preview…</div>
@@ -1120,6 +1166,7 @@ export default function ThemeStudio() {
             </div>
           </div>
         </div>
+        </Show>
       </div>
 
       <Show when={codeOpen()}>
