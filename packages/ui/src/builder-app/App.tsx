@@ -12,6 +12,7 @@ import { createSignal, onMount, onCleanup, Show, For } from 'solid-js';
 import { BuilderStart, BUILDABLE_BUILDER_TEMPLATES, type BuilderTemplateId } from '../components/builder-start';
 import { WorkspaceVariantPicker, type WorkspaceVariantId } from '../components/builder-workspace-variants';
 import { DerivedBuilderPanel } from '../components/builder-panel-derived';
+import { BuilderHeader } from '../components/builder-header';
 import { buildableTemplates, templateById, inferTemplateId, type BuildableTemplate } from '../agent-tooling/construct/templates';
 import type { Construct, ConstructProblem } from '../agent-tooling/construct/schema';
 import { createEditGuard } from './edit-guard';
@@ -101,6 +102,13 @@ export function App() {
   const [pickedId, setPickedId] = createSignal<BuilderTemplateId | undefined>();
   const [name, setName] = createSignal('');
   const [confirmSwitch, setConfirmSwitch] = createSignal(false);
+  // The theme-studio takeover (owner's choice: the studio replaces the ENTIRE
+  // canvas + sidebar under the header, not a cramped modal). `available` is a
+  // three-state probe: undefined = checking, false = the /theme-studio/ route
+  // isn't in this build (friendly placeholder), true = iframe it.
+  const [themeStudio, setThemeStudio] = createSignal(false);
+  const [themeStudioAvailable, setThemeStudioAvailable] = createSignal<boolean | undefined>();
+  const [themeNotice, setThemeNotice] = createSignal<string | undefined>();
   // F1: one persistent banner across every server round-trip site (load,
   // SSE refetch, create, edit). Server-down (fetch throws) or a non-422
   // non-2xx response sets it; the NEXT successful round-trip on ANY of
@@ -243,6 +251,14 @@ export function App() {
   };
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  // The write that has been SCHEDULED but not yet handed to submitEdit. The
+  // header's Save button is honest about this exact window: `dirty` is true
+  // from the keystroke until the debounce (or an explicit Save click) flushes
+  // it, and false once the file write round-tripped. There is ONE persistence
+  // path — the debounced POST — and Save merely flushes it early.
+  let pendingConstruct: Construct | undefined;
+  const [dirty, setDirty] = createSignal(false);
+  const [savingNow, setSavingNow] = createSignal(false);
   // F2: each edit's POST can outlive the next one (slow network, a burst of
   // keystrokes past the debounce). createEditGuard's monotonic request id,
   // bumped the instant a new submit() starts, drops a response that arrives
@@ -255,15 +271,25 @@ export function App() {
       body: JSON.stringify(next),
     }),
   );
+  const flushSave = async () => {
+    clearTimeout(debounceTimer);
+    const next = pendingConstruct;
+    if (!next) return; // nothing pending — Save is disabled here anyway
+    pendingConstruct = undefined;
+    setSavingNow(true);
+    const outcome = await submitEdit(next);
+    setSavingNow(false);
+    if (!outcome) return; // stale — a newer edit's own flush owns the signals
+    if (pendingConstruct === undefined) setDirty(false); // no newer edit arrived mid-POST
+    setProblems(outcome.problems);
+    setServerError(outcome.serverError);
+  };
   const onEdit = (next: Construct) => {
     setConstruct(next); // optimistic — the panel stays live while typing
+    pendingConstruct = next;
+    setDirty(true);
     clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(async () => {
-      const outcome = await submitEdit(next);
-      if (!outcome) return; // stale — a newer edit's outcome already applied
-      setProblems(outcome.problems);
-      setServerError(outcome.serverError);
-    }, 300);
+    debounceTimer = setTimeout(() => void flushSave(), 300);
   };
 
   const switchTemplate = async (id: BuilderTemplateId) => {
@@ -276,6 +302,78 @@ export function App() {
     setConfirmSwitch(false);
     onEdit(next);
   };
+
+  // ---- Preview canvas mode (the header's sun/moon) -------------------------
+  // The preview is a cross-origin iframe of the GENERATED app, so its theme
+  // is not a class this page can toggle: theme.mode lives in the construct
+  // file, and the toggle writes 'light'|'dark' through the same onEdit →
+  // POST /api/construct path every panel control uses — the preview follows
+  // via the normal file→HMR loop. The builder's own chrome stays dark
+  // (index.html's class="dark") regardless.
+  const prefersDark = typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+  const canvasDark = (): boolean => {
+    const mode = construct()?.theme?.mode ?? 'system';
+    // 'system' resolves the way the generated app resolves it: the OS
+    // preference (sampled once at load — good enough for an icon).
+    return mode === 'dark' || (mode === 'system' && prefersDark);
+  };
+  const toggleCanvasMode = () => {
+    const c = construct();
+    if (!c) return;
+    onEdit({ ...c, theme: { ...c.theme, mode: canvasDark() ? 'light' : 'dark' } });
+  };
+
+  // ---- Theme-studio takeover ----------------------------------------------
+  const openThemeStudio = async () => {
+    setThemeStudio(true);
+    if (themeStudioAvailable()) return; // probed good earlier this session
+    try {
+      const res = await fetch('/theme-studio/');
+      setThemeStudioAvailable(res.ok);
+    } catch {
+      setThemeStudioAvailable(false);
+    }
+  };
+  /** 'kai-theme-apply' hands us full light/dark --kai-* token maps, but
+   *  today's construct schema holds exactly theme.accent/unreadColor/mode
+   *  (.strict() — do not extend it here; full token-map persistence is a
+   *  queued follow-up). Decide loudly: persist the applied primary as the
+   *  accent through the one onEdit path, and SAY what was left behind. */
+  const applyStudioTheme = (payload: { light?: Record<string, string>; dark?: Record<string, string>; radius?: string; fonts?: Record<string, string> }) => {
+    const c = construct();
+    if (!c) return;
+    const accent = payload.light?.['--kai-color-primary'];
+    const knobCount =
+      Object.keys(payload.light ?? {}).length +
+      Object.keys(payload.dark ?? {}).length +
+      (payload.radius ? 1 : 0) +
+      Object.keys(payload.fonts ?? {}).length;
+    if (accent) {
+      onEdit({ ...c, theme: { ...c.theme, mode: c.theme?.mode ?? 'system', accent } });
+      setThemeNotice(knobCount > 1 ? 'Applied the primary color as your accent. Full palette persistence is coming — the rest of the theme was not saved.' : undefined);
+    } else {
+      setThemeNotice('The construct file cannot hold this theme yet — nothing was saved. Full palette persistence is coming.');
+    }
+  };
+  onMount(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return; // the studio is same-origin; everything else is noise
+      const data = e.data as { type?: unknown } | null;
+      if (!data || typeof data !== 'object') return;
+      if (data.type === 'kai-theme-close') setThemeStudio(false);
+      else if (data.type === 'kai-theme-apply') applyStudioTheme(data as Parameters<typeof applyStudioTheme>[0]);
+      // 'kai-theme-change' (the studio's live-preview stream) has nowhere to
+      // land here: the preview iframe is the generated app on its own origin
+      // and follows the construct FILE, so unpersisted changes stay the
+      // studio's own preview. Apply is the moment anything persists.
+    };
+    // Captured at setup: teardown can run after the test harness tore the DOM
+    // globals down, so the cleanup must not reach for bare `window` (same
+    // class the teardown-without-dom-globals test pins across components).
+    const win = window;
+    win.addEventListener('message', onMessage);
+    onCleanup(() => win.removeEventListener('message', onMessage));
+  });
 
   return (
     <div class="min-h-dvh bg-background text-foreground">
@@ -350,49 +448,103 @@ export function App() {
         }}
       </Show>
       <Show when={screen().step === 'panel' && construct()}>
-        <div class="grid h-dvh grid-cols-[380px_1fr]">
-          <div class="flex flex-col overflow-y-auto border-r border-border">
-            <div class="flex items-center justify-between border-b border-border p-3">
-              <div class="flex items-center gap-2">
-                <span class="text-sm font-semibold">{template().name}</span>
-                {/* The panel is usable before the preview exists, so the fact
-                    that one is still coming belongs here, next to the thing
-                    that IS ready — not only in the empty pane beside it. */}
-                <Show when={previewPending()}>
-                  <span class="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">preview starting…</span>
-                </Show>
-              </div>
-              <Button variant="ghost" size="sm" onClick={() => setConfirmSwitch(true)}>Switch template</Button>
+        {/* BRAND_STYLE inline on the panel step's own wrapper, same defect
+            the header story hit live: index.html carries class="dark", and
+            theme.css's `.dark` block re-declares `--color-primary` on the
+            node carrying the class, clobbering any inherited brand value —
+            so the brand has to be an INLINE declaration on a descendant,
+            where it outranks the class. Without it the header's primary
+            Save button renders the kit's neutral near-white. */}
+        <div class="flex h-dvh flex-col" style={BRAND_STYLE}>
+          <BuilderHeader
+            title={template().name}
+            /* The panel is usable before the preview exists, so the fact
+               that one is still coming belongs up here, next to the things
+               that ARE ready — not only in the empty pane below. */
+            status={previewPending() ? 'preview starting…' : undefined}
+            onSwitchTemplate={() => setConfirmSwitch(true)}
+            onOpenThemeBuilder={() => void openThemeStudio()}
+            canvasDark={canvasDark()}
+            onToggleCanvasDark={toggleCanvasMode}
+            onSave={() => void flushSave()}
+            saving={savingNow()}
+            saved={!dirty()}
+          />
+          <Show when={themeNotice()}>
+            <div class="flex items-center justify-center gap-3 border-b border-border bg-muted px-4 py-1.5 text-xs text-muted-foreground" data-theme-notice>
+              <span>{themeNotice()}</span>
+              <button type="button" class="underline hover:text-foreground" onClick={() => setThemeNotice(undefined)}>Dismiss</button>
             </div>
-            <DerivedBuilderPanel value={construct()!} onChange={onEdit} template={template()} problems={problems()} />
-          </div>
-          {/* The preview boots behind the panel, so this pane has to SAY what
-              is happening rather than sit blank for the length of an npm
-              install — and it has to say it while the panel beside it stays
-              fully editable (edits go to the construct file; the watcher picks
-              them up the moment Vite is up). */}
+          </Show>
           <Show
-            when={previewUrl()}
+            when={!themeStudio()}
             fallback={
-              <div class="flex h-full flex-col items-center justify-center gap-2 p-8 text-center" data-preview-placeholder>
+              /* Full takeover (owner's choice): the studio replaces the whole
+                 canvas + sidebar under the header; Back returns to the builder.
+                 The studio also closes itself via postMessage 'kai-theme-close'. */
+              <div class="flex min-h-0 flex-1 flex-col" data-theme-studio-takeover>
+                <div class="flex items-center justify-between border-b border-border px-4 py-2">
+                  <span class="text-sm font-medium">Theme builder</span>
+                  <Button variant="outline" size="sm" onClick={() => setThemeStudio(false)}>Back to builder</Button>
+                </div>
                 <Show
-                  when={previewError()}
+                  when={themeStudioAvailable() !== false}
                   fallback={
-                    <>
-                      <p class="text-sm text-muted-foreground">{PREVIEW_STARTING_MESSAGE}</p>
+                    <div class="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+                      <p class="text-sm text-muted-foreground">The theme studio isn't in this build yet.</p>
                       <p class="max-w-sm text-xs text-muted-foreground">
-                        Keep editing — every change is written to your construct file and shows up as soon as the preview is running.
+                        Rebuild the kit and restart <code>kai dev --builder</code> — the studio is served at <code>/theme-studio/</code> on this same server once it ships.
                       </p>
-                    </>
+                    </div>
                   }
                 >
-                  <p role="alert" class="text-sm text-destructive dark:text-red-400">Preview failed to start — {previewError()}</p>
-                  <p class="max-w-sm text-xs text-muted-foreground">Your construct file is safe on disk. Check the terminal running <code>kai dev --builder</code> for the full output.</p>
+                  <Show when={themeStudioAvailable()} fallback={<div class="flex flex-1 items-center justify-center"><p class="text-sm text-muted-foreground">Opening theme studio…</p></div>}>
+                    <iframe
+                      title="theme studio"
+                      src="/theme-studio/?embed=1"
+                      class="min-h-0 w-full flex-1 border-0"
+                      /* Seed the studio with the construct's current theme once
+                         it is listening. Same-origin route, explicit origin. */
+                      on:load={(e) => e.currentTarget.contentWindow?.postMessage({ type: 'kai-theme-init', theme: construct()?.theme ?? {} }, window.location.origin)}
+                    />
+                  </Show>
                 </Show>
               </div>
             }
           >
-            <iframe title="preview" src={previewUrl()} class="h-full w-full border-0" />
+            <div class="grid min-h-0 flex-1 grid-cols-[380px_1fr]">
+              <div class="flex flex-col overflow-y-auto border-r border-border">
+                <DerivedBuilderPanel value={construct()!} onChange={onEdit} template={template()} problems={problems()} />
+              </div>
+              {/* The preview boots behind the panel, so this pane has to SAY what
+                  is happening rather than sit blank for the length of an npm
+                  install — and it has to say it while the panel beside it stays
+                  fully editable (edits go to the construct file; the watcher picks
+                  them up the moment Vite is up). */}
+              <Show
+                when={previewUrl()}
+                fallback={
+                  <div class="flex h-full flex-col items-center justify-center gap-2 p-8 text-center" data-preview-placeholder>
+                    <Show
+                      when={previewError()}
+                      fallback={
+                        <>
+                          <p class="text-sm text-muted-foreground">{PREVIEW_STARTING_MESSAGE}</p>
+                          <p class="max-w-sm text-xs text-muted-foreground">
+                            Keep editing — every change is written to your construct file and shows up as soon as the preview is running.
+                          </p>
+                        </>
+                      }
+                    >
+                      <p role="alert" class="text-sm text-destructive dark:text-red-400">Preview failed to start — {previewError()}</p>
+                      <p class="max-w-sm text-xs text-muted-foreground">Your construct file is safe on disk. Check the terminal running <code>kai dev --builder</code> for the full output.</p>
+                    </Show>
+                  </div>
+                }
+              >
+                <iframe title="preview" src={previewUrl()} class="h-full w-full border-0" />
+              </Show>
+            </div>
           </Show>
         </div>
       </Show>

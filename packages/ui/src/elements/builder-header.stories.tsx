@@ -11,9 +11,9 @@ import { Dialog } from '../ui/dialog';
 // read as a button; this design moves the chrome into ONE strip across the
 // whole builder: title · an obvious outline Switch-template button on the
 // left, then theme-builder · canvas light/dark toggle · primary Save on the
-// right. Nothing here is wired into `builder-app/App.tsx` yet — the theme
-// builder opens a stub modal, the canvas toggle flips a stubbed preview
-// region, Save just reports.
+// right. The real wiring lives in `builder-app/App.tsx` (same-day round);
+// HERE the theme builder opens a stub modal, the canvas toggle flips a
+// stubbed preview region, and Save just reports.
 //
 // Sits in Labs/Builder with the rest of the builder design suite (Start,
 // Workspace, …) — the SolidJS-authored story, same as its siblings.
@@ -34,7 +34,7 @@ const BRAND_STYLE = { '--color-primary': '#EC2295' } as const;
  *  that region (the same move builder-workspace.stories.tsx's preview frame
  *  makes), so an author can test a design in both modes while the builder
  *  chrome around it stays in the page theme. */
-function HeaderDemo(props: { canvasDark?: boolean; saving?: boolean }) {
+function HeaderDemo(props: { canvasDark?: boolean; saving?: boolean; saved?: boolean }) {
   const [canvasDark, setCanvasDark] = createSignal(props.canvasDark ?? false);
   const [themeOpen, setThemeOpen] = createSignal(false);
   const [lastAction, setLastAction] = createSignal<string | undefined>();
@@ -49,6 +49,7 @@ function HeaderDemo(props: { canvasDark?: boolean; saving?: boolean }) {
         onToggleCanvasDark={() => setCanvasDark((d) => !d)}
         onSave={() => setLastAction('save')}
         saving={props.saving}
+        saved={props.saved}
       />
       <div class="grid min-h-0 flex-1 grid-cols-[320px_1fr]">
         {/* Panel stub — enough rows to read as the derived panel beside the canvas. */}
@@ -125,4 +126,12 @@ export const DarkCanvas: Story = {
 /** Save mid-write: disabled, label swapped. */
 export const Saving: Story = {
   render: () => <HeaderDemo saving />,
+};
+
+/** Everything persisted: Save disabled and labeled "Saved" — the honest
+ *  resting state for a page that autosaves (the real builder debounces its
+ *  writes; Save only arms while one is pending, and clicking it flushes the
+ *  debounce early). */
+export const Saved: Story = {
+  render: () => <HeaderDemo saved />,
 };

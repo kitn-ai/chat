@@ -1,6 +1,7 @@
 /**
  * `BuilderHeader` — the full-width top bar for the `kai dev --builder` page
- * (story-first, stub round 2026-08-31; not yet wired into `builder-app/App.tsx`).
+ * (story-first, stub round 2026-08-31; wired into `builder-app/App.tsx` the
+ * same day — the page is the one real caller, the story keeps the stub).
  *
  * WHY NOT `AppHeader`: that component's arrangement is a fixed owner ruling
  * for the WORKSPACE app strip (title · search/theme · authored actions ·
@@ -65,6 +66,12 @@ export interface BuilderHeaderProps {
   onSave?: () => void;
   /** Disables Save and swaps its label (e.g. mid-write). */
   saving?: boolean;
+  /** Everything already persisted: disables Save and labels it "Saved" —
+   *  the honest state for a page that autosaves (the builder debounces its
+   *  POSTs; Save is only ACTIVE while a write is pending, and clicking it
+   *  flushes the debounce, never a second persistence path). `saving`
+   *  takes precedence. */
+  saved?: boolean;
 
   class?: string;
 }
@@ -150,11 +157,11 @@ export function BuilderHeader(props: BuilderHeaderProps): JSX.Element {
             type="button"
             variant="default"
             size="sm"
-            disabled={props.saving}
+            disabled={props.saving || props.saved}
             onClick={() => props.onSave?.()}
             data-kai-builder-header-save
           >
-            {props.saving ? 'Saving…' : 'Save'}
+            {props.saving ? 'Saving…' : props.saved ? 'Saved' : 'Save'}
           </Button>
         </Show>
       </div>
