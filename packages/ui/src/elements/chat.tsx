@@ -147,7 +147,7 @@ type Props = Omit<ChatThreadProps,
      *  no-home widget (chat view only, unchanged). */
     home?: HomeConfig;
     /** Whether the chrome that HOSTS this element is currently VISIBLE to the
-     *  visitor — e.g. a composed launcher/dock's open state. Set as a JS
+     *  visitor, e.g. a composed launcher/dock's open state. Set as a JS
      *  PROPERTY (`el.hostOpen = open`), never an attribute: the default is
      *  `true` and an HTML attribute's presence can only ever say "true", so
      *  there is no attribute form that expresses the one value worth setting
@@ -155,7 +155,7 @@ type Props = Omit<ChatThreadProps,
      *  third leg of "seen": the active conversation is marked read only while
      *  it is active AND the chat view is showing AND this is `true`. Leave it
      *  unset for any layout with no show/hide concept (fullscreen, aside,
-     *  split) — that just means unread never distinguishes "closed" from
+     *  split); that just means unread never distinguishes "closed" from
      *  "open". The companion of the `kai-unread-change` event: set this from
      *  your launcher's open state, mirror that event onto its badge. */
     hostOpen?: boolean;
@@ -199,11 +199,11 @@ interface Events {
   /** A `home.links` entry with no `href` was activated (tapped/clicked/Enter).
    *  Meaningful only when `home` is set. */
   'kai-home-link': { entry: HomeLinkEntry };
-  /** "Is any conversation OTHER than the currently-seen one unread" changed —
-   *  the same value this element already renders as the dot on its own header
-   *  list toggle, reported outward so a sibling control with no view into the
-   *  internal conversation-summary state (a composed launcher's badge, a
-   *  `kai-dock`'s `unread` prop) can mirror it: set `dock.unread =
+  /** "Is any conversation OTHER than the currently-seen one unread" changed.
+   *  This is the same value this element already renders as the dot on its
+   *  own header list toggle, reported outward so a sibling control with no
+   *  view into the internal conversation-summary state (a composed launcher's
+   *  badge, a `kai-dock`'s `unread` prop) can mirror it: set `dock.unread =
    *  event.detail.unread`. Fires on every change, including the initial
    *  `false`. Only meaningful with `conversations` on; pairs with the
    *  `hostOpen` property, which is what lets "arrived while the widget was
@@ -275,7 +275,7 @@ defineWebComponent<Props, Events>('kai-chat', {
     /** Scroll the message viewport to the newest message. Defaults to `'smooth'`;
      *  pass `'instant'` to jump without animating. */
     scrollToBottom: (behavior?: ScrollBehavior) => controller?.scrollToBottom(behavior),
-    /** Force the widget back to its default landing view — `'home'` when the
+    /** Force the widget back to its default landing view: `'home'` when the
      *  `home` property is set, `'chat'` otherwise (a no-op if already there, or
      *  if neither `home` nor `conversations` is on). This element has no
      *  knowledge of whatever chrome hosts it, so it cannot know when that host
@@ -284,12 +284,12 @@ defineWebComponent<Props, Events>('kai-chat', {
      *  list was left. `kai-dock`'s `kai-open-change` fires on every close path
      *  (header X, launcher toggle, Escape), so one listener covers all three. */
     closeConversationsList: () => controller?.closeConversationsList(),
-    /** Start a fresh conversation — the same path as the list view's "+ New
+    /** Start a fresh conversation, on the same path as the list view's "+ New
      *  conversation" row: clears the active conversation id, returns to the
      *  chat view, and delivers `[]` through `kai-conversation-load` (set
      *  `el.messages = event.detail.messages` like every other load; this
      *  element never updates `messages` for you). The seam a composed app's
-     *  own "New conversation" control drives (B-10 — the construct shell
+     *  own "New conversation" control drives (B-10; the construct shell
      *  palette's entry rides the same controller call). No id is minted until
      *  the first message (C-6), so calling this on an already-empty new
      *  conversation is a harmless no-op. */
