@@ -124,6 +124,15 @@ of an infinite list if Workspace stays config-tier — they are the natural
 stopping point, not the next step.** The owner has not ruled on the
 boundary; the Workspace/Research vocabulary work is ON HOLD pending it.
 
+**Postscript 2026-08-31: DECIDED.** The owner ruled, adopting both
+recommendations as proposed: the boundary splits at the thread — Construct
+keeps tier 1 config-tier, Workspace/Research go composition-first —
+checkpoints and the model switcher drop out of config vocabulary into
+composition recipes (components still get built), `cards[].kind` stands,
+and the Workspace/Research config-vocabulary queue is CLOSED rather than
+on hold. Full ruling: Amendment 3 in
+`docs/superpowers/specs/2026-08-28-t5-vocabulary-rulings.md`.
+
 ## Queued, in the audit's priority order (all on hold for the boundary call except 1)
 
 1. **Scripted mocks per template** (+ `MockTurn.sources`). No vocabulary,

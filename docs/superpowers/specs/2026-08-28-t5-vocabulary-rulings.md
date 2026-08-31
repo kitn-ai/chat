@@ -310,3 +310,39 @@ recommends would catch NONE of this amendment's findings: it asserts a
 contract derived from the construct, and every finding here is something
 the construct could not declare. Build it for what it does catch; do not
 count it against this class.
+
+## Amendment 3 — 2026-08-31 (owner ruling: the boundary is split at the thread)
+
+The owner answered the config-vs-composition question directly
+(`HANDOFF-2026-08-30-builder-testing-and-the-config-boundary.md`, "THE
+DECISION FOR TOMORROW"). Both recommendations adopted as proposed.
+
+**The boundary is SPLIT AT THE THREAD.** Construct keeps tier 1 config-tier
+— widget · in-app assistant · assistant: chrome and capability toggles over
+one conversation, which is what config is honestly good at. Workspace and
+Research become COMPOSITION-FIRST: real example apps, recipes, eject as the
+front door rather than the escape hatch. The live-runtime spec's emitter
+seam (one shared plan module, snippets per framework, eject producing
+something worth keeping) is what makes this a direction rather than a
+retreat. The rationale is the handoff's own analysis, now empirically
+backed by the scripted-mocks round (e51ba027): the guided-config ceiling is
+not where the LAYOUT gets complex, it is where the THREAD gets rich — and
+config made the wrong question the easy one, so a build-loop template
+shipped with no build loop.
+
+**Amendment 2 partially rescinded.** Checkpoints and the model switcher are
+NO LONGER config vocabulary: their schema, panel and codegen halves are
+dropped. They were the first two items of an infinite list if Workspace
+stayed config-tier — the natural stopping point, not the next step. They
+become composition recipes demonstrated in the Workspace/Research example
+apps instead; the components and events themselves still get built (the
+Checkpoint promotion and the switcher's event seam are kit work either
+way). `cards[].kind` from the same amendment STANDS — it pays off
+regardless of tier and has already landed.
+
+**Consequence: the Workspace/Research config-vocabulary queue is CLOSED**,
+not on hold. The named deferrals that were queued behind the boundary call
+get re-triaged against the new boundary in the next planning pass — some
+become recipes, some belong to the tier-1 templates and keep their existing
+rulings, some die — rather than being silently carried as
+vocabulary-in-waiting.
