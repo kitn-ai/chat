@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { join } from 'node:path';
-import { mkdtempSync, readFileSync as readF, writeFileSync as writeF, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync as readF, writeFileSync as writeF, readdirSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import { mkdirSync } from 'node:fs';
-import { workDirFor, installKey, regenerate, regenTurn, handleConstructPut, shapeConstructGetResponse, createEventHub, serveBuilderAsset, listenLoopbackOnly, resolveBuilderPageDir, listenWithPortFallback, portInUseNotice, probePort, handleCreate, starterFor, previewFields, waitUntilListening, announceBoot } from './dev';
+import { workDirFor, installKey, regenerate, regenTurn, handleConstructPut, shapeConstructGetResponse, createEventHub, serveBuilderAsset, listenLoopbackOnly, resolveBuilderPageDir, listenWithPortFallback, portInUseNotice, probePort, handleCreate, starterFor, previewFields, waitUntilListening, announceBoot, listConstructs, resolveConstructArg, handleOpen } from './dev';
 import { generateProject, type GeneratedFile } from './codegen';
 import { validateConstruct } from './schema';
 
@@ -355,6 +355,145 @@ describe('POST /api/create responds before the boot (B-22 background boot)', () 
         { log: () => {}, error: () => {} },
       ),
     ).resolves.toEqual({ status: 'error', message: 'boom' });
+  });
+});
+
+// ── the home-screen entry flow (owner ask, 2026-08-31) ───────────────────────
+// Constructs live at the project ROOT (handleCreate writes
+// `<cwd>/<name>.construct.json`; `.kai/` holds generated workdirs), so that
+// is what the scan reads.
+describe('listConstructs — the home screen scan', () => {
+  const write = (dir: string, file: string, body: unknown) =>
+    writeF(join(dir, file), typeof body === 'string' ? body : JSON.stringify(body));
+
+  it('lists every *.construct.json newest-first with name, template label and mtime; other files are ignored', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-scan-'));
+    write(dir, 'acme-support.construct.json', { name: 'acme-support', layout: 'widget', provider: { mode: 'mock' } });
+    write(dir, 'acme-desk.construct.json', { name: 'acme-desk', layout: 'fullscreen', provider: { mode: 'mock' } });
+    write(dir, 'notes.json', { irrelevant: true });
+    write(dir, 'README.md', 'not json at all');
+    // Force a stable mtime ordering (same-second writes tie otherwise).
+    const past = new Date(Date.now() - 60_000);
+    utimesSync(join(dir, 'acme-desk.construct.json'), past, past);
+
+    const rows = listConstructs(dir);
+    expect(rows.map((r) => r.file)).toEqual(['acme-support.construct.json', 'acme-desk.construct.json']);
+    expect(rows[0]).toMatchObject({ name: 'acme-support', valid: true, templateId: 'widget' });
+    expect(typeof rows[0].updatedAt).toBe('string');
+    expect(rows[0].templateName).toBeTruthy(); // the human label rides along for the card
+  });
+
+  it('an invalid or non-JSON construct file is LISTED and marked, never silently dropped', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-scan-'));
+    write(dir, 'broken.construct.json', '{not json');
+    write(dir, 'rejected.construct.json', { name: 'rejected', layout: 'sideways', provider: { mode: 'mock' } });
+    const rows = listConstructs(dir);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.valid).toBe(false);
+      expect(row.templateId).toBeUndefined();
+    }
+    expect(rows.map((r) => r.name).sort()).toEqual(['broken', 'rejected']); // basename-derived identity
+  });
+
+  it('an empty or unreadable directory is an empty list (phase start), not a throw', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-scan-'));
+    expect(listConstructs(dir)).toEqual([]);
+    expect(listConstructs(join(dir, 'does-not-exist'))).toEqual([]);
+  });
+});
+
+describe('resolveConstructArg — `kai dev --builder <name>` direct open', () => {
+  it('a real path wins as-is; a bare name resolves to <cwd>/<name>.construct.json', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-arg-'));
+    writeF(join(dir, 'acme-support.construct.json'), JSON.stringify({}));
+    expect(resolveConstructArg('acme-support.construct.json', dir)).toEqual({
+      ok: true,
+      abs: join(dir, 'acme-support.construct.json'),
+    });
+    expect(resolveConstructArg('acme-support', dir)).toEqual({
+      ok: true,
+      abs: join(dir, 'acme-support.construct.json'),
+    });
+  });
+
+  it('an unknown name fails loudly LISTING what exists — never a bare ENOENT', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-arg-'));
+    writeF(join(dir, 'acme-support.construct.json'), JSON.stringify({}));
+    writeF(join(dir, 'acme-desk.construct.json'), JSON.stringify({}));
+    const out = resolveConstructArg('acme-shop', dir);
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.message).toContain('no construct named "acme-shop"');
+    expect(out.message).toContain('acme-support');
+    expect(out.message).toContain('acme-desk');
+    expect(out.message).toContain('kai dev --builder');
+  });
+
+  it('an unknown name in an EMPTY directory says so instead of listing nothing', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-arg-'));
+    const out = resolveConstructArg('anything', dir);
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.message).toContain('no *.construct.json files exist');
+  });
+});
+
+describe('handleOpen — POST /api/open opens by basename only', () => {
+  const goodRaw = { name: 'demo-widget', layout: 'widget', provider: { mode: 'mock' } };
+
+  it('opens a listed construct and returns the RAW file content', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-open-'));
+    writeF(join(dir, 'demo-widget.construct.json'), JSON.stringify(goodRaw));
+    const out = handleOpen({ file: 'demo-widget.construct.json' }, dir);
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.abs).toBe(join(dir, 'demo-widget.construct.json'));
+      expect(out.construct).toEqual(goodRaw);
+    }
+  });
+
+  it('a path with separators or traversal is inexpressible — rejected before any fs access', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-open-'));
+    for (const file of ['../evil.construct.json', 'sub/dir.construct.json', '/etc/passwd', 'x.json', 42, undefined]) {
+      const out = handleOpen({ file }, dir);
+      expect(out.ok).toBe(false);
+      if (!out.ok) expect(out.status).toBe(422);
+    }
+  });
+
+  it('a missing file 404s naming the file (stale list), an invalid one 422s with its own problems', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-open-'));
+    const missing = handleOpen({ file: 'gone.construct.json' }, dir);
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) {
+      expect(missing.status).toBe(404);
+      expect(missing.problems[0].message).toContain('gone.construct.json');
+    }
+    writeF(join(dir, 'bad.construct.json'), JSON.stringify({ ...goodRaw, layout: 'sideways' }));
+    const invalid = handleOpen({ file: 'bad.construct.json' }, dir);
+    expect(invalid.ok).toBe(false);
+    if (!invalid.ok) {
+      expect(invalid.status).toBe(422);
+      expect(invalid.problems.some((p) => p.path === 'layout')).toBe(true);
+    }
+  });
+});
+
+describe('handleCreate refuses to overwrite an existing construct (multi-construct directories)', () => {
+  it('a second create with the same name is a pathed rejection naming the file, and the file is untouched', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-create-'));
+    const first = handleCreate({ templateId: 'scratch', name: 'acme-support' }, dir);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const before = readF(first.target, 'utf8');
+    const second = handleCreate({ templateId: 'assistant', name: 'acme-support' }, dir);
+    expect(second.ok).toBe(false);
+    if (!second.ok) {
+      expect(second.problems[0].path).toBe('name');
+      expect(second.problems[0].message).toContain('acme-support.construct.json');
+      expect(second.problems[0].message).toContain('already exists');
+    }
+    expect(readF(first.target, 'utf8')).toBe(before);
   });
 });
 
