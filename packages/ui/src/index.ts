@@ -216,6 +216,8 @@ export { Artifact } from './components/artifact';
 export type { ArtifactProps, ArtifactFile, ArtifactTab } from './components/artifact';
 export { WorkSurface, WORK_SURFACE_DEVICE_WIDTHS } from './components/work-surface';
 export type { WorkSurfaceProps, WorkSurfaceDevice } from './components/work-surface';
+export { AppHeader } from './components/app-header';
+export type { AppHeaderProps, AppHeaderAction, AppHeaderUserMenuItem } from './components/app-header';
 export { ArtifactCard, DEFAULT_ARTIFACT_CARD_HEIGHT } from './components/artifact-card';
 // `ArtifactCardFile` is the SAME declaration `FileTreeFile` and `ArtifactFile`
 // alias, authored in primitives/card-data-types.ts because `ArtifactCardData.files`

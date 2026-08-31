@@ -215,3 +215,30 @@ an a11y liability at 3.55:1 for white-on-accent text.
 card now names an affordance the vocabulary cannot express. Menu-honesty
 says the label changes or the mechanism gets built; recorded, not silently
 shipped.
+
+## Amendment — 2026-08-30 (owner defect report: "the workspace is missing the proper header")
+
+**No vocabulary change. Ruling 8's REJECT of `header.search` / `header.user`
+stands and is now load-bearing** — the emitted header reads the shell flags for
+exactly those two pieces, so there is still one vocabulary per fact.
+
+What changed is ruling 8's stated EMIT PATH ("ChatThread's built-in header bar +
+`header-end` slot territory"). That was right for a single chat column and wrong
+for `split`, whose approved design (`src/elements/builder-workspace.stories.tsx`)
+puts an app-level bar ACROSS the frame, above the split. Emitting into
+ChatThread's header row put it inside the chat rail's width, and — because it
+was hand-rolled a second time there — it drifted off the design in three more
+ways at once: a text "Theme" button instead of the icon toggle, no search at
+all, and a bare avatar with no menu.
+
+Fixed by PROMOTION, the same move `WorkSurface` got the same week: the story's
+`AppHeader` is now the real component `src/components/app-header.tsx`, the story
+renders it, and codegen composes it for `layout: 'split'`. The arrangement
+(title LEFT; search · theme | actions | user) lives in one place and is not
+configurable, per the owner's ruling; only presence is. Every other layout keeps
+its `headerEndContent` chrome unchanged — widening the strip to another layout
+means drawing that layout's header first.
+
+Mapping, unchanged keys only: `header.title` · `header.themeToggle` ·
+`header.actions` · `shell.commandPalette` (the search affordance) ·
+`shell.userMenu` (the avatar cluster, `name`/`plan`).

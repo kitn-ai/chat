@@ -1100,10 +1100,44 @@ function emitDockHideClose(c: Construct): string {
  *  the header button and the shell palette's "Toggle theme" entry (B-10) —
  *  one closure, no drift between the two call sites. Flips the HOST's own
  *  `theme` attribute (the one `defineWebComponent` already owns), reached
- *  via the `host` prop `needsHost`/`emitElement` thread through the facade. */
+ *  via the `host` prop `needsHost`/`emitElement` thread through the facade.
+ *
+ *  Two shapes, because the two headers ask different questions of it. The
+ *  header-end row's button is a plain text "Theme" control that only needs to
+ *  FLIP the attribute. The app header's toggle (`hasAppHeader`) is icon-only
+ *  and shows the mode you would switch TO, so it needs the RESOLVED mode — and
+ *  an absent or `auto` attribute means "follow the system", a question only
+ *  matchMedia can answer. The resolved variant is emitted only where something
+ *  reads it: the emitted project runs `noUnusedLocals`, so an unconditional
+ *  signal would break every construct that does not have the strip. */
 function emitToggleThemeVar(c: Construct, indent: string): string {
   if (c.layout === 'custom' || !c.header?.themeToggle) return '';
-  return `${indent}const toggleTheme = () => props.host.setAttribute('theme', props.host.getAttribute('theme') === 'dark' ? 'light' : 'dark');\n`;
+  if (!hasAppHeader(c)) {
+    return `${indent}const toggleTheme = () => props.host.setAttribute('theme', props.host.getAttribute('theme') === 'dark' ? 'light' : 'dark');\n`;
+  }
+  return `${indent}// header.themeToggle -> the host's own 'theme' (the one defineWebComponent
+${indent}// owns). AppHeader's toggle is icon-only and shows the mode you would switch
+${indent}// TO, so it needs the RESOLVED mode, and resolving it takes both reads:
+${indent}//  - the PROPERTY, not just the attribute. This construct declares its mode
+${indent}//    through defineWebComponent's prop DEFAULT, so a themed element can carry
+${indent}//    no 'theme' attribute at all — reading only the attribute reported
+${indent}//    "light" on a dark app and drew the wrong icon (caught in the live
+${indent}//    builder, not in a test).
+${indent}//  - matchMedia for 'auto' (and for nothing set), which is the only thing
+${indent}//    that can answer "follow the system".
+${indent}const resolveDark = () => {
+${indent}  const mode = (props.host as HTMLElement & { theme?: string }).theme ?? props.host.getAttribute('theme');
+${indent}  if (mode === 'dark') return true;
+${indent}  if (mode === 'light') return false;
+${indent}  return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
+${indent}};
+${indent}const [themeDark, setThemeDark] = createSignal(resolveDark());
+${indent}const toggleTheme = () => {
+${indent}  const next = !themeDark();
+${indent}  props.host.setAttribute('theme', next ? 'dark' : 'light');
+${indent}  setThemeDark(next);
+${indent}};
+`;
 }
 
 /** ChatThread's `headerEndContent` prop (chat-thread.tsx): an ORDERED
@@ -1139,6 +1173,47 @@ function hasThemeToggleChrome(c: Construct): boolean {
  *  `hasHeaderActionsChrome`'s doc for why this is its own named predicate. */
 function hasUserMenuChrome(c: Construct): boolean {
   return c.layout !== 'custom' && !!c.shell?.userMenu;
+}
+
+/**
+ * Whether this construct renders the kit's real `AppHeader` (components/
+ * app-header.tsx) as a strip ACROSS the frame, above the layout — the
+ * arrangement `builder-workspace.stories.tsx` has always shipped and the owner
+ * ruled on twice (2026-08-30 defect: the emitted app rendered a text "Theme"
+ * button, no search at all and a bare avatar, all crammed into ChatThread's own
+ * header row inside the chat rail).
+ *
+ * SCOPED TO `split` ON PURPOSE. `split` is the workspace shape — a chat rail
+ * beside a work surface — and an app-level top bar is a fact about THAT shape,
+ * which is the one the promoted design was drawn for. The other layouts keep
+ * their existing `headerEndContent` chrome, and it is right that they do:
+ * `widget` is a docked panel whose only header row is ChatThread's own (and
+ * whose close control lives in it), and `fullscreen`/`aside` are a single chat
+ * column where a second full-width bar above ChatThread's own title row would
+ * be two headers stacked. Widening this to another layout means drawing that
+ * layout's header first, not flipping this predicate.
+ *
+ * `header.title` alone is enough to raise the strip: the story renders the app
+ * bar and the rail's own title row together (the title appears in both), which
+ * is what the approved design shows.
+ */
+function hasAppHeader(c: Construct): boolean {
+  return (
+    c.layout === 'split' &&
+    (!!c.header?.title ||
+      hasThemeToggleChrome(c) ||
+      hasHeaderActionsChrome(c) ||
+      hasUserMenuChrome(c) ||
+      hasShellPalette(c))
+  );
+}
+
+/** Whether the header-chrome pieces land in ChatThread's own header-end row.
+ *  They move OUT of it wholesale when the app header strip takes them
+ *  (`hasAppHeader`) — never split across both, which would put Share in one
+ *  bar and the avatar in another. */
+function inHeaderEndRow(c: Construct): boolean {
+  return !hasAppHeader(c);
 }
 
 /** header.actions dispatch `kai-header-action` and nothing in the emitted app
@@ -1180,7 +1255,7 @@ function emitHeaderEndContentProp(c: Construct): string {
   //    directly; `label` is construct-authored/untrusted text,
   //    JSON.stringify'd at BOTH interpolation sites (the event detail and
   //    the button's own child text).
-  if (hasHeaderActionsChrome(c)) {
+  if (hasHeaderActionsChrome(c) && inHeaderEndRow(c)) {
     for (const a of c.header!.actions!) {
       const variant = a.variant ? ` variant="${a.variant}"` : '';
       pieces.push(
@@ -1191,7 +1266,7 @@ function emitHeaderEndContentProp(c: Construct): string {
 
   // 2. header.themeToggle: flips the host's `theme` attribute via the
   //    shared `toggleTheme` closure (emitToggleThemeVar).
-  if (hasThemeToggleChrome(c)) {
+  if (hasThemeToggleChrome(c) && inHeaderEndRow(c)) {
     pieces.push(`<Button variant="ghost" size="sm" aria-label="Toggle theme" onClick={toggleTheme}>Theme</Button>`);
   }
 
@@ -1203,7 +1278,7 @@ function emitHeaderEndContentProp(c: Construct): string {
   //    vocabulary-never-logic seam as header.actions above, since a
   //    construct has no app code to run "Settings"/"Get help"/"Log out"
   //    itself.
-  if (hasUserMenuChrome(c)) {
+  if (hasUserMenuChrome(c) && inHeaderEndRow(c)) {
     const m = c.shell!.userMenu!;
     const menuLabel = JSON.stringify(`${m.name}${m.plan ? ` — ${m.plan}` : ''} account menu`);
     const initials = JSON.stringify(m.name.slice(0, 2).toUpperCase());
@@ -1238,13 +1313,66 @@ function emitHeaderEndContentProp(c: Construct): string {
  *  (reviewer-caught TS6133 under `tsc --strict --noUnusedLocals`). */
 function emitChromeImports(c: Construct): string {
   let names = '';
-  if (hasHeaderActionsChrome(c) || hasThemeToggleChrome(c) || widgetHasHeaderClose(c)) names += ', Button';
-  if (hasUserMenuChrome(c)) {
+  if ((inHeaderEndRow(c) && (hasHeaderActionsChrome(c) || hasThemeToggleChrome(c))) || widgetHasHeaderClose(c)) {
+    names += ', Button';
+  }
+  if (hasUserMenuChrome(c) && inHeaderEndRow(c)) {
     names += ', Dropdown, DropdownTrigger, DropdownContent, DropdownItem, DropdownSeparator, Avatar';
   }
+  // The app header strip composes ONE component instead of all of the above —
+  // that is the whole point of the promotion (components/app-header.tsx owns
+  // the arrangement, so the emitted app cannot drift off it).
+  if (hasAppHeader(c)) names += ', AppHeader';
   if (hasShellPalette(c)) names += ', CommandList, Input';
   if (widgetHasHeaderClose(c)) names += ', DockCloseGlyph';
   return names;
+}
+
+/**
+ * The `<AppHeader …>` strip itself (`hasAppHeader`) — the kit's own promoted
+ * component, the SAME one `builder-workspace.stories.tsx` renders, so the
+ * arrangement (title LEFT; search · theme | actions | user on the right) lives
+ * in one place and this file never restates it.
+ *
+ * VOCABULARY MAPPING — the T-5 rulings' own keys, no new ones. `header.search`
+ * and `header.user` were REJECTED as vocabulary precisely because they would
+ * duplicate the shell flags, so: the search affordance follows
+ * `shell.commandPalette`, the user cluster follows `shell.userMenu` (its
+ * `name`/`plan` feed it), the toggle is `header.themeToggle`, the buttons are
+ * `header.actions`, and the title is `header.title`.
+ *
+ * MENU-HONESTY: every piece is emitted with its MECHANISM attached, and the
+ * component itself renders nothing for a piece whose mechanism is missing —
+ * so search is emitted only alongside the palette this file actually writes
+ * (`hasShellPalette`), and there is no path here that produces a control with
+ * nothing behind it.
+ *
+ * `title`, the whole `actions` array and the whole `user` object are
+ * construct-authored untrusted text, JSON.stringify'd at this one emit site
+ * like every other free-text field in this file — never raw JSX attribute
+ * strings.
+ */
+function emitAppHeader(c: Construct, indent: string): string {
+  if (!hasAppHeader(c)) return '';
+  let out = `${indent}<AppHeader\n`;
+  if (c.header?.title) out += `${indent}  title={${JSON.stringify(c.header.title)}}\n`;
+  if (hasShellPalette(c)) {
+    out += `${indent}  showSearch={true}\n${indent}  onSearch={() => setPaletteOpen(true)}\n`;
+  }
+  if (hasThemeToggleChrome(c)) {
+    out += `${indent}  showThemeToggle={true}\n${indent}  dark={themeDark()}\n${indent}  onToggleDark={toggleTheme}\n`;
+  }
+  if (hasHeaderActionsChrome(c)) {
+    out +=
+      `${indent}  actions={${JSON.stringify(c.header!.actions!)}}\n` +
+      `${indent}  onActionSelect={(action) => dispatchHeaderAction(action.label)}\n`;
+  }
+  if (hasUserMenuChrome(c)) {
+    out +=
+      `${indent}  user={${JSON.stringify(c.shell!.userMenu!)}}\n` +
+      `${indent}  onUserMenuSelect={(item) => props.host.dispatchEvent(new CustomEvent('kai-user-menu', { detail: { item } }))}\n`;
+  }
+  return `${out}${indent}/>\n`;
 }
 
 /** `//` lines placed directly above `export function App`, documenting the
@@ -1474,7 +1602,9 @@ function emitSolidJsImports(c: Construct): string {
     widgetHasConversationsChrome(c) ||
     hasShellPalette(c) ||
     splitNeedsPaneProbe(c) ||
-    workSurfaceOf(c)?.chrome?.expand
+    workSurfaceOf(c)?.chrome?.expand ||
+    // the app header's resolved-dark signal (emitToggleThemeVar)
+    (hasAppHeader(c) && hasThemeToggleChrome(c))
   ) {
     names.push('createSignal');
   }
@@ -2040,6 +2170,21 @@ function emitLayoutOpen(c: Construct): string {
     }
     case 'split': {
       const ws = workSurfaceOf(c);
+      // The app header strip (hasAppHeader) sits ABOVE the split entirely — a
+      // SIBLING of WorkspaceShell, never inside it — so it spans the frame and
+      // survives the work surface's Expand (which collapses the chat rail).
+      // That is the arrangement builder-workspace.stories.tsx ships; putting
+      // this chrome in ChatThread's own header row instead is exactly the
+      // defect this replaced (it rendered inside the chat rail's width).
+      // No wrapper div around the shell: the frame becomes a flex COLUMN and
+      // WorkspaceShell becomes its flexing item (`min-h-0 flex-1` in place of
+      // `h-full`), so the strip and the split share the viewport with no
+      // hand-rolled second container to close.
+      const header = emitAppHeader(c, '      ');
+      const frameOpen = header
+        ? `    <div style={{ height: '100dvh', display: 'flex', 'flex-direction': 'column' }}>\n${header}`
+        : `    <div style={{ height: '100dvh' }}>\n`;
+      const shellClass = header ? 'min-h-0 flex-1' : 'h-full';
       // drawerBelow: split's mobile takeover is the kit's OWN WorkspaceShell
       // capability (components/workspace-shell.tsx), not hand-rolled CSS — wiring
       // it here is composition-over-reauthoring, not a media-query duplicate. 480
@@ -2055,7 +2200,7 @@ function emitLayoutOpen(c: Construct): string {
         // unmounted, so a slotchange listener there could never fire itself
         // back on. Only ELEMENTS can carry a slot attribute, so an element
         // query is the whole test for a NAMED slot.
-        return `    <div style={{ height: '100dvh' }}>\n      <WorkspaceShell class="h-full" drawerBelow={480} end={paneProjected() ? (\n        <div style={{ height: '100%', overflow: 'auto' }}>\n          <slot name="pane" />\n        </div>\n      ) : undefined}>\n`;
+        return `${frameOpen}      <WorkspaceShell class="${shellClass}" drawerBelow={480} end={paneProjected() ? (\n        <div style={{ height: '100%', overflow: 'auto' }}>\n          <slot name="pane" />\n        </div>\n      ) : undefined}>\n`;
       }
       // With a work surface the split INVERTS (owner ruling, and what
       // builder-workspace.stories.tsx has always shipped): the chat is the
@@ -2063,7 +2208,7 @@ function emitLayoutOpen(c: Construct): string {
       // fills WorkspaceShell's larger MAIN region. A bare split keeps the old
       // arrangement above so consumer `<slot name="pane">` projection is
       // untouched.
-      return `    <div style={{ height: '100dvh' }}>\n      <WorkspaceShell class="h-full" drawerBelow={480} startWidth={360} startMinWidth={280} startMaxWidth={520}${
+      return `${frameOpen}      <WorkspaceShell class="${shellClass}" drawerBelow={480} startWidth={360} startMinWidth={280} startMaxWidth={520}${
         ws.chrome?.expand ? ' startCollapsed={surfaceExpanded()}' : ''
       } start={\n        <div style={{ height: '100%', 'min-height': '0', display: 'flex', 'flex-direction': 'column' }}>\n`;
     }

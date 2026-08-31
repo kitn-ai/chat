@@ -1,12 +1,13 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { type JSX, createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
-import { Plus, ChevronUp, ChevronDown, X, Sun, Moon } from 'lucide-solid';
+import { Plus, ChevronUp, ChevronDown, X } from 'lucide-solid';
 import { BuilderPanel, type BuilderConstruct } from '../components/builder-panel';
 import { BuilderLayout, type BuilderViewport } from '../components/builder-layout';
 import { resolveAccentWrapperStyle } from '../components/builder-preview';
 import { ChatThread } from '../components/chat-thread';
 import { WorkspaceShell } from '../components/workspace-shell';
 import { WorkSurface } from '../components/work-surface';
+import { AppHeader, type AppHeaderAction } from '../components/app-header';
 import type { ArtifactTab } from '../components/artifact';
 import { mix, StubStatTile, StubCodeBlock } from '../components/builder-skeleton';
 import {
@@ -30,8 +31,6 @@ import {
   type ShellControlsState,
   ShellSection,
   CommandPaletteOverlay,
-  CommandPaletteTrigger,
-  UserMenu,
 } from '../components/builder-shell-controls';
 import { RadioGroup, type RadioOption } from '../ui/radio';
 import { Switch } from '../ui/switch';
@@ -39,8 +38,6 @@ import { Select } from '../ui/select';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Dropdown, DropdownTrigger, DropdownContent, DropdownItem } from '../ui/dropdown';
-import { Separator } from '../ui/separator';
-import { Tooltip } from '../ui/tooltip';
 import { renderIcon } from '../ui/icon';
 import type { ChatMessage, ChatMessageAction, CustomAction } from './chat-types';
 
@@ -101,7 +98,18 @@ import type { ChatMessage, ChatMessageAction, CustomAction } from './chat-types'
 //    (`startCollapsed={expanded()}`), not a hand-rolled `display:none` or
 //    the v0/kai-artifact maximize protocol, which this shell does not carry.
 //
-// APP HEADER: a new top-level strip inside the preview frame, above the
+// APP HEADER: PROMOTED 2026-08-30 into the real component
+// `components/app-header.tsx` (`AppHeader`) — the same treatment the work
+// pane's chrome got above, and for the same reason: the emitted app had
+// drifted off this design (a text "Theme" button, no search at all, a bare
+// avatar with no menu, and the whole cluster stuffed into ChatThread's own
+// header row inside the chat rail instead of a strip across the frame). This
+// story now RENDERS that component and the emitted app COMPOSES it, so there
+// is one arrangement, not two. Everything below is the recorded reasoning for
+// the design it carries; the component's own doc comment repeats it at the
+// code, superseded history included.
+//
+// A new top-level strip inside the preview frame, above the
 // split entirely (persists through Expand, matching Lovable's own top bar
 // living outside/above its split body) — modeled on Lovable's real
 // `<header>` (brand/title one side, actions the other). JUDGMENT CALL,
@@ -287,105 +295,6 @@ const DEFAULT_CONSTRUCT: BuilderConstruct = {
   },
 };
 
-/** Icon-only theme toggle — the kit's real icon-button idiom (`Tooltip` +
- *  ghost `icon-sm` `Button`, the same pairing every other round's icon
- *  button on this branch uses — `voice-output.tsx`, Voice's transcript
- *  download). Shows the icon for the mode you'd switch TO (the universal
- *  convention: Sun while dark — "tap for light" — Moon while light), never
- *  "dark mode"/"light mode" text. `NAMED_ICONS` (`ui/icon.tsx`) already
- *  carries both `sun`/`moon`; imported directly here (`lucide-solid`) the
- *  same way this file already imports `Plus`/`ChevronDown`/etc. rather
- *  than reused through the string-keyed `renderIcon` helper, since the
- *  icon is fixed, not data-driven. */
-function ThemeToggleButton(props: { dark: boolean; onToggle: () => void }): JSX.Element {
-  const label = () => (props.dark ? 'Switch to light mode' : 'Switch to dark mode');
-  return (
-    <Tooltip content={label()}>
-      <Button type="button" variant="ghost" size="icon-sm" aria-label={label()} onClick={props.onToggle}>
-        {props.dark ? <Sun size={14} aria-hidden="true" /> : <Moon size={14} aria-hidden="true" />}
-      </Button>
-    </Tooltip>
-  );
-}
-
-/** The workspace's own app-level top bar — see the module doc comment's
- *  "APP HEADER" note for the mirrored-placement reasoning. Sits ABOVE the
- *  split entirely (a sibling of `WorkspaceShell`, not inside it), so it
- *  persists through Expand.
- *
- *  OWNER FEEDBACK ROUND — rearranged + made individually optional. The
- *  title moved to the LEFT (was right); the right side is now a fixed,
- *  OPINIONATED arrangement, left to right: a utility cluster (search,
- *  theme toggle) · a divider · the header-actions row (Share/Deploy by
- *  default, a real configurable ordered-rows list — see `HeaderActionsSection`
- *  below, unchanged from the prior round) · a divider · the user avatar
- *  (compact: initials + chevron only, no name/plan text — the owner's own
- *  instruction). POSITIONS are not configurable, only presence is: every
- *  element (`showTitle`/`showThemeToggle`/`showActions`, plus the existing
- *  `shell.commandPalette`/`shell.userMenu` toggles this file already had)
- *  is its own on/off panel switch. Dividers render only between two GROUPS
- *  that both actually have visible content, so turning a group off never
- *  leaves an orphan divider next to nothing. */
-function AppHeader(props: {
-  title?: string;
-  showTitle: boolean;
-  actions: HeaderActionRow[];
-  showActions: boolean;
-  showThemeToggle: boolean;
-  dark: boolean;
-  onToggleDark: () => void;
-  shell: ShellControlsState;
-  onOpenPalette: () => void;
-}): JSX.Element {
-  const utilityVisible = () => props.shell.commandPalette || props.showThemeToggle;
-  const actionsVisible = () => props.showActions && props.actions.length > 0;
-  const userVisible = () => props.shell.userMenu;
-
-  return (
-    <header class="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-4" data-builder-app-header>
-      <div class="flex min-w-0 items-center gap-2">
-        {props.showTitle && <span class="truncate text-sm font-semibold text-foreground">{props.title}</span>}
-      </div>
-      <div class="flex items-center gap-2">
-        <Show when={utilityVisible()}>
-          <div class="flex items-center gap-1">
-            {props.shell.commandPalette && (
-              <Tooltip content="Search commands">
-                <CommandPaletteTrigger onOpen={props.onOpenPalette} />
-              </Tooltip>
-            )}
-            {props.showThemeToggle && <ThemeToggleButton dark={props.dark} onToggle={props.onToggleDark} />}
-          </div>
-        </Show>
-
-        <Show when={utilityVisible() && (actionsVisible() || userVisible())}>
-          <Separator orientation="vertical" class="h-5" />
-        </Show>
-
-        <Show when={actionsVisible()}>
-          <div class="flex items-center gap-2">
-            <For each={props.actions}>
-              {(action) => (
-                <Button type="button" variant={HEADER_VARIANT_TO_BUTTON[action.variant]} size="sm">
-                  {action.label}
-                </Button>
-              )}
-            </For>
-          </div>
-        </Show>
-
-        <Show when={actionsVisible() && userVisible()}>
-          <Separator orientation="vertical" class="h-5" />
-        </Show>
-
-        <Show when={userVisible()}>
-          <UserMenu name="Ada" plan="Pro" class="w-auto" compact />
-        </Show>
-      </div>
-    </header>
-  );
-}
-
 /** The v0-style composer `+` menu — see the module doc comment's COMPOSER
  *  note for why this composes `Dropdown`/`DropdownTrigger`/`DropdownContent`/
  *  `DropdownItem` directly (the real primitives `model-switcher.tsx` also
@@ -428,8 +337,13 @@ function ComposerExtras(props: {
   onFill: (value: string) => void;
   lastAction: string;
 }): JSX.Element {
-  if (!props.chips.length && !props.menuEnabled) return null;
+  // A `Show`, not an early `return null`: this used to be evaluated ONCE at
+  // component-creation time, so toggling the composer menu (or clearing every
+  // chip) never actually added or removed the strip. It also now carries the
+  // last-action readout for the promoted `AppHeader`'s buttons, which have to
+  // be able to bring the strip back on their own.
   return (
+    <Show when={props.chips.length > 0 || props.menuEnabled || props.lastAction}>
     <div class="flex flex-wrap items-center gap-1.5 border-b border-border px-3 py-2" data-builder-composer-extras>
       <Show when={props.menuEnabled}>
         <ComposerMenu entries={props.menuEntries} onEntrySelect={(entry) => props.onFill(`(${entry.label})`)} />
@@ -449,6 +363,7 @@ function ComposerExtras(props: {
         <span class="ml-auto shrink-0 truncate text-[11px] text-muted-foreground">{props.lastAction}</span>
       </Show>
     </div>
+    </Show>
   );
 }
 
@@ -483,6 +398,14 @@ function WorkspacePreview(props: {
     setComposerValue(value);
     setLastAction(`Filled: ${value}`);
   };
+  /** The panel's own three-name variant vocabulary -> the kit Button variants
+   *  `AppHeader` (and the construct schema's `header.actions[].variant`, built
+   *  from the same `BUTTON_VARIANT_NAMES`) actually speak. See
+   *  `HEADER_VARIANT_TO_BUTTON` for why the mapping is honest rather than a
+   *  `primary`/`secondary` variant invented on `Button` itself. */
+  const headerActions = createMemo<AppHeaderAction[]>(() =>
+    props.headerActions.map((action) => ({ label: action.label, variant: HEADER_VARIANT_TO_BUTTON[action.variant] })),
+  );
 
   const frameStyle = createMemo(() => ({
     ...resolveAccentWrapperStyle(props.construct.theme),
@@ -525,16 +448,23 @@ function WorkspacePreview(props: {
       data-builder-pane-expanded={props.expanded}
     >
       <CommandPaletteOverlay open={props.shell.commandPalette && paletteOpen()} onClose={() => setPaletteOpen(false)} />
+      {/* The REAL promoted component (`components/app-header.tsx`), not a local
+          copy of it — same treatment `WorkSurface` got below. The ARRANGEMENT
+          lives in the component (owner ruling: not configurable); this call
+          site only decides PRESENCE, and supplies the mechanism behind each
+          piece. Passing a handler is not optional decoration: the component
+          renders nothing for a piece whose mechanism is missing. */}
       <AppHeader
-        title={props.construct.header?.title}
-        showTitle={props.headerShowTitle}
-        actions={props.headerActions}
-        showActions={props.headerShowActions}
+        title={props.headerShowTitle ? props.construct.header?.title : undefined}
+        showSearch={props.shell.commandPalette}
+        onSearch={() => setPaletteOpen(true)}
         showThemeToggle={props.headerShowThemeToggle}
         dark={props.dark}
         onToggleDark={props.onToggleDark}
-        shell={props.shell}
-        onOpenPalette={() => setPaletteOpen(true)}
+        actions={props.headerShowActions ? headerActions() : undefined}
+        onActionSelect={(action) => setLastAction(`Header action: ${action.label}`)}
+        user={props.shell.userMenu ? { name: 'Ada', plan: 'Pro' } : undefined}
+        onUserMenuSelect={(item) => setLastAction(`User menu: ${item}`)}
       />
       <div class="min-h-0 flex-1">
         <WorkspaceShell

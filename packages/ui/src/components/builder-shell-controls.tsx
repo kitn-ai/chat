@@ -111,35 +111,29 @@ export function CommandPaletteTrigger(props: { onOpen: () => void }): JSX.Elemen
 }
 
 /** The user-menu recipe itself — avatar + name/plan trigger, real Dropdown
- *  primitives, a stub items list (Settings/Help/Log out). `compact` (owner
- *  feedback round, Workspace's app-header rework) drops the name/plan text
- *  entirely, rendering avatar + chevron only — for a header utility cluster
- *  where the full name/plan reads as too much next to icon-only siblings.
- *  `name`/`plan` still feed the avatar initials and the accessible name
- *  (`aria-label`) even when compact, so the control never loses its name to
- *  assistive tech just because the text is hidden visually. */
-export function UserMenu(props: { name: string; plan?: string; class?: string; compact?: boolean }): JSX.Element {
+ *  primitives, a stub items list (Settings/Help/Log out). This is the RAIL
+ *  placement: a full-width row that shows the name and plan as text.
+ *
+ *  The COMPACT header placement (avatar + chevron only, no text) used to be a
+ *  `compact` prop here, added for Workspace's app-header rework. It moved out
+ *  on 2026-08-30 when that header was promoted into the real component
+ *  `components/app-header.tsx`, which owns its own compact cluster — this prop
+ *  had exactly one caller and that caller is now the component. Removed rather
+ *  than left behind: an option nothing passes is the rot this repo keeps
+ *  paying for. */
+export function UserMenu(props: { name: string; plan?: string; class?: string }): JSX.Element {
   return (
     <Dropdown>
       <DropdownTrigger
         as={(triggerProps: JSX.ButtonHTMLAttributes<HTMLButtonElement>) => (
           <button
             type="button"
-            aria-label={props.compact ? `${props.name}${props.plan ? ` — ${props.plan}` : ''} account menu` : undefined}
-            class={cn(
-              'flex min-w-0 items-center gap-2 rounded-md text-left hover:bg-muted',
-              props.compact ? 'p-1' : 'w-full px-2 py-1.5',
-              props.class,
-            )}
+            class={cn('flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-muted', props.class)}
             {...triggerProps}
           >
             <Avatar fallback={props.name.slice(0, 2).toUpperCase()} size="sm" />
-            {!props.compact && (
-              <>
-                <span class="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{props.name}</span>
-                {props.plan && <span class="shrink-0 text-xs text-muted-foreground">{props.plan}</span>}
-              </>
-            )}
+            <span class="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{props.name}</span>
+            {props.plan && <span class="shrink-0 text-xs text-muted-foreground">{props.plan}</span>}
             <ChevronDown size={13} class="shrink-0 text-muted-foreground" aria-hidden="true" />
           </button>
         )}

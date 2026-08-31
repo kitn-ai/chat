@@ -1777,6 +1777,147 @@ describe('shell (B-10)', () => {
   });
 });
 
+describe('the app header strip — `split` composes the promoted AppHeader (2026-08-30)', () => {
+  // The owner-reported defect: the emitted Workspace rendered its header chrome
+  // as a text "Theme" button, no search at all and a bare avatar, all inside
+  // ChatThread's own header row (so, inside the chat rail's width). The story
+  // `src/elements/builder-workspace.stories.tsx` is the binding acceptance
+  // surface; its `AppHeader` is now a real component and codegen composes THAT.
+  const split = (over: Record<string, unknown> = {}): Construct =>
+    construct({
+      layout: 'split',
+      header: {
+        title: 'Workspace',
+        themeToggle: true,
+        actions: [
+          { label: 'Share', variant: 'outline' },
+          { label: 'Deploy', variant: 'default' },
+        ],
+      },
+      shell: { commandPalette: true, userMenu: { name: 'Ada', plan: 'Pro' } },
+      ...over,
+    } as never);
+
+  const appOf = (c: Construct) => file(generateProject(c), 'src/App.tsx');
+
+  it('composes <AppHeader> with every T-5 key mapped to its own prop — and imports it from the kit', () => {
+    const app = appOf(split());
+    expect(app).toContain(', AppHeader');
+    expect(app).toContain('<AppHeader');
+    // header.title
+    expect(app).toContain('title={"Workspace"}');
+    // shell.commandPalette -> the search affordance (NOT a rejected
+    // `header.search` key), wired to the palette this file actually emits.
+    expect(app).toContain('showSearch={true}');
+    expect(app).toContain('onSearch={() => setPaletteOpen(true)}');
+    // header.themeToggle
+    expect(app).toContain('showThemeToggle={true}');
+    expect(app).toContain('dark={themeDark()}');
+    expect(app).toContain('onToggleDark={toggleTheme}');
+    // header.actions
+    expect(app).toContain('actions={[{"label":"Share","variant":"outline"},{"label":"Deploy","variant":"default"}]}');
+    expect(app).toContain('onActionSelect={(action) => dispatchHeaderAction(action.label)}');
+    // shell.userMenu (NOT a rejected `header.user` key)
+    expect(app).toContain('user={{"name":"Ada","plan":"Pro"}}');
+    expect(app).toContain("new CustomEvent('kai-user-menu', { detail: { item } })");
+  });
+
+  it('the strip sits ABOVE the split, as a SIBLING of WorkspaceShell — not inside ChatThread\'s header row', () => {
+    const app = appOf(split());
+    // The whole point of the defect: nothing lands in headerEndContent anymore.
+    expect(app).not.toMatch(/\bheaderEndContent=\{/);
+    // ...and no re-derived copy of the arrangement: the old inline pieces are gone.
+    expect(app).not.toContain('aria-label="Toggle theme"');
+    expect(app).not.toContain(', Dropdown, DropdownTrigger');
+    // Order in the emitted JSX: the AppHeader element opens before the shell.
+    expect(app.indexOf('<AppHeader')).toBeGreaterThan(-1);
+    expect(app.indexOf('<AppHeader')).toBeLessThan(app.indexOf('<WorkspaceShell'));
+    // The frame is a flex column and the shell is its flexing item, so the
+    // strip spans the frame instead of reserving space inside a column.
+    expect(app).toContain("'flex-direction': 'column'");
+    expect(app).toContain('<WorkspaceShell class="min-h-0 flex-1"');
+  });
+
+  it('the rail keeps its own title row: chatTitle is still emitted alongside the strip (the story ships both)', () => {
+    const app = appOf(split());
+    expect(app).toContain('chatTitle={"Workspace"}');
+  });
+
+  it('MENU-HONESTY: no palette, no search prop at all — never a search button with nothing behind it', () => {
+    const app = appOf(split({ shell: { userMenu: { name: 'Ada' } } }));
+    expect(app).not.toContain('showSearch');
+    expect(app).not.toContain('onSearch');
+    // Paired against a vacuous pass: the strip really did render, with the
+    // pieces this construct DOES declare.
+    expect(app).toContain('<AppHeader');
+    expect(app).toContain('user={{"name":"Ada"}}');
+  });
+
+  it('each piece is independently optional — a title-only split emits the strip and nothing else in it', () => {
+    const app = appOf(split({ header: { title: 'Workspace' }, shell: undefined }));
+    expect(app).toContain('<AppHeader');
+    expect(app).toContain('title={"Workspace"}');
+    expect(app).not.toContain('showThemeToggle');
+    expect(app).not.toContain('actions={');
+    expect(app).not.toContain('user={');
+  });
+
+  it('a bare split (no header, no shell) emits NO strip at all and keeps the old frame', () => {
+    const app = appOf(construct({ layout: 'split' }));
+    expect(app).not.toContain('AppHeader');
+    expect(app).toContain("<div style={{ height: '100dvh' }}>");
+    expect(app).toContain('<WorkspaceShell class="h-full"');
+  });
+
+  it('the theme toggle resolves the mode it displays — the PROPERTY first, then the attribute, then the system', () => {
+    const app = appOf(split());
+    // Regression from the live builder: a construct declares its mode through
+    // defineWebComponent's prop DEFAULT, so a dark element can carry no `theme`
+    // ATTRIBUTE at all. Reading only the attribute drew the light-mode icon on a
+    // dark app.
+    expect(app).toContain('(props.host as HTMLElement & { theme?: string }).theme');
+    expect(app).toContain("props.host.getAttribute('theme')");
+    expect(app).toContain("matchMedia('(prefers-color-scheme: dark)')");
+    expect(app).toContain("props.host.setAttribute('theme', next ? 'dark' : 'light')");
+    // ONE closure: the palette's own "Toggle theme" row runs the same one.
+    expect(app).toContain("if (id === 'toggle-theme') toggleTheme();");
+  });
+
+  it('every other layout keeps its header-end row untouched — this is scoped to `split` on purpose', () => {
+    const app = appOf(
+      construct({
+        layout: 'fullscreen',
+        header: { title: 'Workspace', themeToggle: true, actions: [{ label: 'Share' }] },
+        shell: { userMenu: { name: 'Ada' } },
+      } as never),
+    );
+    expect(app).not.toContain('AppHeader');
+    expect(app).toContain('headerEndContent={');
+    expect(app).toContain('aria-label="Toggle theme"');
+  });
+
+  it('untrusted header text is JSON.stringify\'d at every emit site, and cannot break out of the JSX', () => {
+    const title = '</div><b>x</b>';
+    const label = '"><img onerror=alert(1) src=x>';
+    const user = { name: '"><b>', plan: 'Pro' };
+    const app = appOf(split({ header: { title, actions: [{ label }] }, shell: { userMenu: user } }));
+    expect(app).toContain(`title={${JSON.stringify(title)}}`);
+    expect(app).toContain(`actions={${JSON.stringify([{ label }])}}`);
+    expect(app).toContain(`user={${JSON.stringify(user)}}`);
+    // The payload's own double quote is what makes this matter: a raw JSX
+    // attribute string (title="...") would be CLOSED by it. JSON.stringify
+    // produces a real JS string-literal EXPRESSION instead, so the quote lands
+    // escaped and there is no attribute to break out of.
+    expect(app).toContain('\\"><b>');
+    expect(app).not.toContain('title="');
+    expect(app).not.toContain('label="');
+  });
+
+  it('is deterministic', () => {
+    expect(generateProject(split())).toEqual(generateProject(split()));
+  });
+});
+
 it('is deterministic across the full phase-1 vocabulary', () => {
   const full = () => construct({
     layout: 'aside',
