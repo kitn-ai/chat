@@ -485,6 +485,28 @@ export const TEMPLATES: readonly TemplateEntry[] = [
   },
 ];
 
+/** One row of the builder's home-screen list: a construct FILE on disk,
+ *  placed back into its template family (`inferTemplateId`). Produced by the
+ *  dev server's directory scan (`dev.ts: listConstructs`), consumed by the
+ *  builder page — it lives HERE because this module is the shared,
+ *  browser-safe home of template identity (dev.ts is Node-only and emits no
+ *  declaration, so a type imported from it would break the dist d.ts
+ *  boundary the build verifies). `valid: false` rows are still listed
+ *  (decide loudly) but carry no template metadata. */
+export interface ConstructListing {
+  /** Basename in the scanned directory, e.g. `acme-support.construct.json`. */
+  file: string;
+  /** The construct's own `name` (the emitted tag); for an invalid file, the
+   *  basename minus the extension — the only honest identity available. */
+  name: string;
+  templateId?: BuildableTemplateId;
+  /** Human template label derived via inferTemplateId → templateById. */
+  templateName?: string;
+  /** File mtime, ISO — "last modified" on the home screen. */
+  updatedAt: string;
+  valid: boolean;
+}
+
 export function buildableTemplates(): readonly BuildableTemplate[] {
   return TEMPLATES.filter((t): t is BuildableTemplate => t.availability === 'buildable');
 }

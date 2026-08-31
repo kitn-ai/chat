@@ -17,7 +17,9 @@ import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generateProject, writeProject, type GeneratedFile, type GenerateOptions } from './codegen';
 import { validateConstruct, type Construct, type ConstructProblem } from './schema';
-import { buildableTemplates, inferTemplateId, templateById, type BuildableTemplateId } from './templates';
+import { buildableTemplates, inferTemplateId, templateById, type ConstructListing } from './templates';
+
+export type { ConstructListing } from './templates';
 // ONE notice list, shared with the CLI (cli.ts's `generationNotices`) rather
 // than a second copy here — this file prints the same set twice (first run and
 // every regen), which is exactly how the pair got out of sync before.
@@ -584,23 +586,6 @@ export function themeStudioDir(): string | undefined {
 // ROOT — handleCreate writes `<cwd>/<name>.construct.json`; `.kai/` holds only
 // generated workdirs): none → the template picker, one or more → a home screen
 // listing them, and `kai dev --builder <name>` opens one directly.
-
-/** One row of the home screen's list. `valid: false` rows are still LISTED
- *  (decide loudly — hiding a broken file would make it unfindable) but carry
- *  no template metadata and the page renders them un-openable. */
-export interface ConstructListing {
-  /** Basename in the scanned directory, e.g. `acme-support.construct.json`. */
-  file: string;
-  /** The construct's own `name` (the emitted tag); for an invalid file, the
-   *  basename minus the extension — the only honest identity available. */
-  name: string;
-  templateId?: BuildableTemplateId;
-  /** Human template label derived via inferTemplateId → templateById. */
-  templateName?: string;
-  /** File mtime, ISO — "last modified" on the home screen. */
-  updatedAt: string;
-  valid: boolean;
-}
 
 /** Scan a directory (non-recursive) for construct files, newest first. Every
  *  `*.construct.json` is listed; unreadable/unparseable/invalid ones are
