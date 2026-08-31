@@ -67,6 +67,17 @@ const FIELD_LABELS: Record<string, string> = {
   'widget.launcherIcon': 'Launcher icon',
   'widget.defaultOpen': 'Open by default',
   'home.recentConversation': 'Recent conversation',
+  // The design story's own labels (builder-workspace.stories.tsx's
+  // WorkSurfaceSection) — the panel names these controls the way the approved
+  // design names them, never a fresh auto-generated wording.
+  'workSurface.kind': 'Pane kind',
+  'workSurface.url': 'Preview URL',
+  'workSurface.codeUrl': 'Code URL',
+  'workSurface.chrome.deviceToggle': 'Device toggle',
+  'workSurface.chrome.urlBar': 'URL bar',
+  'workSurface.chrome.openInNewTab': 'Open in new tab',
+  'workSurface.chrome.expand': 'Expand',
+  'workSurface.chrome.codeView': 'Code view',
 };
 export function labelFor(path: string): string {
   const named = FIELD_LABELS[path];
@@ -677,10 +688,23 @@ export function DerivedBuilderPanel(props: DerivedBuilderPanelProps): JSX.Elemen
             <For each={section.paths}>
               {(path) => {
                 const Override = FIELD_OVERRIDES[path];
-                return Override ? (
-                  <Dynamic component={Override} path={path} value={props.value} write={props.onChange} />
-                ) : (
-                  <DerivedField path={path} value={props.value} write={props.onChange} disabledReason={disabledReasonFor(path)} />
+                const hint = section.hints?.[path];
+                return (
+                  <>
+                    {Override ? (
+                      <Dynamic component={Override} path={path} value={props.value} write={props.onChange} />
+                    ) : (
+                      <DerivedField path={path} value={props.value} write={props.onChange} disabledReason={disabledReasonFor(path)} />
+                    )}
+                    <Show when={hint}>
+                      {/* One site, not five: DerivedField's enum/string/boolean
+                          branches each render their own label+control inline, so
+                          threading a hint through `Field` would mean five render
+                          sites for one line of text. Same class Field's own hint
+                          uses (builder-panel.tsx's Field), so it looks identical. */}
+                      <p class="text-xs text-muted-foreground" data-derived-hint={path}>{hint}</p>
+                    </Show>
+                  </>
                 );
               }}
             </For>
@@ -698,6 +722,6 @@ const SECTION_TITLES: Record<string, string> = {
   identity: 'Identity', theme: 'Theme', header: 'Header', empty: 'Empty state',
   home: 'Home', capabilities: 'Capabilities', messageActions: 'Message actions',
   sources: 'Sources', widget: 'Widget', aside: 'Aside', composerTriggers: 'Composer triggers',
-  shell: 'Shell', provider: 'Provider', cards: 'Cards',
+  shell: 'Shell', provider: 'Provider', cards: 'Cards', workSurface: 'Work surface',
 };
 function sectionTitle(id: string): string { return SECTION_TITLES[id] ?? id; }
