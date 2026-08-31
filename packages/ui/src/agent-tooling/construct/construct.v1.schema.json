@@ -85,6 +85,43 @@
             "dark",
             "system"
           ]
+        },
+        "tokens": {
+          "type": "object",
+          "properties": {
+            "light": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "dark": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "radius": {
+              "type": "string",
+              "minLength": 1
+            },
+            "fonts": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
         }
       },
       "required": [

@@ -28,6 +28,7 @@ import { z } from 'zod';
 import { isSafeUrl } from '../../primitives/url-scheme-policy';
 import { CHAT_MESSAGE_ACTIONS } from '../../elements/chat-actions';
 import { BUTTON_VARIANT_NAMES } from '../../ui/button-variant-names';
+import { KNOWN_THEME_TOKENS, themeTokenValueProblem } from './theme-token-policy';
 
 export { CONSTRUCT_SCHEMA_URL } from './schema-url';
 
@@ -46,6 +47,103 @@ const TriggerEntrySchema = z
     description: z.string().min(1).optional(),
   })
   .strict();
+
+/** One `--kai-*` name → value map inside `theme.tokens`. Keys and values are
+ *  both checked in ThemeTokensSchema's superRefine below — a zod record's key
+ *  schema can't carry the allow-list message we want (naming the exact knob
+ *  that isn't vocabulary, the same voice as validateConstruct's
+ *  unrecognized-key handling). */
+const TokenRecordSchema = z.record(z.string(), z.string());
+
+/** Full theme-palette persistence (the builder's embedded ThemeStudio posts
+ *  exactly this shape — its `ThemePayload`, src/theme-studio-app/
+ *  ThemeStudio.tsx, minus the message `type`). Every part of that payload is
+ *  persisted here: `light` carries the light colors PLUS the root-scope knobs
+ *  the studio rides along in it (`--kai-text-*` rungs, `--kai-tracking`,
+ *  `--kai-shadow-color`); `dark` carries the dark colors; `radius` is the
+ *  `--kai-radius` value (e.g. "0.6rem"); `fonts` the two `--kai-font-*`
+ *  knobs. Nothing in the payload is silently dropped.
+ *
+ *  Key names MUST be knobs the kit really declares (KNOWN_THEME_TOKENS —
+ *  derived, never hand-typed; see theme-token-policy.ts) — an unknown key is
+ *  rejected loudly, naming it. `dark` keys are additionally restricted to
+ *  `--kai-color-*`: only the color knobs have a `.dark`-scope re-resolution
+ *  in theme.css, so a non-color knob under `dark` would silently theme
+ *  nothing — rejected instead (decide loudly). `fonts` keys must be
+ *  `--kai-font-*` for the same reason in reverse.
+ *
+ *  Values pass themeTokenValueProblem (theme-token-policy.ts): light values
+ *  only ever ride setProperty (opaque, injection-proof), but dark values land
+ *  in generated CSS TEXT, so every value gets the same conservative charset
+ *  bound at this doorway. */
+const ThemeTokensSchema = z
+  .object({
+    /** Light-mode `--kai-*` overrides (+ the studio's root-scope knobs). Set
+     *  on the HOST via setProperty in the emitted facade. NOTE: with no
+     *  paired `dark` entry a light value applies in BOTH modes — the same
+     *  one-knob-both-modes semantics a consumer gets setting `--kai-*` on
+     *  `:root` (theme.css's `.dark` block re-reads the same knob names). */
+    light: TokenRecordSchema.optional(),
+    /** Dark-mode `--kai-color-*` overrides. Emitted as a `.dark { }` rule in
+     *  the shadow `<style>` (see codegen.ts's emitElement for the mechanism). */
+    dark: TokenRecordSchema.optional(),
+    /** The `--kai-radius` value, e.g. "0.6rem". */
+    radius: z.string().min(1).optional(),
+    /** The font knobs: `--kai-font-base` / `--kai-font-code`. */
+    fonts: TokenRecordSchema.optional(),
+  })
+  .strict()
+  .superRefine((tokens, ctx) => {
+    const checkRecord = (
+      record: Record<string, string> | undefined,
+      field: 'light' | 'dark' | 'fonts',
+      keyRule?: { prefix: string; reason: string },
+    ) => {
+      for (const [name, value] of Object.entries(record ?? {})) {
+        if (!KNOWN_THEME_TOKENS.has(name)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [field, name],
+            message: `"${name}" is not a --kai-* knob the kit declares — see the theming guide for the token list`,
+          });
+        } else if (keyRule && !name.startsWith(keyRule.prefix)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [field, name],
+            message: `"${name}" is not valid under "${field}" — ${keyRule.reason}`,
+          });
+        }
+        const problem = themeTokenValueProblem(value);
+        if (problem) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [field, name],
+            message: `value ${problem}`,
+          });
+        }
+      }
+    };
+    checkRecord(tokens.light, 'light');
+    checkRecord(tokens.dark, 'dark', {
+      prefix: '--kai-color-',
+      reason:
+        'only --kai-color-* knobs have a dark-scope re-resolution in theme.css; a mode-less knob belongs in "light" (it applies in both modes)',
+    });
+    checkRecord(tokens.fonts, 'fonts', {
+      prefix: '--kai-font-',
+      reason: 'only --kai-font-* knobs belong here',
+    });
+    if (tokens.radius !== undefined) {
+      const problem = themeTokenValueProblem(tokens.radius);
+      if (problem) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['radius'],
+          message: `value ${problem}`,
+        });
+      }
+    }
+  });
 
 const ProviderSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('mock') }).strict(),
@@ -115,6 +213,11 @@ export const ConstructSchema = z
          *  as-is. */
         unreadColor: z.string().optional(),
         mode: z.enum(['light', 'dark', 'system']).default('system'),
+        /** Full `--kai-*` palette persistence — see ThemeTokensSchema above.
+         *  Precedence with `accent`/`unreadColor`: those emit first, tokens
+         *  after, so a token naming the same knob (e.g. --kai-color-primary)
+         *  WINS — the full palette is the finer-grained wish. */
+        tokens: ThemeTokensSchema.optional(),
       })
       .strict()
       .optional(),

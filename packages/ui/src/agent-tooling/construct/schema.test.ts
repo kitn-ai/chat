@@ -712,3 +712,112 @@ describe('workSurface (2026-08-30 — the split pane gets vocabulary)', () => {
     }
   });
 });
+
+describe('theme.tokens (full palette persistence)', () => {
+  const tokensConstruct = (tokens: unknown) => ({
+    ...minimal,
+    theme: { accent: '#e91e63', tokens },
+  });
+
+  it('accepts the full shape the embedded ThemeStudio posts (light + dark + radius + fonts)', () => {
+    // Mirrors ThemePayload (src/theme-studio-app/ThemeStudio.tsx): colors in
+    // both modes, the root-scope knobs riding in `light` (text rungs,
+    // tracking, shadow), radius, and the two font knobs.
+    const out = validateConstruct(
+      tokensConstruct({
+        light: {
+          '--kai-color-background': 'hsl(0 0% 100%)',
+          '--kai-color-primary': 'hsl(322 84% 45%)',
+          '--kai-color-surface': 'color-mix(in srgb, var(--color-muted) 40%, var(--color-background))',
+          '--kai-text-body': '0.875rem',
+          '--kai-tracking': '0.01em',
+          '--kai-shadow-color': 'oklch(0 0 0)',
+        },
+        dark: {
+          '--kai-color-background': 'hsl(50 2% 9%)',
+          '--kai-color-primary': 'hsl(322 84% 65%)',
+        },
+        radius: '0.6rem',
+        fonts: {
+          '--kai-font-base': 'Inter, ui-sans-serif, system-ui, sans-serif',
+          '--kai-font-code': '"SF Mono", Menlo, monospace',
+        },
+      }),
+    );
+    expect(out.ok).toBe(true);
+  });
+
+  it('rejects an unknown token key loudly, naming it (allow-list derived, never hand-typed)', () => {
+    const out = validateConstruct(tokensConstruct({ light: { '--kai-color-nonsense': 'red' } }));
+    expect(out.ok).toBe(false);
+    if (!out.ok) {
+      const p = out.problems.find((p) => p.path === 'theme.tokens.light.--kai-color-nonsense');
+      expect(p).toBeDefined();
+      expect(p!.message).toMatch(/not a --kai-\* knob/);
+    }
+  });
+
+  it('rejects a non-token key entirely (not even --kai-prefixed)', () => {
+    expect(validateConstruct(tokensConstruct({ light: { color: 'red' } })).ok).toBe(false);
+  });
+
+  it('dark keys must be --kai-color-* — a mode-less knob under dark would silently theme nothing', () => {
+    const out = validateConstruct(tokensConstruct({ dark: { '--kai-radius': '1rem' } }));
+    expect(out.ok).toBe(false);
+    if (!out.ok) {
+      const p = out.problems.find((p) => p.path === 'theme.tokens.dark.--kai-radius');
+      expect(p).toBeDefined();
+      expect(p!.message).toMatch(/dark/);
+    }
+  });
+
+  it('fonts keys must be --kai-font-*', () => {
+    const out = validateConstruct(tokensConstruct({ fonts: { '--kai-color-primary': 'serif' } }));
+    expect(out.ok).toBe(false);
+    if (!out.ok) {
+      expect(out.problems.some((p) => p.path === 'theme.tokens.fonts.--kai-color-primary')).toBe(true);
+    }
+  });
+
+  it('value hygiene: braces, semicolons, backslashes, comment sequences, control chars and unbalanced parens are rejected', () => {
+    for (const hostile of [
+      'red; } .dark { --kai-color-background: red',
+      'red}',
+      'red{',
+      'red;',
+      'red\\7b',
+      'red /* x */',
+      'red*/',
+      'hsl(0 0% 0%',
+      'red)extra(',
+      'red\nblue',
+      'x'.repeat(300),
+      '',
+    ]) {
+      const out = validateConstruct(tokensConstruct({ dark: { '--kai-color-background': hostile } }));
+      expect(out.ok, `should reject: ${JSON.stringify(hostile)}`).toBe(false);
+      if (!out.ok) {
+        expect(
+          out.problems.some((p) => p.path === 'theme.tokens.dark.--kai-color-background'),
+          `path should name the key for: ${JSON.stringify(hostile)}`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it('value hygiene applies to radius too', () => {
+    expect(validateConstruct(tokensConstruct({ radius: '1rem;}' })).ok).toBe(false);
+    expect(validateConstruct(tokensConstruct({ radius: '0.75rem' })).ok).toBe(true);
+  });
+
+  it('unknown keys inside tokens itself are rejected (strict, closed vocabulary)', () => {
+    const out = validateConstruct(tokensConstruct({ palette: {} }));
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.problems.map((p) => p.path)).toContain('theme.tokens.palette');
+  });
+
+  it('tokens is optional and an empty object validates (all sub-keys optional)', () => {
+    expect(validateConstruct(tokensConstruct({})).ok).toBe(true);
+    expect(validateConstruct({ ...minimal, theme: { mode: 'dark' } }).ok).toBe(true);
+  });
+});

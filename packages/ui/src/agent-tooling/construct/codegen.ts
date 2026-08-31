@@ -16,6 +16,7 @@ import { createRequire } from 'node:module';
 import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Construct } from './schema';
+import { KNOWN_THEME_TOKENS, themeTokenValueProblem } from './theme-token-policy';
 
 export interface GeneratedFile {
   path: string;
@@ -495,18 +496,73 @@ function emitIndexHtml(c: Construct): string {
 `;
 }
 
+/**
+ * The `.dark { }` rule for `theme.tokens.dark`, emitted into the shadow
+ * `<style>` alongside the accent-contrast block.
+ *
+ * WHY CSS text and not setProperty: an inline custom property on the host has
+ * no mode — dark mode never reaches the host at all. The `theme` attribute
+ * defineWebComponent owns drives a `.dark` class on an inner WRAPPER div
+ * inside the shadow root (see elements/define.tsx), and the injected kit CSS
+ * re-resolves every `--color-*` token on that wrapper (`theme.css`'s
+ * `.dark { --color-x: var(--kai-color-x, <dark default>) }` block). So "dark
+ * only" is expressible exactly one way: a `.dark`-scoped `--kai-color-*`
+ * declaration in a stylesheet INSIDE this shadow root. It works because the
+ * wrapper's OWN `.dark`-rule value beats the light value inherited from the
+ * host's setProperty when the kit's `.dark` block re-resolves `--color-*`
+ * there — and with no `.dark` class (light mode) the rule matches nothing.
+ *
+ * These values land in generated CSS TEXT, not an opaque setProperty string,
+ * so — same conservative posture as the generated `:host` contrast block,
+ * which only ever interpolates a computed `#000000`/`#ffffff` — every name
+ * and value is re-asserted here against the same policy the schema doorway
+ * enforced (theme-token-policy.ts). validateConstruct is the only doorway to
+ * codegen, so a throw here is unreachable in normal operation; it exists
+ * because the `Construct` TYPE alone does not prove validation ran.
+ */
+function emitDarkTokensCss(entries: ReadonlyArray<[string, string]>): string {
+  const lines = entries.map(([name, value]) => {
+    if (!KNOWN_THEME_TOKENS.has(name) || !name.startsWith('--kai-color-')) {
+      throw new Error(
+        `construct codegen: dark theme token "${name}" is not a declared --kai-color-* knob — was this construct validated?`,
+      );
+    }
+    const problem = themeTokenValueProblem(value);
+    if (problem) {
+      throw new Error(
+        `construct codegen: dark theme token "${name}" has an unsafe value (${problem}) — was this construct validated?`,
+      );
+    }
+    return `  ${name}: ${value};`;
+  });
+  return `.dark {\n${lines.join('\n')}\n}`;
+}
+
 function emitElement(c: Construct): string {
   const accent = c.theme?.accent;
   const unreadColor = c.theme?.unreadColor;
+  const tokens = c.theme?.tokens;
+  // Everything mode-less in `theme.tokens` — the light palette (plus the
+  // root-scope knobs the studio rides in it), `--kai-radius`, the font knobs —
+  // lands on the HOST via the exact same setProperty mechanism as `accent`
+  // below, and for the same reasons (host-not-shadow-tree resolution;
+  // injection-proof opaque values). Only `dark` needs CSS text — see
+  // emitDarkTokensCss above.
+  const hostTokenEntries: Array<[string, string]> = [
+    ...Object.entries(tokens?.light ?? {}),
+    ...(tokens?.radius ? ([['--kai-radius', tokens.radius]] as Array<[string, string]>) : []),
+    ...Object.entries(tokens?.fonts ?? {}),
+  ];
+  const darkTokenEntries = Object.entries(tokens?.dark ?? {});
   // `ctx.element` is the host. header.themeToggle/actions and shell.userMenu
   // (B-10) need it to flip the `theme` attribute and to dispatch
   // `kai-header-action`/`kai-user-menu` CustomEvents on the host — the same
   // handle accent/unreadColor already carry via `ctx`, now threaded through
   // to `App` itself (via a `host` prop) rather than consumed only inside
   // this facade.
-  const usesCtx = !!accent || !!unreadColor || needsHost(c);
+  const usesCtx = !!accent || !!unreadColor || hostTokenEntries.length > 0 || needsHost(c);
   const appJsx = needsHost(c) ? '<App host={ctx.element} />' : '<App />';
-  if (!accent && !unreadColor) {
+  if (!accent && !unreadColor && hostTokenEntries.length === 0 && darkTokenEntries.length === 0) {
     // `empty` (Task 14) composes straight into ChatThread's own `emptyContent`
     // prop now (see emitEmptyContentProp's doc) — a plain JSX value passed down
     // through App, not a Portal onto the host — so the facade needs no `ctx` and
@@ -536,24 +592,29 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
   // badge), so there is nothing to contrast-pair against. Emitted
   // unconditionally alongside accent's setProperty call when present, even if
   // `accent` itself is absent — this branch is reached whenever EITHER is set.
-  const unreadColorSetProperty = unreadColor
-    ? `\n  ctx.element.style.setProperty('--kai-color-unread', ${JSON.stringify(unreadColor)});`
-    : '';
-
-  if (!accent) {
-    // unreadColor-only construct: no accent, so none of the contrast-pairing
-    // machinery below applies — just the one setProperty call and `ctx`.
-    const facade = `(_props, ctx) => {${unreadColorSetProperty}
-  return ${appJsx};
-}`;
-    return `import { defineWebComponent } from '@kitn.ai/ui/define';
-import { App } from './App';
-
-// The one facade. Interior stays pure Solid (no nested element registrations);
-// the kit CSS is injected into the shadow root by defineWebComponent itself.
-defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' | 'auto' }, ${facade});
-`;
-  }
+  //
+  // PRECEDENCE (stated once, enforced by emit order): accent/unreadColor set
+  // their knobs FIRST, theme.tokens entries after. setProperty on the same
+  // custom property is last-write-wins, so a token naming the same knob
+  // (e.g. a full palette's own --kai-color-primary) deliberately WINS over
+  // the coarser accent — the full palette is the finer-grained wish.
+  const setPropertyLines: string[] = [
+    ...(accent
+      ? [`  ctx.element.style.setProperty('--kai-color-primary', ${JSON.stringify(accent)});`]
+      : []),
+    ...(unreadColor
+      ? [`  ctx.element.style.setProperty('--kai-color-unread', ${JSON.stringify(unreadColor)});`]
+      : []),
+    ...(hostTokenEntries.length
+      ? [
+          '  // theme.tokens: after accent/unreadColor on purpose — same knob, the token wins.',
+          ...hostTokenEntries.map(
+            ([name, value]) =>
+              `  ctx.element.style.setProperty(${JSON.stringify(name)}, ${JSON.stringify(value)});`,
+          ),
+        ]
+      : []),
+  ];
 
   // The accent has to land on the HOST element, not anywhere inside this
   // shadow root. The kit's --color-primary token is resolved ONCE, by a rule
@@ -589,27 +650,46 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
   // both layers to be plain `:host {}` declarations in one stylesheet, base
   // rule first, @supports override after — ordinary cascade order, no
   // `!important` required.
-  const foreground = resolveContrastForeground(accent);
-  const foregroundCss =
-    foreground !== null
-      ? `:host { --kai-color-primary-foreground: ${foreground}; }\n`
-      : // Not guessed at: an unparseable accent (var(), a named color, a
-        // color-mix()/oklch() call, …) leaves NO base declaration, so the
-        // kit's own theme default stands — except in a browser new enough to
-        // resolve contrast-color() itself, where the @supports block below
-        // still gets it right natively.
-        `/* NOTICE: accent '${commentSafe(accent)}' not parseable for contrast at generation time; the paired foreground falls back to the theme default in browsers without CSS contrast-color() support. */\n`;
-  const styleText =
-    foregroundCss + `${CONTRAST_COLOR_SUPPORTS} {\n  :host { --kai-color-primary-foreground: contrast-color(var(--kai-color-primary)); }\n}`;
+  const styleParts: string[] = [];
+  if (accent) {
+    // Pair the contrast foreground with the primary that actually WINS: a
+    // theme.tokens light entry for --kai-color-primary overrides the accent
+    // (see the precedence note above), so computing the black/white floor from
+    // the overridden accent would pin the wrong foreground in browsers
+    // without contrast-color().
+    const effectivePrimary = tokens?.light?.['--kai-color-primary'] ?? accent;
+    const foreground = resolveContrastForeground(effectivePrimary);
+    const foregroundCss =
+      foreground !== null
+        ? `:host { --kai-color-primary-foreground: ${foreground}; }\n`
+        : // Not guessed at: an unparseable accent (var(), a named color, a
+          // color-mix()/oklch() call, …) leaves NO base declaration, so the
+          // kit's own theme default stands — except in a browser new enough to
+          // resolve contrast-color() itself, where the @supports block below
+          // still gets it right natively.
+          `/* NOTICE: accent '${commentSafe(effectivePrimary)}' not parseable for contrast at generation time; the paired foreground falls back to the theme default in browsers without CSS contrast-color() support. */\n`;
+    styleParts.push(
+      foregroundCss +
+        `${CONTRAST_COLOR_SUPPORTS} {\n  :host { --kai-color-primary-foreground: contrast-color(var(--kai-color-primary)); }\n}`,
+    );
+  }
+  if (darkTokenEntries.length) styleParts.push(emitDarkTokensCss(darkTokenEntries));
+  const styleText = styleParts.join('\n');
 
-  const facade = `(_props, ctx) => {
-  ctx.element.style.setProperty('--kai-color-primary', ${JSON.stringify(accent)});${unreadColorSetProperty}
+  const setPropertyBlock = setPropertyLines.length ? `\n${setPropertyLines.join('\n')}` : '';
+  const facade = styleText
+    ? `(${usesCtx ? '_props, ctx' : ''}) => {${setPropertyBlock}
   return (
     <>
       <style>{${JSON.stringify(styleText)}}</style>
       ${appJsx}
     </>
   );
+}`
+    : // No CSS text needed (no accent, no dark tokens): setProperty calls only —
+      // e.g. an unreadColor-only or light-tokens-only construct.
+      `(_props, ctx) => {${setPropertyBlock}
+  return ${appJsx};
 }`;
   return `import { defineWebComponent } from '@kitn.ai/ui/define';
 import { App } from './App';

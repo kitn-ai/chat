@@ -2045,3 +2045,97 @@ describe('workSurface — the split pane renders (2026-08-30)', () => {
     expect(app).toContain('dispatchHeaderAction');
   });
 });
+
+describe('theme.tokens emission (full palette persistence)', () => {
+  const themed = (tokens: NonNullable<NonNullable<Construct['theme']>['tokens']>, extra: Partial<NonNullable<Construct['theme']>> = {}) =>
+    construct({ theme: { mode: 'system', ...extra, tokens } });
+
+  it('light tokens + radius + fonts land on the HOST via setProperty, exactly like accent', () => {
+    const element = file(
+      generateProject(
+        themed({
+          light: { '--kai-color-background': 'hsl(266 30% 96%)' },
+          radius: '1.1rem',
+          fonts: { '--kai-font-base': 'Georgia, serif' },
+        }),
+      ),
+      'src/element.tsx',
+    );
+    expect(element).toContain(
+      'ctx.element.style.setProperty("--kai-color-background", "hsl(266 30% 96%)");',
+    );
+    expect(element).toContain('ctx.element.style.setProperty("--kai-radius", "1.1rem");');
+    expect(element).toContain('ctx.element.style.setProperty("--kai-font-base", "Georgia, serif");');
+  });
+
+  it('tokens WIN over accent on the same knob: accent setProperty emits first, token after (last write wins)', () => {
+    const element = file(
+      generateProject(
+        themed({ light: { '--kai-color-primary': 'hsl(200 90% 40%)' } }, { accent: '#e91e63' }),
+      ),
+      'src/element.tsx',
+    );
+    const accentAt = element.indexOf("setProperty('--kai-color-primary', \"#e91e63\")");
+    const tokenAt = element.indexOf('setProperty("--kai-color-primary", "hsl(200 90% 40%)")');
+    expect(accentAt).toBeGreaterThan(-1);
+    expect(tokenAt).toBeGreaterThan(accentAt);
+  });
+
+  it('dark tokens emit as a .dark rule in the shadow <style> — the wrapper defineWebComponent classes, NOT setProperty (an inline custom property has no mode)', () => {
+    const element = file(
+      generateProject(
+        themed({
+          dark: {
+            '--kai-color-background': 'hsl(150 30% 8%)',
+            '--kai-color-primary': 'hsl(150 60% 60%)',
+          },
+        }),
+      ),
+      'src/element.tsx',
+    );
+    // The rule rides the same emitted <style> mechanism as the accent-contrast
+    // :host block; values were validated at the schema doorway.
+    expect(element).toContain('.dark {');
+    expect(element).toContain('--kai-color-background: hsl(150 30% 8%);');
+    expect(element).toContain('--kai-color-primary: hsl(150 60% 60%);');
+    // Dark values must never ride setProperty — that would apply in BOTH modes.
+    expect(element).not.toContain('setProperty("--kai-color-background"');
+  });
+
+  it('dark tokens compose with the accent contrast block in ONE <style>', () => {
+    const element = file(
+      generateProject(
+        themed({ dark: { '--kai-color-background': 'hsl(150 30% 8%)' } }, { accent: '#e91e63' }),
+      ),
+      'src/element.tsx',
+    );
+    expect(element).toContain('--kai-color-primary-foreground');
+    expect(element).toContain('.dark {');
+    // One <style> element, not two.
+    expect(element.match(/<style>/g)?.length).toBe(1);
+  });
+
+  it('codegen re-asserts dark values before interpolating into CSS text (unreachable via validateConstruct, loud if bypassed)', () => {
+    const c = construct();
+    const bypassed = {
+      ...c,
+      theme: { mode: 'system', tokens: { dark: { '--kai-color-background': 'red; } * { color: red' } } },
+    } as unknown as Construct;
+    expect(() => generateProject(bypassed)).toThrow(/unsafe value/);
+    const badKey = {
+      ...c,
+      theme: { mode: 'system', tokens: { dark: { '--kai-radius': '1rem' } } },
+    } as unknown as Construct;
+    expect(() => generateProject(badKey)).toThrow(/--kai-color-\*/);
+  });
+
+  it('tokens without accent/unreadColor still produce a ctx-taking facade; no tokens at all keeps the plain facade', () => {
+    const withTokens = file(
+      generateProject(themed({ light: { '--kai-color-background': 'white' } })),
+      'src/element.tsx',
+    );
+    expect(withTokens).toContain('(_props, ctx) =>');
+    const plain = file(generateProject(construct()), 'src/element.tsx');
+    expect(plain).toContain('() => <App />');
+  });
+});
