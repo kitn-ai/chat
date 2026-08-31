@@ -87,14 +87,14 @@ The components need no CSS import; they are shadow-isolated. `theme.css` is Tail
 Load the bundle as a self-contained ES module — no install, no bundler:
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@kitn.ai/ui/dist/theme.tokens.css">
-
 <script type="module">
   import 'https://cdn.jsdelivr.net/npm/@kitn.ai/ui/dist/kai.es.js';
 </script>
 
 <kai-chat style="display: block; height: 100vh;"></kai-chat>
 ```
+
+The elements carry their own styles, so this is complete — retheme with `--kai-color-*` as above, no stylesheet needed. Add `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@kitn.ai/ui/dist/theme.tokens.css">` only when you want the kit's `--color-*` tokens for your own page chrome.
 
 <Aside type="tip" title="Pin versions in production">
 {/* x-release-please-start-version */}

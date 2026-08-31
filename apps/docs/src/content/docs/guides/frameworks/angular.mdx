@@ -46,7 +46,7 @@ export class AppComponent {}
 
 ## Theme tokens
 
-Each element styles itself inside Shadow DOM, so nothing is required to make the elements look right. Add the token sheet when you want to override the design tokens, or reuse the kit's `--color-*` values for your own chrome around the chat.
+Each element styles itself inside Shadow DOM, so nothing is required to make the elements look right. To retheme the elements, set `--kai-color-*` custom properties on `:root` in your global CSS — see [Theming](/guides/theming/). Add the token sheet when you want the kit's `--color-*` values for your own chrome around the chat.
 
 Angular loads global CSS from the build config, **not** from a TS `import './x.css'`, which `@angular/build` ignores. Add the sheet to `architect.build.options.styles`:
 

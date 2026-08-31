@@ -37,6 +37,8 @@ Pin an exact version in production (e.g. `@kitn.ai/ui@0.30.0/dist/...`).
 {/* x-release-please-end */}
 
 The package is pre-1.0, so a minor release can break things. Pin `0.25.0` or newer: `0.14.1` through `0.24.0` are covered by a [critical security advisory](https://github.com/kitn-ai/ui/security/advisories), and a CDN fetch prints no deprecation warning to tell you.
+
+This bundle registers everything in one fetch — right for a chat page. A page placing only an element or two can load the [autoloader](/guides/loading/#autoloader) instead, which fetches each element on demand.
 </Aside>
 
 ## Your first chat
