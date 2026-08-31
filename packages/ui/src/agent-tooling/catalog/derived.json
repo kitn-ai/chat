@@ -963,6 +963,12 @@
           "scalar": false,
           "optional": true,
           "fn": false
+        },
+        {
+          "name": "hostOpen",
+          "scalar": true,
+          "optional": true,
+          "fn": false
         }
       ],
       "events": [
@@ -974,6 +980,7 @@
         "kai-model-change",
         "kai-submit",
         "kai-suggestion-click",
+        "kai-unread-change",
         "kai-value-change",
         "kai-voice",
         "kai-web-search"
@@ -983,7 +990,9 @@
         "blur",
         "clear",
         "send",
-        "scrollToBottom"
+        "scrollToBottom",
+        "closeConversationsList",
+        "startNewConversation"
       ],
       "parts": [
         "header-bar",

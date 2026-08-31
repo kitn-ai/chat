@@ -42,7 +42,7 @@ export { configureCodeHighlighting, isCodeHighlightingEnabled } from './primitiv
 export type { CodeHighlightingOptions } from './primitives/highlighter';
 export { configurePdfPreview, isPdfPreviewEnabled } from './primitives/pdf-preview';
 export type { PdfPreviewOptions } from './primitives/pdf-preview';
-export { localStorageStore, fetchStore, byRecency, LEGACY_THREAD_MIGRATED_TITLE } from './primitives/conversation-store';
+export { localStorageStore, fetchStore, byRecency, isConversationUnread, LEGACY_THREAD_MIGRATED_TITLE } from './primitives/conversation-store';
 export type { ConversationStore } from './primitives/conversation-store';
 
 // Toasts: imperative `toast()` API + the reactive store behind <kai-toast-region>
