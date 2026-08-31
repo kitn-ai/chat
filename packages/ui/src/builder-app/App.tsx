@@ -9,6 +9,7 @@
  * flow back in through the SSE 'construct' event the watcher broadcasts.
  */
 import { createSignal, onMount, onCleanup, Show, For } from 'solid-js';
+import { SlidersHorizontal } from 'lucide-solid';
 import { BuilderStart, BUILDABLE_BUILDER_TEMPLATES, type BuilderTemplateId } from '../components/builder-start';
 import { WorkspaceVariantPicker, type WorkspaceVariantId } from '../components/builder-workspace-variants';
 import { DerivedBuilderPanel } from '../components/builder-panel-derived';
@@ -16,6 +17,7 @@ import { BuilderHeader } from '../components/builder-header';
 import { buildableTemplates, templateById, inferTemplateId, type BuildableTemplate } from '../agent-tooling/construct/templates';
 import type { Construct, ConstructProblem } from '../agent-tooling/construct/schema';
 import { createEditGuard } from './edit-guard';
+import { ToastRegion, type ToastItem, type ToastVariant } from '../components/toast';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Dialog } from '../ui/dialog';
@@ -108,7 +110,26 @@ export function App() {
   // isn't in this build (friendly placeholder), true = iframe it.
   const [themeStudio, setThemeStudio] = createSignal(false);
   const [themeStudioAvailable, setThemeStudioAvailable] = createSignal<boolean | undefined>();
-  const [themeNotice, setThemeNotice] = createSignal<string | undefined>();
+  // The kit's own Toast (F-48 adopt-if-present), bottom-right. The builder page
+  // is light-DOM Solid with no kai-* elements registered, so the imperative
+  // `toast()` singleton (which mounts a <kai-toast-region> custom element) has
+  // nothing to upgrade it — the ToastRegion COMPONENT with a local list is the
+  // same kit toast without the element dependency.
+  const [toasts, setToasts] = createSignal<ToastItem[]>([]);
+  let toastCounter = 0;
+  const raiseToast = (message: string, variant: ToastVariant, description?: string): void => {
+    toastCounter += 1;
+    setToasts((list) => [...list, {
+      id: `builder-toast-${toastCounter}`,
+      message,
+      variant,
+      description,
+      // A bare confirmation reads fine as a pill; anything carrying a server
+      // message needs the card's description line.
+      appearance: description ? 'card' : 'pill',
+    }]);
+  };
+  const dismissToast = (id: string): void => { setToasts((list) => list.filter((t) => t.id !== id)); };
   // F1: one persistent banner across every server round-trip site (load,
   // SSE refetch, create, edit). Server-down (fetch throws) or a non-422
   // non-2xx response sets it; the NEXT successful round-trip on ANY of
@@ -334,25 +355,45 @@ export function App() {
       setThemeStudioAvailable(false);
     }
   };
-  /** 'kai-theme-apply' hands us full light/dark --kai-* token maps, but
-   *  today's construct schema holds exactly theme.accent/unreadColor/mode
-   *  (.strict() — do not extend it here; full token-map persistence is a
-   *  queued follow-up). Decide loudly: persist the applied primary as the
-   *  accent through the one onEdit path, and SAY what was left behind. */
-  const applyStudioTheme = (payload: { light?: Record<string, string>; dark?: Record<string, string>; radius?: string; fonts?: Record<string, string> }) => {
+  /** 'kai-theme-apply' hands us full light/dark --kai-* token maps. The
+   *  construct schema's `theme.tokens` (landing in this same round) holds the
+   *  whole payload; `theme.accent` keeps getting the applied primary for
+   *  back-compat (tokens win over accent downstream). The flush is awaited so
+   *  the toast reports what actually happened: on a rejection (a dist whose
+   *  schema predates theme.tokens, or an invalid payload) fall back to the
+   *  accent-only write and SAY the full palette wasn't saved — decide loudly. */
+  const applyStudioTheme = async (payload: { light?: Record<string, string>; dark?: Record<string, string>; radius?: string; fonts?: Record<string, string> }) => {
     const c = construct();
     if (!c) return;
     const accent = payload.light?.['--kai-color-primary'];
-    const knobCount =
-      Object.keys(payload.light ?? {}).length +
-      Object.keys(payload.dark ?? {}).length +
-      (payload.radius ? 1 : 0) +
-      Object.keys(payload.fonts ?? {}).length;
+    const tokens = {
+      ...(payload.light && Object.keys(payload.light).length ? { light: payload.light } : {}),
+      ...(payload.dark && Object.keys(payload.dark).length ? { dark: payload.dark } : {}),
+      ...(payload.radius ? { radius: payload.radius } : {}),
+      ...(payload.fonts && Object.keys(payload.fonts).length ? { fonts: payload.fonts } : {}),
+    };
+    // The cast keeps this compiling on either side of the schema round that
+    // adds `tokens` to Construct['theme']; the server's validation is the real
+    // gate, and its rejection is handled below rather than swallowed.
+    const fullTheme = { ...c.theme, mode: c.theme?.mode ?? 'system', ...(accent ? { accent } : {}), tokens } as Construct['theme'];
+    onEdit({ ...c, theme: fullTheme });
+    await flushSave();
+    if (problems().length === 0 && !serverError()) {
+      raiseToast('Theme applied', 'success');
+      return;
+    }
+    const detail = problems().map((p) => `${p.path}: ${p.message}`).join('; ') || serverError() || 'the server rejected the write';
     if (accent) {
+      // Accent-only retry — the pre-tokens construct shape every dist accepts.
       onEdit({ ...c, theme: { ...c.theme, mode: c.theme?.mode ?? 'system', accent } });
-      setThemeNotice(knobCount > 1 ? 'Applied the primary color as your accent. Full palette persistence is coming — the rest of the theme was not saved.' : undefined);
+      await flushSave();
+      if (problems().length === 0 && !serverError()) {
+        raiseToast("Couldn't save the full palette — kept the accent color", 'warning', detail);
+      } else {
+        raiseToast('Theme not saved', 'error', detail);
+      }
     } else {
-      setThemeNotice('The construct file cannot hold this theme yet — nothing was saved. Full palette persistence is coming.');
+      raiseToast('Theme not saved', 'error', detail);
     }
   };
   onMount(() => {
@@ -361,7 +402,7 @@ export function App() {
       const data = e.data as { type?: unknown } | null;
       if (!data || typeof data !== 'object') return;
       if (data.type === 'kai-theme-close') setThemeStudio(false);
-      else if (data.type === 'kai-theme-apply') applyStudioTheme(data as Parameters<typeof applyStudioTheme>[0]);
+      else if (data.type === 'kai-theme-apply') void applyStudioTheme(data as Parameters<typeof applyStudioTheme>[0]);
       // 'kai-theme-change' (the studio's live-preview stream) has nowhere to
       // land here: the preview iframe is the generated app on its own origin
       // and follows the construct FILE, so unpersisted changes stay the
@@ -463,19 +504,12 @@ export function App() {
                that ARE ready — not only in the empty pane below. */
             status={previewPending() ? 'preview starting…' : undefined}
             onSwitchTemplate={() => setConfirmSwitch(true)}
-            onOpenThemeBuilder={() => void openThemeStudio()}
             canvasDark={canvasDark()}
             onToggleCanvasDark={toggleCanvasMode}
             onSave={() => void flushSave()}
             saving={savingNow()}
             saved={!dirty()}
           />
-          <Show when={themeNotice()}>
-            <div class="flex items-center justify-center gap-3 border-b border-border bg-muted px-4 py-1.5 text-xs text-muted-foreground" data-theme-notice>
-              <span>{themeNotice()}</span>
-              <button type="button" class="underline hover:text-foreground" onClick={() => setThemeNotice(undefined)}>Dismiss</button>
-            </div>
-          </Show>
           <Show
             when={!themeStudio()}
             fallback={
@@ -514,7 +548,32 @@ export function App() {
           >
             <div class="grid min-h-0 flex-1 grid-cols-[380px_1fr]">
               <div class="flex flex-col overflow-y-auto border-r border-border">
-                <DerivedBuilderPanel value={construct()!} onChange={onEdit} template={template()} problems={problems()} />
+                <DerivedBuilderPanel
+                  value={construct()!}
+                  onChange={onEdit}
+                  template={template()}
+                  problems={problems()}
+                  /* The theme-studio entry point lives IN the Theme section now
+                     (owner ruling 2026-08-31), not the header: a subtle
+                     "Advanced" action right of the section title, opening the
+                     same full takeover. The panel only places the element; the
+                     takeover is this page's. */
+                  sectionActions={{
+                    theme: (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        class="-my-1 h-6 gap-1 px-1.5 text-[11px] text-muted-foreground hover:text-foreground"
+                        onClick={() => void openThemeStudio()}
+                        data-builder-theme-advanced
+                      >
+                        <SlidersHorizontal size={12} aria-hidden="true" />
+                        Advanced
+                      </Button>
+                    ),
+                  }}
+                />
               </div>
               {/* The preview boots behind the panel, so this pane has to SAY what
                   is happening rather than sit blank for the length of an npm
@@ -568,6 +627,9 @@ export function App() {
           <BuilderStart templates={BUILDABLE_BUILDER_TEMPLATES} onSelect={(id) => switchTemplate(id)} />
         </div>
       </Dialog>
+      {/* The kit's toast stack, bottom-right (F-48). Renders nothing while the
+          list is empty; auto-dismisses on the component's own default timer. */}
+      <ToastRegion toasts={toasts()} position="bottom-right" onDismiss={dismissToast} />
     </div>
   );
 }

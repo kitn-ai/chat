@@ -1,19 +1,20 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { createSignal, Show, For } from 'solid-js';
+import { SlidersHorizontal } from 'lucide-solid';
 import { BuilderHeader } from '../components/builder-header';
 import { Button } from '../ui/button';
-import { Dialog } from '../ui/dialog';
 
 // Labs/Builder: "Header" — story-first (owner policy: new visual surfaces
 // get a stub-data story before any wiring). The full-width top bar for the
-// `kai dev --builder` page. Today the panel's chrome is a 380px-column
-// header row whose "Switch template" is a bare ghost button that does not
-// read as a button; this design moves the chrome into ONE strip across the
-// whole builder: title · an obvious outline Switch-template button on the
-// left, then theme-builder · canvas light/dark toggle · primary Save on the
-// right. The real wiring lives in `builder-app/App.tsx` (same-day round);
-// HERE the theme builder opens a stub modal, the canvas toggle flips a
-// stubbed preview region, and Save just reports.
+// `kai dev --builder` page: title · an obvious outline Switch-template
+// button on the left, then the canvas light/dark toggle · primary Save on
+// the right. The real wiring lives in `builder-app/App.tsx`; HERE the
+// canvas toggle flips a stubbed preview region and Save just reports.
+//
+// The theme-builder entry point moved OUT of this header into the panel's
+// Theme section (owner ruling 2026-08-31) — the stub panel column below
+// shows it where it lives now: a subtle "Advanced" action right of the
+// Theme section's title, opening the theme-studio takeover in the real app.
 //
 // Sits in Labs/Builder with the rest of the builder design suite (Start,
 // Workspace, …) — the SolidJS-authored story, same as its siblings.
@@ -36,7 +37,6 @@ const BRAND_STYLE = { '--color-primary': '#EC2295' } as const;
  *  chrome around it stays in the page theme. */
 function HeaderDemo(props: { canvasDark?: boolean; saving?: boolean; saved?: boolean }) {
   const [canvasDark, setCanvasDark] = createSignal(props.canvasDark ?? false);
-  const [themeOpen, setThemeOpen] = createSignal(false);
   const [lastAction, setLastAction] = createSignal<string | undefined>();
 
   return (
@@ -44,7 +44,6 @@ function HeaderDemo(props: { canvasDark?: boolean; saving?: boolean; saved?: boo
       <BuilderHeader
         title="Support workspace"
         onSwitchTemplate={() => setLastAction('switch-template (opens the template overlay)')}
-        onOpenThemeBuilder={() => setThemeOpen(true)}
         canvasDark={canvasDark()}
         onToggleCanvasDark={() => setCanvasDark((d) => !d)}
         onSave={() => setLastAction('save')}
@@ -57,7 +56,24 @@ function HeaderDemo(props: { canvasDark?: boolean; saving?: boolean; saved?: boo
           <For each={['Identity', 'Theme', 'Header', 'Capabilities', 'Provider']}>
             {(section) => (
               <div class="flex flex-col gap-2 rounded-md border border-border p-3">
-                <span class="text-xs font-semibold text-foreground">{section}</span>
+                <div class="flex min-h-5 items-center justify-between gap-2">
+                  <span class="text-xs font-semibold text-foreground">{section}</span>
+                  {/* Where the theme-builder entry point lives now: the Theme
+                      section's own header action, not the page chrome. */}
+                  <Show when={section === 'Theme'}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      class="-my-1 h-6 gap-1 px-1.5 text-[11px] text-muted-foreground hover:text-foreground"
+                      onClick={() => setLastAction('advanced (opens the theme-studio takeover)')}
+                      data-builder-theme-advanced
+                    >
+                      <SlidersHorizontal size={12} aria-hidden="true" />
+                      Advanced
+                    </Button>
+                  </Show>
+                </div>
                 <div class="h-2 w-2/3 rounded bg-muted" />
                 <div class="h-2 w-1/2 rounded bg-muted" />
               </div>
@@ -94,24 +110,13 @@ function HeaderDemo(props: { canvasDark?: boolean; saving?: boolean; saved?: boo
           </div>
         </div>
       </div>
-      {/* Theme-builder modal — stub open state only; the controls land in a
-          later round. */}
-      <Dialog
-        open={themeOpen()}
-        onOpenChange={setThemeOpen}
-        header="Theme builder"
-        class="max-w-2xl"
-        footer={<Button variant="outline" size="sm" onClick={() => setThemeOpen(false)}>Close</Button>}
-      >
-        <p class="text-sm text-muted-foreground">Theme controls land here — accent, mode, radius, typography.</p>
-      </Dialog>
     </div>
   );
 }
 
 /** The full header over the stubbed builder body. Click the moon to flip the
- *  preview canvas to dark while the chrome stays put; "Theme builder" opens
- *  the stub modal. */
+ *  preview canvas to dark while the chrome stays put; the Theme section's
+ *  "Advanced" (in the stub panel column) is where the theme builder opens. */
 export const Header: Story = {
   render: () => <HeaderDemo />,
 };

@@ -37,6 +37,12 @@ export interface DerivedBuilderPanelProps {
   onChange: (next: Construct) => void; // fires a whole next Construct per edit
   template: BuildableTemplate; // registry entry — controls manifest + starter (section seeds)
   problems?: readonly ConstructProblem[]; // server-side rejections, rendered per path
+  /** Section-header actions, keyed by section id: a small affordance rendered
+   *  to the RIGHT of that section's title (e.g. the Theme section's "Advanced"
+   *  button opening the theme-studio takeover — an App.tsx concern, so the
+   *  CALLER supplies the whole element and this panel only places it). The
+   *  minimal seam: sections had no header-action slot before 2026-08-31. */
+  sectionActions?: Record<string, JSX.Element>;
   class?: string;
 }
 
@@ -684,7 +690,10 @@ export function DerivedBuilderPanel(props: DerivedBuilderPanelProps): JSX.Elemen
       <For each={props.template.controls.filter((s) => !hiddenSections().has(s.id))}>
         {(section) => (
           <section class="flex flex-col gap-3 border-b border-border p-4 last:border-b-0" data-derived-section={section.id}>
-            <h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{sectionTitle(section.id)}</h3>
+            <div class="flex min-h-5 items-center justify-between gap-2">
+              <h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{sectionTitle(section.id)}</h3>
+              {props.sectionActions?.[section.id]}
+            </div>
             <For each={section.paths}>
               {(path) => {
                 const Override = FIELD_OVERRIDES[path];

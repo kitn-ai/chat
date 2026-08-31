@@ -15,14 +15,12 @@
  *
  * Left to right:
  *
- *     [ title · Switch template ]        [ Theme builder · sun/moon ] | [ Save ]
+ *     [ title · Switch template ]        [ sun/moon ] | [ Save ]
  *
  *  - the construct/template TITLE on the left;
  *  - "Switch template" beside it as an OBVIOUS button — outline variant with
  *    an icon + label. The defect being fixed: the panel's old control was a
  *    bare ghost button that did not read as a button at all;
- *  - a theme-builder button (icon + label) that opens a modal — the modal is
- *    the CALLER's (menu-honesty: this component only reports the click);
  *  - the canvas light/dark toggle: icon-only, showing the mode you would
  *    switch TO (AppHeader's own rule — Sun while dark, Moon while light).
  *    This flips the PREVIEW CANVAS's theme so an author can test a design in
@@ -30,14 +28,17 @@
  *    what "the canvas theme" means;
  *  - a divider, then the primary Save button, rightmost.
  *
+ * The theme-builder entry point used to live here too; it moved into the
+ * derived panel's Theme section as its "Advanced" header action (owner
+ * ruling, 2026-08-31) — theming is a Theme-section concern, not page chrome.
+ *
  * MENU-HONESTY (the repo's standing rule, same shape as AppHeader): every
  * affordance is gated on its mechanism. No `onSwitchTemplate` → no Switch
- * button; no `onOpenThemeBuilder` → no theme-builder button; no
- * `onToggleCanvasDark` → no mode toggle; no `onSave` → no Save. Dividers
- * render only between two groups that both have visible content.
+ * button; no `onToggleCanvasDark` → no mode toggle; no `onSave` → no Save.
+ * Dividers render only between two groups that both have visible content.
  */
 import { type JSX, Show } from 'solid-js';
-import { LayoutTemplate, Palette, Sun, Moon } from 'lucide-solid';
+import { LayoutTemplate, Sun, Moon } from 'lucide-solid';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
@@ -51,9 +52,6 @@ export interface BuilderHeaderProps {
 
   /** Opens the switch-template overlay. Renders the button only when given. */
   onSwitchTemplate?: () => void;
-
-  /** Opens the theme-builder modal. Renders the button only when given. */
-  onOpenThemeBuilder?: () => void;
 
   /** Current resolved mode of the PREVIEW CANVAS — controlled, never owned
    *  here. Drives which icon shows (the mode you would switch TO) and the
@@ -77,9 +75,8 @@ export interface BuilderHeaderProps {
 }
 
 export function BuilderHeader(props: BuilderHeaderProps): JSX.Element {
-  const themeVisible = (): boolean => !!props.onOpenThemeBuilder;
   const toggleVisible = (): boolean => !!props.onToggleCanvasDark;
-  const utilityVisible = (): boolean => themeVisible() || toggleVisible();
+  const utilityVisible = (): boolean => toggleVisible();
   const saveVisible = (): boolean => !!props.onSave;
 
   const toggleLabel = (): string =>
@@ -119,18 +116,6 @@ export function BuilderHeader(props: BuilderHeaderProps): JSX.Element {
       <div class="flex items-center gap-2">
         <Show when={utilityVisible()}>
           <div class="flex items-center gap-1" data-kai-builder-header-utility>
-            <Show when={themeVisible()}>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => props.onOpenThemeBuilder?.()}
-                data-kai-builder-header-theme
-              >
-                <Palette size={14} aria-hidden="true" />
-                Theme builder
-              </Button>
-            </Show>
             <Show when={toggleVisible()}>
               <Tooltip content={toggleLabel()}>
                 <Button
