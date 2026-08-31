@@ -766,8 +766,13 @@ export async function devBuilder(
   // (--strictPort), so the old process must actually release it first.
   let activeVite: ReturnType<typeof spawn> | undefined;
   let activeWatcher: ReturnType<typeof watch> | undefined;
+  // Monotonic boot generation: a second open racing a boot still in its slow
+  // half (npm install) must supersede it — the stale boot checks after every
+  // await and aborts instead of spawning a second Vite onto the same port.
+  let bootGeneration = 0;
 
-  const boot = async (absPath: string): Promise<string> => {
+  const boot = async (absPath: string, gen: number): Promise<string> => {
+    const superseded = (): boolean => gen !== bootGeneration;
     activeWatcher?.close();
     activeWatcher = undefined;
     if (activeVite) {
@@ -779,6 +784,7 @@ export async function devBuilder(
         throw new Error(`the previous preview server did not release port ${previewPort} — stop it and reopen`);
       }
     }
+    if (superseded()) throw new Error('superseded by a newer open');
     const readRaw = (): unknown => JSON.parse(readFileSync(absPath, 'utf8'));
     const initialText = readFileSync(absPath, 'utf8');
     const first = validateConstruct(JSON.parse(initialText));
@@ -790,6 +796,7 @@ export async function devBuilder(
     const files = generateProject(first.construct, { uiSpec: opts.uiSpec });
     writeProject(files, dir);
     await ensureInstalled(dir, files, io);
+    if (superseded()) throw new Error('superseded by a newer open');
     // Same rename-surviving directory watch as dev() — see its comment.
     const base = basename(absPath);
     activeWatcher = watch(dirname(absPath), (_event, filename) => {
@@ -829,11 +836,20 @@ export async function devBuilder(
     return url;
   };
 
-  /** Boot detached, then park the outcome where /api/state can report it. */
+  /** Boot detached, then park the outcome where /api/state can report it.
+   *  Everything is gated on the boot's generation still being current, so a
+   *  boot superseded mid-install can neither clobber the newer boot's state
+   *  nor broadcast a stray preview/preview-error frame for the wrong file. */
   const bootInBackground = (absPath: string): void => {
+    const gen = ++bootGeneration;
     preview = { status: 'starting' };
-    void announceBoot(() => boot(absPath), hub, io).then((next) => {
-      preview = next;
+    const gatedHub: Pick<EventHub, 'broadcast'> = {
+      broadcast: (event, data) => {
+        if (gen === bootGeneration) hub.broadcast(event, data);
+      },
+    };
+    void announceBoot(() => boot(absPath, gen), gatedHub, io).then((next) => {
+      if (gen === bootGeneration) preview = next;
     });
   };
 
