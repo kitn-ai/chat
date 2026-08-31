@@ -138,15 +138,25 @@ describe('kai CLI', () => {
     expect(lines.join('\n')).toMatch(/usage/i);
   });
 
-  it('eject: re-ejecting over existing files says so before the success line', async () => {
+  it('eject: re-ejecting over CHANGED files says so before the success line; a byte-identical re-eject stays quiet', async () => {
     const out = mkdtempSync(join(tmpdir(), 'kai-eject-'));
     const path = tmpConstruct(good);
     const first = collect();
     expect(await runCli(['eject', path, out, '--ui', PINNED_UI], first.io)).toBe(0);
 
+    // Byte-identical re-eject: writeProject skips every file (no mtime bump —
+    // a rewritten vite.config.ts restarts a running preview server), so
+    // nothing was really overwritten and the notice would be a false alarm.
+    const identical = collect();
+    expect(await runCli(['eject', path, out, '--ui', PINNED_UI], identical.io)).toBe(0);
+    expect(identical.lines.some((l) => /overwriting \d+ existing file/i.test(l))).toBe(false);
+
+    // Hand-edit one generated file, re-eject: THAT is a real clobber of the
+    // caller's edit, and the loud notice lands before the success line.
+    writeFileSync(join(out, 'src/App.tsx'), '// hand-edited\n');
     const second = collect();
     expect(await runCli(['eject', path, out, '--ui', PINNED_UI], second.io)).toBe(0);
-    const overwriteIdx = second.lines.findIndex((l) => /overwriting \d+ existing file/i.test(l));
+    const overwriteIdx = second.lines.findIndex((l) => /overwriting 1 existing file/i.test(l));
     const ejectedIdx = second.lines.findIndex((l) => /^ejected/.test(l));
     expect(overwriteIdx).toBeGreaterThanOrEqual(0);
     expect(ejectedIdx).toBeGreaterThan(overwriteIdx);

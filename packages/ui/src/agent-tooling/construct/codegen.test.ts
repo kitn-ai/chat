@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -1402,6 +1402,52 @@ describe('writeProject', () => {
 
     const manifest = JSON.parse(readFileSync(join(dir, '.kai-manifest.json'), 'utf8')) as string[];
     expect(manifest).toEqual(projectB.map((f) => f.path).sort());
+  });
+
+  it('a byte-identical regen touches ZERO files (no mtime bump — a rewritten vite.config.ts restarts the preview Vite server)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-construct-'));
+    const project = generateProject(construct());
+    writeProject(project, dir);
+    const paths = [...project.map((f) => f.path), '.kai-manifest.json'];
+    const before = new Map(paths.map((p) => [p, statSync(join(dir, p)).mtimeMs]));
+
+    // Filesystem mtime resolution can swallow a rewrite that lands in the
+    // same tick; the gap makes "unchanged mtime" mean "no write happened".
+    await new Promise((r) => setTimeout(r, 20));
+    const overwritten = writeProject(generateProject(construct()), dir);
+
+    expect(overwritten).toEqual([]);
+    for (const p of paths) {
+      expect(statSync(join(dir, p)).mtimeMs, `${p} was rewritten`).toBe(before.get(p));
+    }
+  });
+
+  it('a regen with ONE changed file writes only that file — and the prune manifest still covers the FULL emitted list', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-construct-'));
+    writeProject(generateProject(construct()), dir);
+    // A hand-edit to one file (the case eject warns about) — regen must put
+    // the generated content back, and touch nothing else.
+    writeFileSync(join(dir, 'src/App.tsx'), '// hand-edited\n');
+    const project = generateProject(construct());
+    const before = new Map(project.map((f) => [f.path, statSync(join(dir, f.path)).mtimeMs]));
+    await new Promise((r) => setTimeout(r, 20));
+
+    const overwritten = writeProject(project, dir);
+
+    expect(overwritten).toEqual(['src/App.tsx']);
+    expect(readFileSync(join(dir, 'src/App.tsx'), 'utf8')).not.toContain('hand-edited');
+    for (const f of project) {
+      if (f.path === 'src/App.tsx') continue;
+      expect(statSync(join(dir, f.path)).mtimeMs, `${f.path} was rewritten`).toBe(before.get(f.path));
+    }
+    // The CRITICAL constraint (a changed-only sink upstream got this wrong and
+    // pruned the project): the manifest is built from the FULL emitted list,
+    // never the changed subset, so nothing unchanged is pruned on the NEXT run.
+    const manifest = JSON.parse(readFileSync(join(dir, '.kai-manifest.json'), 'utf8')) as string[];
+    expect(manifest).toEqual(project.map((f) => f.path).sort());
+    // And the next full regen prunes nothing: every file still stands.
+    writeProject(generateProject(construct()), dir);
+    for (const f of project) expect(existsSync(join(dir, f.path))).toBe(true);
   });
 });
 

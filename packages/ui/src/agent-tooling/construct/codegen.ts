@@ -2349,10 +2349,22 @@ const MANIFEST = '.kai-manifest.json';
 
 /**
  * Write files; prune anything the PREVIOUS generation wrote that this one
- * didn't. Returns the paths that already existed on disk before this write
- * (i.e. were overwritten) — callers that decide loudly (the CLI's `eject`)
- * use it to say so instead of silently clobbering a file the caller may have
- * hand-edited.
+ * didn't. Returns the paths that already existed on disk with DIFFERENT
+ * content (i.e. were really overwritten) — callers that decide loudly (the
+ * CLI's `eject`) use it to say so instead of silently clobbering a file the
+ * caller may have hand-edited. A byte-identical file is not rewritten and
+ * not reported: rewriting it would be a lie to every watcher downstream —
+ * Vite treats a fresh mtime on vite.config.ts as a restart signal, so `dev`'s
+ * regen-per-edit was restarting the preview server on EVERY construct edit,
+ * and at live-theming frequency a restart landing mid-iframe-reload strands
+ * the preview on a dead page.
+ *
+ * The skip lives HERE, inside writeProject, and the prune manifest is still
+ * built from the FULL emitted-file list — never from the subset that changed.
+ * An earlier attempt filtered the file list UPSTREAM (dev.ts handing
+ * writeProject only the changed files), and since writeProject prunes
+ * everything its manifest doesn't cover, the subset deleted the rest of the
+ * project. Reverted; do not reintroduce it.
  */
 export function writeProject(files: GeneratedFile[], dir: string): string[] {
   const manifestPath = join(dir, MANIFEST);
@@ -2366,10 +2378,21 @@ export function writeProject(files: GeneratedFile[], dir: string): string[] {
   const overwritten: string[] = [];
   for (const f of files) {
     const abs = join(dir, f.path);
-    if (existsSync(abs)) overwritten.push(f.path);
+    if (existsSync(abs)) {
+      // Skip a byte-identical file entirely: no write, no mtime bump, no
+      // watcher wake-up. readFileSync-then-compare is cheap next to the
+      // write it saves (these are small text files, once per regen).
+      if (readFileSync(abs, 'utf8') === f.code) continue;
+      overwritten.push(f.path);
+    }
     mkdirSync(dirname(abs), { recursive: true });
     writeFileSync(abs, f.code);
   }
-  writeFileSync(manifestPath, `${JSON.stringify([...current].sort(), null, 2)}\n`);
+  // Same skip for the manifest itself — on a no-op regen nothing in the
+  // project directory is touched at all.
+  const manifestText = `${JSON.stringify([...current].sort(), null, 2)}\n`;
+  if (!existsSync(manifestPath) || readFileSync(manifestPath, 'utf8') !== manifestText) {
+    writeFileSync(manifestPath, manifestText);
+  }
   return overwritten;
 }
