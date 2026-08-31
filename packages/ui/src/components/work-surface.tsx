@@ -102,7 +102,12 @@ const CANVAS_BG = 'color-mix(in oklab, var(--color-muted) 30%, transparent)';
 function CodeTabEmpty(): JSX.Element {
   return (
     <div
-      class="mx-auto flex h-full max-w-lg flex-col justify-center gap-2 px-2 text-sm"
+      // The placeholder page's own box, in Tailwind: `max-width: 34rem;
+      // margin: 0 auto; padding: 3.5rem 1.5rem`. Top-aligned like it, NOT
+      // centered in the pane — a tall work surface would otherwise float this
+      // text in the middle of nothing while the preview branch beside it
+      // starts at the top.
+      class="mx-auto flex max-w-[34rem] flex-col gap-3 px-6 pt-14 text-sm"
       data-kai-work-surface-code-empty
     >
       <h2 class="text-base font-semibold text-foreground">Nothing to read yet</h2>
