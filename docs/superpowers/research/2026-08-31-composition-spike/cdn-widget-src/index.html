@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>composed support widget — CDN autoloader path</title>
+    <style>
+      body { margin: 0; background: #fff; }
+      @media (prefers-color-scheme: dark) { body { background: #0b1020; } }
+    </style>
+  </head>
+  <body>
+    <p style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); margin: 0; color: #94a3b8; font: 14px system-ui, sans-serif; text-align: center; max-width: 28rem; padding: 0 1rem;">This blank page stands in for your site. The chat widget is in the bottom-right corner. (CDN autoloader path — no bundler.)</p>
+
+    <kai-dock id="dock" label="Support" position="bottom-end" hide-close>
+      <kai-chat
+        id="chat"
+        slot="panel"
+        style="display: block; height: 100%;"
+        chat-title="Support"
+        accept="image/*,application/pdf"
+        placeholder="Ask anything"
+      >
+        <kai-button id="close" slot="header-end" variant="ghost" size="icon-sm" icon="x" label="Close Support"></kai-button>
+        <kai-empty
+          slot="empty"
+          empty-title="Hi, we're here to help"
+          description="Ask us about orders, refunds, and more."
+        ></kai-empty>
+      </kai-chat>
+    </kai-dock>
+
+    <script type="module">
+      // Stand-in for: https://cdn.jsdelivr.net/npm/@kitn.ai/ui@0.30.0/dist/elements/autoloader.js
+      import '/kit/elements/autoloader.js';
+      import './app.js';
+    </script>
+  </body>
+</html>
