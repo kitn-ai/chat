@@ -242,3 +242,71 @@ means drawing that layout's header first.
 Mapping, unchanged keys only: `header.title` · `header.themeToggle` ·
 `header.actions` · `shell.commandPalette` (the search affordance) ·
 `shell.userMenu` (the avatar cluster, `name`/`plan`).
+
+## Amendment 2 — 2026-08-30 (owner rulings, after the template-purpose audit)
+
+Prompted by the owner: "if there is a preview then most likely there are
+checkpoints... not sure if you are really carefully thinking about each use
+case." The audit (docs/superpowers/research/2026-08-30-template-purpose/)
+confirmed it and found the root cause.
+
+**The process finding, recorded first because it caused the rest.** Every
+T-5 ruling and all five control manifests answer "what CONTROLS does this
+template's panel need." Not one asks "what does this template's THREAD
+contain." The Labs corpus averages four distinct in-thread content types
+per app; our starters seed two plain-text messages. Added to the template
+checklist: name the turn-level content the use case implies, and check it
+against the kit's export surface, BEFORE listing controls.
+
+**S-1 (no ruling needed, priority-1 work).** Every starter emits
+`createMockResponder()` with no arguments, and a mock turn is
+`{text?, toolCalls?}` — so `reasoning`, `sources.strip`, `cards` and tool
+rows are unobservable in EVERY emitted app. No research app built from a
+starter has ever rendered a citation. Fix: scripted mocks per template
+(+ `MockTurn.sources`). Widest effect of anything in the audit.
+
+**S-2 — `cards[].kind`: ADOPTED (owner).** The kit ships seven built-in
+card types (form · confirm · tasks · choice · link · embed · artifact), all
+exported and faced; codegen hardcoded every declared card to `form`. `kind`
+is optional, defaults to `form`, so existing constructs are unchanged.
+Pure HOW-routing over components that already ship.
+
+**Checkpoints — ADOPTED as marker vocabulary + event seam (owner).** The
+construct declares that a restore point renders; the Restore control emits
+an event and the kit never defines what it does — the `header.actions`
+pattern. WHICH turns get one stays the app's call: only the app that
+produced a generation knows. Restoring can cost tokens or trigger a
+redeploy, so the action never belongs to the kit. Also promotes the row
+`lovable.stories.tsx` and `v0.stories.tsx` each hand-rolled onto the
+shipped `Checkpoint` components — the kit had them exported and documented
+the whole time and both reference apps ignored them, which is how the
+Workspace template got built without anyone noticing.
+
+**Model switcher — ADOPTED (owner).** `models: [{id, label}]`, selection
+emitted as an event. The consumer authors the list, so the cost difference
+stays theirs; the kit only renders. Closes an item T-5 left neither
+adopted nor deferred.
+
+**Supervisor rulings (adopted from the audit's recommendations):**
+- Support handoff/escalation gets NO vocabulary this round. It fails both
+  tests (a support seat is an invoice line; who gets escalated to is a
+  policy document) and — the deeper reason — Support widget is the one
+  template with no thread-level design reference at all. A Labs app models
+  it first; everything before that is guesswork.
+- `capabilities.webSearch` stays OFF, but as a NAMED deferral rather than
+  the silent `webSearch={false}` hardcode in codegen. Search bills per
+  query and `onWebSearch` is event-only, so turning it on today emits a
+  dead button — the reason voice was deferred.
+- `FeedbackBar` (the widget's resolution moment) is kit-rendered, but its
+  destination is retention policy: event-only if it lands at all.
+
+**Correction to Amendment 1:** it recorded `deviceToggle` as dropped for
+want of a mechanism and questioned the "App preview with device toggles"
+label. Both are stale — the schema carries `chrome.deviceToggle` and
+`chrome.codeView`, and the label is honest. That open question is closed.
+
+**Caution carried forward.** The render-leg guard the parity audit
+recommends would catch NONE of this amendment's findings: it asserts a
+contract derived from the construct, and every finding here is something
+the construct could not declare. Build it for what it does catch; do not
+count it against this class.
