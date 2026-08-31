@@ -122,3 +122,25 @@ the original.
 legitimately different (story = device viewport inside builder chrome with
 stub messages; emitted = full-bleed and empty), so the diff is noise, and
 noisy gates get baselined into uselessness.
+
+## K6 CLOSED — 2026-08-30, Code-tab round
+
+The WIRE row reads "Preview|Code absent from both variants (needs `codeUrl`,
+unset in both starters)". The parenthetical is now wrong and the row is fixed.
+Owner ruling: `chrome.codeView: true` no longer needs a `codeUrl` at all — the
+tab renders a graceful empty state from `components/work-surface.tsx` naming
+`workSurface.codeUrl`, in the same voice as the preview placeholder codegen
+emits. `codeUrl` without `codeView` stays rejected. The `appPreview` variant
+ships `codeView: true`, so the toggle is visible out of the box;
+`artifactPreview` states `false` — an artifact pane is not a code surface.
+
+That also retires the separately queued "a relative `codeUrl` frames a 404"
+concern, and with it the CLI notice that was queued to announce the 404: the
+no-source path renders a page instead of fetching one, so there is nothing left
+to decide quietly. Live captures, from the real `kai dev --builder` with no
+`--ui`: `docs/superpowers/research/2026-08-30-code-tab/`.
+
+Unchanged by this: the recommended `verify:construct` RENDER leg. It is still
+the only thing that would have caught K6 in the first place, and the empty state
+is exactly the kind of fact it would assert (`chrome.codeView` → a Pane-kind
+group exists; no `codeView` → it does not).
