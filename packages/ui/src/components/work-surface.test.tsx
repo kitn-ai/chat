@@ -114,4 +114,45 @@ describe('WorkSurface — promoted from builder-workspace.stories.tsx', () => {
     const frame = container.querySelector('iframe')!;
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-forms');
   });
+
+  // ── the Code tab's graceful empty state (owner ruling, 2026-08-30) ────────
+  //
+  // `chrome.codeView: true` with no `codeUrl` is now a VALID construct: the
+  // toggle has to be reachable out of the box, and the tab says honestly that
+  // nothing is pointed at it yet rather than erroring at authoring time or
+  // framing a missing page.
+  describe('the Code tab with no source', () => {
+    it('renders a graceful empty state — not a blank pane, not an error, not a 404', () => {
+      const { container } = render(() => <WorkSurface src="/x.html" showCodeView defaultTab="code" />);
+      const empty = container.querySelector('[data-kai-work-surface-code-empty]');
+      expect(empty).toBeInTheDocument();
+      // It has to say what the tab reads and name the key that fills it —
+      // an empty state that explains nothing is just a blank pane with a border.
+      expect(empty!.textContent).toContain('workSurface.codeUrl');
+      // And it must not be a broken frame: no iframe on this branch at all.
+      expect(container.querySelector('iframe')).toBeNull();
+    });
+
+    it('the Preview tab is unaffected — the empty state belongs to the Code branch only', () => {
+      const { container } = render(() => <WorkSurface src="/x.html" showCodeView />);
+      expect(container.querySelector('[data-kai-work-surface-code-empty]')).toBeNull();
+      expect(container.querySelector('iframe')).toBeInTheDocument();
+    });
+
+    it('`code` content WINS over the empty state — the story\'s stub path is untouched', () => {
+      const { container } = render(() => (
+        <WorkSurface src="/x.html" showCodeView defaultTab="code" code={<pre data-stub>source</pre>} />
+      ));
+      expect(container.querySelector('[data-stub]')).toBeInTheDocument();
+      expect(container.querySelector('[data-kai-work-surface-code-empty]')).toBeNull();
+    });
+
+    it('`codeSrc` WINS over the empty state — the emitted app\'s path is untouched', () => {
+      const { container } = render(() => (
+        <WorkSurface src="/x.html" showCodeView defaultTab="code" codeSrc="/src.html" />
+      ));
+      expect(container.querySelector('iframe')).toBeInTheDocument();
+      expect(container.querySelector('[data-kai-work-surface-code-empty]')).toBeNull();
+    });
+  });
 });

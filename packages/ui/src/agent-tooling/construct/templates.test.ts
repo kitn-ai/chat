@@ -165,14 +165,27 @@ describe('starter content rules (B-14 / B-4)', () => {
     expect(app.workSurface?.kind).toBe('preview');
 
     expect(artifact.workSurface?.chrome).toEqual({
-      deviceToggle: false, urlBar: false, openInNewTab: false, expand: true,
+      deviceToggle: false, urlBar: false, openInNewTab: false, expand: true, codeView: false,
     });
     expect(app.workSurface?.chrome).toEqual({
-      deviceToggle: true, urlBar: true, openInNewTab: true, expand: true,
+      deviceToggle: true, urlBar: true, openInNewTab: true, expand: true, codeView: true,
     });
 
     // The tell that this is a real difference and not a renamed one.
     expect(JSON.stringify(artifact.workSurface)).not.toBe(JSON.stringify(app.workSurface));
+  });
+
+  it('appPreview ships the Preview|Code toggle ON and artifactPreview does not — an app preview is a code surface, a framed artifact is not (owner ruling, 2026-08-30)', () => {
+    const ws = buildableTemplates().find((t) => t.id === 'workspace')!;
+    const artifact = ws.variants!.find((v) => v.id === 'artifactPreview')!.starter;
+    const app = ws.variants!.find((v) => v.id === 'appPreview')!.starter;
+
+    expect(app.workSurface?.chrome?.codeView).toBe(true);
+    expect(artifact.workSurface?.chrome?.codeView).toBe(false);
+    // Neither points at source: the tab renders WorkSurface's own empty state,
+    // and a starter must never ship a codeUrl it has no offline file for.
+    expect(app.workSurface?.codeUrl).toBeUndefined();
+    expect(artifact.workSurface?.codeUrl).toBeUndefined();
   });
 
   it('the two variants emit DIFFERENT Artifact/WorkSurface props, not merely a different name', async () => {

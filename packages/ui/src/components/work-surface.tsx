@@ -87,6 +87,36 @@ export const WORK_SURFACE_DEVICE_WIDTHS: Record<WorkSurfaceDevice, string> = {
 const TOOLBAR_BG = 'color-mix(in oklab, var(--color-muted) 20%, transparent)';
 const CANVAS_BG = 'color-mix(in oklab, var(--color-muted) 30%, transparent)';
 
+/** What the Code tab shows when nothing has been pointed at it — the state a
+ *  construct reaches with `chrome.codeView: true` and no `codeUrl`, which is
+ *  VALID vocabulary (owner ruling, 2026-08-30: the toggle has to be reachable
+ *  out of the box, so an unset source is an empty state and not an authoring
+ *  error).
+ *
+ *  Deliberately the same shape and voice as the preview placeholder codegen
+ *  emits (`emitWorkSurfacePage` in `agent-tooling/construct/codegen.ts`): a
+ *  short headline, what the surface is, and the one key that replaces it. The
+ *  difference is that this one is a COMPONENT, not an emitted HTML file — it
+ *  renders in the host document with the kit's tokens available, and it lives
+ *  here so the story and the emitted app share one copy of it. */
+function CodeTabEmpty(): JSX.Element {
+  return (
+    <div
+      class="mx-auto flex h-full max-w-lg flex-col justify-center gap-2 px-2 text-sm"
+      data-kai-work-surface-code-empty
+    >
+      <h2 class="text-base font-semibold text-foreground">Nothing to read yet</h2>
+      <p class="text-muted-foreground">
+        This tab frames the source behind the preview. Nothing has been pointed at it, so there is nothing to show.
+      </p>
+      <p class="text-muted-foreground">
+        Point <code class="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">workSurface.codeUrl</code> at
+        the file you want read here, and it loads in place of this message.
+      </p>
+    </div>
+  );
+}
+
 export interface WorkSurfaceProps {
   /** URL the preview frames, through `Artifact`'s sandboxed iframe. Omit to
    *  render `preview` instead (the story's stub path). */
@@ -96,7 +126,8 @@ export interface WorkSurfaceProps {
   /** URL the Code tab frames. The Preview|Code toggle needs `showCodeView`;
    *  what it SHOWS is this, or `code`. */
   codeSrc?: string;
-  /** Code-tab content used when `codeSrc` is absent. */
+  /** Code-tab content used when `codeSrc` is absent. With neither, the tab
+   *  renders `CodeTabEmpty` — see its doc comment. */
   code?: JSX.Element;
   /** Address text shown in the read-only URL bar. Defaults to `src`. */
   urlLabel?: string;
@@ -263,7 +294,12 @@ export function WorkSurface(props: WorkSurfaceProps): JSX.Element {
         <Show
           when={tab() === 'preview'}
           fallback={
-            <Show when={props.codeSrc} fallback={props.code}>
+            // `codeSrc` first, then whatever `code` the host projects (the
+            // story's StubCodeBlock), then the honest empty state. Rendering
+            // NOTHING here was the third option and it is the one this
+            // replaces: a blank pane says the tab is broken, not that no
+            // source has been chosen.
+            <Show when={props.codeSrc} fallback={props.code ?? <CodeTabEmpty />}>
               {(codeSrc) => (
                 <Artifact
                   src={codeSrc()}

@@ -1999,6 +1999,16 @@ describe('workSurface — the split pane renders (2026-08-30)', () => {
     expect(app).toContain('codeSrc={"/src.html"}');
   });
 
+  it('codeView with NO codeUrl still emits the toggle and no codeSrc — components/work-surface.tsx owns the empty state (owner ruling, 2026-08-30)', () => {
+    const app = file(generateProject(ws({ chrome: { codeView: true } })), 'src/App.tsx');
+    expect(app).toContain('showCodeView={true}');
+    expect(app).not.toContain('codeSrc=');
+    // No second placeholder page gets written for a source nobody pointed at.
+    expect(generateProject(ws({ chrome: { codeView: true } })).map((f) => f.path)).toEqual(
+      expect.not.arrayContaining(['public/work-surface-source.html']),
+    );
+  });
+
   it('emits public/work-surface.html at a CONSTANT path for a relative url — never derived from construct text', () => {
     expect(generateProject(ws()).map((f) => f.path)).toContain('public/work-surface.html');
     const html = file(generateProject(ws()), 'public/work-surface.html');

@@ -694,17 +694,15 @@ describe('workSurface (2026-08-30 — the split pane gets vocabulary)', () => {
     if (!out.ok) expect(out.problems.some((p) => p.path === 'workSurface.codeUrl')).toBe(true);
   });
 
-  it('codeView without codeUrl is rejected — a tab with nothing behind it is a dead affordance', () => {
+  it('codeView WITHOUT codeUrl is VALID — the tab is not empty, it renders WorkSurface\'s own empty state (owner ruling, 2026-08-30)', () => {
     const out = validateConstruct({ ...splitBase, workSurface: { kind: 'artifact', url: '/x.html', chrome: { codeView: true } } });
-    expect(out.ok).toBe(false);
-    if (!out.ok) {
-      expect(out.problems.find((p) => p.path === 'workSurface.codeUrl')?.message).toBe(
-        '"chrome.codeView" requires a codeUrl — the Code tab needs source to read',
-      );
-    }
+    expect(out.ok).toBe(true);
+    // Paired against a vacuous pass: the SAME construct with the coupling
+    // inverted still fails, so this is not "validation stopped running".
+    expect(validateConstruct({ ...splitBase, workSurface: { kind: 'artifact', url: '/x.html', codeUrl: '/src.html' } }).ok).toBe(false);
   });
 
-  it('codeUrl without codeView is rejected too — both directions loud, the history-endpoint-url precedent', () => {
+  it('codeUrl without codeView is STILL rejected — a source nothing displays is a dead key', () => {
     const out = validateConstruct({ ...splitBase, workSurface: { kind: 'artifact', url: '/x.html', codeUrl: '/src.html' } });
     expect(out.ok).toBe(false);
     if (!out.ok) {

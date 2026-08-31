@@ -138,8 +138,13 @@ const WORK_SURFACE: TemplateControlSection = {
     'workSurface.chrome.codeView',
   ],
   hints: {
+    // Both hints rewritten 2026-08-30 with the one-way coupling: the toggle no
+    // longer needs a URL to be switched on, so the old "leave it blank and the
+    // tab stays hidden" was describing a rule that no longer exists.
     'workSurface.codeUrl':
-      'The Code tab reads source from this URL. Leave it blank and the tab stays hidden — a preview-only surface.',
+      'The Code tab reads source from this URL. Leave it blank and the tab says so — it never frames a missing page.',
+    'workSurface.chrome.codeView':
+      'Shows the Preview|Code toggle. Fine to switch on before you have a Code URL.',
   },
 };
 const COMPOSER_TRIGGERS: TemplateControlSection = {
@@ -340,7 +345,7 @@ const workspaceBase: Construct = {
   workSurface: {
     kind: 'artifact',
     url: '/work-surface.html',
-    chrome: { deviceToggle: false, urlBar: false, openInNewTab: false, expand: true },
+    chrome: { deviceToggle: false, urlBar: false, openInNewTab: false, expand: true, codeView: false },
   },
   shell: { commandPalette: true, userMenu: { name: 'Ada', plan: 'Pro' } },
   composer: workspaceTriggers,
@@ -360,21 +365,32 @@ const workspaceArtifactPreview: Construct = {
   // A clean framed surface: one expand control, no browser chrome. The
   // difference from appPreview below is what the two variant CARDS promise,
   // and until 2026-08-30 the two starters delivered none of it.
+  // `codeView` stays OFF here on the owner's ruling: an artifact pane frames a
+  // finished thing, not a source tree, so a Code tab beside it would be
+  // chrome the variant does not claim. appPreview below is the one that does.
   workSurface: {
     kind: 'artifact',
     url: '/work-surface.html',
-    chrome: { deviceToggle: false, urlBar: false, openInNewTab: false, expand: true },
+    chrome: { deviceToggle: false, urlBar: false, openInNewTab: false, expand: true, codeView: false },
   },
 };
 
 const workspaceAppPreview: Construct = {
   ...workspaceBase,
   name: 'app-workspace',
-  // Full browser chrome: device toggle, address bar, open-in-new-tab, expand.
+  // Full browser chrome: device toggle, address bar, open-in-new-tab, expand,
+  // and the Preview|Code toggle. `codeView: true` with no `codeUrl` is valid
+  // vocabulary (owner ruling, 2026-08-30) and it is what this variant needs:
+  // the app-preview surface it is modeled on shows both tabs, so shipping the
+  // toggle off meant nobody ever saw it. With no source pointed at it the tab
+  // renders WorkSurface's own empty state naming `workSurface.codeUrl` — an
+  // honest "nothing here yet", never a 404. No `codeUrl` is set because there
+  // is no honest offline file to point at; the placeholder codegen emits is
+  // the PREVIEW's page, not source.
   workSurface: {
     kind: 'preview',
     url: '/work-surface.html',
-    chrome: { deviceToggle: true, urlBar: true, openInNewTab: true, expand: true },
+    chrome: { deviceToggle: true, urlBar: true, openInNewTab: true, expand: true, codeView: true },
   },
   capabilities: {
     ...workspaceBase.capabilities,

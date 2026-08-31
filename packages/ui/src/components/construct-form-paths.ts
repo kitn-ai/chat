@@ -220,5 +220,10 @@ export const RULE_VISIBILITY: Record<string, RuleVisibility> = {
   'work-surface-layout-scope': { treatment: 'hide-section', section: 'workSurface', layout: 'split' },
   'work-surface-url': { treatment: 'reject-only' },
   'work-surface-code-url': { treatment: 'reject-only' },
+  // Still `show-requires` on the SAME path after the 2026-08-30 ruling made
+  // the coupling one-way: `workSurface.codeUrl` is the field with the
+  // precondition (it needs `chrome.codeView` on). What changed is the reverse
+  // — the toggle no longer requires the URL — so the panel can switch
+  // `codeView` on with the URL blank and the Code tab renders its empty state.
   'work-surface-code-view': { treatment: 'show-requires', path: 'workSurface.codeUrl' },
 };

@@ -33,7 +33,8 @@
       "deviceToggle": true,
       "urlBar": true,
       "openInNewTab": true,
-      "expand": true
+      "expand": true,
+      "codeView": true
     }
   },
   "shell": {

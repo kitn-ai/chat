@@ -420,10 +420,12 @@ export const ConstructSchema = z
          *  iframe `src`, so isSafeUrl in superRefine below, the same shape
          *  as `widget.launcherIcon` / `empty.icon`. */
         url: z.string().min(1),
-        /** What the Code tab frames. Coupled to `chrome.codeView` in BOTH
-         *  directions (superRefine below): a tab with no source is a dead
-         *  affordance, and a source with no tab is unreachable. Same url
-         *  policy as `url`. */
+        /** What the Code tab frames. OPTIONAL even with `chrome.codeView` on:
+         *  the tab then renders `WorkSurface`'s own empty state, which says
+         *  what it reads and names this key (owner ruling, 2026-08-30). The
+         *  coupling runs ONE way (superRefine below) — a source with no tab to
+         *  show it is unreachable, so `codeUrl` alone is still rejected. Same
+         *  url policy as `url`. */
         codeUrl: z.string().min(1).optional(),
         /** Per-affordance toolbar chrome. Each key is ONE affordance
          *  `WorkSurface` really ships; absent means OFF, the same
@@ -443,7 +445,9 @@ export const ConstructSchema = z
              *  kai-resizable maximize protocol, which WorkspaceShell does
              *  not carry (recorded in the story's own module comment). */
             expand: z.boolean().optional(),
-            /** The Preview|Code segmented toggle. Requires `codeUrl`. */
+            /** The Preview|Code segmented toggle. Stands alone — with no
+             *  `codeUrl` the Code tab renders its empty state rather than
+             *  refusing to validate. */
             codeView: z.boolean().optional(),
           })
           .strict()
@@ -757,16 +761,19 @@ export const CROSS_FIELD_RULES: readonly CrossFieldRule[] = [
     check: (construct, ctx) => {
       const ws = construct.workSurface;
       if (!ws) return;
-      // Both directions loud, exactly like history-endpoint-url: a Code tab
-      // with nothing behind it is a dead affordance, and a source with no tab
-      // is unreachable. Neither is a state to guess a fix for.
-      if (ws.chrome?.codeView && !ws.codeUrl) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['workSurface', 'codeUrl'],
-          message: '"chrome.codeView" requires a codeUrl — the Code tab needs source to read',
-        });
-      }
+      // ONE direction, not two (owner ruling, 2026-08-30). The reverse
+      // coupling — `codeView` requiring a `codeUrl` — was rejected as an
+      // authoring error, which made the toggle impossible to switch on in the
+      // builder panel and kept the Preview|Code control off every starter.
+      // `codeView` alone is now valid: WorkSurface's Code branch renders its
+      // own empty state naming `workSurface.codeUrl`, in the same voice as the
+      // preview placeholder page codegen already ships. An honest empty state
+      // is not a dead affordance — the tab still tells you something true —
+      // and it retires the "a relative codeUrl frames a 404" concern with it,
+      // because the no-source path now renders a page instead of fetching one.
+      //
+      // A `codeUrl` with no `codeView` stays rejected: the tab is the only
+      // thing that reads it, so the key would be dead weight in the file.
       if (ws.codeUrl && !ws.chrome?.codeView) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
