@@ -42,3 +42,8 @@ packages/ui/.tmp-emitted-scaffold/
 # `kai compile` integration test's packed-tarball cache (derived from the
 # checkout's own dist/ build; see packedUiTarball() in construct/cli.test.ts)
 packages/ui/.kai-test-cache/
+
+# The same packing, at CLI runtime: running `kai dev`/`eject`/`compile` from a
+# source checkout installs THAT checkout's build into the generated project
+# (see construct/local-kit.ts), cached here keyed by dist/'s fingerprint.
+packages/ui/.kai-local-kit/

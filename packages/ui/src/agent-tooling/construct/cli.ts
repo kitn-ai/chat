@@ -9,6 +9,7 @@ import { spawn } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { validateConstruct, type Construct } from './schema';
 import { accentContrastNotice, emitTypes, generateProject, writeProject } from './codegen';
+import { classifyKit, localKitNotice, localKitStartDir, packLocalKit, unbuiltMessage } from './local-kit';
 
 export interface CliIo {
   log: (s: string) => void;
@@ -111,6 +112,45 @@ export function parseDevArgs(rest: string[]): { uiSpec: string | undefined; buil
   return { uiSpec, builder, path };
 }
 
+/**
+ * Which `@kitn.ai/ui` the generated project depends on, for the three
+ * subcommands that emit one. `undefined` means "leave codegen's default
+ * alone" — the published `^<version>`, byte-for-byte today's behaviour.
+ *
+ * ONE call site per subcommand rather than a default buried in codegen: this
+ * decision spawns npm and can fail, and both belong to the CLI layer, not to
+ * a pure emitter. See local-kit.ts for why a checkout defaults to its own
+ * build and why an install must not notice this exists — including the
+ * silence on the `published` and `explicit` paths, which is what makes an
+ * installed package byte-identical rather than merely equivalent.
+ */
+function resolveUiSpec(explicit: string | undefined, io: CliIo): { ok: true; uiSpec: string | undefined } | { ok: false } {
+  const origin = classifyKit(explicit, localKitStartDir());
+  switch (origin.kind) {
+    case 'explicit':
+      return { ok: true, uiSpec: origin.uiSpec };
+    case 'published':
+      return { ok: true, uiSpec: undefined };
+    case 'unbuilt':
+      io.error(unbuiltMessage(origin));
+      return { ok: false };
+    case 'checkout': {
+      let packed;
+      try {
+        packed = packLocalKit(origin.pkgRoot);
+      } catch (err) {
+        io.error(
+          `packing this checkout's @kitn.ai/ui failed: ${err instanceof Error ? err.message : String(err)}\n` +
+            `  Pass --ui <version|tarball|path> to choose a kit explicitly.`,
+        );
+        return { ok: false };
+      }
+      io.log(localKitNotice(origin.pkgRoot, packed.tarball, packed.packed));
+      return { ok: true, uiSpec: packed.tarball };
+    }
+  }
+}
+
 export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<number> {
   const [command, ...rest] = argv;
   switch (command) {
@@ -132,7 +172,9 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       }
       const construct = loadConstruct(path, io);
       if (!construct) return 1;
-      const overwritten = writeProject(generateProject(construct, { uiSpec }), resolve(outDir));
+      const kit = resolveUiSpec(uiSpec, io);
+      if (!kit.ok) return 1;
+      const overwritten = writeProject(generateProject(construct, { uiSpec: kit.uiSpec }), resolve(outDir));
       if (overwritten.length > 0) {
         io.log(`overwriting ${overwritten.length} existing file(s)`);
       }
@@ -142,17 +184,27 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
     }
     case 'dev': {
       const { uiSpec, builder, path } = parseDevArgs(rest);
+      // The kit is resolved per branch, always AFTER the usage check and
+      // BEFORE anything is generated or served: the one line saying which kit
+      // this preview runs belongs on screen at startup, a checkout with no
+      // build must fail here rather than minutes later inside a preview whose
+      // imports do not exist, and a bad invocation must not spawn `npm pack`
+      // on its way to printing the usage it was always going to print.
       if (builder) {
+        const kit = resolveUiSpec(uiSpec, io);
+        if (!kit.ok) return 1;
         const { devBuilder } = await import('./dev');
-        await devBuilder(path, { io, uiSpec });
+        await devBuilder(path, { io, uiSpec: kit.uiSpec });
         return 0; // unreachable; devBuilder never resolves
       }
       if (!path) {
         io.error(USAGE);
         return 2;
       }
+      const kit = resolveUiSpec(uiSpec, io);
+      if (!kit.ok) return 1;
       const { dev } = await import('./dev');
-      await dev(path, { io, uiSpec });
+      await dev(path, { io, uiSpec: kit.uiSpec });
       return 0; // unreachable; dev() never resolves
     }
     case 'compile': {
@@ -164,10 +216,12 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       }
       const construct = loadConstruct(path, io);
       if (!construct) return 1;
+      const kit = resolveUiSpec(uiSpec, io);
+      if (!kit.ok) return 1;
       const outDir = resolve(outArg ?? 'dist-construct');
       const { workDirFor, ensureInstalled } = await import('./dev');
       const dir = workDirFor(construct.name, process.cwd());
-      const files = generateProject(construct, { uiSpec });
+      const files = generateProject(construct, { uiSpec: kit.uiSpec });
       writeProject(files, dir);
       await ensureInstalled(dir, files, io);
       await new Promise<void>((done, fail) => {
