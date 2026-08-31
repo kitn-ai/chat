@@ -54,6 +54,15 @@ const TMP_DIR = resolve(PKG, '.tmp-emitted-rail');
 const proto = Element.prototype as unknown as Record<string, unknown>;
 proto.scrollTo ??= () => {};
 proto.scrollIntoView ??= () => {};
+// The scripted mock reply streams a REASONING part, whose disclosure measures
+// with a ResizeObserver jsdom lacks; without the stub the emitted try/catch
+// swallows the crash into stream.abort() and the "turn" this test builds on is
+// really an error message. Same stub as emitted-maximal-surface.live.test.ts.
+(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 
 const SEP = '// ── src/main.ts ──';
 
@@ -151,7 +160,7 @@ describe('the EMITTED conversation rail keeps its row in step with the thread', 
 
       // The canned reply streams token by token; wait for the turn to settle
       // rather than for a fixed duration.
-      for (let i = 0; i < 400 && chat.loading !== false; i += 1) {
+      for (let i = 0; i < 2000 && chat.loading !== false; i += 1) {
         await new Promise((r) => setTimeout(r, 10));
       }
       await new Promise((r) => setTimeout(r, 50));

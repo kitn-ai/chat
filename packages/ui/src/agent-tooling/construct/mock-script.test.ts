@@ -8,7 +8,7 @@
  * template or a toggled capability moves the assertions on its own.
  */
 import { describe, it, expect } from 'vitest';
-import { mockScriptFor } from './mock-script';
+import { mockScriptFor, scaffoldMockScript } from './mock-script';
 import { buildableTemplates } from './templates';
 import type { Construct } from './schema';
 import type { MockTurn } from '../../state/mock';
@@ -114,5 +114,45 @@ describe('mockScriptFor — every starter script exercises what its construct en
     expect(turns.some((t) => t.reasoning !== undefined)).toBe(true);
     expect(turns.some((t) => (t.sources ?? []).length > 0)).toBe(true);
     expect(turns.some((t) => (t.toolCalls ?? []).length > 0)).toBe(true);
+  });
+});
+
+describe('scaffoldMockScript — the framework scaffolds get the same rich first run', () => {
+  const asTurns = (s: { replies: readonly (string | MockTurn)[] }): MockTurn[] =>
+    s.replies.map((r) => (typeof r === 'string' ? { text: r } : r));
+
+  it('always scripts reasoning and citations; the mock names itself; docs-origin URLs', () => {
+    for (const tools of [false, true]) {
+      const script = scaffoldMockScript({ tools });
+      const turns = asTurns(script);
+      expect(turns.some((t) => t.reasoning !== undefined), `tools=${tools}`).toBe(true);
+      expect(turns.some((t) => (t.sources ?? []).length > 0), `tools=${tools}`).toBe(true);
+      const text = turns.map((t) => `${t.reasoning ?? ''} ${t.text ?? ''}`).join(' ');
+      expect(text.toLowerCase()).toContain('mock');
+      for (const t of turns) {
+        for (const s of t.sources ?? []) expect(s.url).toMatch(/^https:\/\/ui\.kitn\.ai\//);
+      }
+    }
+  });
+
+  it('announces a tool call iff the surface renders kai-tool, and every call has an output', () => {
+    const withTools = scaffoldMockScript({ tools: true });
+    const calls = asTurns(withTools).flatMap((t) => t.toolCalls ?? []);
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) {
+      expect(call.name.startsWith('kai_'), 'the mock scaffold declares no card registry').toBe(false);
+      expect(withTools.toolOutputs, `${call.name} has no scripted output`).toHaveProperty(call.name);
+    }
+    const without = scaffoldMockScript({ tools: false });
+    expect(asTurns(without).flatMap((t) => t.toolCalls ?? [])).toHaveLength(0);
+    expect(Object.keys(without.toolOutputs)).toHaveLength(0);
+  });
+
+  it('never scripts a kai_ card call — cardEmitPlan gives mock no registry to settle one', () => {
+    for (const tools of [false, true]) {
+      for (const call of asTurns(scaffoldMockScript({ tools })).flatMap((t) => t.toolCalls ?? [])) {
+        expect(call.name.startsWith('kai_')).toBe(false);
+      }
+    }
   });
 });

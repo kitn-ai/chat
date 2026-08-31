@@ -39,7 +39,10 @@
  * path, not into tool rows.
  *
  * Leaf discipline: type-only imports plus `inferTemplateId` from the
- * templates leaf — no zod, no components. Consumed by codegen (Node) only.
+ * templates leaf — no zod, no components. Consumed by codegen (Node) and by
+ * the MCP scaffolder (`mcp/tools/scaffold.ts`, via `scaffoldMockScript`
+ * below), so the construct templates and the framework scaffolds script their
+ * first conversation from ONE module instead of two drifting copies.
  */
 import type { Construct } from './schema';
 import type { MockReply, MockSource, MockToolCall, MockTurn } from '../../state/mock';
@@ -305,6 +308,73 @@ function genericScript(g: ContentGates): MockScript {
   return {
     replies,
     toolOutputs: { demo_tool: { ok: true, note: 'scripted by the mock' } },
+  };
+}
+
+/**
+ * The scripted mock conversation for a FRAMEWORK SCAFFOLD (the MCP
+ * scaffolder's non-construct starters — React/Vue/Svelte/Angular/Solid/html).
+ *
+ * There is no Construct to gate on here. What the scaffolder's registry does
+ * know is one fact per surface: whether it renders `kai-tool`
+ * (`hasToolPanel` in scaffold.ts), and that is the `tools` gate. Everything
+ * else is one well-authored default, on purpose:
+ *   · reasoning and citations are ALWAYS scripted, because every emitted
+ *     front end renders every `MessagePart` variant — `<kai-chat>` natively,
+ *     and the solid target's `renderPart` under the structural check in
+ *     verify:scaffold that derives the variant list from the union;
+ *   · a card call is NEVER scripted, because the mock scaffold declares no
+ *     card registry (`cardEmitPlan` returns `cards: false` for mock), so a
+ *     `kai_` call would be a row nothing settles and a card nothing renders.
+ *
+ * The demo tool is named `search` — a declared copy of the scaffolder's own
+ * `toolSchemaLines` demo tool (and the tool `SAMPLE_AGENTIC_MESSAGE` shows),
+ * so the row the mock settles and the tool a real integration would forward
+ * describe the same tool.
+ */
+export function scaffoldMockScript(opts: { tools: boolean }): MockScript {
+  const g: ContentGates = { reasoning: true, sources: true };
+  const replies: MockReply[] = [
+    turn(g, {
+      reasoning:
+        'First run. Say what I am before anything else — no one should wonder whether a model replied — then show every part a real turn can carry.',
+      text:
+        "Hi! I'm a local mock — no backend, no API key, no provider was contacted. " +
+        "This reasoning block, this text and the citation below all streamed through the kit's real parser, on the exact path a live model's reply takes.",
+      sources: [CITE_PARTS],
+    }),
+    ...(opts.tools
+      ? [
+          turn(g, {
+            reasoning:
+              'Demonstrate the tool path: announce a call on the wire and let the app settle it with a scripted output.',
+            text: 'Here is a tool call. The wire only announces it — this app settles it from MOCK_TOOL_OUTPUTS, the same move a real tool loop makes.',
+            toolCalls: [{ name: 'search', arguments: { query: 'streaming chat UI components' } }],
+          }),
+          turn(g, {
+            text:
+              'That row settled the way a real one does: announced by the model, answered by the host. ' +
+              'Still the mock — every frame is tagged _kai_mock and usage reports zero tokens [1].',
+            sources: [CITE_WIRE],
+          }),
+        ]
+      : [
+          turn(g, {
+            reasoning: 'Second turn. Point at the seam.',
+            text:
+              "Still the mock. Swap `mockResponse(value)` for a fetch to your own route and nothing else in this handler changes — that's the whole point of the seam [1].",
+            sources: [CITE_WIRE],
+          }),
+        ]),
+    turn(g, {
+      text: 'Mock again — the script cycles from the top after this. Edit MOCK_SCRIPT in this file to script your own conversation: it is data, not wiring.',
+    }),
+  ];
+  return {
+    replies,
+    toolOutputs: opts.tools
+      ? { search: { results: 3, top: 'AI/UI — streaming chat components (ui.kitn.ai)' } }
+      : {},
   };
 }
 
