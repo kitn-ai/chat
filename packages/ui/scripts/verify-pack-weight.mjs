@@ -371,8 +371,20 @@ if (SELF_TEST) {
  * exactly two new entries under dist/builder-page/assets/ and nothing else
  * unaccounted for. Margin rule unchanged: 9.5630 + ~0.29 MiB of headroom ->
  * 9.85 MiB.
+ *
+ * 9.85 -> 10.30 MiB (2026-08-31, the theme studio app): tripped at
+ * 10,494,905 bytes / 10.0087 MiB / 622 files. Deliberate feature weight on
+ * the builder-page precedent: `dist/theme-studio/` (217,702 bytes: index.html
+ * + one JS + one CSS asset) is the prebuilt theme editor `kai dev --builder`
+ * serves at /theme-studio/ (relocated from apps/docs; the docs site now
+ * renders the same component from the package). It does NOT re-bundle the
+ * kit: its one element-bundle import is external, served from the package's
+ * own dist via /theme-studio/kit/*. The remaining ~0.24 MiB over the last
+ * audit is ordinary tree growth since 2026-08-28, still under the old
+ * ceiling on its own. Margin rule unchanged: 10.0087 + ~0.29 MiB of
+ * headroom -> 10.30 MiB.
  */
-const MAX_UNPACKED_BYTES = 9.85 * 1024 * 1024;
+const MAX_UNPACKED_BYTES = 10.30 * 1024 * 1024;
 
 const kib = (n) => `${(n / 1024).toFixed(1)} KiB`;
 const mib = (n) => `${(n / 1024 / 1024).toFixed(2)} MiB`;

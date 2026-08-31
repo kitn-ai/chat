@@ -13,7 +13,17 @@
     "declaration": true,
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
-    "baseUrl": "."
+    "baseUrl": ".",
+    "paths": {
+      // The theme studio's kit.ts dynamic-imports the package's OWN
+      // `./elements` export (see its comment for the runtime story). Left to
+      // export-map self-resolution, tsc fails with TS2209 ("project root is
+      // ambiguous") on this package's layout — map the one specifier at the
+      // source that implements it instead. Type-check only: Vite never reads
+      // tsconfig paths, so every bundler keeps resolving through the real
+      // export map.
+      "@kitn.ai/ui/elements": ["./src/elements/register.ts"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules", "dist", "frameworks", "src/agent-tooling/mcp"]

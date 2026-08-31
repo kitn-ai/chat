@@ -526,11 +526,11 @@ export function serveBuilderAsset(urlPath: string, rootDir: string): { file: str
  *  that can change on any dependency bump), walk up from wherever the
  *  chunk lands until `builder-page/` is found, bounded so a genuinely
  *  missing artifact still fails fast and loud with every path it tried. */
-export function resolveBuilderPageDir(startDir: string): { dir: string } | { tried: string[] } {
+export function resolveBuilderPageDir(startDir: string, dirName = 'builder-page'): { dir: string } | { tried: string[] } {
   const tried: string[] = [];
   let dir = startDir;
   for (let i = 0; i < 6; i++) {
-    const candidate = join(dir, 'builder-page');
+    const candidate = join(dir, dirName);
     tried.push(candidate);
     if (existsSync(join(candidate, 'index.html'))) return { dir: candidate };
     const atPackageRoot = existsSync(join(dir, 'package.json'));
@@ -553,6 +553,15 @@ export function builderPageDir(): string {
       `Tried:\n${out.tried.map((p) => `  ${p}`).join('\n')}\n` +
       `Run \`nx build ui\` (or npm run build in packages/ui) and try again.`,
   );
+}
+
+/** dist/theme-studio, resolved by the same walk as dist/builder-page (it is
+ *  prebuilt right beside it — vite.config.theme-studio.ts). Nullable rather
+ *  than throwing: the studio route is additive, and a build predating it must
+ *  not take the whole builder down — the route 404s with instructions. */
+export function themeStudioDir(): string | undefined {
+  const out = resolveBuilderPageDir(dirname(fileURLToPath(import.meta.url)), 'theme-studio');
+  return 'dir' in out ? out.dir : undefined;
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
@@ -709,6 +718,32 @@ export async function devBuilder(
         send(200, { construct: out.construct, ...previewFields(preview) });
         bootInBackground(out.target);
         return;
+      }
+      // The standalone theme studio (dist/theme-studio), iframed by the
+      // builder page. /theme-studio/kit/* maps onto the package's own dist
+      // root, so the studio's external `import('@kitn.ai/ui/elements')`
+      // (rewritten to /theme-studio/kit/kai.es.js at build time) loads the
+      // element bundle + its chunks WITHOUT dist/theme-studio re-bundling the
+      // kit. Same trust story as pageDir: our own build output, loopback only.
+      if (req.method === 'GET' && (url === '/theme-studio' || url.startsWith('/theme-studio?'))) {
+        const q = url.indexOf('?');
+        res.writeHead(302, { location: `/theme-studio/${q === -1 ? '' : url.slice(q)}` });
+        return res.end();
+      }
+      if (req.method === 'GET' && url.startsWith('/theme-studio/')) {
+        const studioDir = themeStudioDir();
+        if (!studioDir) {
+          return send(404, {
+            problems: [{ path: '', message: 'dist/theme-studio is missing — run `npm run build` in packages/ui (or nx build ui) and reload.' }],
+          });
+        }
+        const sub = url.slice('/theme-studio'.length);
+        const studioAsset = sub.startsWith('/kit/')
+          ? serveBuilderAsset(sub.slice('/kit'.length), dirname(studioDir))
+          : serveBuilderAsset(sub, studioDir);
+        if (!studioAsset) return send(404, { problems: [{ path: '', message: 'not found' }] });
+        res.writeHead(200, { 'content-type': studioAsset.type });
+        return res.end(readFileSync(studioAsset.file));
       }
       const asset = serveBuilderAsset(url, pageDir);
       if (asset) {
