@@ -23,7 +23,7 @@ export type { ParsedThread, DroppedStored, SaveScheduler, SaveSchedulerOptions }
 // so the no-backend preview runs through the SAME parser a real provider does —
 // and is deliberately impossible to mistake for one. See ./mock.
 export { createMockResponder, DEFAULT_MOCK_REPLIES, MOCK_BANNER, MOCK_MARKER, MOCK_MARKER_KEY, MOCK_MODEL_ID } from './mock';
-export type { MockReply, MockResponder, MockResponderOptions, MockToolCall, MockTurn } from './mock';
+export type { MockReply, MockResponder, MockResponderOptions, MockSource, MockToolCall, MockTurn } from './mock';
 
 // The content-model types every signature above mentions. Without these a
 // consumer importing only from '@kitn.ai/ui/state' cannot annotate the very

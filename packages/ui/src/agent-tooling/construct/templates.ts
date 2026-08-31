@@ -155,7 +155,10 @@ const SHELL: TemplateControlSection = { id: 'shell', paths: ['shell.commandPalet
 const CARDS: TemplateControlSection = {
   id: 'cards',
   paths: ['cards'],
-  hints: { cards: 'Cards arrive as tool calls from a model — the mock provider never emits one.' },
+  // Rewritten with S-1's scripted mocks: the old "the mock provider never
+  // emits one" stopped being true when mockScriptFor started scripting a
+  // `kai_<card>` call for any construct that declares a card.
+  hints: { cards: 'Cards arrive as tool calls from a model. Declare one and the mock scripts a call to it, so it renders keylessly.' },
 };
 const PROVIDER: TemplateControlSection = {
   id: 'provider',

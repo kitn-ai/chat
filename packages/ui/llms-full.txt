@@ -297,7 +297,7 @@ const mock = createMockResponder({
 
 I/O-free pure folds over `ChatMessage[]`. No client, no fetch — you own the transport; these functions own the array-identity discipline the elements re-render on.
 
-Every export (56, derived from `dist/state/index.d.ts`):
+Every export (57, derived from `dist/state/index.d.ts`):
 
 | Export | Kind | Module |
 |---|---|---|
@@ -342,6 +342,7 @@ Every export (56, derived from `dist/state/index.d.ts`):
 | `MockReply` | type | `mock` |
 | `MockResponder` | type | `mock` |
 | `MockResponderOptions` | type | `mock` |
+| `MockSource` | type | `mock` |
 | `MockToolCall` | type | `mock` |
 | `MockTurn` | type | `mock` |
 | `ChatMessage` | type | `../elements/chat-types` |
@@ -571,12 +572,34 @@ export interface MockToolCall {
      *  the mock's naming tell (see tell 3): no provider issues ids in that shape. */
     id?: string;
 }
-/** A scripted mock turn: optional text, then optional tool calls. A turn with
- *  tool calls finishes `finish_reason: 'tool_calls'`, exactly as a real
- *  tool-calling turn does; a turn without them finishes `'stop'`. */
+/** One scripted citation for a mock turn. Framed as an OpenAI-wire
+ *  `url_citation` annotation — the shape `readOpenAIStream` already parses into
+ *  a `source` MessagePart — so a scripted citation takes the exact path a real
+ *  provider's takes and renders through the same guarded sinks. */
+export interface MockSource {
+    /** The cited URL. Scheme policy is enforced at the render sink
+     *  (`isSafeUrl`), same as for a real model's citation. */
+    url: string;
+    /** Human title for the citation chip. */
+    title?: string;
+    /** Quoted snippet; rides the wire as the annotation's `content` field. */
+    snippet?: string;
+}
+/** A scripted mock turn: optional reasoning, then text, then citations, then
+ *  tool calls. A turn with tool calls finishes `finish_reason: 'tool_calls'`,
+ *  exactly as a real tool-calling turn does; a turn without them finishes
+ *  `'stop'`. */
 export interface MockTurn {
+    /** Reasoning streamed (token by token) BEFORE the text, as `delta.reasoning`
+     *  — the OpenRouter-normalized sibling `readOpenAIStream` folds into a
+     *  `reasoning` part. Models think before they answer; the mock does too. */
+    reasoning?: string;
     /** Text streamed (token by token) before the tool calls. */
     text?: string;
+    /** Citations announced after the text, one `url_citation` annotation frame
+     *  each, so consecutive `source` parts land the way a real cited answer's
+     *  do (and collapse into the citations strip). */
+    sources?: readonly MockSource[];
     /** Tool calls announced this turn, in order. */
     toolCalls?: readonly MockToolCall[];
 }
@@ -585,9 +608,10 @@ export interface MockTurn {
 export type MockReply = string | MockTurn;
 export interface MockResponderOptions {
     /** Canned replies, cycled one per turn. Plain strings stream as text; a
-     *  `MockTurn` can also script tool calls (`{ text, toolCalls }`), which is
-     *  what lets the zero-config mock exercise the kit's tool/card path without
-     *  hand-rolled SSE framing. Defaults to `DEFAULT_MOCK_REPLIES`. */
+     *  `MockTurn` can also script reasoning, citations and tool calls
+     *  (`{ reasoning, text, sources, toolCalls }`), which is what lets the
+     *  zero-config mock exercise the kit's reasoning/source/tool/card paths
+     *  without hand-rolled SSE framing. Defaults to `DEFAULT_MOCK_REPLIES`. */
     replies?: readonly MockReply[];
     /** Delay between chunks, in ms. Defaults to 24 — fast enough to feel alive,
      *  slow enough that the streaming is visible. `0` streams as fast as the

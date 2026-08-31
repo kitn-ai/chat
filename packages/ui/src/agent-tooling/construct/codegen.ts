@@ -17,6 +17,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node
 import { dirname, join } from 'node:path';
 import type { Construct } from './schema';
 import { KNOWN_THEME_TOKENS, themeTokenValueProblem } from './theme-token-policy';
+import { mockScriptFor } from './mock-script';
 
 export interface GeneratedFile {
   path: string;
@@ -358,6 +359,23 @@ function emitCardTypesProp(c: Construct): string {
  *  (an off-vocabulary call slipping through); it is silently dropped rather
  *  than rendered, matching cardFromToolCall's own "not every kai_ call is
  *  renderable" boundary (see its module header). */
+/** Settle the mock script's announced demo tool calls with their scripted
+ *  outputs, mock mode only. The wire parks an announced call at
+ *  `input-available` — resolving it is the HOST's side of the seam
+ *  (tool-types.ts), and for the mock the host is `MOCK_TOOL_OUTPUTS` plus this
+ *  loop, the same `upsertTool` move a real tool loop makes. `kai_` card calls
+ *  are untouched (never in the map): those settle into cards below. Runs
+ *  before emitApplyCardTools' loop; the two touch disjoint tool names. */
+function emitSettleMockTools(hasOutputs: boolean): string {
+  if (!hasOutputs) return '';
+  return `
+    for (const part of chat.messages().find((m) => m.id === stream.id)?.parts ?? []) {
+      if (part.type !== 'tool' || part.tool.state !== 'input-available' || !part.tool.toolCallId) continue;
+      const output = MOCK_TOOL_OUTPUTS[part.tool.type];
+      if (output) stream.upsertTool(part.tool.toolCallId, { state: 'output-available', output });
+    }`;
+}
+
 function emitApplyCardTools(c: Construct): string {
   if (!c.cards) return '';
   return `
@@ -1853,7 +1871,7 @@ createEffect(() => {
 
 function emitProviderImports(c: Construct): string {
   if (c.provider.mode === 'mock') {
-    return `import { createMockResponder } from '@kitn.ai/ui/state';
+    return `import { createMockResponder, type MockReply } from '@kitn.ai/ui/state';
 import { readOpenAIStream } from '@kitn.ai/ui/wire';`;
   }
   const read = c.provider.wire === 'openai' ? 'readOpenAIStream' : 'readAnthropicStream';
@@ -1867,16 +1885,33 @@ function emitProviderSetup(c: Construct): string {
   // the value directly, so there's no PromptInput-specific signal-reading
   // workaround to carry here any more.
   if (c.provider.mode === 'mock') {
+    const script = mockScriptFor(c);
+    const hasOutputs = Object.keys(script.toolOutputs).length > 0;
     const cardsNote = c.cards
       ? `
-// Cards demo keylessly: createMockResponder() can already SCRIPT a tool call
-// (\`replies: [{ toolCalls: [...] }]\`, F-35), so a scripted turn calling
-// \`kai_<card name>\` renders exactly like a live model's would, below.`
+// Cards demo keylessly: the script's \`kai_<card name>\` call renders exactly
+// like a live model's would, below.`
+      : '';
+    const outputsDecl = hasOutputs
+      ? `
+
+// Scripted outputs for the demo tool calls above. The wire only ever ANNOUNCES
+// a call — executing it and answering is the host's side of the seam — so the
+// mock's "host" is this map plus the settle step after the read. It disappears
+// with the mock: a real backend's tool loop replaces it.
+const MOCK_TOOL_OUTPUTS: Record<string, Record<string, unknown>> = ${JSON.stringify(script.toolOutputs, null, 2)};`
       : '';
     return `// Provider seam: mock — keyless, streams locally, announces itself once.
 // Swap for provider.mode "endpoint" in the construct and re-run kai dev; the
 // generated fetch keeps this exact shape (the seam is the point).${cardsNote}
-const respond = createMockResponder();
+//
+// The script below is this template's mock conversation: it exercises every
+// content type this construct enables (reasoning, citations, tool rows${c.cards ? ', cards' : ''})
+// through the kit's real parser, so the first run SHOWS the rendering paths a
+// live model would use. Edit it freely — it is data, not wiring.
+const MOCK_SCRIPT: MockReply[] = ${JSON.stringify(script.replies, null, 2)};${outputsDecl}
+
+const respond = createMockResponder({ replies: MOCK_SCRIPT });
 const chat = createKaiChat();
 
 async function submit(detail: { value: string; attachments: AttachmentData[] }) {
@@ -1891,7 +1926,7 @@ async function submit(detail: { value: string; attachments: AttachmentData[] }) 
   });
   const stream = chat.streamAssistant();
   try {
-    await readOpenAIStream(respond(detail.value), stream);${emitApplyCardTools(c)}
+    await readOpenAIStream(respond(detail.value), stream);${emitSettleMockTools(hasOutputs)}${emitApplyCardTools(c)}
     stream.done();
   } catch (err) {
     stream.abort(err instanceof Error ? err.message : String(err));

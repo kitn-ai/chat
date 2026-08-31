@@ -112,12 +112,35 @@ export interface MockToolCall {
   id?: string;
 }
 
-/** A scripted mock turn: optional text, then optional tool calls. A turn with
- *  tool calls finishes `finish_reason: 'tool_calls'`, exactly as a real
- *  tool-calling turn does; a turn without them finishes `'stop'`. */
+/** One scripted citation for a mock turn. Framed as an OpenAI-wire
+ *  `url_citation` annotation — the shape `readOpenAIStream` already parses into
+ *  a `source` MessagePart — so a scripted citation takes the exact path a real
+ *  provider's takes and renders through the same guarded sinks. */
+export interface MockSource {
+  /** The cited URL. Scheme policy is enforced at the render sink
+   *  (`isSafeUrl`), same as for a real model's citation. */
+  url: string;
+  /** Human title for the citation chip. */
+  title?: string;
+  /** Quoted snippet; rides the wire as the annotation's `content` field. */
+  snippet?: string;
+}
+
+/** A scripted mock turn: optional reasoning, then text, then citations, then
+ *  tool calls. A turn with tool calls finishes `finish_reason: 'tool_calls'`,
+ *  exactly as a real tool-calling turn does; a turn without them finishes
+ *  `'stop'`. */
 export interface MockTurn {
+  /** Reasoning streamed (token by token) BEFORE the text, as `delta.reasoning`
+   *  — the OpenRouter-normalized sibling `readOpenAIStream` folds into a
+   *  `reasoning` part. Models think before they answer; the mock does too. */
+  reasoning?: string;
   /** Text streamed (token by token) before the tool calls. */
   text?: string;
+  /** Citations announced after the text, one `url_citation` annotation frame
+   *  each, so consecutive `source` parts land the way a real cited answer's
+   *  do (and collapse into the citations strip). */
+  sources?: readonly MockSource[];
   /** Tool calls announced this turn, in order. */
   toolCalls?: readonly MockToolCall[];
 }
@@ -128,9 +151,10 @@ export type MockReply = string | MockTurn;
 
 export interface MockResponderOptions {
   /** Canned replies, cycled one per turn. Plain strings stream as text; a
-   *  `MockTurn` can also script tool calls (`{ text, toolCalls }`), which is
-   *  what lets the zero-config mock exercise the kit's tool/card path without
-   *  hand-rolled SSE framing. Defaults to `DEFAULT_MOCK_REPLIES`. */
+   *  `MockTurn` can also script reasoning, citations and tool calls
+   *  (`{ reasoning, text, sources, toolCalls }`), which is what lets the
+   *  zero-config mock exercise the kit's reasoning/source/tool/card paths
+   *  without hand-rolled SSE framing. Defaults to `DEFAULT_MOCK_REPLIES`. */
   replies?: readonly MockReply[];
   /** Delay between chunks, in ms. Defaults to 24 — fast enough to feel alive,
    *  slow enough that the streaming is visible. `0` streams as fast as the
@@ -248,9 +272,41 @@ export function createMockResponder(options: MockResponderOptions = {}): MockRes
         // exercises the reader's empty-delta path.
         yield frame(id, { choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] });
 
+        // Scripted reasoning first — a model thinks before it answers. Carried
+        // as the `delta.reasoning` sibling string (the OpenRouter-normalized
+        // spelling), which `readOpenAIStream` folds into a reasoning part.
+        for (const token of tokenize(scripted.reasoning ?? '', chunkSize)) {
+          await delay(delayMs);
+          yield frame(id, { choices: [{ index: 0, delta: { reasoning: token }, finish_reason: null }] });
+        }
+
         for (const token of tokenize(scripted.text ?? '', chunkSize)) {
           await delay(delayMs);
           yield frame(id, { choices: [{ index: 0, delta: { content: token }, finish_reason: null }] });
+        }
+
+        // Scripted citations, one `url_citation` annotation frame each — the
+        // OpenAI-wire shape `readOpenAIStream` parses into `source` parts, so
+        // consecutive citations collapse into the strip the way real ones do.
+        // `snippet` rides as `content`: the annotation's own field name.
+        for (const source of scripted.sources ?? []) {
+          await delay(delayMs);
+          yield frame(id, {
+            choices: [{
+              index: 0,
+              delta: {
+                annotations: [{
+                  type: 'url_citation',
+                  url_citation: {
+                    url: source.url,
+                    ...(source.title !== undefined ? { title: source.title } : {}),
+                    ...(source.snippet !== undefined ? { content: source.snippet } : {}),
+                  },
+                }],
+              },
+              finish_reason: null,
+            }],
+          });
         }
 
         // Scripted tool calls, framed the way the OpenAI wire frames real ones:
