@@ -346,3 +346,45 @@ get re-triaged against the new boundary in the next planning pass — some
 become recipes, some belong to the tier-1 templates and keep their existing
 rulings, some die — rather than being silently carried as
 vocabulary-in-waiting.
+
+## Amendment 4 — 2026-08-31 (owner ruling: composition means composing IN the consumer's app, not compiling a box)
+
+Made in the discussion immediately following Amendment 3, and it sharpens
+what that amendment's word "composition" actually commits us to. The term
+was ambiguously covering two models. Model A: compose Solid internally and
+compile out ONE sealed web component — the construct emission's
+`element.tsx` path, the builder-compile-to-WC idea. Model B: the consumer
+composes the kit's web components / framework wrappers directly inside
+their own application, interleaved with their own components, images and
+state. The owner ruled: **composition-first means Model B.** Model A is a
+PACKAGING choice, not the composition model, and it is only the right
+choice when the developer does not control the host page.
+
+The rationale, in the owner's terms: a compiled box seals its interior. A
+custom image or component can only enter through a predeclared slot; slots
+do not carry framework context across the shadow boundary; and every
+interior change is an edit-and-rebuild of the box. "They are creating a
+box which could be problematic... with composition via web components /
+wrappers there are no limits."
+
+**Consequences:**
+
+- The widget KEEPS the compiled-element output. The box is a feature
+  there — one tag, isolation, drop into a page you will never own — and it
+  stays available as an optional export for anyone wanting an embed of any
+  construct.
+- Assistant / in-app assistant / workspace eject emit FRAMEWORK-NATIVE
+  source composing kai parts — the wrappers or elements in the consumer's
+  own framework. The emitter seam gains a box-vs-open output axis, chosen
+  by where the app will live. The MCP framework scaffolds already prove
+  per-framework emission works; the construct engine has just never
+  offered it as an output shape.
+- The Workspace/Research composition-first example apps (Amendment 3) are
+  Model B by definition: framework-native, public surface only.
+- Solid remains the kit's internal authoring language; consumers never
+  write Solid. Nothing here changes kit authorship.
+
+**Honest caveat, recorded so nobody over-rotates:** the box retains real
+virtues — version and style isolation, updating the interior without
+touching the host. Open composition trades those for freedom. That is why
+this is a per-tier default, not the death of Model A.
