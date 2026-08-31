@@ -12,12 +12,14 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { connect } from 'node:net';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { existsSync, readFileSync, renameSync, watch, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, renameSync, statSync, watch, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generateProject, writeProject, type GeneratedFile, type GenerateOptions } from './codegen';
 import { validateConstruct, type Construct, type ConstructProblem } from './schema';
-import { buildableTemplates } from './templates';
+import { buildableTemplates, inferTemplateId, templateById, type ConstructListing } from './templates';
+
+export type { ConstructListing } from './templates';
 // ONE notice list, shared with the CLI (cli.ts's `generationNotices`) rather
 // than a second copy here — this file prints the same set twice (first run and
 // every regen), which is exactly how the pair got out of sync before.
@@ -296,6 +298,20 @@ export function handleCreate(
   // name to a lowercase hyphenated custom-element tag, so there is no
   // separator or traversal segment left in it by this line.
   const target = resolve(cwd, `${validated.construct.name}.construct.json`);
+  // Never clobber an existing construct silently: with multiple constructs in
+  // one directory (the home-screen model), a create colliding with a file on
+  // disk is a rejection naming the working path, not an overwrite.
+  if (existsSync(target)) {
+    return {
+      ok: false,
+      problems: [{
+        path: 'name',
+        message:
+          `a construct named "${validated.construct.name}" already exists here (${basename(target)}) — ` +
+          `open it from the home screen, or pick another name.`,
+      }],
+    };
+  }
   atomicWriteJson(target, starter);
   return { ok: true, construct: starter, target };
 }
@@ -564,6 +580,121 @@ export function themeStudioDir(): string | undefined {
   return 'dir' in out ? out.dir : undefined;
 }
 
+// ── the manifest-of-constructs entry flow (owner ask, 2026-08-31) ───────────
+// The builder used to start from scratch every time. Now the session's cwd is
+// scanned for existing `*.construct.json` files (they live at the PROJECT
+// ROOT — handleCreate writes `<cwd>/<name>.construct.json`; `.kai/` holds only
+// generated workdirs): none → the template picker, one or more → a home screen
+// listing them, and `kai dev --builder <name>` opens one directly.
+
+/** Scan a directory (non-recursive) for construct files, newest first. Every
+ *  `*.construct.json` is listed; unreadable/unparseable/invalid ones are
+ *  marked rather than dropped. */
+export function listConstructs(cwd: string): ConstructListing[] {
+  let entries: string[];
+  try {
+    entries = readdirSync(cwd);
+  } catch {
+    return [];
+  }
+  const rows: ConstructListing[] = [];
+  for (const file of entries) {
+    if (!file.endsWith('.construct.json')) continue;
+    const abs = join(cwd, file);
+    let updatedAt = new Date(0).toISOString();
+    try {
+      updatedAt = statSync(abs).mtime.toISOString();
+    } catch {
+      continue; // raced away between readdir and stat — not a listing
+    }
+    const fallbackName = file.slice(0, -'.construct.json'.length);
+    try {
+      const checked = validateConstruct(JSON.parse(readFileSync(abs, 'utf8')));
+      if (checked.ok) {
+        const templateId = inferTemplateId(checked.construct);
+        rows.push({
+          file,
+          name: checked.construct.name,
+          templateId,
+          templateName: templateId ? templateById(templateId)?.name : undefined,
+          updatedAt,
+          valid: true,
+        });
+        continue;
+      }
+    } catch {
+      // unreadable or not JSON — falls through to the invalid row
+    }
+    rows.push({ file, name: fallbackName, updatedAt, valid: false });
+  }
+  return rows.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
+}
+
+/** `kai dev --builder <arg>` accepts a path OR a bare construct name
+ *  (`acme-support` → `<cwd>/acme-support.construct.json`). An unknown name
+ *  fails loudly, listing what actually exists — never a bare ENOENT. */
+export function resolveConstructArg(
+  arg: string,
+  cwd: string,
+): { ok: true; abs: string } | { ok: false; message: string } {
+  const asPath = resolve(cwd, arg);
+  if (existsSync(asPath)) return { ok: true, abs: asPath };
+  if (!arg.includes('/') && !arg.endsWith('.json')) {
+    const asName = resolve(cwd, `${arg}.construct.json`);
+    if (existsSync(asName)) return { ok: true, abs: asName };
+  }
+  const names = listConstructs(cwd).map((c) => c.file.slice(0, -'.construct.json'.length));
+  const inventory =
+    names.length > 0
+      ? `this directory has: ${names.join(', ')}`
+      : `no *.construct.json files exist in ${cwd}`;
+  return {
+    ok: false,
+    message:
+      `no construct named "${arg}" — ${inventory}. ` +
+      `Run \`kai dev --builder\` with no argument to pick from a list, or pass a path to a .construct.json file.`,
+  };
+}
+
+/** POST /api/open's doorway: the page asks by BASENAME only (the file must be
+ *  one the scan could have listed — a path with separators or a traversal
+ *  segment is inexpressible, not filtered), and an invalid file is rejected
+ *  with its own problems rather than mounted over a panel that cannot edit it. */
+export function handleOpen(
+  body: { file?: unknown },
+  cwd: string,
+): { ok: true; abs: string; construct: unknown } | { ok: false; status: number; problems: ConstructProblem[] } {
+  const file = body.file;
+  if (typeof file !== 'string' || file !== basename(file) || !file.endsWith('.construct.json')) {
+    return {
+      ok: false,
+      status: 422,
+      problems: [{ path: 'file', message: 'file must be the basename of a *.construct.json in the project directory' }],
+    };
+  }
+  const abs = resolve(cwd, file);
+  if (!existsSync(abs)) {
+    return {
+      ok: false,
+      status: 404,
+      problems: [{ path: 'file', message: `no construct file "${file}" here — the list may be stale; reload the page.` }],
+    };
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(abs, 'utf8'));
+  } catch (err) {
+    return {
+      ok: false,
+      status: 422,
+      problems: [{ path: 'file', message: `${file} is not valid JSON: ${err instanceof Error ? err.message : String(err)}` }],
+    };
+  }
+  const checked = validateConstruct(raw);
+  if (!checked.ok) return { ok: false, status: 422, problems: checked.problems };
+  return { ok: true, abs, construct: raw };
+}
+
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -594,7 +725,18 @@ export async function devBuilder(
   }
 
   const hub = createEventHub();
-  let abs = constructPath ? resolve(constructPath) : undefined;
+  // The argument may be a path OR a bare name (`kai dev --builder acme-support`
+  // → `<cwd>/acme-support.construct.json`); an unknown name fails loudly,
+  // listing the constructs that exist, before any server is offered.
+  let abs: string | undefined;
+  if (constructPath) {
+    const resolved = resolveConstructArg(constructPath, process.cwd());
+    if (!resolved.ok) {
+      io.error(resolved.message);
+      process.exit(1);
+    }
+    abs = resolved.abs;
+  }
   // The preview url is handed straight to the builder page, which iframes it
   // unguarded (no isSafeUrl check on the consuming side) — its trust story
   // lives HERE: it is never model- or consumer-supplied, only ever this
@@ -603,7 +745,31 @@ export async function devBuilder(
   // spawned this" and "we iframe it".
   let preview: PreviewState = { status: 'idle' };
 
-  const boot = async (absPath: string): Promise<string> => {
+  // One live preview at a time: opening a DIFFERENT construct (POST /api/open,
+  // or a create after one) kills the previous Vite child and closes its
+  // watcher before booting the next — both on the same fixed preview port
+  // (--strictPort), so the old process must actually release it first.
+  let activeVite: ReturnType<typeof spawn> | undefined;
+  let activeWatcher: ReturnType<typeof watch> | undefined;
+  // Monotonic boot generation: a second open racing a boot still in its slow
+  // half (npm install) must supersede it — the stale boot checks after every
+  // await and aborts instead of spawning a second Vite onto the same port.
+  let bootGeneration = 0;
+
+  const boot = async (absPath: string, gen: number): Promise<string> => {
+    const superseded = (): boolean => gen !== bootGeneration;
+    activeWatcher?.close();
+    activeWatcher = undefined;
+    if (activeVite) {
+      const previous = activeVite;
+      activeVite = undefined;
+      previous.kill();
+      const freed = await waitUntilListening(async () => !(await probePort(previewPort)), { timeoutMs: 15_000 });
+      if (!freed.ok) {
+        throw new Error(`the previous preview server did not release port ${previewPort} — stop it and reopen`);
+      }
+    }
+    if (superseded()) throw new Error('superseded by a newer open');
     const readRaw = (): unknown => JSON.parse(readFileSync(absPath, 'utf8'));
     const initialText = readFileSync(absPath, 'utf8');
     const first = validateConstruct(JSON.parse(initialText));
@@ -615,9 +781,10 @@ export async function devBuilder(
     const files = generateProject(first.construct, { uiSpec: opts.uiSpec });
     writeProject(files, dir);
     await ensureInstalled(dir, files, io);
+    if (superseded()) throw new Error('superseded by a newer open');
     // Same rename-surviving directory watch as dev() — see its comment.
     const base = basename(absPath);
-    watch(dirname(absPath), (_event, filename) => {
+    activeWatcher = watch(dirname(absPath), (_event, filename) => {
       if (filename !== base) return;
       regenTurn(readRaw, { write: writeProject }, dir, { uiSpec: opts.uiSpec }, io);
       hub.broadcast('construct'); // hand-edits flow into the open builder
@@ -635,6 +802,7 @@ export async function devBuilder(
       cwd: dir,
       stdio: 'inherit',
     });
+    activeVite = vite;
     let viteDied: string | undefined;
     vite.on('exit', (code) => {
       viteDied ??= `the preview server exited with code ${code} before it started listening`;
@@ -653,11 +821,20 @@ export async function devBuilder(
     return url;
   };
 
-  /** Boot detached, then park the outcome where /api/state can report it. */
+  /** Boot detached, then park the outcome where /api/state can report it.
+   *  Everything is gated on the boot's generation still being current, so a
+   *  boot superseded mid-install can neither clobber the newer boot's state
+   *  nor broadcast a stray preview/preview-error frame for the wrong file. */
   const bootInBackground = (absPath: string): void => {
+    const gen = ++bootGeneration;
     preview = { status: 'starting' };
-    void announceBoot(() => boot(absPath), hub, io).then((next) => {
-      preview = next;
+    const gatedHub: Pick<EventHub, 'broadcast'> = {
+      broadcast: (event, data) => {
+        if (gen === bootGeneration) hub.broadcast(event, data);
+      },
+    };
+    void announceBoot(() => boot(absPath, gen), gatedHub, io).then((next) => {
+      if (gen === bootGeneration) preview = next;
     });
   };
 
@@ -686,14 +863,22 @@ export async function devBuilder(
     try {
       const url = req.url ?? '/';
       if (req.method === 'GET' && url === '/api/state') {
-        return send(200, abs
-          ? {
-              phase: 'panel',
-              constructPath: abs,
-              construct: JSON.parse(readFileSync(abs, 'utf8')),
-              ...previewFields(preview),
-            }
-          : { phase: 'start' });
+        if (abs) {
+          return send(200, {
+            phase: 'panel',
+            constructPath: abs,
+            construct: JSON.parse(readFileSync(abs, 'utf8')),
+            ...previewFields(preview),
+          });
+        }
+        // No construct opened yet: existing constructs in this directory make
+        // the session start at the HOME screen; an empty directory keeps
+        // today's template picker (`phase: 'start'`, additive `constructs`).
+        const constructs = listConstructs(process.cwd());
+        return send(200, { phase: constructs.length > 0 ? 'home' : 'start', constructs });
+      }
+      if (req.method === 'GET' && url === '/api/constructs') {
+        return send(200, { constructs: listConstructs(process.cwd()) });
       }
       if (req.method === 'GET' && url === '/api/construct') {
         if (!abs) return send(404, { problems: [{ path: '', message: 'no construct yet' }] });
@@ -705,8 +890,24 @@ export async function devBuilder(
         const out = handleConstructPut(await readJsonBody(req), abs);
         return out.ok ? send(200, { ok: true }) : send(422, { problems: out.problems });
       }
+      if (req.method === 'POST' && url === '/api/open') {
+        const out = handleOpen((await readJsonBody(req)) as { file?: unknown }, process.cwd());
+        if (!out.ok) return send(out.status, { problems: out.problems });
+        // Reopening the construct that is ALREADY live (back-to-home, then the
+        // same card) must not kill and respawn a healthy preview.
+        if (abs === out.abs && (preview.status === 'ready' || preview.status === 'starting')) {
+          return send(200, { construct: out.construct, constructPath: abs, ...previewFields(preview) });
+        }
+        abs = out.abs;
+        preview = { status: 'starting' };
+        send(200, { construct: out.construct, constructPath: abs, ...previewFields(preview) });
+        bootInBackground(out.abs);
+        return;
+      }
       if (req.method === 'POST' && url === '/api/create') {
-        if (abs) return send(409, { problems: [{ path: '', message: 'a construct already exists in this session' }] });
+        // No session-level 409 any more: with the home screen, creating a
+        // SECOND construct in the same session is the "New construct" flow.
+        // handleCreate itself refuses to overwrite a file that already exists.
         const out = handleCreate((await readJsonBody(req)) as CreateRequestBody, process.cwd());
         if (!out.ok) return send(422, { problems: out.problems });
         // The construct file IS the state (B-22), so the moment it is on disk

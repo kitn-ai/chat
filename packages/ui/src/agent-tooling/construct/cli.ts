@@ -23,7 +23,7 @@ const USAGE = `usage: npx @kitn.ai/ui <command>   (or \`kai <command>\` once @ki
   kai validate <construct.json>          check a construct, print problems with paths
   kai eject <construct.json> <outDir>    write the generated Solid project (it's yours)
   kai dev <construct.json>               live preview with reload-on-edit
-  kai dev --builder [construct.json]     visual builder + live preview (no file = start from a template)
+  kai dev --builder [name|construct.json]  visual builder + live preview (no arg = your constructs, or the template picker)
   kai compile <construct.json> [outDir]  one self-registering .js
 `;
 

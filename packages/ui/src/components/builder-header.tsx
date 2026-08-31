@@ -38,13 +38,18 @@
  * Dividers render only between two groups that both have visible content.
  */
 import { type JSX, Show } from 'solid-js';
-import { LayoutTemplate, Sun, Moon } from 'lucide-solid';
+import { LayoutTemplate, Sun, Moon, House } from 'lucide-solid';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Tooltip } from '../ui/tooltip';
 
 export interface BuilderHeaderProps {
+  /** Back to the builder's home screen (the construct list). Renders the
+   *  leftmost icon button only when given — same menu-honesty gate as every
+   *  other affordance here. */
+  onHome?: () => void;
+
   /** The construct/template name, rendered on the LEFT. */
   title?: string;
   /** Optional small status chip beside the title (e.g. "preview starting…"). */
@@ -91,6 +96,20 @@ export function BuilderHeader(props: BuilderHeaderProps): JSX.Element {
       data-kai-builder-header
     >
       <div class="flex min-w-0 items-center gap-3">
+        <Show when={props.onHome}>
+          <Tooltip content="Your constructs">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Your constructs"
+              onClick={() => props.onHome?.()}
+              data-kai-builder-header-home
+            >
+              <House size={14} aria-hidden="true" />
+            </Button>
+          </Tooltip>
+        </Show>
         <Show when={props.title}>
           <span class="truncate text-sm font-semibold text-foreground" data-kai-builder-header-title>
             {props.title}

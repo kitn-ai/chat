@@ -16,6 +16,7 @@ import { DerivedBuilderPanel } from '../components/builder-panel-derived';
 import { BuilderHeader } from '../components/builder-header';
 import { buildableTemplates, templateById, inferTemplateId, type BuildableTemplate } from '../agent-tooling/construct/templates';
 import type { Construct, ConstructProblem } from '../agent-tooling/construct/schema';
+import { HomeScreen, type ConstructListing } from './HomeScreen';
 import { createEditGuard } from './edit-guard';
 import { ToastRegion, type ToastItem, type ToastVariant } from '../components/toast';
 import { Input } from '../ui/input';
@@ -56,6 +57,7 @@ export const PREVIEW_STARTING_MESSAGE =
   'Starting the preview — installing dependencies, this can take a minute on the first run.';
 
 type Screen =
+  | { step: 'home' }
   | { step: 'start' }
   | { step: 'variant'; templateId: 'workspace' }
   | { step: 'name'; templateId: BuilderTemplateId; variantId?: WorkspaceVariantId }
@@ -103,6 +105,10 @@ export function App() {
   const [problems, setProblems] = createSignal<readonly ConstructProblem[]>([]);
   const [pickedId, setPickedId] = createSignal<BuilderTemplateId | undefined>();
   const [name, setName] = createSignal('');
+  // The HOME screen's list (constructs already in the project directory) —
+  // seeded from GET /api/state's `home` phase, refreshed on every return home.
+  const [constructList, setConstructList] = createSignal<readonly ConstructListing[]>([]);
+  const [openingFile, setOpeningFile] = createSignal<string | undefined>();
   const [confirmSwitch, setConfirmSwitch] = createSignal(false);
   // The theme-studio takeover (owner's choice: the studio replaces the ENTIRE
   // canvas + sidebar under the header, not a cramped modal). `available` is a
@@ -155,6 +161,11 @@ export function App() {
         // neutral label built from its own name, never "Scratch").
         setTemplate(templateForLoadedConstruct(loaded));
         setScreen({ step: 'panel' });
+      } else if (state.phase === 'home') {
+        // Existing constructs in this directory: land on the home screen
+        // rather than the template picker (owner ask, 2026-08-31).
+        setConstructList(((state.constructs ?? []) as ConstructListing[]));
+        setScreen({ step: 'home' });
       }
       setServerError(undefined);
     } catch {
@@ -269,6 +280,58 @@ export function App() {
     } finally {
       setCreating(false);
     }
+  };
+
+  /** Open an existing construct from the home screen — mirrors `create`'s
+   *  handling of the response (the server boots the preview in the
+   *  background and answers the moment the session points at the file). */
+  const openConstruct = async (file: string) => {
+    if (openingFile()) return;
+    setOpeningFile(file);
+    try {
+      const res = await fetch('/api/open', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ file }),
+      });
+      if (res.status === 422 || res.status === 404) {
+        setProblems(((await res.json()).problems as ConstructProblem[] | undefined) ?? []);
+        setServerError(undefined); // reachable — a validation rejection, not a server problem
+        return;
+      }
+      if (!res.ok) throw new Error(`POST /api/open → ${res.status}`);
+      const body = await res.json();
+      const loaded = body.construct as Construct;
+      setConstruct(loaded);
+      setTemplate(templateForLoadedConstruct(loaded));
+      setPreviewUrl(body.previewUrl);
+      setPreviewPending(Boolean(body.previewPending));
+      setPreviewError(undefined);
+      setProblems([]);
+      setServerError(undefined);
+      setScreen({ step: 'panel' });
+    } catch {
+      setServerError("can't reach the builder server");
+    } finally {
+      setOpeningFile(undefined);
+    }
+  };
+
+  /** Back to the home screen, with a FRESH scan — hand-created or deleted
+   *  files since the last look must show up. The open construct's preview
+   *  keeps running server-side; reopening the same card is a no-op reboot
+   *  (the server answers with the live preview instead of respawning it). */
+  const goHome = async () => {
+    try {
+      const res = await fetch('/api/constructs');
+      if (!res.ok) throw new Error(`GET /api/constructs → ${res.status}`);
+      setConstructList((((await res.json()).constructs ?? []) as ConstructListing[]));
+      setServerError(undefined);
+    } catch {
+      setServerError("can't reach the builder server");
+    }
+    setProblems([]);
+    setScreen({ step: 'home' });
   };
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -517,6 +580,20 @@ export function App() {
           {serverError()}
         </div>
       </Show>
+      <Show when={screen().step === 'home'}>
+        {/* Same canvas + brand treatment as the Start screen — the home
+            screen is the new front door when constructs already exist; the
+            whole surface lives in HomeScreen.tsx (see its module comment). */}
+        <main class={canvas('max-w-6xl')} style={BRAND_STYLE} data-builder-step="home">
+          <HomeScreen
+            constructs={constructList()}
+            opening={openingFile()}
+            onOpen={(file) => void openConstruct(file)}
+            onNew={() => { setProblems([]); setScreen({ step: 'start' }); }}
+          />
+          <For each={problems()}>{(p) => <p role="alert" class="text-xs text-destructive">{p.path}: {p.message}</p>}</For>
+        </main>
+      </Show>
       <Show when={screen().step === 'start'}>
         {/* Layout/spacing/grid matched to builder-start.stories.tsx's
             `StartDemo` (design-parity fix wave item 3a): max-w-6xl (was
@@ -529,6 +606,15 @@ export function App() {
           <div class="flex flex-col gap-1">
             <h1 class="text-xl font-semibold text-foreground">Start a construct</h1>
             <p class="text-sm text-muted-foreground">Pick a template. You will get a live preview and a construct file you own.</p>
+            {/* Back to the construct list — only when there IS one (an empty
+                directory lands here directly and has nowhere to go back to). */}
+            <Show when={constructList().length > 0}>
+              <div>
+                <Button variant="ghost" size="sm" class="-ml-2 text-muted-foreground" onClick={() => void goHome()} data-builder-back-home>
+                  Back to your constructs
+                </Button>
+              </div>
+            </Show>
           </div>
           <BuilderStart templates={BUILDABLE_BUILDER_TEMPLATES} value={pickedId()} onSelect={onPick} />
         </main>
@@ -589,6 +675,7 @@ export function App() {
             Save button renders the kit's neutral near-white. */}
         <div class="flex h-dvh flex-col" style={BRAND_STYLE}>
           <BuilderHeader
+            onHome={() => void goHome()}
             title={template().name}
             /* The panel is usable before the preview exists, so the fact
                that one is still coming belongs up here, next to the things

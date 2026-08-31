@@ -53,12 +53,23 @@ const jsonResponse = (status: number, body: Json): Response =>
 function stubServer(opts: {
   state?: Json;
   create?: () => Promise<Response>;
+  open?: () => Promise<Response>;
 } = {}) {
   const calls: Array<{ url: string; body?: unknown }> = [];
   const fetchStub = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
     if (url === '/api/state') return jsonResponse(200, opts.state ?? { phase: 'start' });
+    if (url === '/api/constructs') return jsonResponse(200, { constructs: (opts.state?.constructs as unknown[]) ?? [] });
+    if (url === '/api/open') {
+      return opts.open
+        ? await opts.open()
+        : jsonResponse(200, {
+            construct: { name: 'acme-support', layout: 'widget', provider: { mode: 'mock' } },
+            constructPath: '/proj/acme-support.construct.json',
+            previewPending: true,
+          });
+    }
     if (url === '/api/create') {
       return opts.create
         ? await opts.create()
@@ -390,5 +401,91 @@ describe('builder page — theme-studio takeover themes the REAL app through the
     await new Promise((r) => setTimeout(r, 400)); // past the debounce window
     expect(writes(calls)).toHaveLength(0);
     expect(screen.getByTitle('theme studio')).toBeInTheDocument();
+  });
+});
+
+// ── the home-screen entry flow (owner ask, 2026-08-31) ───────────────────────
+// The server decides the front door: `phase: 'home'` when the directory holds
+// constructs, `phase: 'start'` (today's picker, pinned by every test above)
+// when it does not. This block is the page's half of the loop: land on home,
+// open a card into the panel, reach the picker through New, and get back.
+const HOME_STATE = {
+  phase: 'home',
+  constructs: [
+    {
+      file: 'acme-support.construct.json',
+      name: 'acme-support',
+      templateId: 'widget',
+      templateName: 'Support widget',
+      updatedAt: new Date().toISOString(),
+      valid: true,
+    },
+    {
+      file: 'acme-desk.construct.json',
+      name: 'acme-desk',
+      templateId: 'assistant',
+      templateName: 'Assistant',
+      updatedAt: new Date().toISOString(),
+      valid: true,
+    },
+  ],
+};
+
+describe('builder page — the home screen entry flow', () => {
+  it('phase "home" lands on the construct list, not the template picker', async () => {
+    stubServer({ state: HOME_STATE });
+    render(() => <App />);
+    expect(await screen.findByText('Your constructs')).toBeInTheDocument();
+    expect(screen.getByText('<acme-support>')).toBeInTheDocument();
+    expect(screen.getByText('<acme-desk>')).toBeInTheDocument();
+    expect(screen.queryByText('Start a construct')).not.toBeInTheDocument();
+    expect(stepMain('home')).toBeInTheDocument();
+  });
+
+  it('opening a card POSTs /api/open with THAT file and goes straight to the panel, preview pending honestly', async () => {
+    const { calls } = stubServer({ state: HOME_STATE });
+    render(() => <App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open acme-support' }));
+    expect(await screen.findByText(PREVIEW_STARTING_MESSAGE)).toBeInTheDocument();
+    const open = calls.find((c) => c.url === '/api/open');
+    expect(open?.body).toEqual({ file: 'acme-support.construct.json' });
+  });
+
+  it('a rejected open (invalid file raced in) surfaces problems and STAYS on home', async () => {
+    stubServer({
+      state: HOME_STATE,
+      open: async () => jsonResponse(422, { problems: [{ path: 'layout', message: 'not one of the layouts' }] }),
+    });
+    render(() => <App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open acme-desk' }));
+    expect(await screen.findByText(/not one of the layouts/)).toBeInTheDocument();
+    expect(screen.getByText('Your constructs')).toBeInTheDocument();
+    expect(screen.queryByText(PREVIEW_STARTING_MESSAGE)).not.toBeInTheDocument();
+  });
+
+  it('the New construct tile reaches the picker, which now carries a way BACK to the list', async () => {
+    stubServer({ state: HOME_STATE });
+    render(() => <App />);
+    fireEvent.click(await screen.findByText('New construct'));
+    expect(await screen.findByText('Start a construct')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Back to your constructs'));
+    expect(await screen.findByText('Your constructs')).toBeInTheDocument();
+  });
+
+  it('an EMPTY directory keeps today\'s behavior: the picker, with NO back link to an empty list', async () => {
+    stubServer({ state: { phase: 'start', constructs: [] } });
+    render(() => <App />);
+    expect(await screen.findByText('Start a construct')).toBeInTheDocument();
+    expect(screen.queryByText('Back to your constructs')).not.toBeInTheDocument();
+  });
+
+  it('the panel header grows a home affordance that refetches the list on the way back', async () => {
+    const { calls } = stubServer({ state: HOME_STATE });
+    render(() => <App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open acme-support' }));
+    await screen.findByText(PREVIEW_STARTING_MESSAGE);
+    fireEvent.click(screen.getByRole('button', { name: 'Your constructs' }));
+    expect(await screen.findByText('Your constructs')).toBeInTheDocument();
+    expect(calls.some((c) => c.url === '/api/constructs')).toBe(true);
   });
 });
