@@ -51,7 +51,7 @@ function serveRemoteProvider(): Plugin {
 }
 
 const config: StorybookConfig = {
-  stories: ['../src/**/*.mdx', '../src/**/*.stories.@(ts|tsx)'],
+  stories: ['../src/**/*.mdx', '../src/**/*.stories.@(ts|tsx)', '../apps/**/*.stories.@(ts|tsx)'],
   framework: 'storybook-solidjs-vite',
   // Serve the generated agent files so the docs can link to them directly.
   staticDirs: [

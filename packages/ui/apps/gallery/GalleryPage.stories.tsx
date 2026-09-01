@@ -6,8 +6,8 @@ import {
   renderWcForm,
   type FormFile,
   type BlockFormId,
-} from '../agent-tooling/blocks/forms';
-import type { Block } from '../agent-tooling/blocks/registry';
+} from '../../src/agent-tooling/blocks/forms';
+import type { Block } from '../../src/agent-tooling/blocks/registry';
 
 /**
  * Labs/Gallery — the blocks gallery page layout, STUB DATA ONLY

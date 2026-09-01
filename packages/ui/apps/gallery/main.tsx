@@ -1,7 +1,7 @@
 import { render } from 'solid-js/web';
 import { createResource, Show } from 'solid-js';
 import { GalleryPage, type GalleryBlock } from './GalleryPage';
-import { BLOCK_FORMS, type BlockFormId, type FormFile } from '../agent-tooling/blocks/forms';
+import { BLOCK_FORMS, type BlockFormId, type FormFile } from '../../src/agent-tooling/blocks/forms';
 import './styles.css';
 
 // Chrome is dark by default (matches the builder shell); ?theme=light opts

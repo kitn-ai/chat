@@ -51,7 +51,6 @@ const NOT_SHIPPED_DIRS = new Set([
   'agent-tooling', // scaffold + construct templates: emitted into a consumer's app, compiled by THEIR Tailwind
   'test-utils',
   'stories', // docs-only stories
-  'gallery-app', // standalone dev-tool app: light-DOM, brings its own Tailwind build (vite.config.gallery.ts + src/gallery-app/styles.css)
 ]);
 
 function shippedSource(): { label: string; files: string[] } {

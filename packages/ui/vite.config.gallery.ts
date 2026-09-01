@@ -9,7 +9,7 @@ import { resolve } from 'node:path';
 // and compiles nothing at consumer runtime. base './' because dev.ts serves
 // it under /gallery/.
 export default defineConfig({
-  root: resolve(__dirname, 'src/gallery-app'),
+  root: resolve(__dirname, 'apps/gallery'),
   base: './',
   plugins: [solid()],
   css: { postcss: { plugins: [tailwindcss()] } },

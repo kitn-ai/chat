@@ -49,14 +49,13 @@ export default defineConfig({
         'src/agent-tooling/construct/schema-url.ts',
         // The blocks pure-module layer (registry + the shared form renderer).
         // Browser-safe by their own discipline headers (no node:*, no zod-free
-        // violation — registry/forms are plain functions over injected data),
-        // and needed here because the gallery page's emitted
-        // dist/gallery-app/GalleryPage.d.ts imports BLOCK_FORMS types from
-        // '../agent-tooling/blocks/forms' — the same reason templates.d.ts is
-        // emitted while the builder page still lived under src/ (it is
-        // apps/builder/HomeScreen.tsx now, outside the dts include; the
-        // entries stay for public.d.ts consumers). forms.d.ts imports
-        // './registry', so both are listed.
+        // violation — registry/forms are plain functions over injected data).
+        // Needed here because both apps/gallery/GalleryPage.tsx and
+        // apps/builder/HomeScreen.tsx import BLOCK_FORMS types from
+        // '../../src/agent-tooling/blocks/forms' — neither app lives under
+        // src/ or the dts include anymore, but the entries stay for
+        // public.d.ts's own consumers (removing them is a separate decision).
+        // forms.d.ts imports './registry', so both are listed.
         'src/agent-tooling/blocks/registry.ts',
         'src/agent-tooling/blocks/forms.ts',
       ],
