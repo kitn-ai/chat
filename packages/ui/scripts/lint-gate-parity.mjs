@@ -362,6 +362,15 @@ const PLUMBING = [
   /^npm\s+(install|ci)\b/,
   /^npx\s+playwright\s+install\b/,
   /^echo\b/,
+  // A working-tree snapshot redirected to a file. It asserts nothing on its
+  // own; the step that READS it (`verify:artifact-glob`) is the gate.
+  /^git\s+status\b/,
+  // A backgrounded server, and the bounded poll that waits for it to answer.
+  // Setup for the steps after them, in the same sense as the playwright
+  // download above. Narrow on purpose -- `timeout <n> bash -c 'until ...` is a
+  // readiness loop and nothing else, so a real check cannot hide inside one.
+  /^nohup\s/,
+  /^timeout\s+\d+\s+bash\s+-c\s+'until\s/,
 ];
 
 const stripEnvPrefix = (cmd) =>
@@ -1041,6 +1050,55 @@ if (SELF_TEST && IS_MAIN) {
       'an unrecognised `run:` shape is a hard failure naming the step',
     );
   }
+
+  // -- the split's three plumbing shapes, and the near-misses beside each --
+  //
+  // A plumbing rule is a HOLE in the gate set by construction: whatever it
+  // matches stops being a gate and stops being an unrecognised shape. So each
+  // of the three is watched twice -- once on the command it exists for, and
+  // once on a command that looks like it and IS a check. The near-misses are
+  // the half that can fail if a rule is widened later.
+  const kindOf = (cmd, ctx) => classifyCommand(cmd, ctx).kind;
+
+  report(
+    kindOf('git status --porcelain --ignored=matching packages/ui > "$RUNNER_TEMP/before.txt"') === 'plumbing',
+    'a working-tree snapshot is plumbing (the step that READS it is the gate)',
+  );
+  report(
+    kindOf('git diff --exit-code packages/ui/src') !== 'plumbing',
+    'NEAR MISS: `git diff --exit-code` is a check, and stays outside the plumbing hole',
+    `(${kindOf('git diff --exit-code packages/ui/src')})`,
+  );
+
+  report(
+    kindOf('nohup pnpm --filter @kitn.ai/ui exec storybook dev -p 6006 --ci > "$RUNNER_TEMP/sb.log" 2>&1 &') ===
+      'plumbing',
+    'a backgrounded server is plumbing',
+  );
+  report(
+    kindOf('node scripts/nohup-runner.mjs') === 'gate',
+    'NEAR MISS: a script whose NAME contains nohup is still a gate',
+    `(${JSON.stringify(classifyCommand('node scripts/nohup-runner.mjs'))})`,
+  );
+
+  report(
+    kindOf(`timeout 120 bash -c 'until curl -sf http://127.0.0.1:6006 > /dev/null; do sleep 2; done'`) === 'plumbing',
+    'a bounded readiness poll is plumbing',
+  );
+  report(
+    kindOf(`timeout 900 bash -c 'pnpm --filter @kitn.ai/ui run verify:pack'`) !== 'plumbing',
+    'NEAR MISS: a real gate wrapped in `timeout ... bash -c` is NOT swallowed by the poll rule',
+    `(${kindOf(`timeout 900 bash -c 'pnpm --filter @kitn.ai/ui run verify:pack'`)})`,
+  );
+
+  // The reason the snapshot path travels in an env var: this spelling keeps the
+  // gate identifier stable, and `-- --before <path>` would not.
+  report(
+    classifyCommand('ARTIFACT_GLOB_BEFORE="$RUNNER_TEMP/before.txt" pnpm --filter @kitn.ai/ui run verify:artifact-glob')
+      .id === '@kitn.ai/ui run verify:artifact-glob',
+    'the env-var spelling of the artifact-glob gate canonicalizes to a stable id',
+    `(${classifyCommand('ARTIFACT_GLOB_BEFORE="$RUNNER_TEMP/before.txt" pnpm --filter @kitn.ai/ui run verify:artifact-glob').id})`,
+  );
 
   // -- the doc scanner, on a real temp tree --
   const tmp = mkdtempSync(join(tmpdir(), 'gate-parity-'));
