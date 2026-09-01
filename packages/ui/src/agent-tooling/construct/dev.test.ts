@@ -684,7 +684,8 @@ describe('a taken builder port fails helpfully, not with an EADDRINUSE stack (ow
 
 // ── the blocks gallery route (Task 5.1) ─────────────────────────────────────
 
-import { handleGalleryRequest, isBlockName, blockFromRegistryItem, galleryPreviewHtml, type GalleryDirs } from './dev';
+import { handleGalleryRequest, isBlockName, blockFromRegistryItem, galleryPreviewHtml, storeZip, type GalleryDirs } from './dev';
+import { BLOCK_FORMS } from '../blocks/forms';
 
 const ITEM = {
   name: 'demo-block',
@@ -764,6 +765,64 @@ describe('the gallery route table', () => {
     expect(cdn?.kind === 'file' && String(cdn.body)).toContain('cdn form');
   });
 
+  it('GET /gallery/api/form/<block>/<form> serves every delivery form through the ONE shared renderer', () => {
+    const { dirs } = galleryFixture();
+    const filesOf = (form: string): { path: string; content: string }[] => {
+      const out = handleGalleryRequest(`/gallery/api/form/demo-block/${form}`, dirs);
+      expect(out?.kind === 'file' && out.type, form).toBe('application/json');
+      return out?.kind === 'file' ? (JSON.parse(String(out.body)) as { files: { path: string; content: string }[] }).files : [];
+    };
+    // wc — the add form: the entry script is IIFE-wrapped and registration is
+    // rewritten off the CDN-only autoloader (what `add` writes, byte for byte).
+    const wc = filesOf('wc');
+    expect(wc.map((f) => f.path)).toContain('demo-block.html');
+    const wcJs = wc.find((f) => f.path === 'demo-block.js')?.content ?? '';
+    expect(wcJs).toContain('(async () => {');
+    expect(wcJs).toContain(`import '@kitn.ai/ui/elements'`);
+    // react — the page becomes a generated component plus derived typings.
+    const react = filesOf('react');
+    expect(react.map((f) => f.path)).toEqual(
+      expect.arrayContaining(['DemoBlock.tsx', 'kai-elements.d.ts', 'demo-block.d.ts', 'demo-block.js']),
+    );
+    expect(react.map((f) => f.path)).not.toContain('demo-block.html');
+    // cdn — one self-contained file with imports pinned to the served version.
+    // The expected URL is DERIVED from the fixture's version, never a literal
+    // pin: lint:cdn-pins scans every @kitn.ai/ui@<semver> literal in the tree
+    // and would (rightly) flag a hand-typed one here as a live unwired pin.
+    const cdn = filesOf('cdn');
+    expect(cdn.map((f) => f.path)).toEqual(['demo-block.html']);
+    expect(cdn[0].content).toContain(`https://cdn.jsdelivr.net/npm/@kitn.ai/ui@${dirs.version}/dist/`);
+  });
+
+  it('unknown forms and blocks on the form/zip routes answer missing — the form list derived, never restated', () => {
+    const { dirs } = galleryFixture();
+    const badForm = handleGalleryRequest('/gallery/api/form/demo-block/vue', dirs);
+    expect(badForm?.kind === 'missing' && badForm.message).toContain(BLOCK_FORMS.map((f) => f.id).join(', '));
+    expect(handleGalleryRequest('/gallery/api/form/nope/wc', dirs)).toMatchObject({ kind: 'missing' });
+    expect(handleGalleryRequest('/gallery/api/zip/demo-block/vue', dirs)).toMatchObject({ kind: 'missing' });
+    expect(handleGalleryRequest('/gallery/api/form/..%2Fx/wc', dirs)).toMatchObject({ kind: 'missing' });
+  });
+
+  it('GET /gallery/api/zip/<block>/<form> is the SAME rendered files as a store-only zip download', () => {
+    const { dirs } = galleryFixture();
+    const form = handleGalleryRequest('/gallery/api/form/demo-block/wc', dirs);
+    const files = form?.kind === 'file' ? (JSON.parse(String(form.body)) as { files: { path: string; content: string }[] }).files : [];
+    const zip = handleGalleryRequest('/gallery/api/zip/demo-block/wc', dirs);
+    expect(zip?.kind === 'file' && zip.type).toBe('application/zip');
+    expect(zip?.kind === 'file' && zip.download).toBe('demo-block-wc.zip');
+    const body = zip?.kind === 'file' ? (zip.body as Buffer) : Buffer.alloc(0);
+    // Byte-equal to the form route's files, by construction: same renderer,
+    // and store-only means each file's exact bytes appear in the archive.
+    expect(body.subarray(0, 4)).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+    for (const file of files) {
+      expect(body.includes(Buffer.from(file.content, 'utf8')), file.path).toBe(true);
+      expect(body.includes(Buffer.from(file.path, 'utf8')), file.path).toBe(true);
+    }
+    // EOCD entry count equals the form's file count.
+    const eocd = body.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+    expect(body.readUInt16LE(eocd + 10)).toBe(files.length);
+  });
+
   it('the live preview is the item JSON rendered through the ONE CDN-form serializer against /kit/', () => {
     const { dirs } = galleryFixture();
     const preview = handleGalleryRequest('/gallery/preview/demo-block/', dirs);
@@ -795,6 +854,53 @@ describe('the gallery route table', () => {
     expect(noBlocks?.kind === 'missing' && noBlocks.message).toContain('dist/blocks is missing');
     const noPage = handleGalleryRequest('/gallery/', { ...dirs, pageDir: undefined });
     expect(noPage?.kind === 'missing' && noPage.message).toContain('dist/gallery is missing');
+  });
+});
+
+describe('storeZip', () => {
+  // A minimal independent reader: walk the central directory the way any
+  // unzip does and extract each entry through its local header, so the test
+  // proves the container parses rather than pattern-matching our own writer.
+  function readZip(zip: Buffer): { name: string; data: Buffer }[] {
+    const eocd = zip.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+    expect(eocd).toBeGreaterThanOrEqual(0);
+    const count = zip.readUInt16LE(eocd + 10);
+    let at = zip.readUInt32LE(eocd + 16); // central directory offset
+    const out: { name: string; data: Buffer }[] = [];
+    for (let i = 0; i < count; i++) {
+      expect(zip.readUInt32LE(at)).toBe(0x02014b50);
+      const nameLen = zip.readUInt16LE(at + 28);
+      const extraLen = zip.readUInt16LE(at + 30);
+      const commentLen = zip.readUInt16LE(at + 32);
+      const localAt = zip.readUInt32LE(at + 42);
+      const name = zip.subarray(at + 46, at + 46 + nameLen).toString('utf8');
+      expect(zip.readUInt32LE(localAt)).toBe(0x04034b50);
+      const size = zip.readUInt32LE(localAt + 22);
+      const lNameLen = zip.readUInt16LE(localAt + 26);
+      const lExtraLen = zip.readUInt16LE(localAt + 28);
+      const dataAt = localAt + 30 + lNameLen + lExtraLen;
+      expect(zip.readUInt16LE(localAt + 8)).toBe(0); // method: store
+      out.push({ name, data: zip.subarray(dataAt, dataAt + size) });
+      at += 46 + nameLen + extraLen + commentLen;
+    }
+    return out;
+  }
+
+  it('emits a parseable store-only archive whose entries are byte-equal to the input files', () => {
+    const files = [
+      { path: 'a/deep/file.html', content: '<p>hello</p>' },
+      { path: 'b.js', content: "console.log('x');\n" },
+    ];
+    const entries = readZip(storeZip(files));
+    expect(entries.map((e) => e.name)).toEqual(files.map((f) => f.path));
+    for (const [i, entry] of entries.entries()) {
+      expect(entry.data.equals(Buffer.from(files[i].content, 'utf8'))).toBe(true);
+    }
+  });
+
+  it('is deterministic — the same files always produce the same bytes', () => {
+    const files = [{ path: 'x.css', content: 'body{}' }];
+    expect(storeZip(files).equals(storeZip(files))).toBe(true);
   });
 });
 

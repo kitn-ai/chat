@@ -1,6 +1,7 @@
 import { render } from 'solid-js/web';
 import { createResource, Show } from 'solid-js';
 import { GalleryPage, type GalleryBlock } from './GalleryPage';
+import { BLOCK_FORMS, type BlockFormId, type FormFile } from '../agent-tooling/blocks/forms';
 import './styles.css';
 
 // Chrome is dark by default (matches the builder shell); ?theme=light opts
@@ -23,33 +24,46 @@ interface RegistryIndex {
   }[];
 }
 
-interface RegistryItem {
-  files: { path: string; content: string }[];
-}
-
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url} answered ${res.status}`);
   return (await res.json()) as T;
 }
 
-/** Load the whole gallery model: the index, then each block's item JSON
- *  (file contents for the code view) and its CDN form (the secondary
- *  try-it/download affordance). A missing CDN form degrades to no row —
+/** Every delivery form the server can render for one block, from the shared
+ *  renderer's GET route — the axis comes from `BLOCK_FORMS` (one derivation).
+ *  A form the server cannot render for this block (route answers non-OK) is
+ *  simply not offered (menu honesty), never a dead tab. */
+async function loadForms(name: string): Promise<Partial<Record<BlockFormId, FormFile[]>>> {
+  const forms: Partial<Record<BlockFormId, FormFile[]>> = {};
+  await Promise.all(
+    BLOCK_FORMS.map(async ({ id }) => {
+      const res = await fetch(`/gallery/api/form/${name}/${id}`);
+      if (res.ok) forms[id] = ((await res.json()) as { files: FormFile[] }).files;
+    }),
+  );
+  return forms;
+}
+
+/** Load the whole gallery model: the index, then each block's rendered
+ *  delivery forms (the code view's framework axis) and its CDN form (the
+ *  secondary try-it affordance). A missing CDN form degrades to no row —
  *  the block itself still browses. */
 async function loadBlocks(): Promise<GalleryBlock[]> {
   const index = await fetchJson<RegistryIndex>('/gallery/api/registry.json');
   return Promise.all(
     index.items.map(async (item) => {
-      const detail = await fetchJson<RegistryItem>(`/gallery/api/r/${item.name}.json`);
-      const cdnRes = await fetch(`/gallery/api/r/${item.name}.cdn.html`);
+      const [forms, cdnRes] = await Promise.all([
+        loadForms(item.name),
+        fetch(`/gallery/api/r/${item.name}.cdn.html`),
+      ]);
       return {
         name: item.name,
         title: item.title,
         description: item.description,
         categories: item.categories ?? [],
         iframeHeight: item.meta?.iframeHeight,
-        files: detail.files.map((f) => ({ path: f.path, content: f.content })),
+        forms,
         docs: item.docs,
         previewSrc: `/gallery/preview/${item.name}/`,
         cdnHtml: cdnRes.ok ? await cdnRes.text() : undefined,

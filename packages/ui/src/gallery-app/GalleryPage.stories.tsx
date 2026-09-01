@@ -1,5 +1,13 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { GalleryPage, type GalleryBlock } from './GalleryPage';
+import {
+  renderCdnFormFiles,
+  renderReactForm,
+  renderWcForm,
+  type FormFile,
+  type BlockFormId,
+} from '../agent-tooling/blocks/forms';
+import type { Block } from '../agent-tooling/blocks/registry';
 
 /**
  * Labs/Gallery — the blocks gallery page layout, STUB DATA ONLY
@@ -7,22 +15,26 @@ import { GalleryPage, type GalleryBlock } from './GalleryPage';
  * story first for design iteration; the real page — `kai dev`'s /gallery/
  * route — renders this same component over the derived registry).
  *
- * The owner ruling this layout answers to (spec B-G amendment, 2026-08-31):
- * the gallery LEADS with the block's file tree — per-file view + copy and the
- * `npx create-kai add <name>` one-liner are the primary affordances; the
- * standalone CDN form is a secondary try-it/download row.
+ * The owner rulings this layout answers to (spec B-G amendment 2026-08-31,
+ * plus the round-2 feedback): the gallery LEADS with the block's file tree —
+ * per-file view + copy and the `npx create-kai add <name>` one-liner are the
+ * primary affordances; the Code view carries a FRAMEWORK selector whose
+ * forms come from the ONE shared renderer (`agent-tooling/blocks/forms.ts`
+ * — the stub forms below are rendered through it, so the story shows real
+ * renderer output); Download + the icon Copy live in the code header; the
+ * standalone CDN form is a secondary try-it row.
  */
 
 const src = (code: string) => ({
   parameters: { docs: { source: { code, language: 'tsx' } } },
 });
 
-const STUB_HTML = `<!doctype html>
+const stubHtml = (name: string, title: string) => `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Support widget</title>
-    <link rel="stylesheet" href="./support-widget.css" />
+    <title>${title}</title>
+    <link rel="stylesheet" href="./${name}.css" />
   </head>
   <body>
     <kai-dock position="bottom-right">
@@ -30,19 +42,18 @@ const STUB_HTML = `<!doctype html>
         <kai-view-stack></kai-view-stack>
       </kai-panel>
     </kai-dock>
-    <script type="module" src="./support-widget.js"></script>
+    <script type="module" src="./${name}.js"></script>
   </body>
 </html>
 `;
 
-const STUB_JS = `import '@kitn.ai/ui/autoloader';
-import { createAssistantStream, createMockResponder } from '@kitn.ai/ui/state';
-import { readOpenAIStream } from '@kitn.ai/ui/wire';
+const stubJs = (name: string) => `import '@kitn.ai/ui/autoloader';
 import { SCRIPT } from './mock.js';
 
-const thread = document.querySelector('kai-thread');
+await customElements.whenDefined('kai-panel');
+const panel = document.querySelector('kai-panel');
 // Array/object props are set as JS PROPERTIES, never attributes.
-thread.messages = [];
+console.log('${name} boots with', SCRIPT.length, 'scripted turns', panel);
 `;
 
 const STUB_CSS = `body { margin: 0; }
@@ -62,20 +73,51 @@ function stubPreview(label: string) {
   );
 }
 
+/** The stub block in the AUTHORED shape, so the story's forms come out of
+ *  the one shared renderer rather than being hand-typed lookalikes. */
+function authoredStub(name: string, title: string): Block {
+  const files = new Map<string, string>([
+    [`${name}.html`, stubHtml(name, title)],
+    [`${name}.js`, stubJs(name)],
+    [`${name}.css`, STUB_CSS],
+    ['mock.js', STUB_MOCK],
+  ]);
+  return {
+    name,
+    manifest: {
+      name,
+      title,
+      description: '',
+      type: 'registry:block',
+      files: [
+        { path: `${name}.html`, type: 'registry:page' },
+        { path: `${name}.js`, type: 'registry:file' },
+        { path: `${name}.css`, type: 'registry:file' },
+        { path: 'mock.js', type: 'registry:file' },
+      ],
+    },
+    files,
+  };
+}
+
+function stubForms(block: Block): Partial<Record<BlockFormId, FormFile[]>> {
+  return {
+    wc: renderWcForm(block),
+    react: renderReactForm(block),
+    cdn: renderCdnFormFiles(block, { version: '0.0.0-story', base: '/kit/' }),
+  };
+}
+
 function stubBlock(overrides: Partial<GalleryBlock> & Pick<GalleryBlock, 'name' | 'title' | 'categories'>): GalleryBlock {
+  const authored = authoredStub(overrides.name, overrides.title);
   return {
     description:
       'A docked support widget: panel, tab bar, view stack, home rows, thread and conversations, driven by the headless conversation controller.',
     iframeHeight: '640px',
-    files: [
-      { path: `${overrides.name}.html`, content: STUB_HTML },
-      { path: `${overrides.name}.js`, content: STUB_JS },
-      { path: `${overrides.name}.css`, content: STUB_CSS },
-      { path: 'mock.js', content: STUB_MOCK },
-    ],
+    forms: stubForms(authored),
     docs: 'Runs against a scripted local mock out of the box. To go live, replace the mock responder with a fetch to your chat endpoint and keep parsing through the @kitn.ai/ui/wire readers.',
     preview: stubPreview(overrides.title),
-    cdnHtml: STUB_HTML,
+    cdnHtml: authored.files.get(`${overrides.name}.html`),
     ...overrides,
   };
 }
