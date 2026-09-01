@@ -34,7 +34,7 @@
 // Two commands:
 //
 //   (default)   -- ask the API about one SHA and exit 0 (green) or non-zero.
-//   --self-test -- drive the resolver through 15 scenarios with a stub
+//   --self-test -- drive the resolver through every scenario below with a stub
 //                  transport, including the ones that must PASS. No network.
 //
 // The self-test is not decoration. A gate that refuses everything passes every
@@ -367,6 +367,28 @@ const SCENARIOS = [
     turns: [
       {
         checkRuns: [checkRun('test', 'completed', 'success'), checkRun('build', 'completed', 'success')],
+      },
+    ],
+    expect: true,
+  },
+  {
+    id: 'test-green-storybook-gate-red',
+    why: 'the actual pair release-please passes today: `test` green must not let a red `storybook-gate` publish',
+    required: ['test', 'storybook-gate'],
+    turns: [
+      {
+        checkRuns: [checkRun('test', 'completed', 'success'), checkRun('storybook-gate', 'completed', 'failure')],
+      },
+    ],
+    expect: false,
+  },
+  {
+    id: 'test-and-storybook-gate-both-green',
+    why: 'the real release path once both ruleset contexts (18328421) are required',
+    required: ['test', 'storybook-gate'],
+    turns: [
+      {
+        checkRuns: [checkRun('test', 'completed', 'success'), checkRun('storybook-gate', 'completed', 'success')],
       },
     ],
     expect: true,

@@ -134,6 +134,14 @@ jobs:
       # be derived at runtime. If the ruleset gains a context, add it here. Naming
       # a context that does not exist makes the gate refuse everything, which is
       # loud and safe; the reverse would be silent.)
+      #
+      # As of 2026-09-01, ruleset 18328421 requires TWO contexts: `test` and
+      # `storybook-gate`. Both are listed below (one `--require` per context, or
+      # comma-separate them in a single flag -- the script accepts either). Before
+      # this, `storybook-gate` was enforced on PRs but not checked here, so a red
+      # `storybook-gate` on the commit being released would not have blocked the
+      # publish. See docs/coupling-map.md row 7 for how this list is kept in sync
+      # with the ruleset: hand-typed, not derived, and unguarded if it drifts.
       - name: Publish gate — require green checks on the commit being published
         if: ${{ steps.release.outputs.release_created || steps.release.outputs.releases_created || github.event_name == 'workflow_dispatch' }}
         env:
@@ -143,6 +151,7 @@ jobs:
             --repo "${{ github.repository }}" \
             --sha "${{ github.sha }}" \
             --require test \
+            --require storybook-gate \
             --timeout-minutes 45 \
             --event-name "${{ github.event_name }}" \
             --override "${{ inputs.skip_required_checks }}"
