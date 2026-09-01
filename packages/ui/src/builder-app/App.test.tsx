@@ -54,6 +54,9 @@ function stubServer(opts: {
   state?: Json;
   create?: () => Promise<Response>;
   open?: () => Promise<Response>;
+  /** Factory for POST /api/construct — lets a test 422 one write and accept
+   *  the next (the stale-toast repro needs exactly that sequence). */
+  construct?: () => Promise<Response>;
 } = {}) {
   const calls: Array<{ url: string; body?: unknown }> = [];
   const fetchStub = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -78,7 +81,7 @@ function stubServer(opts: {
             previewPending: true,
           });
     }
-    if (url === '/api/construct') return jsonResponse(200, { ok: true });
+    if (url === '/api/construct') return opts.construct ? await opts.construct() : jsonResponse(200, { ok: true });
     if (url === '/theme-studio/') return jsonResponse(200, {}); // availability probe for the takeover
     throw new Error(`unstubbed ${url}`);
   });
@@ -392,6 +395,114 @@ describe('builder page — theme-studio takeover themes the REAL app through the
     expect(await screen.findByText('Theme applied')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByTitle('theme studio')).not.toBeInTheDocument());
     expect(writes(calls)).toHaveLength(1); // the stream's write stands; Done added none
+  });
+
+  it('kai-theme-init posts the construct theme FOLDED to the flat ThemePayload — saved tokens seed the studio, not the nested construct shape', async () => {
+    // The shape mismatch that shipped: the builder posted { accent, mode,
+    // tokens: {…} } while the studio reads { light, dark, radius, fonts } off
+    // the top level, so a saved theme never seeded and the studio opened on
+    // kit defaults. This asserts the exact frame the iframe load handler posts.
+    await openTakeover({
+      ...panelState,
+      construct: {
+        ...(panelState.construct as Json),
+        theme: {
+          mode: 'system',
+          accent: '#112233',
+          tokens: { light: { '--kai-color-primary': '#123456' }, dark: { '--kai-color-primary': '#654321' }, radius: '1rem' },
+        },
+      },
+    });
+    const studio = screen.getByTitle('theme studio') as HTMLIFrameElement;
+    const postSpy = vi.spyOn(studio.contentWindow!, 'postMessage');
+    fireEvent.load(studio);
+    expect(postSpy).toHaveBeenCalledWith(
+      {
+        type: 'kai-theme-init',
+        theme: {
+          light: { '--kai-color-primary': '#123456' },
+          dark: { '--kai-color-primary': '#654321' },
+          radius: '1rem',
+        },
+      },
+      window.location.origin,
+    );
+  });
+
+  it('kai-theme-init from a construct with NO saved tokens folds the accent into light\'s primary', async () => {
+    await openTakeover(); // panelState: accent #112233, no tokens
+    const studio = screen.getByTitle('theme studio') as HTMLIFrameElement;
+    const postSpy = vi.spyOn(studio.contentWindow!, 'postMessage');
+    fireEvent.load(studio);
+    expect(postSpy).toHaveBeenCalledWith(
+      { type: 'kai-theme-init', theme: { light: { '--kai-color-primary': '#112233' }, dark: {} } },
+      window.location.origin,
+    );
+  });
+
+  it('OPENING writes nothing: a change frame identical to the open-time snapshot is dropped (defense behind the studio\'s write-free open)', async () => {
+    // A construct whose accent already tracks its saved primary — exactly what
+    // themeFromPayload writes — so a seed echo resolves to the snapshot.
+    const { calls } = await openTakeover({
+      ...panelState,
+      construct: {
+        ...(panelState.construct as Json),
+        theme: { mode: 'system', accent: '#123456', tokens: { light: { '--kai-color-primary': '#123456' } } },
+      },
+    });
+    post({ type: 'kai-theme-change', light: { '--kai-color-primary': '#123456' } });
+    await new Promise((r) => setTimeout(r, 400)); // past the debounce window
+    expect(writes(calls)).toHaveLength(0);
+    // …while a REAL edit still writes.
+    post({ type: 'kai-theme-change', light: { '--kai-color-primary': '#ff0000' } });
+    await waitFor(() => expect(writes(calls).length).toBe(1), { timeout: 2000 });
+  });
+
+  it('a STALE 422 from an earlier panel edit cannot make Done toast "Theme not saved" — no takeover write, silent close (the stale-toast defect)', async () => {
+    // One rejected PANEL write before the takeover opens leaves problems()
+    // non-empty; Done's verdict must be scoped to the takeover's own writes.
+    let first = true;
+    const server = stubServer({
+      state: panelState,
+      construct: async () => {
+        if (first) { first = false; return jsonResponse(422, { problems: [{ path: 'header.title', message: 'too long' }] }); }
+        return jsonResponse(200, { ok: true });
+      },
+    });
+    render(() => <App />);
+    // A panel edit that the server rejects: switch template → onEdit → POST.
+    fireEvent.click(await screen.findByRole('button', { name: 'Switch template' }));
+    fireEvent.click(await screen.findByText('Support widget'));
+    await waitFor(() => expect(writes(server.calls).length).toBe(1), { timeout: 2000 });
+    expect(await screen.findByText(/too long/)).toBeInTheDocument();
+    // Open the takeover, change nothing, Done: it must close without the
+    // false "Theme not saved" the stale ambient problems() used to produce.
+    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }));
+    await screen.findByTitle('theme studio');
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(screen.queryByTitle('theme studio')).not.toBeInTheDocument());
+    expect(screen.queryByText('Theme not saved')).not.toBeInTheDocument();
+    expect(screen.queryByText('Theme applied')).not.toBeInTheDocument(); // nothing was applied either
+    expect(writes(server.calls)).toHaveLength(1); // the takeover added no write
+  });
+
+  it('the INVERSE stays loud: a failed stream write makes Done toast "Theme not saved" and hold the takeover open, even with nothing left to flush', async () => {
+    const { calls } = await (async () => {
+      const server = stubServer({
+        state: panelState,
+        construct: async () => jsonResponse(422, { problems: [{ path: 'theme.tokens.light', message: 'not a --kai-* knob' }] }),
+      });
+      render(() => <App />);
+      fireEvent.click(await screen.findByRole('button', { name: /Advanced/ }));
+      await screen.findByTitle('theme studio');
+      return server;
+    })();
+    post(CHANGE);
+    await waitFor(() => expect(writes(calls).length).toBe(1), { timeout: 2000 }); // the debounce already flushed — Done has nothing pending
+    await flush(); // …and its 422 response has settled (the write is done, not merely started)
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(await screen.findByText('Theme not saved')).toBeInTheDocument();
+    expect(screen.getByTitle('theme studio')).toBeInTheDocument(); // stays open on the failure
   });
 
   it('a cross-origin message is ignored entirely', async () => {

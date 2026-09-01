@@ -17,7 +17,8 @@ import { BuilderHeader } from '../components/builder-header';
 import { buildableTemplates, templateById, inferTemplateId, type BuildableTemplate } from '../agent-tooling/construct/templates';
 import type { Construct, ConstructProblem } from '../agent-tooling/construct/schema';
 import { HomeScreen, type ConstructListing } from './HomeScreen';
-import { createEditGuard } from './edit-guard';
+import { createEditGuard, type EditOutcome } from './edit-guard';
+import type { ThemePayload } from '../theme-studio-app/theme-payload';
 import { ToastRegion, type ToastItem, type ToastVariant } from '../components/toast';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -355,18 +356,31 @@ export function App() {
       body: JSON.stringify(next),
     }),
   );
-  const flushSave = async () => {
+  // The outcome of the most recent flush that actually round-tripped, kept so
+  // a caller whose OWN flush had nothing pending (the debounce already wrote)
+  // can still judge the last write instead of reading the ambient
+  // problems()/serverError() signals — which may hold a STALE verdict from an
+  // unrelated earlier edit (the stale-toast defect: a leftover panel 422 made
+  // the takeover's Done toast "Theme not saved" and refuse to close when the
+  // studio had written nothing at all; the inverse — a stale-clean read over
+  // a failed stream write — would have toasted "Theme applied" falsely).
+  let lastFlushOutcome: EditOutcome | undefined;
+  /** Flush the pending debounced write, returning THIS flush's outcome —
+   *  `undefined` when nothing was pending or a newer edit superseded it. */
+  const flushSave = async (): Promise<EditOutcome | undefined> => {
     clearTimeout(debounceTimer);
     const next = pendingConstruct;
-    if (!next) return; // nothing pending — Save is disabled here anyway
+    if (!next) return undefined; // nothing pending — Save is disabled here anyway
     pendingConstruct = undefined;
     setSavingNow(true);
     const outcome = await submitEdit(next);
     setSavingNow(false);
-    if (!outcome) return; // stale — a newer edit's own flush owns the signals
+    if (!outcome) return undefined; // stale — a newer edit's own flush owns the signals
     if (pendingConstruct === undefined) setDirty(false); // no newer edit arrived mid-POST
     setProblems(outcome.problems);
     setServerError(outcome.serverError);
+    lastFlushOutcome = outcome;
+    return outcome;
   };
   const onEdit = (next: Construct) => {
     setConstruct(next); // optimistic — the panel stays live while typing
@@ -422,6 +436,7 @@ export function App() {
   const openThemeStudio = async () => {
     const t = construct()?.theme as { accent?: string; tokens?: unknown } | undefined;
     themeSnapshot = { accent: t?.accent, tokens: t?.tokens };
+    lastFlushOutcome = undefined; // Done's verdict covers the TAKEOVER's writes, not earlier panel edits
     setThemeStudio(true);
     if (!themeStudioAvailable()) {
       try {
@@ -432,7 +447,30 @@ export function App() {
       }
     }
   };
-  type StudioPayload = { light?: Record<string, string>; dark?: Record<string, string>; radius?: string; fonts?: Record<string, string> };
+  // DERIVED from the studio's own wire type (theme-payload.ts), not retyped —
+  // a key renamed on either side is now a compile error, which is how the
+  // init-shape mismatch (nested construct theme posted at a flat reader)
+  // shipped in the first place. Partial because postMessage data is unproven.
+  type StudioPayload = Partial<ThemePayload>;
+  /** The construct's saved theme, folded to the studio's FLAT ThemePayload for
+   *  kai-theme-init. The construct nests the same fields under `theme.tokens`;
+   *  posting that raw seeded NOTHING (the studio reads top-level keys), so a
+   *  saved custom theme opened as kit defaults — and, with the seed echo the
+   *  studio used to stream on open, got overwritten on disk by them. A
+   *  construct with no saved tokens folds its `accent` into light's primary. */
+  const initThemePayload = (c: Construct | undefined): ThemePayload => {
+    const t = c?.theme as { accent?: string; tokens?: Partial<ThemePayload> } | undefined;
+    const tok = t?.tokens;
+    if (tok && (tok.light || tok.dark || tok.radius || tok.fonts)) {
+      return {
+        light: { ...(tok.light ?? {}) },
+        dark: { ...(tok.dark ?? {}) },
+        ...(tok.radius ? { radius: tok.radius } : {}),
+        ...(tok.fonts ? { fonts: tok.fonts } : {}),
+      };
+    }
+    return { light: t?.accent ? { '--kai-color-primary': t.accent } : {}, dark: {} };
+  };
   /** A studio payload (full light/dark --kai-* maps + radius/fonts) as the
    *  construct's theme: everything into `theme.tokens`, with `theme.accent`
    *  kept in sync from the applied primary for back-compat (tokens win over
@@ -455,7 +493,17 @@ export function App() {
   const onStudioChange = (payload: StudioPayload): void => {
     const c = construct();
     if (!c || !themeStudio()) return;
-    onEdit({ ...c, theme: themeFromPayload(c, payload) });
+    const theme = themeFromPayload(c, payload) as { accent?: string; tokens?: unknown };
+    // Defense in depth behind the studio's own write-free-open rule: a change
+    // frame that resolves to exactly the open-time snapshot writes nothing —
+    // an older studio dist echoes its seeded state once on open, and that
+    // echo must not touch the file.
+    if (
+      themeSnapshot &&
+      JSON.stringify({ a: theme.accent, t: theme.tokens }) ===
+        JSON.stringify({ a: themeSnapshot.accent, t: themeSnapshot.tokens })
+    ) return;
+    onEdit({ ...c, theme: theme as Construct['theme'] });
   };
   /** 'kai-theme-apply' (the studio's Apply button) = Done: write the final
    *  payload, keep it, close. The flush is awaited so the toast reports what
@@ -463,24 +511,30 @@ export function App() {
    *  theme.tokens, or an invalid payload) fall back to the accent-only write
    *  and SAY the full palette wasn't saved — decide loudly. The takeover
    *  closes on any kept outcome and stays open on a hard failure. */
+  /** Did THIS flush's write land clean? Judged on the returned outcome, never
+   *  the ambient problems()/serverError() signals (see lastFlushOutcome). */
+  const flushOk = (o: EditOutcome | undefined): boolean => !!o && o.problems.length === 0 && !o.serverError;
+  const flushDetail = (o: EditOutcome | undefined): string =>
+    o
+      ? o.problems.map((p) => `${p.path}: ${p.message}`).join('; ') || o.serverError || 'the server rejected the write'
+      : 'the write was superseded by a newer edit';
   const applyStudioTheme = async (payload: StudioPayload) => {
     const c = construct();
     if (!c) return;
     const accent = payload.light?.['--kai-color-primary'];
     onEdit({ ...c, theme: themeFromPayload(c, payload) });
-    await flushSave();
-    if (problems().length === 0 && !serverError()) {
+    const outcome = await flushSave();
+    if (flushOk(outcome)) {
       raiseToast('Theme applied', 'success');
       themeSnapshot = undefined;
       setThemeStudio(false);
       return;
     }
-    const detail = problems().map((p) => `${p.path}: ${p.message}`).join('; ') || serverError() || 'the server rejected the write';
+    const detail = flushDetail(outcome);
     if (accent) {
       // Accent-only retry — the pre-tokens construct shape every dist accepts.
       onEdit({ ...c, theme: { ...c.theme, mode: c.theme?.mode ?? 'system', accent } });
-      await flushSave();
-      if (problems().length === 0 && !serverError()) {
+      if (flushOk(await flushSave())) {
         raiseToast("Couldn't save the full palette — kept the accent color", 'warning', detail);
         themeSnapshot = undefined;
         setThemeStudio(false);
@@ -492,16 +546,20 @@ export function App() {
     }
   };
   /** The bar's Done — no payload of its own: the live stream already wrote
-   *  everything; just flush whatever is still inside the debounce window. */
+   *  everything; just flush whatever is still inside the debounce window. The
+   *  verdict is scoped to the TAKEOVER'S OWN writes — this flush, or the last
+   *  stream flush since open — never the ambient signals, which can hold a
+   *  stale verdict from an unrelated earlier panel edit. With no takeover
+   *  write at all there is nothing to claim was applied: close silently. */
   const doneThemeStudio = async () => {
-    await flushSave();
-    if (problems().length > 0 || serverError()) {
-      const detail = problems().map((p) => `${p.path}: ${p.message}`).join('; ') || serverError() || 'the server rejected the write';
-      raiseToast('Theme not saved', 'error', detail);
+    const verdict = (await flushSave()) ?? lastFlushOutcome;
+    if (verdict && (verdict.problems.length > 0 || verdict.serverError)) {
+      raiseToast('Theme not saved', 'error', flushDetail(verdict));
       return; // stay open — closing would silently discard the user's read on the failure
     }
-    raiseToast('Theme applied', 'success');
+    if (verdict) raiseToast('Theme applied', 'success');
     themeSnapshot = undefined;
+    lastFlushOutcome = undefined;
     setThemeStudio(false);
   };
   /** Cancel (the bar's button AND the studio's kai-theme-close): restore the
@@ -723,12 +781,16 @@ export function App() {
                           title="theme studio"
                           src="/theme-studio/?embed=1"
                           class="h-full w-full border-0"
-                          /* Seed the studio with the construct's current theme once
-                             it is listening. Same-origin route, explicit origin.
-                             Seeding also opens the studio's change stream (it
-                             holds the stream until init so kit defaults never
-                             overwrite the construct's real theme). */
-                          on:load={(e) => e.currentTarget.contentWindow?.postMessage({ type: 'kai-theme-init', theme: construct()?.theme ?? {} }, window.location.origin)}
+                          /* Seed the studio with the construct's current theme
+                             once it is listening — FOLDED to the flat
+                             ThemePayload the studio reads (posting the raw
+                             construct theme seeded nothing; initThemePayload's
+                             comment has the story). Same-origin route, explicit
+                             origin. Seeding also arms the studio's change
+                             stream (it holds the stream until init AND until a
+                             real edit, so kit defaults never overwrite the
+                             construct's real theme). */
+                          on:load={(e) => e.currentTarget.contentWindow?.postMessage({ type: 'kai-theme-init', theme: initThemePayload(construct()) }, window.location.origin)}
                         />
                       </div>
                       {/* The user's ACTUAL app — same pane, same not-ready states,

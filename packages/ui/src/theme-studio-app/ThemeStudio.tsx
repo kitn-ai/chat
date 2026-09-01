@@ -336,20 +336,26 @@ const nextId = () => `s${++uid}`;
 // builder serves the studio and hosts the iframe from the same server, so
 // same-origin holds; a cross-origin host simply receives nothing.
 //
-// studio → host: { type: 'kai-theme-change', ...ThemePayload }  on any change
+// studio → host: { type: 'kai-theme-change', ...ThemePayload }  after a REAL
+//                user edit — never on seeding (write-free open: the host
+//                debounce-writes every change frame to disk, so a seed echo
+//                would overwrite the construct's saved theme with a full
+//                resolved palette carrying zero edits)
 // studio → host: { type: 'kai-theme-apply',  ...ThemePayload }  Apply button
 // studio → host: { type: 'kai-theme-close' }                    Close button
 // host → studio: { type: 'kai-theme-init', theme: ThemePayload } seeds state
 //                (handled whenever it arrives — the listener attaches on mount)
-/** Token keys are the `--kai-*` knob names. Root-scope knobs (`--kai-text-*`
- *  rungs, `--kai-tracking`, `--kai-shadow-color`) ride in `light`, matching the
- *  exported CSS where they sit on `:root`; `dark` carries the dark colors. */
-export interface ThemePayload {
-  light: Record<string, string>;
-  dark: Record<string, string>;
-  radius?: string;
-  fonts?: Record<string, string>;
-}
+//
+// The canonical `theme` shape in every direction is the FLAT ThemePayload
+// (theme-payload.ts — the one type both sides import; the builder folds the
+// construct file's nested `theme.tokens` flat before posting init).
+// applyHostTheme below additionally tolerates the nested construct shape and
+// a bare `accent`, defensively, so a stale host can't silently seed nothing.
+import { type ThemePayload } from './theme-payload';
+export type { ThemePayload };
+/** What a host may put in kai-theme-init's `theme`: canonically a flat
+ *  ThemePayload; tolerated, the construct file's own nested shape. */
+type HostInitTheme = Partial<ThemePayload> & { tokens?: Partial<ThemePayload>; accent?: string };
 const isEmbedded = (): boolean =>
   typeof window !== 'undefined' &&
   (new URLSearchParams(window.location.search).has('embed') || window.parent !== window);
@@ -490,17 +496,42 @@ export default function ThemeStudio() {
   const postClose = (): void => {
     window.parent.postMessage({ type: 'kai-theme-close' }, window.location.origin);
   };
+  // Write-free open: a change frame means "the USER edited something", so the
+  // effect below must not fire for the seeding itself — setSeeded(true) is a
+  // dependency write, and before this gate existed opening the takeover posted
+  // one full resolved palette with zero edits, which the host debounce-wrote
+  // over the construct's saved theme. `seedSnapshot` is the payload exactly as
+  // seeded; the stream opens the first time the payload differs from it.
+  // Non-rail embeds that never receive an init keep the original
+  // stream-from-ready behavior (seedSnapshot stays undefined, so the first
+  // run counts as the edit).
+  let applyingInit = false;
+  let seedSnapshot: string | undefined;
+  let editedSinceSeed = false;
   if (embed) {
     createEffect(() => {
       const payload = themePayload(); // read first so every knob is tracked
-      if (!ready() || !seeded()) return;
+      if (!ready() || !seeded() || applyingInit) return;
+      if (!editedSinceSeed) {
+        if (JSON.stringify(payload) === seedSnapshot) return; // the seed itself, not an edit
+        editedSinceSeed = true;
+      }
       window.parent.postMessage({ type: 'kai-theme-change', ...payload }, window.location.origin);
     });
   }
   /** Seed state from a host's kai-theme-init. Colors flow through
    *  resolvePalette so anything the host does not name gets the kit default —
    *  the same path a saved preset takes. */
-  const applyHostTheme = (t: Partial<ThemePayload>): void => {
+  const applyHostTheme = (raw: HostInitTheme): void => {
+    applyingInit = true; // a re-init must not stream its own setters as edits
+    // Canonical init is the FLAT ThemePayload; a host still posting the
+    // construct's nested shape ({ tokens: {…}, accent }) is folded flat here
+    // rather than silently seeding kit defaults over a saved theme.
+    const t: Partial<ThemePayload> =
+      raw.light || raw.dark || raw.radius || raw.fonts ? raw
+      : raw.tokens && (raw.tokens.light || raw.tokens.dark || raw.tokens.radius || raw.tokens.fonts) ? raw.tokens
+      : raw.accent ? { light: { '--kai-color-primary': raw.accent } }
+      : {};
     setHsl({ ...HSL_IDENTITY });
     const colors = (rec: Record<string, string> | undefined): Palette =>
       Object.fromEntries(Object.entries(rec ?? {}).filter(([k]) => k.startsWith('--kai-color-')));
@@ -523,7 +554,10 @@ export default function ThemeStudio() {
     ensureFont(fontBase());
     ensureFont(fontCode());
     setPreset('Custom');
-    setSeeded(true); // host state is in — the rail's change stream may open
+    seedSnapshot = JSON.stringify(themePayload()); // the state a change frame must DIFFER from
+    editedSinceSeed = false;
+    applyingInit = false;
+    setSeeded(true); // host state is in — the rail's change stream may open (on the first real edit)
   };
 
   // Apply the active palette + radius onto the canvas wrapper. Custom properties
@@ -705,7 +739,7 @@ export default function ThemeStudio() {
       if (e.origin !== win.location.origin) return;
       const d = e.data as { type?: unknown; theme?: unknown } | null;
       if (!d || d.type !== 'kai-theme-init' || typeof d.theme !== 'object' || d.theme === null) return;
-      applyHostTheme(d.theme as Partial<ThemePayload>);
+      applyHostTheme(d.theme as HostInitTheme);
     };
     if (embed) win.addEventListener('message', onHostMessage);
     onCleanup(() => {
