@@ -576,6 +576,13 @@ export const WispInteractions: Story = {
   name: 'Wisp Interactions',
   tags: ['!dev'],
   render: () => <WispApp />,
+  parameters: {
+    docs: {
+      description: {
+        story: 'Same composition as the Wisp showcase above, isolated on its own story so the kebab interaction test never runs on the showcase view. See Wisp for the source.',
+      },
+    },
+  },
   // The composed rail's kebab really works: open the first row's menu, pick
   // Rename, and the row title visibly changes in the rail's light DOM.
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {

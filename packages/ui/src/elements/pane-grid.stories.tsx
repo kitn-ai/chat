@@ -34,6 +34,9 @@ const body = (text: string) => (
   <div style={{ padding: '12px', color: 'var(--color-muted-foreground)', 'font-size': '13px' }}>{text}</div>
 );
 
+// Hand-written HTML for the "Show code" panel (real consumer markup, not JSX).
+const src = (code: string) => ({ docs: { source: { language: 'html', code } } });
+
 /**
  * The element facade over `PaneGrid` (SolidJS story: Components/Elements/Pane Grid).
  * Each direct light child is one tile; the grid fills up to `max-columns`, drops
@@ -49,6 +52,12 @@ export const FourPanes: Story = {
       <kai-pane headline="Juno" subtitle="Docs">{body('Drafting')}</kai-pane>
     </kai-pane-grid>
   ),
+  parameters: src(`<kai-pane-grid min-pane-width="240" style="height: 480px">
+  <kai-pane headline="Atlas" subtitle="claude-sonnet">Running tests...</kai-pane>
+  <kai-pane headline="Otto" subtitle="Reviewer">Waiting on input</kai-pane>
+  <kai-pane headline="Nova" subtitle="claude-haiku">Idle</kai-pane>
+  <kai-pane headline="Juno" subtitle="Docs">Drafting</kai-pane>
+</kai-pane-grid>`),
 };
 
 /**
@@ -77,4 +86,20 @@ export const MaximizeHook: Story = {
       <kai-pane headline="Nova">{body('Arbitrary N — add panes freely.')}</kai-pane>
     </kai-pane-grid>
   ),
+  parameters: src(`<kai-pane-grid min-pane-width="200" style="height: 420px">
+  <kai-pane headline="Atlas">Use the window controls to maximize.</kai-pane>
+  <kai-pane headline="Otto">Each pane restores the grid on its restore control.</kai-pane>
+  <kai-pane headline="Nova">Arbitrary N - add panes freely.</kai-pane>
+</kai-pane-grid>
+
+<script type="module">
+  const grid = document.querySelector('kai-pane-grid');
+  Array.from(grid.children).forEach((pane, i) => {
+    pane.addEventListener('kai-maximize', (e) => {
+      if (e.detail.maximized) grid.setAttribute('maximized-index', String(i));
+      else grid.removeAttribute('maximized-index');
+      pane.maximized = e.detail.maximized;
+    });
+  });
+</script>`),
 };

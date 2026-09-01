@@ -115,6 +115,12 @@ export const About: Story = {
         story:
           'About the Labs/Proofs section: token-only screens built without feature components, to prove the token system holds for arbitrary screens and to surface the next components/tokens worth building. Gaps are logged in docs/labs-proofs-gap-backlog.md.',
       },
+      source: {
+        language: 'tsx',
+        code: `// Token-only screen: design tokens + raw markup, no kai-* elements and no
+// feature components. There is no consumer snippet to show - the point of
+// this proof is that it needs none.`,
+      },
     },
   },
 };

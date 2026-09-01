@@ -502,4 +502,21 @@ export const DataTable: Story = {
       </div>
     );
   },
+  parameters: {
+    docs: {
+      source: {
+        language: 'tsx',
+        code: `// Showcase composition: a Members data-table screen built from the kit's
+// design tokens + raw markup (table, checkboxes, pagination, sort headers are
+// all hand-rolled - the kit ships no data-table/grid component). The one
+// kai-* element in the page is the toolbar search field:
+<kai-search
+  value={search}
+  placeholder="Search members..."
+  onkai-search={(e) => setSearch(e.detail.value)}
+></kai-search>
+// See proof-data-table.stories.tsx for the full markup.`,
+      },
+    },
+  },
 };
