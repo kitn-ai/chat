@@ -56,7 +56,14 @@ const src = (code: string) => ({
 // `--color-primary` itself, which — being a plain custom property with no
 // further indirection between here and the illustrations/Card classes that
 // read it — inherits normally and actually renders.
-const BRAND_STYLE = { '--color-primary': '#EC2295' } as const;
+// Paired with its own foreground: overriding `--color-primary` alone leaves the
+// theme's near-white/near-black on magenta at 4.02:1 / 4.20:1, under WCAG AA's
+// 4.5:1 for normal text (it failed builder-header.stories.tsx's axe run).
+// hsl(45 4% 5%) measures 4.84:1. Same constant as `apps/builder/App.tsx`.
+const BRAND_STYLE = {
+  '--color-primary': '#EC2295',
+  '--color-primary-foreground': 'hsl(45 4% 5%)',
+} as const;
 
 /** A page heading + the picker — reads as a real screen rather than an
  *  isolated component. No selection readout below the grid (Round P2): the

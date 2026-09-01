@@ -60,40 +60,48 @@ export function ConversationPanel(props: ConversationPanelProps) {
                 const time = () => relativeTimeShort(conv.updatedAt ?? conv.lastMessageAt);
                 const unread = () => isConversationUnread(conv);
                 return (
-                  <button
-                    type="button"
-                    role="listitem"
-                    data-conversation-id={conv.id}
-                    data-active={isActive() ? '' : undefined}
-                    data-unread={unread() ? '' : undefined}
-                    aria-current={isActive() ? 'true' : undefined}
-                    onClick={() => props.onSelect(conv.id)}
-                    class={cn(
-                      'block w-full rounded-lg px-3 py-2.5 text-left transition-colors',
-                      isActive() ? 'bg-muted' : 'hover:bg-muted/50',
-                    )}
-                  >
-                    <div class="flex items-baseline gap-2">
-                      <span class={cn('min-w-0 flex-1 truncate text-sm font-semibold', isActive() ? 'text-foreground' : 'text-foreground/90')}>
-                        {conv.title}
-                      </span>
-                      <Show when={time()}>
-                        <span class="shrink-0 text-xs text-muted-foreground">{time()}</span>
-                      </Show>
-                    </div>
-                    {/* Trailing line: the last-message preview, plus — Intercom's own
-                        placement (research doc §2) — a small unread dot at its end. No
-                        preview text and no unread still renders nothing, same as before. */}
-                    <Show when={conv.trailing || unread()}>
-                      <div class="mt-0.5 flex items-center gap-1.5">
-                        <span class="min-w-0 flex-1 truncate text-xs text-muted-foreground">{conv.trailing}</span>
-                        <Show when={unread()}>
-                          <span aria-hidden="true" class="size-1.5 shrink-0 rounded-full bg-unread" />
-                          <span class="sr-only">Unread</span>
+                  // The row is a listitem WRAPPER holding a native <button>, not a
+                  // button wearing role="listitem": `listitem` is not an allowed role
+                  // for <button> (axe `aria-allowed-role`), and the override also threw
+                  // away the button's own semantics, so the row announced as a plain
+                  // list item with no hint it could be activated. Same shape as
+                  // `SlottedConversationItem` — the listitem is the row box, the
+                  // activation control lives inside it.
+                  <div role="listitem">
+                    <button
+                      type="button"
+                      data-conversation-id={conv.id}
+                      data-active={isActive() ? '' : undefined}
+                      data-unread={unread() ? '' : undefined}
+                      aria-current={isActive() ? 'true' : undefined}
+                      onClick={() => props.onSelect(conv.id)}
+                      class={cn(
+                        'block w-full rounded-lg px-3 py-2.5 text-left transition-colors',
+                        isActive() ? 'bg-muted' : 'hover:bg-muted/50',
+                      )}
+                    >
+                      <div class="flex items-baseline gap-2">
+                        <span class={cn('min-w-0 flex-1 truncate text-sm font-semibold', isActive() ? 'text-foreground' : 'text-foreground/90')}>
+                          {conv.title}
+                        </span>
+                        <Show when={time()}>
+                          <span class="shrink-0 text-xs text-muted-foreground">{time()}</span>
                         </Show>
                       </div>
-                    </Show>
-                  </button>
+                      {/* Trailing line: the last-message preview, plus — Intercom's own
+                          placement (research doc §2) — a small unread dot at its end. No
+                          preview text and no unread still renders nothing, same as before. */}
+                      <Show when={conv.trailing || unread()}>
+                        <div class="mt-0.5 flex items-center gap-1.5">
+                          <span class="min-w-0 flex-1 truncate text-xs text-muted-foreground">{conv.trailing}</span>
+                          <Show when={unread()}>
+                            <span aria-hidden="true" class="size-1.5 shrink-0 rounded-full bg-unread" />
+                            <span class="sr-only">Unread</span>
+                          </Show>
+                        </div>
+                      </Show>
+                    </button>
+                  </div>
                 );
               }}
             </For>
