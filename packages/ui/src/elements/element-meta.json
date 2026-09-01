@@ -3208,6 +3208,22 @@
         "scalar": true,
         "description": "Dense single-line row padding.",
         "displayType": "undefined | false | true"
+      },
+      {
+        "name": "density",
+        "type": "undefined | \"default\" | \"compact\" | \"panel\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Row density: `default`, `compact` (same as the `compact` flag), or `panel`, the widget-panel presentation matching the facade panel's measured row box (12px/10px padding, a 40px single-line row). Previously that box was a private interior class a composition could only approximate by smuggling padding through slotted spans (2026-08-31 composition spike, phase 3 round 3). An explicit density wins over `compact`.",
+        "displayType": "undefined | \"default\" | \"compact\" | \"panel\""
+      },
+      {
+        "name": "unread",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Show the unread indicator dot at the row's trailing edge, inside the activation surface and before the `menu` region, with a screen-reader \"Unread\" label. Drive it from `isConversationUnread` (exported from the package root and from `dist/stores.js`).",
+        "displayType": "undefined | false | true"
       }
     ],
     "events": [
@@ -3267,6 +3283,11 @@
         "name": "title",
         "doc": "The title line (the default slot renders inside it).",
         "recipe": "kai-conversation-item::part(title) { font-weight: 600 }"
+      },
+      {
+        "name": "unread",
+        "doc": "The unread indicator dot at the body's trailing edge, before the `menu` region (renders only while the `unread` flag is set; a screen-reader \"Unread\" label rides along).",
+        "recipe": "kai-conversation-item::part(unread) { background: var(--color-primary) }"
       },
       {
         "name": "leading",
@@ -3352,6 +3373,14 @@
         "scalar": true,
         "description": "Dense single-line rows (a leading dot + title, no message count).",
         "displayType": "undefined | false | true"
+      },
+      {
+        "name": "density",
+        "type": "undefined | \"default\" | \"compact\" | \"panel\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Row density for the data rows: `default`, `compact` (same as the `compact` flag), or `panel`, the widget-panel presentation matching the facade panel's measured row box (12px/10px padding, a 40px single-line row with a right-aligned relative time and an optional preview line carrying the unread dot). An explicit density wins over `compact`. Item mode is unaffected: slotted `<kai-conversation-item>` rows carry their own `density` attribute.",
+        "displayType": "undefined | \"default\" | \"compact\" | \"panel\""
       },
       {
         "name": "searchable",
@@ -6429,6 +6458,177 @@
     ]
   },
   {
+    "tag": "kai-panel",
+    "className": "KaiPanelElement",
+    "displayName": "Panel",
+    "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
+        "name": "frame",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Standalone widget-box chrome: border, radius and shadow on the panel itself. Off (the default), the panel inherits its container's radius and clips to it, the right posture inside an already-framed container such as `kai-dock`'s floating panel.",
+        "default": "false",
+        "displayType": "undefined | false | true"
+      }
+    ],
+    "events": [],
+    "methods": [],
+    "composedFrom": [
+      {
+        "name": "Panel",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-panel--docs"
+      },
+      {
+        "name": "PanelBody",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-panelbody--docs"
+      },
+      {
+        "name": "PanelFooter",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-panelfooter--docs"
+      },
+      {
+        "name": "PanelHeader",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-panelheader--docs"
+      }
+    ],
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The view content that fills the body region (a `<kai-thread>`, a `<kai-view-stack>`, a home screen). Stretched to fill the remaining height between the `header` and `footer` slots."
+      },
+      {
+        "name": "header",
+        "mode": "inject",
+        "part": true,
+        "doc": "The header region above the view container: put a `<kai-panel-header>` there, or anything. Keeps its natural height and never scrolls away."
+      },
+      {
+        "name": "footer",
+        "mode": "inject",
+        "part": true,
+        "doc": "The row below the view container (a \"Powered by\" line, a disclaimer). Keeps its natural height and never scrolls away."
+      }
+    ],
+    "parts": [
+      {
+        "name": "panel",
+        "doc": "The panel frame itself: the flex column that fills the host. With the `frame` flag it carries the standalone border, radius and shadow.",
+        "recipe": "kai-panel::part(panel) { border-radius: 1.25rem }"
+      },
+      {
+        "name": "body",
+        "doc": "The view container between header and footer: fills the remaining height, clips, and anchors floating children.",
+        "recipe": "kai-panel::part(body) { background: var(--color-muted) }"
+      },
+      {
+        "name": "header",
+        "doc": "The header region above the view container: put a `<kai-panel-header>` there, or anything. Keeps its natural height and never scrolls away."
+      },
+      {
+        "name": "footer",
+        "doc": "The row below the view container (a \"Powered by\" line, a disclaimer). Keeps its natural height and never scrolls away."
+      }
+    ]
+  },
+  {
+    "tag": "kai-panel-header",
+    "className": "KaiPanelHeaderElement",
+    "displayName": "PanelHeader",
+    "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      }
+    ],
+    "events": [],
+    "methods": [],
+    "composedFrom": [
+      {
+        "name": "Panel",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-panel--docs"
+      },
+      {
+        "name": "PanelBody",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-panelbody--docs"
+      },
+      {
+        "name": "PanelFooter",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-panelfooter--docs"
+      },
+      {
+        "name": "PanelHeader",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-panelheader--docs"
+      }
+    ],
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The title text. `start` and `end` are the clusters around it: back arrows and close buttons are slotted content, never props."
+      },
+      {
+        "name": "start",
+        "mode": "inject",
+        "doc": "The leading cluster, before the title: a back arrow, an avatar."
+      },
+      {
+        "name": "end",
+        "mode": "inject",
+        "doc": "The trailing cluster, after the title: a close or overflow button."
+      }
+    ],
+    "parts": [
+      {
+        "name": "header",
+        "doc": "The 56px header row itself (bottom border included).",
+        "recipe": "kai-panel-header::part(header) { border-bottom: none }"
+      },
+      {
+        "name": "start",
+        "doc": "The leading cluster wrapper (the `start` slot renders inside it).",
+        "recipe": "kai-panel-header::part(start) { gap: 0.25rem }"
+      },
+      {
+        "name": "title",
+        "doc": "The title line (the default slot renders inside it).",
+        "recipe": "kai-panel-header::part(title) { font-weight: 700 }"
+      },
+      {
+        "name": "end",
+        "doc": "The trailing cluster wrapper (the `end` slot renders inside it).",
+        "recipe": "kai-panel-header::part(end) { gap: 0.25rem }"
+      }
+    ]
+  },
+  {
     "tag": "kai-popover",
     "className": "KaiPopoverElement",
     "displayName": "Popover",
@@ -7527,6 +7727,118 @@
       }
     ],
     "tokens": []
+  },
+  {
+    "tag": "kai-row",
+    "className": "KaiRowElement",
+    "displayName": "Row",
+    "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
+        "name": "interactive",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Pressable row: renders real button semantics (click, Enter, Space) and fires `kai-click` on activation. Ignored when `href` is set.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "href",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Navigate on press: the row renders as a real anchor opening in a new tab. An href outside the kit's safe URL schemes renders a plain non-interactive row instead (label visible, nothing clickable).",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "chevron",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Show a trailing chevron affordance at the row's end.",
+        "displayType": "undefined | false | true"
+      }
+    ],
+    "events": [
+      {
+        "name": "kai-click",
+        "detail": null,
+        "description": "The row was activated (click, Enter or Space) while `interactive` is set and no `href` is present. Non-bubbling: listen on the element itself.",
+        "displayDetail": null
+      }
+    ],
+    "methods": [],
+    "composedFrom": [
+      {
+        "name": "Row",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-row--docs"
+      }
+    ],
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The row title. `leading`, `subtitle` and `trailing` are the named regions around it."
+      },
+      {
+        "name": "leading",
+        "mode": "inject",
+        "part": true,
+        "doc": "Leading region before the title (an icon or avatar)."
+      },
+      {
+        "name": "subtitle",
+        "mode": "inject",
+        "part": true,
+        "doc": "Secondary line under the title."
+      },
+      {
+        "name": "trailing",
+        "mode": "inject",
+        "part": true,
+        "doc": "Right-aligned trailing region (a timestamp, value, or badge)."
+      }
+    ],
+    "parts": [
+      {
+        "name": "row",
+        "doc": "The whole row surface: the button when interactive, the anchor when `href` is set, a plain div otherwise.",
+        "recipe": "kai-row::part(row) { border-radius: 0 }"
+      },
+      {
+        "name": "title",
+        "doc": "The title line (the default slot renders inside it).",
+        "recipe": "kai-row::part(title) { font-weight: 600 }"
+      },
+      {
+        "name": "chevron",
+        "doc": "The trailing chevron affordance (renders only with the `chevron` flag).",
+        "recipe": "kai-row::part(chevron) { color: var(--color-primary) }"
+      },
+      {
+        "name": "leading",
+        "doc": "Leading region before the title (an icon or avatar)."
+      },
+      {
+        "name": "subtitle",
+        "doc": "Secondary line under the title."
+      },
+      {
+        "name": "trailing",
+        "doc": "Right-aligned trailing region (a timestamp, value, or badge)."
+      }
+    ]
   },
   {
     "tag": "kai-scope-picker",
@@ -9069,6 +9381,190 @@
     "tokens": []
   },
   {
+    "tag": "kai-tab-bar",
+    "className": "KaiTabBarElement",
+    "displayName": "TabBar",
+    "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
+        "name": "value",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Controlled selected value. Set the property or the `value` attribute and drive it from your app in response to `kai-tab-change`. Omit for uncontrolled: the bar manages its own selection, seeded from `defaultValue`, else the first enabled tab.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "defaultValue",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Initial selected value when uncontrolled (the `default-value` attribute in plain HTML).",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "iconOnly",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Icon-only mode: every tab hides its label visually. The slotted labels still name the tabs for assistive tech.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "label",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Accessible name for the tablist (default \"Navigation\").",
+        "displayType": "undefined | string"
+      }
+    ],
+    "events": [
+      {
+        "name": "kai-tab-change",
+        "detail": "{ value: string }",
+        "description": "A tab was selected (click, Enter/Space, or arrow-key move). `value` is the item's `value` attribute, else its host `id`.",
+        "displayDetail": "{ value: string }"
+      }
+    ],
+    "methods": [
+      {
+        "name": "select",
+        "params": "next: string",
+        "returns": "void",
+        "description": "Select a tab by value (fires `kai-tab-change`). Ignores unknown and disabled values."
+      },
+      {
+        "name": "focus",
+        "params": "",
+        "returns": "void",
+        "description": "Focus the active tab (or the first focusable tab)."
+      }
+    ],
+    "composedFrom": [],
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The `<kai-tab-bar-item>` tabs, direct children in tab order."
+      }
+    ],
+    "parts": [
+      {
+        "name": "tablist",
+        "doc": "The bar itself: the `role=\"tablist\"` row the item children slot into.",
+        "recipe": "kai-tab-bar::part(tablist) { border-top: 1px solid var(--color-border) }"
+      }
+    ]
+  },
+  {
+    "tag": "kai-tab-bar-item",
+    "className": "KaiTabBarItemElement",
+    "displayName": "TabBarItem",
+    "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
+        "name": "value",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "The tab's identity: the `value` attribute (host `id` is the fallback). It is the `value` in the bar's `kai-tab-change` detail.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "icon",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Named icon from the kit roster (e.g. \"home\", \"message-square\"). The icon renders at the element's own default size, so equal glyphs across tabs need no consumer sizing.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "dot",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Unread dot on the icon's corner. Reaches the tab's accessible name too: a dot alone is invisible to assistive tech.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "badge",
+        "type": "undefined | string | number",
+        "optional": true,
+        "scalar": true,
+        "description": "Count badge on the icon's corner; wins over `dot` when both are set. Reaches the accessible name too.",
+        "displayType": "undefined | string | number"
+      },
+      {
+        "name": "disabled",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Disabled tabs are skipped by arrow keys and cannot be selected.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "active",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Selected state. Inside `<kai-tab-bar>` the bar drives it from its `value`; the active tab retints with the primary token.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "iconOnly",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Hide the label visually (the slotted text still names the tab for assistive tech). Inside `<kai-tab-bar>` the bar drives it from its own `icon-only` attribute.",
+        "displayType": "undefined | false | true"
+      }
+    ],
+    "events": [],
+    "methods": [],
+    "composedFrom": [
+      {
+        "name": "TabBarItemContent",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-tabbaritemcontent--docs"
+      }
+    ],
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The tab's label text (it also names the tab for assistive tech, even in icon-only mode)."
+      }
+    ],
+    "parts": [
+      {
+        "name": "tab",
+        "doc": "The tab button (icon-over-label column). Carries `data-active` while selected.",
+        "recipe": "kai-tab-bar-item::part(tab) { gap: 2px }"
+      }
+    ]
+  },
+  {
     "tag": "kai-tabs",
     "className": "KaiTabsElement",
     "displayName": "Tabs",
@@ -9892,6 +10388,132 @@
         "name": "",
         "mode": "inject",
         "doc": "The TRIGGER the tooltip describes. The tip text is the `text` prop."
+      }
+    ]
+  },
+  {
+    "tag": "kai-view",
+    "className": "KaiViewElement",
+    "displayName": "View",
+    "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
+        "name": "name",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "The view's name: what `push()` / `selectTab()` / the stack's `view` attribute address. Attribute: `name`.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "tabRoot",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Marks this view as a TAB ROOT: it shows the tab bar and never a back affordance, and a tab switch lands on it directly. Views without it are DRILL views, reached by `push()` and left by `back()`. Attribute: `tab-root`.",
+        "displayType": "undefined | false | true"
+      }
+    ],
+    "events": [],
+    "methods": [],
+    "composedFrom": [],
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "This view's content. It stays mounted while hidden, so switching views resets nothing."
+      }
+    ]
+  },
+  {
+    "tag": "kai-view-stack",
+    "className": "KaiViewStackElement",
+    "displayName": "ViewStack",
+    "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
+        "name": "view",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Deep link / initial view name; reflected to the `view` ATTRIBUTE as navigation happens, so `kai-view-stack[view=\"chat\"]` selectors follow. Setting it later navigates (tab root selects that tab; a drill view replaces the top while drilled, or pushes from a root).",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "drilled",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "READ-ONLY reflection of the drilled state, present while a pushed (non-root) view is showing. THE rule this element owns: drilled hides the tab bar and shows a back affordance, so a sibling tab bar hides itself on `kai-view-stack[drilled]` (or from `kai-view-change`), and a header shows its back arrow the same way.",
+        "displayType": "undefined | false | true"
+      }
+    ],
+    "events": [
+      {
+        "name": "kai-view-change",
+        "detail": "{ view: string | undefined; root: string | undefined; drilled: false | true; stack: string[] }",
+        "description": "The visible view or the drilled flag changed (push, back, replace, tab switch, or a `view` attribute write). `detail`: `{ view, root, drilled, stack }`; `root` is what the tab bar should mark active, defined even while drilled.",
+        "displayDetail": "{ view: string | undefined; root: string | undefined; drilled: false | true; stack: string[] }"
+      }
+    ],
+    "methods": [
+      {
+        "name": "push",
+        "params": "name: string",
+        "returns": "void",
+        "description": "Drill into a view (fires `kai-view-change`). A tab-root name routes to `selectTab`; unknown names are ignored."
+      },
+      {
+        "name": "back",
+        "params": "",
+        "returns": "void",
+        "description": "Pop one drilled view. No-op at a tab root."
+      },
+      {
+        "name": "replace",
+        "params": "name: string",
+        "returns": "void",
+        "description": "Swap the current view without touching history."
+      },
+      {
+        "name": "selectTab",
+        "params": "name: string",
+        "returns": "void",
+        "description": "Switch tab roots and clear any drill. Ignores non-root names."
+      },
+      {
+        "name": "navigate",
+        "params": "name: string",
+        "returns": "void",
+        "description": "Deep-link navigation: what the `view` attribute drives."
+      }
+    ],
+    "composedFrom": [],
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The named `<kai-view>` children: tab roots (`tab-root`) side by side behind a tab bar, the rest drill views reached by `push()`."
       }
     ]
   },

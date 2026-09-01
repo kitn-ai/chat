@@ -108,6 +108,13 @@ import './input';
 import './search';
 import './kbd';
 import './editable-label';
+// Blocks & parts phase 1: widget chrome, drill navigation, tab bar, generic row
+import './panel'; // kai-panel + kai-panel-header
+import './tab-bar';
+import './tab-bar-item';
+import './view-stack';
+import './view';
+import './row';
 
 // The devtools recorder hook, installed HERE because this file is already the
 // browser-only half of the elements entry (register.ts gates it behind a window

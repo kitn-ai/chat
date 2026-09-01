@@ -25,7 +25,7 @@ interface Props extends Record<string, unknown> {
    *  Setting it later navigates (tab root selects that tab; a drill view
    *  replaces the top while drilled, or pushes from a root). */
   view?: string;
-  /** READ-ONLY reflection of the drilled state — present while a pushed
+  /** READ-ONLY reflection of the drilled state, present while a pushed
    *  (non-root) view is showing. THE rule this element owns: drilled hides
    *  the tab bar and shows a back affordance, so a sibling tab bar hides
    *  itself on `kai-view-stack[drilled]` (or from `kai-view-change`), and a
@@ -37,7 +37,7 @@ interface Props extends Record<string, unknown> {
 interface Events {
   /** The visible view or the drilled flag changed (push, back, replace, tab
    *  switch, or a `view` attribute write). `detail`: `{ view, root, drilled,
-   *  stack }` — `root` is what the tab bar should mark active, defined even
+   *  stack }`; `root` is what the tab bar should mark active, defined even
    *  while drilled. */
   'kai-view-change': ViewStackState;
 }
@@ -120,7 +120,14 @@ defineWebComponent<Props, Events>('kai-view-stack', {
     entries();
     for (const child of viewChildren()) {
       const active = readViewEntry(child).name === current;
-      child.toggleAttribute('hidden', !active);
+      // The native `hidden` IDL property, not toggleAttribute: it reflects to
+      // the attribute (so `kai-view[hidden]` and the host's `:host([hidden])`
+      // rule both see it) AND the property reads back what was set. kai-view
+      // deliberately does not declare `hidden` as a facade prop, so the native
+      // reflecting accessor is intact (contrast kai-resizable-item, which
+      // declares it and loses the reflection — see NOT_REFLECTED in
+      // tests/elements/reflected-boolean-coverage.test.ts).
+      (child as HTMLElement).hidden = !active;
       if (active) child.setAttribute('data-active', 'true');
       else child.removeAttribute('data-active');
     }
@@ -153,7 +160,7 @@ defineWebComponent<Props, Events>('kai-view-stack', {
     replace: (name: string) => controller.replace(name),
     /** Switch tab roots and clear any drill. Ignores non-root names. */
     selectTab: (name: string) => controller.selectTab(name),
-    /** Deep-link navigation — what the `view` attribute drives. */
+    /** Deep-link navigation: what the `view` attribute drives. */
     navigate: (name: string) => controller.navigate(name),
   });
 

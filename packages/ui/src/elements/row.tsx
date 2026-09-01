@@ -1,39 +1,7 @@
 import { createSignal, onCleanup, onMount } from 'solid-js';
 import { defineWebComponent } from './define';
-import { readSlots, type SlotDef, type PartDef } from './slots';
+import { readSlots, ROW_SLOTS } from './slots';
 import { Row } from '../components/row';
-
-/** Slots of `<kai-row>`: the default slot is the title; `leading`, `subtitle`
- *  and `trailing` are the named regions around it.
- *
- *  Defined here (not in slots.ts) while the blocks-and-parts phase-1 lanes run
- *  in parallel; the phase-close serialization step folds these into slots.ts's
- *  ELEMENT registry so the docs generators pick them up. */
-export const ROW_SLOTS: SlotDef[] = [
-  { name: 'leading', mode: 'inject', part: true, doc: 'Leading region before the title (an icon or avatar).' },
-  { name: 'subtitle', mode: 'inject', part: true, doc: 'Secondary line under the title.' },
-  { name: 'trailing', mode: 'inject', part: true, doc: 'Right-aligned trailing region (a timestamp, value, or badge).' },
-];
-
-/** Styleable `::part`s of `<kai-row>`. (`leading`/`subtitle`/`trailing` are
- *  covered by their slot defs' `part: true` flags.) */
-export const ROW_PARTS: PartDef[] = [
-  {
-    name: 'row',
-    doc: 'The whole row surface: the button when interactive, the anchor when `href` is set, a plain div otherwise.',
-    recipe: 'kai-row::part(row) { border-radius: 0 }',
-  },
-  {
-    name: 'title',
-    doc: 'The title line (the default slot renders inside it).',
-    recipe: 'kai-row::part(title) { font-weight: 600 }',
-  },
-  {
-    name: 'chevron',
-    doc: 'The trailing chevron affordance (renders only with the `chevron` flag).',
-    recipe: 'kai-row::part(chevron) { color: var(--color-primary) }',
-  },
-];
 
 interface Props extends Record<string, unknown> {
   /** Pressable row: renders real button semantics (click, Enter, Space) and

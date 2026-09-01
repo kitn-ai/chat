@@ -703,13 +703,17 @@ export interface ConversationItemProps extends WebComponentProps {
   active?: boolean;
   /** Dense single-line row padding. */
   compact?: boolean;
+  /** Row density: `default`, `compact` (same as the `compact` flag), or `panel`, the widget-panel presentation matching the facade panel's measured row box (12px/10px padding, a 40px single-line row). Previously that box was a private interior class a composition could only approximate by smuggling padding through slotted spans (2026-08-31 composition spike, phase 3 round 3). An explicit density wins over `compact`. */
+  density?: "default" | "compact" | "panel";
+  /** Show the unread indicator dot at the row's trailing edge, inside the activation surface and before the `menu` region, with a screen-reader "Unread" label. Drive it from `isConversationUnread` (exported from the package root and from `dist/stores.js`). */
+  unread?: boolean;
   /** STANDALONE activation only: the row was activated (click, Enter or Space on its body) while the item is NOT a direct child of `<kai-conversations>`. `id` is the row's identity: the `conversation-id` attribute, else the host `id`. Inside a container this never fires: activation surfaces once, as `kai-conversation-select` on the container. */
   onSelect?: (event: CustomEvent<{ id: string }>) => void;
 }
 
 export const ConversationItem = /*#__PURE__*/ createWebComponent<ConversationItemProps>(
   'kai-conversation-item',
-  ["theme","conversationId","active","compact"],
+  ["theme","conversationId","active","compact","density","unread"],
   { onSelect: 'kai-select' },
   () => import('@kitn.ai/ui/elements/conversation-item'),
 );
@@ -727,6 +731,8 @@ export interface ConversationsProps extends WebComponentProps {
   defaultCollapsed?: boolean;
   /** Dense single-line rows (a leading dot + title, no message count). */
   compact?: boolean;
+  /** Row density for the data rows: `default`, `compact` (same as the `compact` flag), or `panel`, the widget-panel presentation matching the facade panel's measured row box (12px/10px padding, a 40px single-line row with a right-aligned relative time and an optional preview line carrying the unread dot). An explicit density wins over `compact`. Item mode is unaffected: slotted `<kai-conversation-item>` rows carry their own `density` attribute. */
+  density?: "default" | "compact" | "panel";
   /** Show the built-in search box above the list. Default `true`. Set `searchable="false"` (or `el.searchable = false`) to hide it: the widget-box case, where the facade's own list view renders no search and a fine-grain composition previously had no way to match it (2026-08-31 composition spike, phase 3 round 2). Same default-true flag convention as `<kai-prompt-input attach>`: `<kai-conversations searchable>` and omitting it are both ON. Hidden, the `focus()`/`clear()` methods reach no input and `kai-search` never fires. */
   searchable?: boolean;
   /** The rail was collapsed or expanded (via the toggle, the reopen button, or a `collapse()`/`expand()`/`toggle()` call). */
@@ -743,7 +749,7 @@ export interface ConversationsProps extends WebComponentProps {
 
 export const Conversations = /*#__PURE__*/ createWebComponent<ConversationsProps>(
   'kai-conversations',
-  ["theme","groups","conversations","activeId","collapsed","defaultCollapsed","compact","searchable"],
+  ["theme","groups","conversations","activeId","collapsed","defaultCollapsed","compact","density","searchable"],
   { onCollapseToggle: 'kai-collapse-toggle', onConversationSelect: 'kai-conversation-select', onNewChat: 'kai-new-chat', onSearch: 'kai-search', onToggleSidebar: 'kai-toggle-sidebar' },
   () => import('@kitn.ai/ui/elements/conversation-list'),
 );
@@ -1356,6 +1362,29 @@ export const PaneGroup = /*#__PURE__*/ createWebComponent<PaneGroupProps>(
   () => import('@kitn.ai/ui/elements/pane-group'),
 );
 
+export interface PanelProps extends WebComponentProps {
+  /** Standalone widget-box chrome: border, radius and shadow on the panel itself. Off (the default), the panel inherits its container's radius and clips to it, the right posture inside an already-framed container such as `kai-dock`'s floating panel. */
+  frame?: boolean;
+}
+
+export const Panel = /*#__PURE__*/ createWebComponent<PanelProps>(
+  'kai-panel',
+  ["theme","frame"],
+  {  },
+  () => import('@kitn.ai/ui/elements/panel'),
+);
+
+export interface PanelHeaderProps extends WebComponentProps {
+
+}
+
+export const PanelHeader = /*#__PURE__*/ createWebComponent<PanelHeaderProps>(
+  'kai-panel-header',
+  ["theme"],
+  {  },
+  () => import('@kitn.ai/ui/elements/panel'),
+);
+
 export interface PopoverProps extends WebComponentProps {
   /** Floating placement relative to the trigger (floating-ui placement). */
   placement?: "top" | "right" | "bottom" | "left" | "bottom-end" | "bottom-start" | "left-end" | "left-start" | "right-end" | "right-start" | "top-end" | "top-start";
@@ -1595,6 +1624,24 @@ export const ResponseStream = /*#__PURE__*/ createWebComponent<ResponseStreamPro
   ["theme","text","mode","speed","as"],
   { onComplete: 'kai-complete' },
   () => import('@kitn.ai/ui/elements/response-stream'),
+);
+
+export interface RowProps extends WebComponentProps {
+  /** Pressable row: renders real button semantics (click, Enter, Space) and fires `kai-click` on activation. Ignored when `href` is set. */
+  interactive?: boolean;
+  /** Navigate on press: the row renders as a real anchor opening in a new tab. An href outside the kit's safe URL schemes renders a plain non-interactive row instead (label visible, nothing clickable). */
+  href?: string;
+  /** Show a trailing chevron affordance at the row's end. */
+  chevron?: boolean;
+  /** The row was activated (click, Enter or Space) while `interactive` is set and no `href` is present. Non-bubbling: listen on the element itself. */
+  onClick?: (event: CustomEvent) => void;
+}
+
+export const Row = /*#__PURE__*/ createWebComponent<RowProps>(
+  'kai-row',
+  ["theme","interactive","href","chevron"],
+  { onClick: 'kai-click' },
+  () => import('@kitn.ai/ui/elements/row'),
 );
 
 export interface ScopePickerProps extends WebComponentProps {
@@ -1959,6 +2006,50 @@ export const Switch = /*#__PURE__*/ createWebComponent<SwitchProps>(
   () => import('@kitn.ai/ui/elements/switch'),
 );
 
+export interface TabBarProps extends WebComponentProps {
+  /** Controlled selected value. Set the property or the `value` attribute and drive it from your app in response to `kai-tab-change`. Omit for uncontrolled: the bar manages its own selection, seeded from `defaultValue`, else the first enabled tab. */
+  value?: string;
+  /** Initial selected value when uncontrolled (the `default-value` attribute in plain HTML). */
+  defaultValue?: string;
+  /** Icon-only mode: every tab hides its label visually. The slotted labels still name the tabs for assistive tech. */
+  iconOnly?: boolean;
+  /** Accessible name for the tablist (default "Navigation"). */
+  label?: string;
+  /** A tab was selected (click, Enter/Space, or arrow-key move). `value` is the item's `value` attribute, else its host `id`. */
+  onTabChange?: (event: CustomEvent<{ value: string }>) => void;
+}
+
+export const TabBar = /*#__PURE__*/ createWebComponent<TabBarProps>(
+  'kai-tab-bar',
+  ["theme","value","defaultValue","iconOnly","label"],
+  { onTabChange: 'kai-tab-change' },
+  () => import('@kitn.ai/ui/elements/tab-bar'),
+);
+
+export interface TabBarItemProps extends WebComponentProps {
+  /** The tab's identity: the `value` attribute (host `id` is the fallback). It is the `value` in the bar's `kai-tab-change` detail. */
+  value?: string;
+  /** Named icon from the kit roster (e.g. "home", "message-square"). The icon renders at the element's own default size, so equal glyphs across tabs need no consumer sizing. */
+  icon?: string;
+  /** Unread dot on the icon's corner. Reaches the tab's accessible name too: a dot alone is invisible to assistive tech. */
+  dot?: boolean;
+  /** Count badge on the icon's corner; wins over `dot` when both are set. Reaches the accessible name too. */
+  badge?: string | number;
+  /** Disabled tabs are skipped by arrow keys and cannot be selected. */
+  disabled?: boolean;
+  /** Selected state. Inside `<kai-tab-bar>` the bar drives it from its `value`; the active tab retints with the primary token. */
+  active?: boolean;
+  /** Hide the label visually (the slotted text still names the tab for assistive tech). Inside `<kai-tab-bar>` the bar drives it from its own `icon-only` attribute. */
+  iconOnly?: boolean;
+}
+
+export const TabBarItem = /*#__PURE__*/ createWebComponent<TabBarItemProps>(
+  'kai-tab-bar-item',
+  ["theme","value","icon","dot","badge","disabled","active","iconOnly"],
+  {  },
+  () => import('@kitn.ai/ui/elements/tab-bar-item'),
+);
+
 export interface TabsProps extends WebComponentProps {
   /** Tabs to render. Set as a JS property, not an HTML attribute. */
   items?: { id: string; label?: string; icon?: string; disabled?: boolean }[];
@@ -2151,6 +2242,36 @@ export const Tooltip = /*#__PURE__*/ createWebComponent<TooltipProps>(
   ["theme","content","openDelay","closeDelay","placement","open","defaultOpen","disabled"],
   { onOpenChange: 'kai-open-change' },
   () => import('@kitn.ai/ui/elements/tooltip'),
+);
+
+export interface ViewProps extends WebComponentProps {
+  /** The view's name: what `push()` / `selectTab()` / the stack's `view` attribute address. Attribute: `name`. */
+  name?: string;
+  /** Marks this view as a TAB ROOT: it shows the tab bar and never a back affordance, and a tab switch lands on it directly. Views without it are DRILL views, reached by `push()` and left by `back()`. Attribute: `tab-root`. */
+  tabRoot?: boolean;
+}
+
+export const View = /*#__PURE__*/ createWebComponent<ViewProps>(
+  'kai-view',
+  ["theme","name","tabRoot"],
+  {  },
+  () => import('@kitn.ai/ui/elements/view'),
+);
+
+export interface ViewStackProps extends WebComponentProps {
+  /** Deep link / initial view name; reflected to the `view` ATTRIBUTE as navigation happens, so `kai-view-stack[view="chat"]` selectors follow. Setting it later navigates (tab root selects that tab; a drill view replaces the top while drilled, or pushes from a root). */
+  view?: string;
+  /** READ-ONLY reflection of the drilled state, present while a pushed (non-root) view is showing. THE rule this element owns: drilled hides the tab bar and shows a back affordance, so a sibling tab bar hides itself on `kai-view-stack[drilled]` (or from `kai-view-change`), and a header shows its back arrow the same way. */
+  drilled?: boolean;
+  /** The visible view or the drilled flag changed (push, back, replace, tab switch, or a `view` attribute write). `detail`: `{ view, root, drilled, stack }`; `root` is what the tab bar should mark active, defined even while drilled. */
+  onViewChange?: (event: CustomEvent<{ view: string | undefined; root: string | undefined; drilled: boolean; stack: string[] }>) => void;
+}
+
+export const ViewStack = /*#__PURE__*/ createWebComponent<ViewStackProps>(
+  'kai-view-stack',
+  ["theme","view","drilled"],
+  { onViewChange: 'kai-view-change' },
+  () => import('@kitn.ai/ui/elements/view-stack'),
 );
 
 export interface VoiceInputProps extends WebComponentProps {

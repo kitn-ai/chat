@@ -87,7 +87,14 @@
     "kai-input": "input",
     "kai-search": "search",
     "kai-kbd": "kbd",
-    "kai-editable-label": "editable-label"
+    "kai-editable-label": "editable-label",
+    "kai-panel": "panel",
+    "kai-panel-header": "panel",
+    "kai-tab-bar": "tab-bar",
+    "kai-tab-bar-item": "tab-bar-item",
+    "kai-view-stack": "view-stack",
+    "kai-view": "view",
+    "kai-row": "row"
   },
   "files": {
     "conversation-list": [
@@ -349,6 +356,25 @@
     ],
     "editable-label": [
       "kai-editable-label"
+    ],
+    "panel": [
+      "kai-panel",
+      "kai-panel-header"
+    ],
+    "tab-bar": [
+      "kai-tab-bar"
+    ],
+    "tab-bar-item": [
+      "kai-tab-bar-item"
+    ],
+    "view-stack": [
+      "kai-view-stack"
+    ],
+    "view": [
+      "kai-view"
+    ],
+    "row": [
+      "kai-row"
     ]
   }
 }

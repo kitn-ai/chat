@@ -272,7 +272,12 @@ export function View(props: ViewProps): JSX.Element {
   // Registration is render-time (not onMount) so declaration order is the
   // entry order and the first frame already knows its default root.
   const entry: ViewEntry = { name: props.name, tabRoot: props.tabRoot === true };
-  onCleanup(ctx.register(entry));
+  // Capture the disposer, then hand onCleanup a body the teardown scan can
+  // WALK (an inline arrow), rather than the opaque call expression — the
+  // capture-the-function rule tests/components/teardown-without-dom-globals
+  // .test.tsx enforces. `unregister` touches only Solid state, no DOM globals.
+  const unregister = ctx.register(entry);
+  onCleanup(() => unregister());
 
   const active = () => ctx.controller.view() === props.name;
   return (

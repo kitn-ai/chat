@@ -251,6 +251,27 @@ no automated check at all.
 
 ---
 
+## 10. Blocks and the facades that still paint their own copies
+
+Phase 1 of the blocks-and-parts plan (2026-08-31) made the widget's chrome
+public — `kai-panel`/`kai-panel-header`, `kai-tab-bar`(`-item`),
+`kai-view-stack`/`kai-view`, `kai-row`, `createConversationController` — but
+`kai-chat`'s widget mode still renders its own private copies of that chrome
+(`chat-container.tsx`, `home-panel.tsx`, `widget-tab-bar.tsx`). Until the P-9
+refactor rebuilds `kai-chat` ON the parts, every pair below is two copies of one
+design, and a fix landing on either side alone is the failure mode.
+
+| If you change | What else moves | How it fails | Enforced by |
+|---|---|---|---|
+| `kai-panel` / `kai-panel-header` chrome (`components/panel.tsx`: the frame, the 56px header row) | the widget-box chrome `kai-chat`'s widget mode paints itself (`chat-container.tsx` / `home-panel.tsx`) — `kai-panel-header` is documented as "the exact chrome the `kai-chat` facade paints for its own built-in header" | Restyle one and the public part no longer matches the facade it claims to reproduce; a consumer composing `kai-panel` beside a `kai-chat` sees two different headers | **NOTHING** until P-9 lands (which closes it by construction: one component, two call sites). Stories catch the look only when a human compares |
+| `TAB_BAR_CLASS` / `tabBarTabClass` in `components/tab-bar.tsx` (the h-14 bar, the icon-over-label tab) | `WidgetTabBar` (`components/widget-tab-bar.tsx`), which `kai-chat`'s widget mode renders and which restates the same bar markup WITHOUT importing those exports | The two bars drift the day either is edited alone; the public `kai-tab-bar` stops looking like the built-in one | **NOTHING**. P-9 is the fix (retire `WidgetTabBar` onto the tab-bar controller) |
+| The drilled rule in `createViewStack` (`components/view-stack.tsx`): a drilled view hides the tab bar and shows a back affordance | `kai-chat`'s own home/messages/chat view switching, which implements that policy privately | The element docs say consumers should wire chrome to `kai-view-stack[drilled]` "never to their own copy of that policy" — `kai-chat` currently IS such a copy | **NOTHING**. The stack's own suite pins ITS rule (`view-stack.test.tsx`); agreement between the two copies is checked by nothing |
+| `kai-row` anatomy (`components/row.tsx`: leading / title+subtitle / trailing / chevron) | the widget home tab's hand-built rows in `home-panel.tsx` (recent conversation, CTA, help link) — the rows `kai-row` was measured off (P-4) | A padding or type-scale change on either side and the public row no longer matches the facade's | **NOTHING** until P-9 recomposes the home tab from `kai-row` |
+| `createConversationController` (`src/stores/conversation-controller.ts`) | the conversation selection/unread state `kai-chat` + `kai-conversations` manage internally — the controller is the headless restatement a compose-your-own consumer drives | The controller's fold and the facades' internal state answer the same questions; a semantic change to one (what counts as unread, what selection means) ships without the other | The controller's own unit tests pin ITS fold (`src/stores/conversation-controller.test.ts`); agreement with the facades: **NOTHING** |
+| `NAMED_ICONS` in `src/ui/icon.tsx` | the icon roster on every doc/agent surface: `docs/web-components.md`'s `<!-- spec:icon-roster -->` region, llms-full.txt's "Icon roster" section, `src/elements/icon-names.json` (all derived by `iconNames()` in `gen-web-components-md.mjs`, shared with `gen-llms.mjs` — never a hand list), and the fail-loud fallback in `renderIcon` | An icon-shaped name outside the roster used to paint as literal text with the names enumerated nowhere (spike finding F-7); a stale roster would send agents right back to guessing | `verify:generated` (`verify-generated-sync.mjs`: `icon-names.json`, `llms-full.txt` overwrite probes + the `web-components.md` in-block probe) for freshness · `tests/scripts/llms-index-coverage.test.ts` for the llms.txt pointer · `iconNames()` hard-fails on a zero-match extraction · `src/ui/icon.test.tsx` pins the fail-loud render |
+
+---
+
 ## The unenforced list
 
 Everything above whose last column says `NOTHING`, in one place. An unenforced
@@ -338,3 +359,11 @@ naming which command produced it.
 36. Links.
 37. Whether the re-render rule as *worded* still matches the keying it describes. The behaviour is pinned; the prose is not, and a phrasing grep would be theatre.
 39. The field-format docs (`guides/field-formats.mdx`, the `form.mdx` bullet, the hand-written `kai-input` line in `docs/web-components.md`) vs `FIELD_SEMANTIC_TYPES` and the mask token vocabulary they restate. The code-side copies are the best-guarded pair in §4; the prose tables are checked by nothing — `verify:docs` resolves symbols and markup, not enum members or caps in a table. Next free number per the rule at item 38.
+
+**Blocks vs the facades' private copies (§10 — every item here is closed by the P-9 refactor when it lands, by construction: one component, two call sites)**
+
+42. `kai-panel`/`kai-panel-header` chrome vs the widget-box chrome `kai-chat`'s widget mode paints itself.
+43. `TAB_BAR_CLASS`/`tabBarTabClass` vs `WidgetTabBar`'s restated bar markup.
+44. The drilled rule in `createViewStack` vs `kai-chat`'s private view switching.
+45. `kai-row` anatomy vs the hand-built rows in `home-panel.tsx`.
+46. `createConversationController`'s fold vs the facades' internal conversation state — each side's own suite is green; their agreement is checked by nothing.

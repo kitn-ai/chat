@@ -39,6 +39,12 @@ describe('composedFrom story ids', () => {
     expect((meta as any[]).length).toBeGreaterThan(50);
     // kai-icon renders a raw glyph via the icon registry; kai-remote mounts a
     // cross-origin card through an iframe. Neither renders a kit component.
-    expect(empty).toEqual(['kai-icon', 'kai-remote']);
+    // The blocks-and-parts trio render no kit component either: kai-tab-bar
+    // renders its own <nav> driven by the headless createTabBarItemsController
+    // (its items are light-DOM children, not composed JSX); kai-view-stack
+    // renders a bare <slot/> over createViewStack; kai-view is a slot plus a
+    // host style. All three import only lowercase controller/helper functions
+    // from ../components/, which composedFrom rightly excludes.
+    expect(empty).toEqual(['kai-icon', 'kai-remote', 'kai-tab-bar', 'kai-view', 'kai-view-stack']);
   });
 });

@@ -1703,6 +1703,18 @@
           "scalar": true,
           "optional": true,
           "fn": false
+        },
+        {
+          "name": "density",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "unread",
+          "scalar": true,
+          "optional": true,
+          "fn": false
         }
       ],
       "events": [
@@ -1713,6 +1725,7 @@
         "body",
         "row",
         "title",
+        "unread",
         "leading",
         "meta",
         "menu"
@@ -1763,6 +1776,12 @@
         },
         {
           "name": "compact",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "density",
           "scalar": true,
           "optional": true,
           "fn": false
@@ -3308,6 +3327,64 @@
       "tokens": []
     },
     {
+      "tag": "kai-panel",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "frame",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [
+        "panel",
+        "body",
+        "header",
+        "footer"
+      ],
+      "composedFrom": [
+        "Panel",
+        "PanelBody",
+        "PanelFooter",
+        "PanelHeader"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-panel-header",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [
+        "header",
+        "start",
+        "title",
+        "end"
+      ],
+      "composedFrom": [
+        "Panel",
+        "PanelBody",
+        "PanelFooter",
+        "PanelHeader"
+      ],
+      "tokens": []
+    },
+    {
       "tag": "kai-popover",
       "props": [
         {
@@ -3870,6 +3947,51 @@
       "parts": [],
       "composedFrom": [
         "ResponseStream"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-row",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "interactive",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "href",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "chevron",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-click"
+      ],
+      "methods": [],
+      "parts": [
+        "row",
+        "title",
+        "chevron",
+        "leading",
+        "subtitle",
+        "trailing"
+      ],
+      "composedFrom": [
+        "Row"
       ],
       "tokens": []
     },
@@ -4736,6 +4858,115 @@
       "tokens": []
     },
     {
+      "tag": "kai-tab-bar",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultValue",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "iconOnly",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-tab-change"
+      ],
+      "methods": [
+        "select",
+        "focus"
+      ],
+      "parts": [
+        "tablist"
+      ],
+      "composedFrom": [],
+      "tokens": []
+    },
+    {
+      "tag": "kai-tab-bar-item",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "icon",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "dot",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "badge",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "active",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "iconOnly",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [
+        "tab"
+      ],
+      "composedFrom": [
+        "TabBarItemContent"
+      ],
+      "tokens": []
+    },
+    {
       "tag": "kai-tabs",
       "props": [
         {
@@ -5214,6 +5445,70 @@
       "composedFrom": [
         "Tooltip"
       ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-view",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "name",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "tabRoot",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [],
+      "tokens": []
+    },
+    {
+      "tag": "kai-view-stack",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "view",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "drilled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-view-change"
+      ],
+      "methods": [
+        "push",
+        "back",
+        "replace",
+        "selectTab",
+        "navigate"
+      ],
+      "parts": [],
+      "composedFrom": [],
       "tokens": []
     },
     {
