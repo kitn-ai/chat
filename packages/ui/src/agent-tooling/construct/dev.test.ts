@@ -681,3 +681,138 @@ describe('a taken builder port fails helpfully, not with an EADDRINUSE stack (ow
     }
   });
 });
+
+// ── the blocks gallery route (Task 5.1) ─────────────────────────────────────
+
+import { handleGalleryRequest, isBlockName, blockFromRegistryItem, galleryPreviewHtml, type GalleryDirs } from './dev';
+
+const ITEM = {
+  name: 'demo-block',
+  title: 'Demo block',
+  description: 'A demo.',
+  type: 'registry:block' as const,
+  files: [
+    {
+      path: 'demo-block.html',
+      type: 'registry:page' as const,
+      content:
+        '<!doctype html>\n<html><head><link rel="stylesheet" href="./demo-block.css" /></head>' +
+        '<body><kai-panel></kai-panel><script type="module" src="./demo-block.js"></script></body></html>',
+    },
+    { path: 'demo-block.js', type: 'registry:file' as const, content: "import '@kitn.ai/ui/autoloader';\nconsole.log('hi');" },
+    { path: 'demo-block.css', type: 'registry:file' as const, content: 'body { margin: 0; }' },
+  ],
+};
+
+function galleryFixture(): { dirs: GalleryDirs; root: string } {
+  const root = mkdtempSync(join(tmpdir(), 'kai-gallery-'));
+  // The layout the walk finds in a real package: <root>/dist/blocks + <root>/dist/gallery.
+  const blocksDir = join(root, 'dist', 'blocks');
+  const pageDir = join(root, 'dist', 'gallery');
+  mkdirSync(join(blocksDir, 'r'), { recursive: true });
+  mkdirSync(join(pageDir, 'assets'), { recursive: true });
+  writeF(join(blocksDir, 'registry.json'), JSON.stringify({ items: [{ name: 'demo-block' }] }));
+  writeF(join(blocksDir, 'r', 'demo-block.json'), JSON.stringify(ITEM));
+  writeF(join(blocksDir, 'r', 'demo-block.cdn.html'), '<!doctype html><html><body>cdn form</body></html>');
+  writeF(join(pageDir, 'index.html'), '<!doctype html><html><body>gallery shell</body></html>');
+  writeF(join(pageDir, 'assets', 'app.js'), 'console.log("app");');
+  writeF(join(root, 'dist', 'kai.es.js'), 'export {};');
+  return { dirs: { pageDir, blocksDir, version: '9.9.9' }, root };
+}
+
+describe('the gallery route table', () => {
+  it('block names are lowercase-hyphenated only — separators, dots and traversal are inexpressible', () => {
+    expect(isBlockName('support-widget')).toBe(true);
+    expect(isBlockName('a1')).toBe(true);
+    for (const bad of ['', '..', 'a..b', 'A-Widget', 'a_b', 'a.b', 'a/b', '-a', 'a-']) {
+      expect(isBlockName(bad), bad).toBe(false);
+    }
+  });
+
+  it('owns /gallery and /kit only — every other URL falls through to the builder page', () => {
+    const { dirs } = galleryFixture();
+    expect(handleGalleryRequest('/', dirs)).toBeUndefined();
+    expect(handleGalleryRequest('/api/state', dirs)).toBeUndefined();
+    expect(handleGalleryRequest('/galleryish', dirs)).toBeUndefined();
+  });
+
+  it('/gallery redirects to /gallery/ and the shell + assets serve from the page dir', () => {
+    const { dirs } = galleryFixture();
+    expect(handleGalleryRequest('/gallery', dirs)).toEqual({ kind: 'redirect', location: '/gallery/' });
+    const shell = handleGalleryRequest('/gallery/', dirs);
+    expect(shell?.kind === 'file' && String(shell.body)).toContain('gallery shell');
+    const js = handleGalleryRequest('/gallery/assets/app.js', dirs);
+    expect(js?.kind === 'file' && js.type).toContain('text/javascript');
+    // SPA fallback: an unknown path under /gallery/ serves the shell.
+    const fallback = handleGalleryRequest('/gallery/some/route', dirs);
+    expect(fallback?.kind === 'file' && String(fallback.body)).toContain('gallery shell');
+  });
+
+  it('serves the registry index and the per-block item JSON (the public integration surface)', () => {
+    const { dirs } = galleryFixture();
+    const index = handleGalleryRequest('/gallery/api/registry.json', dirs);
+    expect(index?.kind === 'file' && index.type).toBe('application/json');
+    const item = handleGalleryRequest('/gallery/api/r/demo-block.json', dirs);
+    expect(item?.kind === 'file' && JSON.parse(String(item.body)).name).toBe('demo-block');
+    expect(handleGalleryRequest('/gallery/api/r/nope.json', dirs)).toMatchObject({ kind: 'missing' });
+  });
+
+  it('serves the CDN form as text/plain — data for the copy/download affordance, never a second live document', () => {
+    const { dirs } = galleryFixture();
+    const cdn = handleGalleryRequest('/gallery/api/r/demo-block.cdn.html', dirs);
+    expect(cdn?.kind === 'file' && cdn.type).toContain('text/plain');
+    expect(cdn?.kind === 'file' && String(cdn.body)).toContain('cdn form');
+  });
+
+  it('the live preview is the item JSON rendered through the ONE CDN-form serializer against /kit/', () => {
+    const { dirs } = galleryFixture();
+    const preview = handleGalleryRequest('/gallery/preview/demo-block/', dirs);
+    expect(preview?.kind === 'file' && preview.type).toContain('text/html');
+    const html = preview?.kind === 'file' ? String(preview.body) : '';
+    expect(html).toContain("'/kit/elements/autoloader.js'");
+    expect(html).toContain('inlined from ./demo-block.css');
+    expect(html).not.toContain('src="./demo-block.js"');
+  });
+
+  it('/kit/* maps onto the package dist root, and traversal in a block name cannot escape', () => {
+    const { dirs } = galleryFixture();
+    const kit = handleGalleryRequest('/kit/kai.es.js', dirs);
+    expect(kit?.kind === 'file' && kit.type).toContain('text/javascript');
+    // The sandboxed preview iframe has an opaque origin, so kit imports are
+    // CORS fetches: /kit/* carries the header (matching the CDN it stands in
+    // for), and the API routes deliberately do NOT.
+    expect(kit?.kind === 'file' && kit.cors).toBe(true);
+    const api = handleGalleryRequest('/gallery/api/registry.json', dirs);
+    expect(api?.kind === 'file' && api.cors).toBeUndefined();
+    expect(handleGalleryRequest('/kit/../package.json', dirs)).toMatchObject({ kind: 'missing' });
+    expect(handleGalleryRequest('/gallery/api/r/..%2F..%2Fsecret.json', dirs)).toMatchObject({ kind: 'missing' });
+    expect(handleGalleryRequest('/gallery/preview/../x/', dirs)).toMatchObject({ kind: 'missing' });
+  });
+
+  it('missing build artifacts answer with rebuild instructions, not a crash', () => {
+    const { dirs } = galleryFixture();
+    const noBlocks = handleGalleryRequest('/gallery/api/registry.json', { ...dirs, blocksDir: undefined });
+    expect(noBlocks?.kind === 'missing' && noBlocks.message).toContain('dist/blocks is missing');
+    const noPage = handleGalleryRequest('/gallery/', { ...dirs, pageDir: undefined });
+    expect(noPage?.kind === 'missing' && noPage.message).toContain('dist/gallery is missing');
+  });
+});
+
+describe('the gallery preview serializer seam', () => {
+  it('blockFromRegistryItem reconstructs the Block shape the generator takes (manifest without content, files as a map)', () => {
+    const block = blockFromRegistryItem(ITEM);
+    expect(block.name).toBe('demo-block');
+    expect(block.manifest.files.map((f) => Object.keys(f).sort())).toEqual([
+      ['path', 'type'],
+      ['path', 'type'],
+      ['path', 'type'],
+    ]);
+    expect(block.files.get('demo-block.css')).toBe('body { margin: 0; }');
+  });
+
+  it('galleryPreviewHtml reports unreadable item JSON as errors, never a throw', () => {
+    const out = galleryPreviewHtml('not json', '1.0.0');
+    expect(out.html).toBeUndefined();
+    expect(out.errors[0]).toContain('item JSON unreadable');
+  });
+});

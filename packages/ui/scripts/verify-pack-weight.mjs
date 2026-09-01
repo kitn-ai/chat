@@ -395,8 +395,21 @@ if (SELF_TEST) {
  * artifact — the growth is the API surface itself. Margin rule unchanged:
  * 10.32 + ~0.29 MiB of headroom -> 10.60 MiB (rounded to the same 0.05
  * grain the prior entries use).
+ *
+ * 10.60 -> 11.85 MiB (2026-08-31, the gallery + blocks builder surface):
+ * tripped at 12,121,045 bytes / 11.5595 MiB / 697 files. Deliberate feature
+ * weight on the builder-page/theme-studio precedent: `dist/gallery/`
+ * (~1.10 MiB: index.html + bundled JS/CSS assets) is the prebuilt component
+ * gallery `kai dev --builder` serves at /gallery/, and `dist/blocks/`
+ * (~107 KiB: the blocks registry JSON + assets) is the block catalog the
+ * same builder reads — both served from the INSTALLED package so the CLI
+ * compiles nothing at consumer runtime, the same reason `dist/builder-page/`
+ * and `dist/theme-studio/` already ship. Neither re-bundles the kit: like
+ * theme-studio, they consume the package's own dist rather than duplicating
+ * it. Margin rule unchanged: 11.5595 + ~0.29 MiB of headroom -> 11.85 MiB
+ * (rounded to the same 0.05 grain the prior entries use).
  */
-const MAX_UNPACKED_BYTES = 10.60 * 1024 * 1024;
+const MAX_UNPACKED_BYTES = 11.85 * 1024 * 1024;
 
 const kib = (n) => `${(n / 1024).toFixed(1)} KiB`;
 const mib = (n) => `${(n / 1024 / 1024).toFixed(2)} MiB`;

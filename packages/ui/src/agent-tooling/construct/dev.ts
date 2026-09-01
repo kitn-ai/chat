@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { generateProject, writeProject, type GeneratedFile, type GenerateOptions } from './codegen';
 import { npmArgs, npmInvocation } from './local-kit';
 import { validateConstruct, type Construct, type ConstructProblem } from './schema';
+import { generateCdnForm, type Block, type BlockManifest } from '../blocks/registry';
 import { buildableTemplates, inferTemplateId, templateById, type ConstructListing } from './templates';
 
 export type { ConstructListing } from './templates';
@@ -516,6 +517,7 @@ const ASSET_TYPES: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.map': 'application/json',
+  '.json': 'application/json',
 };
 
 /** Resolve a request path inside the prebuilt page dir; undefined on
@@ -591,6 +593,167 @@ export function builderPageDir(): string {
 export function themeStudioDir(): string | undefined {
   const out = resolveBuilderPageDir(dirname(fileURLToPath(import.meta.url)), 'theme-studio');
   return 'dir' in out ? out.dir : undefined;
+}
+
+/** dist/gallery (the prebuilt blocks-gallery page, vite.config.gallery.ts) —
+ *  same walk, same nullable contract as the theme studio: additive route,
+ *  404s with instructions on an older build. */
+export function galleryPageDir(): string | undefined {
+  const out = resolveBuilderPageDir(dirname(fileURLToPath(import.meta.url)), 'gallery');
+  return 'dir' in out ? out.dir : undefined;
+}
+
+/** dist/blocks (registry.json + r/<name>.json + r/<name>.cdn.html, emitted by
+ *  gen-blocks.mjs in postbuild) — the walk probes for registry.json rather
+ *  than index.html, so `resolveBuilderPageDir`'s index.html probe cannot be
+ *  reused here. Bounded the same way. */
+export function blocksDistDir(): string | undefined {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 6; i++) {
+    const candidate = join(dir, 'blocks');
+    if (existsSync(join(candidate, 'registry.json'))) return candidate;
+    const atPackageRoot = existsSync(join(dir, 'package.json'));
+    const parent = dirname(dir);
+    if (atPackageRoot || parent === dir) return undefined;
+    dir = parent;
+  }
+  return undefined;
+}
+
+// ── the blocks gallery route (Task 5.1, blocks-and-parts plan) ──────────────
+// A GET-only surface on the same server (spec Part 5: the construct dev
+// server is KEPT infrastructure and becomes the gallery's front door). It
+// serves the prebuilt page (dist/gallery), the derived registry artifacts
+// (dist/blocks — the public integration surface the CLI and MCP also
+// resolve), and a LIVE per-block preview: the same `generateCdnForm`
+// serializer gen-blocks.mjs uses, rendered at request time against the
+// server's own /kit/ mount of the package dist. That choice over iframing
+// the pinned-CDN form is deliberate and honest: the CDN form pins the
+// CURRENT package.json version, which during development is usually not
+// published yet, so an iframe of it would 404 off jsdelivr; the /kit/ form
+// is the identical generated output with the identical serializer, running
+// the code actually in dist. (The driver's generated pages under scripts/
+// are not shipped in the package, so they cannot be this route's source.)
+// No origin guard needed: every gallery route is a GET and writes nothing.
+
+/** A registry ITEM (r/<name>.json — manifest + inlined file contents),
+ *  reconstructed into the `Block` shape `generateCdnForm` takes. One
+ *  serializer, two callers (gen-blocks at build, this route at serve). */
+export function blockFromRegistryItem(item: Omit<BlockManifest, 'files'> & { files: (BlockManifest['files'][number] & { content: string })[] }): Block {
+  return {
+    name: item.name,
+    manifest: { ...item, files: item.files.map(({ content: _content, ...entry }) => entry) },
+    files: new Map(item.files.map((f) => [f.path, f.content])),
+  };
+}
+
+/** The live-preview HTML for one block: its item JSON rendered through the
+ *  one CDN-form serializer with the local `/kit/` base (no pins). */
+export function galleryPreviewHtml(itemJsonText: string, version: string): { html?: string; errors: string[] } {
+  let item: unknown;
+  try {
+    item = JSON.parse(itemJsonText);
+  } catch (err) {
+    return { errors: [`item JSON unreadable: ${err instanceof Error ? err.message : String(err)}`] };
+  }
+  return generateCdnForm(blockFromRegistryItem(item as Parameters<typeof blockFromRegistryItem>[0]), {
+    version,
+    base: '/kit/',
+  });
+}
+
+/** Block names come from URLs here; the registry constrains real names to
+ *  lowercase-hyphenated, so anything else (separators, dots, traversal) is
+ *  inexpressible rather than filtered. */
+export function isBlockName(name: string): boolean {
+  return /^[a-z0-9]+(-[a-z0-9]+)*$/.test(name);
+}
+
+export interface GalleryDirs {
+  /** dist/gallery — the prebuilt page. */
+  pageDir?: string;
+  /** dist/blocks — registry.json, r/<name>.json, r/<name>.cdn.html. */
+  blocksDir?: string;
+  /** The kit version for the preview serializer (unused for pins under the
+   *  local base, but part of the serializer's contract). */
+  version: string;
+}
+
+export type GalleryResponse =
+  | { kind: 'file'; type: string; body: string | Buffer; cors?: boolean }
+  | { kind: 'redirect'; location: string }
+  | { kind: 'missing'; message: string };
+
+const GALLERY_REBUILD = 'run `npm run build` in packages/ui (or nx build ui) and reload.';
+
+/** Route one GET under /gallery (plus the top-level /kit mount the previews
+ *  import from). Returns undefined for URLs this surface does not own. Pure
+ *  over `dirs` so the route table is unit-testable without binding a port. */
+export function handleGalleryRequest(url: string, dirs: GalleryDirs): GalleryResponse | undefined {
+  const path = url.split('?')[0];
+
+  // The previews' import base: /kit/* maps onto the package's own dist root
+  // (the parent of dist/blocks) — same mechanism and trust story as the
+  // theme studio's /theme-studio/kit/* mount: our own build output, loopback
+  // only, never request-writable.
+  if (path.startsWith('/kit/')) {
+    if (!dirs.blocksDir) return { kind: 'missing', message: `dist/blocks is missing — ${GALLERY_REBUILD}` };
+    const asset = serveBuilderAsset(path.slice('/kit'.length), dirname(dirs.blocksDir));
+    if (!asset) return { kind: 'missing', message: 'not found' };
+    // `cors`: the preview iframe runs in Artifact's sandbox WITHOUT
+    // allow-same-origin (one sandbox, one policy — untouched), so its origin
+    // is opaque and every module import off /kit/ is a CORS fetch with
+    // `Origin: null`. The CDN this mount stands in for (jsdelivr) answers
+    // `access-control-allow-origin: *`; without matching it here every kit
+    // import is blocked and no element upgrades (found live, not in review).
+    // Safe by content: /kit/ serves only the package's own published build
+    // output — public static files, no state, no secrets — and the API
+    // routes deliberately do NOT get this header.
+    return { kind: 'file', type: asset.type, body: readFileSync(asset.file), cors: true };
+  }
+
+  if (path !== '/gallery' && !path.startsWith('/gallery/')) return undefined;
+  if (path === '/gallery') return { kind: 'redirect', location: `/gallery/${url.includes('?') ? url.slice(url.indexOf('?')) : ''}` };
+
+  if (path.startsWith('/gallery/api/') || path.startsWith('/gallery/preview/')) {
+    if (!dirs.blocksDir) return { kind: 'missing', message: `dist/blocks is missing — ${GALLERY_REBUILD}` };
+
+    if (path === '/gallery/api/registry.json') {
+      return { kind: 'file', type: 'application/json', body: readFileSync(join(dirs.blocksDir, 'registry.json')) };
+    }
+    const itemMatch = /^\/gallery\/api\/r\/([^/]+)\.json$/.exec(path);
+    if (itemMatch && isBlockName(itemMatch[1])) {
+      const file = join(dirs.blocksDir, 'r', `${itemMatch[1]}.json`);
+      if (!existsSync(file)) return { kind: 'missing', message: `no block named "${itemMatch[1]}" in the registry` };
+      return { kind: 'file', type: 'application/json', body: readFileSync(file) };
+    }
+    const cdnMatch = /^\/gallery\/api\/r\/([^/]+)\.cdn\.html$/.exec(path);
+    if (cdnMatch && isBlockName(cdnMatch[1])) {
+      const file = join(dirs.blocksDir, 'r', `${cdnMatch[1]}.cdn.html`);
+      if (!existsSync(file)) return { kind: 'missing', message: `no CDN form for "${cdnMatch[1]}"` };
+      // text/plain, deliberately: this route feeds the copy/download
+      // affordance with DATA; the runnable document for THIS server is the
+      // /gallery/preview/ route, and serving the pinned form as html here
+      // would offer a second, subtly different live path.
+      return { kind: 'file', type: 'text/plain; charset=utf-8', body: readFileSync(file) };
+    }
+    const previewMatch = /^\/gallery\/preview\/([^/]+)\/$/.exec(path);
+    if (previewMatch && isBlockName(previewMatch[1])) {
+      const file = join(dirs.blocksDir, 'r', `${previewMatch[1]}.json`);
+      if (!existsSync(file)) return { kind: 'missing', message: `no block named "${previewMatch[1]}" in the registry` };
+      const out = galleryPreviewHtml(readFileSync(file, 'utf8'), dirs.version);
+      if (!out.html) return { kind: 'missing', message: `preview generation failed: ${out.errors.join('; ')}` };
+      return { kind: 'file', type: 'text/html; charset=utf-8', body: out.html };
+    }
+    return { kind: 'missing', message: 'not found' };
+  }
+
+  // Static page assets, with the SPA fallback the builder page also gets.
+  if (!dirs.pageDir) return { kind: 'missing', message: `dist/gallery is missing — ${GALLERY_REBUILD}` };
+  const sub = path.slice('/gallery'.length) || '/';
+  const asset = serveBuilderAsset(sub === '' ? '/' : sub, dirs.pageDir);
+  if (asset) return { kind: 'file', type: asset.type, body: readFileSync(asset.file) };
+  return { kind: 'file', type: 'text/html; charset=utf-8', body: readFileSync(join(dirs.pageDir, 'index.html')) };
 }
 
 // ── the manifest-of-constructs entry flow (owner ask, 2026-08-31) ───────────
@@ -760,6 +923,25 @@ export async function devBuilder(
   }
 
   const hub = createEventHub();
+  // Gallery artifact locations, resolved once — the walk and the version read
+  // are per-server facts, not per-request work.
+  let cachedGalleryDirs: GalleryDirs | undefined;
+  const galleryDirs = (): GalleryDirs => {
+    if (!cachedGalleryDirs) {
+      const blocks = blocksDistDir();
+      let version = '0.0.0';
+      if (blocks) {
+        try {
+          const pkg = JSON.parse(readFileSync(join(dirname(blocks), '..', 'package.json'), 'utf8')) as { version?: string };
+          version = pkg.version ?? version;
+        } catch {
+          // keep the placeholder; the local /kit/ base emits no pins anyway
+        }
+      }
+      cachedGalleryDirs = { pageDir: galleryPageDir(), blocksDir: blocks, version };
+    }
+    return cachedGalleryDirs;
+  };
   // The argument may be a path OR a bare name (`kai dev --builder acme-support`
   // → `<cwd>/acme-support.construct.json`); an unknown name fails loudly,
   // listing the constructs that exist, before any server is offered.
@@ -1007,6 +1189,26 @@ export async function devBuilder(
         res.writeHead(200, { 'content-type': studioAsset.type });
         return res.end(readFileSync(studioAsset.file));
       }
+      // The blocks gallery + the /kit/ mount its previews import from —
+      // GET-only (nothing under it writes or spawns), so it sits after the
+      // non-GET origin guard and never needs one of its own.
+      if (req.method === 'GET') {
+        const galleryOut = handleGalleryRequest(url, galleryDirs());
+        if (galleryOut) {
+          if (galleryOut.kind === 'redirect') {
+            res.writeHead(302, { location: galleryOut.location });
+            return res.end();
+          }
+          if (galleryOut.kind === 'missing') {
+            return send(404, { problems: [{ path: '', message: galleryOut.message }] });
+          }
+          res.writeHead(200, {
+            'content-type': galleryOut.type,
+            ...(galleryOut.cors ? { 'access-control-allow-origin': '*' } : {}),
+          });
+          return res.end(galleryOut.body);
+        }
+      }
       const asset = serveBuilderAsset(url, pageDir);
       if (asset) {
         res.writeHead(200, { 'content-type': asset.type });
@@ -1031,6 +1233,13 @@ export async function devBuilder(
   }
   if (opts.previewPort === undefined) previewPort = bound + 1;
   io.log(`kai builder at http://localhost:${bound}/ — the construct file stays yours.`);
+  // Announced only when the built artifacts actually exist (menu honesty:
+  // never advertise a door that 404s). The front-door flip to the gallery is
+  // the deprecation round's move, not this one — for now the route is named
+  // beside the builder.
+  if (galleryDirs().pageDir && galleryDirs().blocksDir) {
+    io.log(`block gallery at http://localhost:${bound}/gallery/`);
+  }
   // AFTER the bind, so the preview port is derived from the port we really got
   // and the builder url is on screen before the first npm install starts.
   if (abs) bootInBackground(abs);

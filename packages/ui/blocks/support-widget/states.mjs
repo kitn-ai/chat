@@ -100,8 +100,41 @@ export default {
       probes: {
         greeting: (page) => page.getByText('How can we help?', { exact: false }).count().then((n) => n > 0),
         helpLink: (page) => page.getByText('Help center', { exact: false }).count().then((n) => n > 0),
+        // MEASURED home-layout probes (owner-caught defect 2026-09-01: the
+        // recorded baseline itself showed the CTA overlapping the subtitle's
+        // descenders — the flex gap authored on the kai-view host counted the
+        // shadow <style> as an item and the .home children got no gaps at
+        // all). Relationships, not absolute y: parity-comparable against the
+        // facade, and an overlap can never re-record itself into a baseline.
+        homeCtaClearOfSubtitle: async (page) => {
+          const sub = await page.getByText('Orders, refunds, anything.').first().boundingBox();
+          const cta = await page.getByRole('button', { name: 'Send us a message' }).first().boundingBox();
+          return !!sub && !!cta && cta.y >= sub.y + sub.height;
+        },
+        // The facade's measured column rhythm: 4px title->subtitle,
+        // 16px subtitle->CTA, a 20px subtitle line box.
+        homeSubtitleToCtaGap: async (page) => {
+          const sub = await page.getByText('Orders, refunds, anything.').first().boundingBox();
+          const cta = await page.getByRole('button', { name: 'Send us a message' }).first().boundingBox();
+          return Math.round(cta.y - (sub.y + sub.height));
+        },
+        homeTitleToSubtitleGap: async (page) => {
+          const title = await page.getByText('How can we help?', { exact: false }).first().boundingBox();
+          const sub = await page.getByText('Orders, refunds, anything.').first().boundingBox();
+          return Math.round(sub.y - (title.y + title.height));
+        },
+        homeSubtitleLineBox: async (page) => {
+          const sub = await page.getByText('Orders, refunds, anything.').first().boundingBox();
+          return Math.round(sub.height);
+        },
       },
-      expect: { greeting: true, helpLink: true },
+      expect: {
+        greeting: true, helpLink: true,
+        homeCtaClearOfSubtitle: true,
+        homeSubtitleToCtaGap: 16,
+        homeTitleToSubtitleGap: 4,
+        homeSubtitleLineBox: 20,
+      },
       styleProbes: [
         style('homeCta', (page) => page.getByRole('button', { name: 'Send us a message' }),
           ['backgroundColor', 'borderRadius', 'fontSize']),
