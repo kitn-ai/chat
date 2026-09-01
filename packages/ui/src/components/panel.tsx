@@ -120,7 +120,9 @@ export function PanelHeader(props: PanelHeaderProps) {
  * (scroll buttons, overlays) -- `ChatThread`'s `relative flex-1
  * overflow-hidden` body, as a public part.
  */
-export function PanelBody(props: JSX.HTMLAttributes<HTMLDivElement>) {
+export type PanelBodyProps = JSX.HTMLAttributes<HTMLDivElement>;
+
+export function PanelBody(props: PanelBodyProps) {
   const [local, rest] = splitProps(props, ['class', 'children']);
   return (
     <div class={cn('relative flex min-h-0 flex-1 flex-col overflow-hidden', local.class)} {...rest}>
@@ -133,7 +135,9 @@ export function PanelBody(props: JSX.HTMLAttributes<HTMLDivElement>) {
  * The footer strip below the view container. Unopinionated beyond layout
  * (it never scrolls away): disclaimers, a powered-by line, a tab bar.
  */
-export function PanelFooter(props: JSX.HTMLAttributes<HTMLDivElement>) {
+export type PanelFooterProps = JSX.HTMLAttributes<HTMLDivElement>;
+
+export function PanelFooter(props: PanelFooterProps) {
   const [local, rest] = splitProps(props, ['class', 'children']);
   return (
     <div class={cn('shrink-0', local.class)} {...rest}>

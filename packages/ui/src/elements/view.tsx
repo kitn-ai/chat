@@ -30,6 +30,7 @@ interface Props extends Record<string, unknown> {
  * Standalone (outside a stack) it is an ordinary block container that shows
  * its content. It fires no events; navigation surfaces on the stack.
  */
+// solid-coverage: equivalent View -- same contract (a named view inside a stack: hidden/data-active toggled by the enclosing stack, content kept mounted while inactive), different mechanism: the Solid `View`/`ViewStack` pair coordinates through context, while this facade is a declarative light-DOM marker `<kai-view-stack>` drives via its MutationObserver — deliberately parallel, so no shared render path exists for the coverage guard to derive.
 defineWebComponent<Props, Record<string, never>>('kai-view', {
   name: undefined,
   tabRoot: undefined,

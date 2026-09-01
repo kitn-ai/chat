@@ -183,6 +183,50 @@ describe('the solid-coverage guard detects, and CI runs it', () => {
     expect(output).toContain('ship no public <Name>Props type');
   });
 
+  // The `solid-coverage: equivalent` directive — the reviewed facade-site
+  // declaration for elements whose Solid twin shares the contract but not the
+  // render path (kai-view/View). Two subprocess cases: the directive works when
+  // it names a PUBLIC component, and it is not an exemption when it does not.
+  const SLOT_ONLY_META = JSON.stringify(
+    [{ tag: 'kai-x', displayName: 'X' }, { tag: 'kai-y', displayName: 'Y' }],
+    null,
+    2,
+  );
+
+  it('accepts a slot-only element whose facade declares a PUBLIC solid equivalent', () => {
+    const root = fixtureRoot({
+      'src/elements/y.tsx':
+        "import { defineWebComponent } from './define';\n// solid-coverage: equivalent Foo -- same contract, different mechanism\ndefineWebComponent('kai-y', {}, () => <div><slot /></div>);\n",
+      'src/elements/element-meta.json': SLOT_ONLY_META,
+    });
+    const { code, output } = runGuard(['--package-root', root]);
+    expect(code, `the guard failed a package whose directive names a public component: ${output}`).toBe(0);
+    expect(output).toContain('2/2 elements have a writable SolidJS equivalent');
+    expect(output, 'the DECLARED verdict is not counted').toContain('DECLARED 1');
+  });
+
+  it('fires when the declared equivalent is not on the public ./solid surface', () => {
+    const root = fixtureRoot({
+      'src/elements/y.tsx':
+        "import { defineWebComponent } from './define';\n// solid-coverage: equivalent Bar -- wishful thinking\ndefineWebComponent('kai-y', {}, () => <div><slot /></div>);\n",
+      'src/elements/element-meta.json': SLOT_ONLY_META,
+    });
+    const { code, output } = runGuard(['--package-root', root]);
+    expect(code, `the guard exited ${code} on a directive naming a non-public component`).not.toBe(0);
+    expect(output).toContain('SOLID-EQUIVALENT NOT PUBLIC');
+    expect(output, 'the element must stay a GAP').toContain('no writable SolidJS equivalent');
+  });
+
+  it('fires when a directive sits on an element that is not a TOTAL gap', () => {
+    const root = fixtureRoot({
+      'src/elements/x.tsx':
+        "import { defineWebComponent } from './define';\nimport { Foo } from '../components/foo';\n// solid-coverage: equivalent Foo -- dead weight\ndefineWebComponent('kai-x', {}, () => <Foo a=\"hi\" />);\n",
+    });
+    const { code, output } = runGuard(['--package-root', root]);
+    expect(code, `the guard exited ${code} on a stale directive`).not.toBe(0);
+    expect(output).toContain('SOLID-EQUIVALENT STALE');
+  });
+
   it('treats an empty element catalog as a failure, not 0/0 success', () => {
     // Every row is derived from the catalog, so an empty one produced no rows, no
     // gaps, and a cheerful "0/0 elements have a writable SolidJS equivalent".

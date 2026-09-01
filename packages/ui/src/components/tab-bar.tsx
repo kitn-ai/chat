@@ -60,13 +60,15 @@ export function tabBarItemAccessibleName(
  * `TabBar` and the `kai-tab-bar-item` facade (which slots its light-DOM text
  * in as `label`).
  */
-export function TabBarItemContent(props: {
+export interface TabBarItemContentProps {
   icon?: string;
   dot?: boolean;
   badge?: string | number;
   iconOnly?: boolean;
   label?: JSX.Element;
-}) {
+}
+
+export function TabBarItemContent(props: TabBarItemContentProps) {
   const showBadge = () => props.badge !== undefined && props.badge !== '';
   return (
     <>

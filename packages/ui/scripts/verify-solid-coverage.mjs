@@ -38,9 +38,31 @@
 // Verdict rule (deliberately sharp):
 //   DIRECT       every Solid component the element renders is public, and it is one
 //   COMPOSITION  every Solid component the element renders is public, and it is 2+
+//   DECLARED     the facade renders/calls nothing kit-derived, but carries a
+//                reviewed `solid-coverage: equivalent` directive naming a PUBLIC
+//                Solid component that is the same contract by a different
+//                mechanism (see below)
 //   GAP          the element renders at least one Solid component that is NOT
 //                reachable from the public entry (grade PARTIAL), or renders /
 //                calls nothing public at all (grade TOTAL)
+//
+// THE DIRECTIVE. Some facades are deliberately mechanism-split from their Solid
+// twin: `<kai-view>` is a bare slot the enclosing stack drives through a
+// MutationObserver over light-DOM children, while the Solid `View` coordinates
+// through context — same contract, no shared render path, so no derivation can
+// connect them. For exactly that shape the facade may declare its equivalent at
+// its own definition site (the same parsed-directive-not-prose policy as
+// `lint-silent-drops`):
+//
+//   // solid-coverage: equivalent <Component> -- <reason>
+//
+// This is NOT an exemption: the named component must be public (source entry AND
+// the runtime keys of the built dist/solid.server.js) or the element stays a GAP
+// and the directive is flagged; a directive on an element that is not a TOTAL
+// gap is STALE and fails the build, so entries cannot accumulate past their
+// usefulness; a directive without a reason is malformed and fails. There is
+// still no central mapping table — the declaration lives next to the facade it
+// describes, one per defect, each carrying its own justification.
 //
 // Each GAP row carries its own proof: the missing symbol, its declaring module,
 // and every public export that module does or does not provide.
@@ -342,17 +364,35 @@ function renderNodeFor(sf, renderArg) {
   return found ?? renderArg;
 }
 
+// The `solid-coverage: equivalent` directive (header: THE DIRECTIVE). Parsed,
+// not prose — a comment that does not parse is a build failure, not a shrug.
+// One per facade module; it attaches to the element(s) that module defines.
+function parseEquivalentDirective(sf, module, problems) {
+  const m = sf.getFullText().match(/\/\/\s*solid-coverage:\s*equivalent\b([^\n]*)/);
+  if (!m) return null;
+  const mm = m[1].trim().match(/^([A-Za-z_$][\w$]*)\s+--\s+(\S.*)$/);
+  if (!mm) {
+    problems.push(
+      `SOLID-EQUIVALENT MALFORMED: ${module} — write "// solid-coverage: equivalent <Component> -- <reason>" (the reason is mandatory)`,
+    );
+    return null;
+  }
+  return { component: mm[1], reason: mm[2].trim() };
+}
+
+const directiveProblems = [];
 const byTag = new Map();
 for (const file of facadeFiles) {
   const sf = program.getSourceFile(file);
   if (!sf) continue;
   const api = apiUsage(sf);
+  const declared = parseEquivalentDirective(sf, rel(file), directiveProblems);
   const visit = (node) => {
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'defineWebComponent') {
       const tagArg = node.arguments[0];
       const renderArg = node.arguments[2];
       if (tagArg && ts.isStringLiteralLike(tagArg) && renderArg) {
-        byTag.set(tagArg.text, { module: basename(file), usage: kitUsage(renderNodeFor(sf, renderArg)), api });
+        byTag.set(tagArg.text, { module: basename(file), usage: kitUsage(renderNodeFor(sf, renderArg)), api, declared });
       }
     }
     ts.forEachChild(node, visit);
@@ -380,6 +420,32 @@ const rows = catalog.map((el) => {
   else if (surface.length === 0) { verdict = 'GAP'; grade = 'TOTAL'; }
   else verdict = surface.length === 1 ? 'DIRECT' : 'COMPOSITION';
 
+  // A reviewed directive can turn ONLY a TOTAL gap into DECLARED, and only by
+  // naming a component that is actually public. Anything else it could say is a
+  // build failure — see THE DIRECTIVE in the header.
+  let declaredEquivalent = null;
+  const d = info.declared;
+  if (d) {
+    if (verdict === 'GAP' && grade === 'TOTAL') {
+      if (isPublic(d.component)) {
+        verdict = 'DECLARED';
+        grade = null;
+        declaredEquivalent = d;
+        surface.push(d.component);
+      } else {
+        directiveProblems.push(
+          `SOLID-EQUIVALENT NOT PUBLIC: ${el.tag} declares ${d.component}, but \`@kitn.ai/ui/solid\` does not export it ` +
+            `(source entry + built dist/solid.server.js are both required) — export it, or the element stays a GAP`,
+        );
+      }
+    } else {
+      directiveProblems.push(
+        `SOLID-EQUIVALENT STALE: ${el.tag} declares ${d.component} but is ${verdict}${grade ? `/${grade}` : ''}, ` +
+          `not a TOTAL gap — the directive no longer earns its place, delete it`,
+      );
+    }
+  }
+
   // Proof for each missing symbol: its module, what that module DOES export
   // publicly, and whether the symbol is already a module export (in which case
   // closing the gap is one line in src/index.ts, not new code).
@@ -398,6 +464,7 @@ const rows = catalog.map((el) => {
     module: info.module,
     verdict,
     grade,
+    declaredEquivalent,
     solidSurface: surface.sort(),
     missing: gaps.map((g) => g.name).sort(),
     proof,
@@ -471,7 +538,7 @@ const result = {
     publicValueExports: publicValues.size,
     publicTypeExports: publicTypes.size,
     runtimeKeys: runtimeExports?.size ?? null,
-    DIRECT: counts.DIRECT ?? 0, COMPOSITION: counts.COMPOSITION ?? 0, GAP: counts.GAP ?? 0,
+    DIRECT: counts.DIRECT ?? 0, COMPOSITION: counts.COMPOSITION ?? 0, DECLARED: counts.DECLARED ?? 0, GAP: counts.GAP ?? 0,
     gapTotal: grades.TOTAL ?? 0, gapPartial: grades.PARTIAL ?? 0,
   },
   rows,
@@ -479,7 +546,7 @@ const result = {
   propTypes: { checked: propTypes.length, missing: propTypesMissing },
 };
 
-  return { result, rows, unreachable, propTypes, propTypesMissing, notInSolid, catalog, publicValues, publicTypes, runtimeExports, rootRuntimeExports };
+  return { result, rows, unreachable, propTypes, propTypesMissing, notInSolid, directiveProblems, catalog, publicValues, publicTypes, runtimeExports, rootRuntimeExports };
 }
 
 // ---------------------------------------------------------------------------
@@ -542,6 +609,7 @@ function failureReasons(a) {
   for (const r of a.rows.filter((row) => row.verdict === 'GAP')) {
     reasons.push(`GAP ${r.tag} (${r.grade}) missing=[${r.missing.join(', ')}]`);
   }
+  for (const p of a.directiveProblems ?? []) reasons.push(p);
   for (const n of a.notInSolid) reasons.push(`MISSING FROM ./solid: ${n}`);
   for (const n of a.propTypesMissing) reasons.push(`NO PROPS TYPE: ${n}`);
   return reasons;
@@ -583,6 +651,67 @@ const SELF_TEST_CASES = [
       'src/solid.ts': "export * from './index';\nexport { Foo } from './components/foo';\n",
     }),
     expect: ['NO PROPS TYPE: Foo'],
+  },
+  // ---- the `solid-coverage: equivalent` directive -------------------------
+  // A slot-only facade (renders no kit component, calls no kit function) plus a
+  // catalog carrying it. The four cases below prove the directive can rescue
+  // EXACTLY that shape and nothing else: without it the element is a TOTAL gap,
+  // with it naming a public component it is DECLARED, and every other thing the
+  // directive could say — a non-public component, a stale site, a missing
+  // reason — fails the build.
+  {
+    name: 'DIRECTIVE baseline: a slot-only facade with no directive is a TOTAL gap',
+    files: fixtureFiles({
+      'src/elements/y.tsx':
+        "import { defineWebComponent } from './define';\ndefineWebComponent('kai-y', {}, () => <div><slot /></div>);\n",
+      'src/elements/element-meta.json': JSON.stringify(
+        [{ tag: 'kai-x', displayName: 'X' }, { tag: 'kai-y', displayName: 'Y' }], null, 2),
+    }),
+    expect: ['GAP kai-y (TOTAL)'],
+  },
+  {
+    name: 'DIRECTIVE: a reviewed equivalent naming a PUBLIC component makes it DECLARED',
+    files: fixtureFiles({
+      'src/elements/y.tsx':
+        "import { defineWebComponent } from './define';\n// solid-coverage: equivalent Foo -- same contract, different mechanism\ndefineWebComponent('kai-y', {}, () => <div><slot /></div>);\n",
+      'src/elements/element-meta.json': JSON.stringify(
+        [{ tag: 'kai-x', displayName: 'X' }, { tag: 'kai-y', displayName: 'Y' }], null, 2),
+    }),
+    expect: [],
+    check: (v) => {
+      const row = v.rows?.find((r) => r.tag === 'kai-y');
+      return row?.verdict === 'DECLARED' && row?.solidSurface?.includes('Foo')
+        ? null
+        : `expected kai-y DECLARED with surface [Foo], got ${row?.verdict} [${row?.solidSurface}]`;
+    },
+  },
+  {
+    name: 'DIRECTIVE is not an exemption: naming a component ./solid does not export still fails',
+    files: fixtureFiles({
+      'src/elements/y.tsx':
+        "import { defineWebComponent } from './define';\n// solid-coverage: equivalent Bar -- wishful thinking\ndefineWebComponent('kai-y', {}, () => <div><slot /></div>);\n",
+      'src/elements/element-meta.json': JSON.stringify(
+        [{ tag: 'kai-x', displayName: 'X' }, { tag: 'kai-y', displayName: 'Y' }], null, 2),
+    }),
+    expect: ['GAP kai-y (TOTAL)', 'SOLID-EQUIVALENT NOT PUBLIC: kai-y declares Bar'],
+  },
+  {
+    name: 'DIRECTIVE on an element that is not a TOTAL gap is STALE and fails',
+    files: fixtureFiles({
+      'src/elements/x.tsx':
+        "import { defineWebComponent } from './define';\nimport { Foo } from '../components/foo';\n// solid-coverage: equivalent Foo -- already renders it, this directive is dead weight\ndefineWebComponent('kai-x', {}, () => <Foo a=\"hi\" />);\n",
+    }),
+    expect: ['SOLID-EQUIVALENT STALE: kai-x declares Foo'],
+  },
+  {
+    name: 'DIRECTIVE without a reason is MALFORMED and fails',
+    files: fixtureFiles({
+      'src/elements/y.tsx':
+        "import { defineWebComponent } from './define';\n// solid-coverage: equivalent Foo\ndefineWebComponent('kai-y', {}, () => <div><slot /></div>);\n",
+      'src/elements/element-meta.json': JSON.stringify(
+        [{ tag: 'kai-x', displayName: 'X' }, { tag: 'kai-y', displayName: 'Y' }], null, 2),
+    }),
+    expect: ['SOLID-EQUIVALENT MALFORMED'],
   },
   {
     name: 'VACUITY: an empty catalog is not 0/0 success',
@@ -637,7 +766,7 @@ if (analysis.fatal) {
   console.error(analysis.fatal);
   process.exit(1);
 }
-const { result, rows, unreachable, propTypes, propTypesMissing, notInSolid, catalog, publicValues, publicTypes, runtimeExports, rootRuntimeExports } = analysis;
+const { result, rows, unreachable, propTypes, propTypesMissing, notInSolid, directiveProblems, catalog, publicValues, publicTypes, runtimeExports, rootRuntimeExports } = analysis;
 
 const jsonIdx = process.argv.indexOf('--json');
 if (jsonIdx > -1) writeFileSync(process.argv[jsonIdx + 1], JSON.stringify(result, null, 2));
@@ -645,7 +774,7 @@ if (jsonIdx > -1) writeFileSync(process.argv[jsonIdx + 1], JSON.stringify(result
 const verbose = process.argv.includes('--verbose');
 
 console.log(`elements ${catalog.length} | public values ${publicValues.size} | public types ${publicTypes.size} | runtime keys ${runtimeExports.size}`);
-console.log(`DIRECT ${result.totals.DIRECT}  COMPOSITION ${result.totals.COMPOSITION}  GAP ${result.totals.GAP} (total ${result.totals.gapTotal} / partial ${result.totals.gapPartial})\n`);
+console.log(`DIRECT ${result.totals.DIRECT}  COMPOSITION ${result.totals.COMPOSITION}  DECLARED ${result.totals.DECLARED}  GAP ${result.totals.GAP} (total ${result.totals.gapTotal} / partial ${result.totals.gapPartial})\n`);
 
 if (verbose) {
   for (const r of rows) {
@@ -680,6 +809,13 @@ if (gapRows.length) {
   console.error('');
 } else {
   console.log(`✓ solid coverage: ${catalog.length}/${catalog.length} elements have a writable SolidJS equivalent.`);
+}
+
+if (directiveProblems.length) {
+  // decided by failureReasons above
+  console.error(`✗ ${directiveProblems.length} \`solid-coverage: equivalent\` directive problem(s):\n`);
+  for (const p of directiveProblems) console.error(`    ${p}`);
+  console.error('');
 }
 
 if (notInSolid.length) {

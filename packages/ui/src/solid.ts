@@ -180,3 +180,32 @@ export { Captions } from './components/captions';
 export type { CaptionsProps, CaptionSegment, CaptionsVariant } from './components/captions';
 export { createConversationItemsController, readConversationItemId } from './components/conversation-list';
 export type { ConversationItemsController, ConversationItemsControllerOptions } from './components/conversation-list';
+// Panel / PanelHeader / PanelBody / PanelFooter — the widget panel chrome as
+// public parts (blocks-and-parts ruling P-1). Behind `<kai-panel>` /
+// `<kai-panel-header>`; exported here for a Solid consumer composing the
+// frame directly.
+export { Panel, PanelHeader, PanelBody, PanelFooter } from './components/panel';
+export type { PanelProps, PanelHeaderProps, PanelBodyProps, PanelFooterProps } from './components/panel';
+// TabBar pieces — TabBarItemContent is the shared interior `<kai-tab-bar>`
+// and `<kai-tab-bar-item>` both render; createTabBarItemsController (plus its
+// reader helpers) is the parent-item DOM contract `<kai-tab-bar>` runs, a
+// Solid consumer building the same declarative-children pattern needs it too.
+export {
+  TabBarItemContent, createTabBarItemsController, readTabBarItemValue, isTabBarItemDisabled,
+} from './components/tab-bar';
+export type {
+  TabBarItemContentProps, TabBarItemsController, TabBarItemsControllerOptions,
+} from './components/tab-bar';
+// createViewStack — the controller behind `<kai-view-stack>`'s DOM-children
+// navigation model. A Solid consumer composing the web-component pattern
+// directly needs it too.
+export { createViewStack } from './components/view-stack';
+export type { CreateViewStackOptions } from './components/view-stack';
+// ViewStack/View — the pure-Solid twin of `<kai-view-stack>`/`<kai-view>`:
+// same contract (named views, tab roots vs drill views, hidden-not-unmounted
+// inactive content), coordinated through context instead of the elements'
+// light-DOM MutationObserver. `<kai-view>`'s solid-coverage directive
+// (src/elements/view.tsx) names `View` as its writable equivalent, and the
+// coverage guard verifies that export survives the build.
+export { ViewStack, View, useViewStack } from './components/view-stack';
+export type { ViewStackProps, ViewProps, ViewStackController, ViewStackState, ViewEntry } from './components/view-stack';
