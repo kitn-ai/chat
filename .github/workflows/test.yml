@@ -238,6 +238,34 @@ jobs:
       - name: pack --json parse guard (one parser, both npm shapes)
         run: pnpm --filter @kitn.ai/ui run lint:pack-parse
 
+      # Two story-convention defects were hand-authored per `.stories.tsx` file
+      # with nothing enforcing them: (a) a story that draws its own JSX via
+      # `render:` has no auto-derived Controls/Code panel to fall back on, so
+      # the house convention is a hand-authored `docs.source.code` usage
+      # snippet -- `view-stack.stories.tsx` and `pane-group.stories.tsx`
+      # shipped `render:` stories with neither, so their Code tab silently
+      # showed Storybook's raw serialized story-object dump instead of usage
+      # code; (b) an `argTypes` entry whose key looks like an event
+      # (`/^on[A-Z]/`) needs `table: { category: 'Events' }` to sort into the
+      # Events group rather than alongside plain props -- ~34 files defined an
+      # `onX` argType without it.
+      #
+      # A real TS parse, not a regex: both rules are about a SHAPE in the code
+      # (a property chain, a story's `render` key), the same reasoning
+      # lint-cdn-pins gives for why IT stays regex on a token that also
+      # legitimately appears in prose -- this is the opposite case.
+      #
+      # `--self-test` proves the analyzer still detects both defect shapes (and
+      # correctly exempts the shared `const meta = {...}.render` args-driven
+      # wrapper, and spread `...argTypesFor(...)` entries, which carry no
+      # static key to check) before trusting the real scan. A run that matches
+      # no `.stories.tsx` file at all is a hard failure, not a clean tree.
+      #
+      # Reads source only, no dist/, so it is a seam anyone can grab to watch
+      # it fail (`node packages/ui/scripts/lint-story-conventions.mjs`).
+      - name: Story-convention guard (docs.source.code + argType Events category)
+        run: pnpm --filter @kitn.ai/ui run lint:story-conventions
+
       # Does a document that ENUMERATES the merge gate still match this job?
       # A handoff said "every gate is green" over a five-command list while this
       # job was red on `verify:pack`, which was not one of the five --
