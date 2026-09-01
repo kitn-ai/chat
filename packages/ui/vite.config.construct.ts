@@ -53,7 +53,9 @@ export default defineConfig({
         // and needed here because the gallery page's emitted
         // dist/gallery-app/GalleryPage.d.ts imports BLOCK_FORMS types from
         // '../agent-tooling/blocks/forms' — the same reason templates.d.ts is
-        // emitted for dist/builder/HomeScreen.d.ts. forms.d.ts imports
+        // emitted while the builder page still lived under src/ (it is
+        // apps/builder/HomeScreen.tsx now, outside the dts include; the
+        // entries stay for public.d.ts consumers). forms.d.ts imports
         // './registry', so both are listed.
         'src/agent-tooling/blocks/registry.ts',
         'src/agent-tooling/blocks/forms.ts',
