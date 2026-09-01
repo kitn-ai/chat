@@ -177,6 +177,7 @@ import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
+import { storyRoots } from './story-roots.mjs';
 // esbuild is imported LAZILY, inside loadAuthored(). It refuses to initialize
 // under jsdom ("new TextEncoder().encode('') instanceof Uint8Array is
 // incorrectly false") and tests/scripts/catalog-drift-guard-wiring.test.ts
@@ -606,6 +607,11 @@ export function check({
  * Walks ALL of src/, not src/elements/: `Labs/Settings` lives in src/ui/ and
  * `Labs/Audio Visualizers` under src/components/, so a scan scoped to
  * src/elements/ false-fails on both. Measured, not assumed.
+ *
+ * Also walks apps/: `.storybook/main.ts:54` indexes the apps stories glob
+ * alongside the src one, and `apps/gallery/GalleryPage.stories.tsx` (title
+ * 'Labs/Gallery') moved out of src/ in the apps-out-of-src restructure — see
+ * story-roots.mjs for the shared derivation this mirrors.
  */
 function deriveLabsTitles() {
   const exts = storyExtensions();
@@ -630,7 +636,7 @@ function deriveLabsTitles() {
       if (titles.includes('Labs/Apps')) names.add(entry.name.replace(`.stories.${ext}`, ''));
     }
   };
-  walk(join(ROOT, 'src'));
+  for (const root of storyRoots(ROOT)) walk(root);
   return [...names];
 }
 

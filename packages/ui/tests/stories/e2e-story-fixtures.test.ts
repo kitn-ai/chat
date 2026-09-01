@@ -53,6 +53,7 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { storyRoots } from '../../scripts/story-roots.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../..');
@@ -117,7 +118,9 @@ interface DeclaredStories {
 function declaredStories(): DeclaredStories {
   const ids = new Set<string>();
   const sections = new Set<string>();
-  walk(join(ROOT, 'src'), (file) => {
+  // Both src/ and apps/ hold `.stories.tsx` files -- see story-roots.mjs's
+  // header (`.storybook/main.ts:54` is the authority the two roots mirror).
+  for (const root of storyRoots(ROOT)) walk(root, (file) => {
     if (!/\.stories\.tsx?$/.test(file)) return;
     const src = readFileSync(file, 'utf8');
     const titleValues = [

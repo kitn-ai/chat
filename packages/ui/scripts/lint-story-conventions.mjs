@@ -50,10 +50,11 @@
 //
 //   node packages/ui/scripts/lint-story-conventions.mjs
 //   node packages/ui/scripts/lint-story-conventions.mjs --self-test   # prove it still detects
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { storyRoots } from './story-roots.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -63,7 +64,9 @@ const argOf = (flag) => {
 };
 const PKG_ROOT = resolve(argOf('--package-root') ?? join(SCRIPT_DIR, '..'));
 const SELF_TEST = argv.includes('--self-test');
-const SRC_DIR = join(PKG_ROOT, 'src');
+// Both `src/` and `apps/` hold `.stories.tsx` files -- see story-roots.mjs's
+// header (`.storybook/main.ts:54` is the authority the two roots mirror).
+const STORY_ROOTS = storyRoots(PKG_ROOT);
 
 const parse = (path, text) =>
   ts.createSourceFile(path, text, ts.ScriptTarget.Latest, /* setParentNodes */ true, ts.ScriptKind.TSX);
@@ -339,14 +342,14 @@ function walk(dir, out) {
   return out;
 }
 
-if (!existsSync(SRC_DIR)) {
-  console.error(`✗ lint-story-conventions: ${SRC_DIR} not found. This script is misrooted.`);
+if (STORY_ROOTS.length === 0) {
+  console.error(`✗ lint-story-conventions: no story roots (src/, apps/) found under ${PKG_ROOT}. This script is misrooted.`);
   process.exit(1);
 }
-const files = walk(SRC_DIR, []).sort();
+const files = STORY_ROOTS.flatMap((dir) => walk(dir, [])).sort();
 if (files.length === 0) {
   console.error(
-    `✗ lint-story-conventions: walked ${relative(PKG_ROOT, SRC_DIR)} and found NO .stories.tsx file.\n` +
+    `✗ lint-story-conventions: walked ${STORY_ROOTS.map((d) => relative(PKG_ROOT, d)).join(', ')} and found NO .stories.tsx file.\n` +
       `  That is this script being broken, not the tree being clean.`,
   );
   process.exit(1);
