@@ -846,6 +846,26 @@ jobs:
       - name: Cross-origin e2e matrix
         run: pnpm --filter @kitn.ai/ui test:e2e
 
+      # Every block in packages/ui/blocks/ gets its CI cell (V-2, blocks-and-
+      # parts 2026-08-31): the list is DERIVED from the directory scan each
+      # run, and per block it asserts (a) the manifest validates and the kai-
+      # contract checks pass, (b) the generated forms under dist/blocks/ are
+      # fresh against the block sources (gen-blocks --check), (c) the emitted
+      # CDN form's @kitn.ai/ui pins equal package.json (dist/ is outside
+      # lint:cdn-pins' scan on purpose, so the artifact a consumer pastes is
+      # re-asserted here), and (d) the block's declared states run in a real
+      # Chromium against its COMMITTED baseline, light + dark, zero console
+      # errors -- a discovered block with no baseline is a hard failure, not
+      # a skip. Build-dependent like verify:consumer AND browser-dependent,
+      # which is why it sits after the Playwright install rather than beside
+      # verify:consumer above. --self-test plants one failure per check class
+      # (including a doctored baseline through a real driver leg) before the
+      # real run. The run prints the block and check counts; read those,
+      # never a figure copied here. Roughly half a minute per block plus a
+      # one-leg self-test, measured at the gate's own OK lines.
+      - name: Block cells (every block vs its committed baseline, built bundle)
+        run: pnpm --filter @kitn.ai/ui run verify:blocks
+
       # Does a keyboard focus indicator actually PAINT inside a kai-* shadow
       # root? Asserting classes proves nothing here: `@property` registration is
       # document-global and ignored inside a shadow root, so every `--tw-*` is
