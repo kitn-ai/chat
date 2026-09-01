@@ -8,25 +8,31 @@ The project feels heavy. `packages/ui/src/` mixes the shipped library (elements,
 
 **Explicitly ruled out:** splitting the shipped library surface (`state`/`wire`/`stores`/`schemas`/…) into separate npm packages. Consumers keep ONE `@kitn.ai/ui` with subpath exports; any internal package split must preserve that. Also ruled out (Approach B in discussion): full internal decomposition of the kit's guts — `elements`/`components`/`primitives`/`ui` are one tightly coupled thing and stay one package.
 
-## Step 1 — move the three dev apps out of `src/` (this round)
+## Step 1 — move the three dev-tool apps out of `src/` (this round)
 
-- `packages/ui/src/builder-app` → `apps/builder`
-- `packages/ui/src/theme-studio-app` → `apps/theme-studio`
-- `packages/ui/src/gallery-app` → `apps/gallery`
+**Correction made during planning (owner-ruled 2026-09-01):** these are not dev-only apps. The kit's `build` prebuilds them into `dist/builder-page`, `dist/theme-studio` and `dist/gallery`, and the CLI's `kai dev` (`src/agent-tooling/construct/dev.ts`) serves those static files to consumers — they SHIP inside `@kitn.ai/ui`. They also import kit internals by relative path (`../ui/button`, `../components/builder-header`, `../agent-tooling/construct/schema`, `../agent-tooling/blocks/registry`, …), none of them public subpaths. A top-level `apps/` home would therefore be a package boundary in name only (or Step-2-class export promotion) and would sit beside `apps/docs`, which deploys separately. So the home is **inside the ui package, outside `src/`**:
 
-Each app keeps its vite config, moved alongside it (`packages/ui/vite.config.builder-page.ts`, `vite.config.theme-studio.ts`, `vite.config.gallery.ts` today). Apps import the kit as a workspace dependency or source alias — whichever the moved vite configs make cheapest, decided in the plan, with the constraint that `pnpm dev`-style iteration against kit source keeps working.
+- `packages/ui/src/builder-app` → `packages/ui/apps/builder`
+- `packages/ui/src/theme-studio-app` → `packages/ui/apps/theme-studio`
+- `packages/ui/src/gallery-app` → `packages/ui/apps/gallery`
 
-**The one real coupling stays behind:** `src/theme-studio-app/theme-tokens.ts` is a data catalog imported by `src/agent-tooling/construct/theme-token-policy.ts` and `tests/styles/theme-studio-coverage.test.ts`. It moves to `packages/ui/src/themes/theme-tokens.ts` (new folder), both importers updated, and `apps/theme-studio` imports it from the kit.
+A sibling of `frameworks/`, which already holds non-`src` code with its own tsconfig. The three vite configs stay where they are and repoint `root`. Relative imports into the kit become `../../src/<dir>/…`. A new `tsconfig.apps.json` joins the `typecheck` chain so the apps stay typechecked (the main tsconfig includes only `src/**`, which is also why the stray `dist/{builder-app,gallery-app,theme-studio-app}/*.d.ts` leakage disappears). The tarball's shipped surface (`dist/builder-page`, `dist/theme-studio`, `dist/gallery`) must be byte-for-byte unchanged apart from that d.ts leakage going away. Top-level `apps/` is revisited with Step 2, if the import surface ever gets public exports.
+
+**Kit-owned data leaves the app:** `theme-tokens.ts` (imported by `agent-tooling/construct/theme-token-policy.ts` and `tests/styles/theme-studio-coverage.test.ts`) and `theme-payload.ts` (the wire type both the builder and the studio import, and which `construct/schema.ts` mirrors) move to `packages/ui/src/themes/`. `theme-presets.ts` and `sample-data.ts` are studio-only and move with the app.
+
+**Storybook stays.** `.storybook/` is already at the package root and stories are co-located with their components by policy; `src/stories/` is low value to move. Not this round.
 
 **Known reference sites to update** (found by grep, re-grep during execution):
 
-- `tests/styles/shadow-sheet-scan.test.ts` — skip-list entries for `theme-studio-app` / `gallery-app`
-- The pack/gate `NOT_SHIPPED_DIRS` list (gallery-app joined it in f9b2d81b) — moving the dirs out may let entries be deleted; the pack ceiling should be re-checked, not assumed
-- `tests/styles/theme-studio-coverage.test.ts` — import path (the test itself stays in the kit; it guards `theme.css` ↔ token-catalog parity, both kit-owned)
-- `apps/docs` Tailwind `@source` pointing at the theme-studio app
-- Story/comment references (`builder-header.stories.tsx`, `builder-derived-panel.stories.tsx`, `components/builder-header.tsx`, `agent-tooling/construct/schema.ts`, `templates.ts`)
+- `tests/styles/shadow-sheet-scan.test.ts` — `NOT_SHIPPED_DIRS` entries for `theme-studio-app` / `gallery-app` (it walks `src/` only, so the moved dirs leave its scope and the entries go)
+- `src/elements/styles.css` — `@source "../builder-app"` scans the builder app into the SHADOW sheet, though the app is light-DOM with its own Tailwind build (`apps/builder/styles.css`). Dropped, with the builder page's rendering verified by IVP before and after; restored with the new path only if the IVP shows a regression
+- `tests/styles/theme-studio-coverage.test.ts` — import path + message text (the test stays in the kit; it guards `theme.css` ↔ token-catalog parity, both kit-owned)
+- `apps/docs/src/components/ThemeStudio.tsx` (re-exports the studio from kit source) and `apps/docs/src/styles/app.css` (Tailwind `@source` into the studio)
+- `.storybook/main.ts` stories glob (`GalleryPage.stories.tsx` moves with the gallery)
+- `vite.config.construct.ts` dts comment; `scripts/verify-pack-weight.mjs` narrative (dist paths unchanged, so behaviour is unaffected)
+- Story/comment references (`builder-header.stories.tsx`, `builder-derived-panel.stories.tsx`, `components/builder-header.tsx`, `agent-tooling/construct/schema.ts`, `templates.ts`); `CLAUDE.md` Map line
 
-**Verification:** the full gate set — `nx typecheck ui` (skip-cache), `vitest --project=unit` and `--project=emitted`, `verify:scaffold`, `verify:consumer`, `lint:silent-drops`, `lint:cdn-pins` — plus each moved app actually launching and rendering (Playwright/IVP), and `npm pack` contents compared before/after (the apps were never shipped; the tarball must not change beyond the theme-tokens path).
+**Verification:** the full gate set — `nx typecheck ui --skip-nx-cache`, `vitest --project=unit` and `--project=emitted`, `verify:scaffold`, `verify:consumer`, `lint:silent-drops`, `lint:cdn-pins` — plus `kai dev --builder` serving all three pages (builder, `/theme-studio/`, `/gallery/`) with screenshots compared to a pre-move baseline, and `npm pack --dry-run --json` file lists diffed before/after: the only permitted delta is the disappearance of `dist/{builder-app,gallery-app,theme-studio-app}/*.d.ts`.
 
 **Eval gate:** owner looks at the result before Step 2 starts.
 
