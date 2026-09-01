@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Support widget</title>
+    <link rel="stylesheet" href="./support-widget.css" />
+  </head>
+  <body>
+    <p class="host-stand-in">This blank page stands in for your site. The chat widget is in the bottom-right corner.</p>
+
+    <!-- The launcher shell. The widget interior is the kit's own parts:
+         kai-panel chrome, kai-panel-header (back/close are slotted content),
+         kai-view-stack routing (drilled hides the tab bar, per the stack's
+         one rule), kai-tab-bar navigation, kai-row home rows. -->
+    <kai-dock id="dock" label="Support" position="bottom-end" hide-close>
+      <kai-panel slot="panel">
+        <kai-panel-header slot="header">
+          <kai-button id="back" slot="start" variant="ghost" size="icon-sm" icon="arrow-left" label="Back" hidden></kai-button>
+          Support
+          <kai-button id="close" slot="end" variant="ghost" size="icon-sm" icon="x" label="Close Support"></kai-button>
+        </kai-panel-header>
+
+        <kai-view-stack id="stack" view="home">
+          <!-- Home tab -->
+          <kai-view name="home" tab-root>
+            <div class="home">
+              <div class="greeting">
+                <h2>How can we help? &#x1F44B;</h2>
+                <p class="subtitle">Orders, refunds, anything.</p>
+              </div>
+              <kai-row id="recent" class="recent-card" interactive hidden>
+                <span id="recent-title"></span>
+                <span slot="subtitle" id="recent-preview"></span>
+                <span slot="trailing" class="unread-dot" id="recent-dot" hidden></span>
+                <span slot="trailing" id="recent-time"></span>
+              </kai-row>
+              <kai-button id="cta" full align="start" icon-trailing="arrow-right">Send us a message</kai-button>
+              <div class="home-links">
+                <kai-row href="https://ui.kitn.ai" chevron>
+                  <kai-icon slot="leading" name="book-open" size="sm"></kai-icon>
+                  Help center
+                  <span slot="subtitle">Guides and FAQs</span>
+                </kai-row>
+              </div>
+            </div>
+          </kai-view>
+
+          <!-- Messages tab: the conversation list in its widget-panel
+               presentation - item mode, rows built by support-widget.js with
+               the public density="panel" (P-7), no group sections, and the
+               built-in rail header replaced by an empty slot. -->
+          <kai-view name="messages" tab-root>
+            <kai-conversations id="conversations" searchable="false">
+              <span slot="header"></span>
+            </kai-conversations>
+            <kai-button id="new-conversation" class="new-pill" variant="outline" size="sm">New conversation</kai-button>
+          </kai-view>
+
+          <!-- Drilled chat -->
+          <kai-view name="chat">
+            <kai-thread id="thread">
+              <kai-empty
+                slot="empty"
+                empty-title="Hi, we're here to help"
+                description="Ask us about orders, refunds, and more."
+              ></kai-empty>
+            </kai-thread>
+            <kai-prompt-input id="prompt" placeholder="Ask anything"></kai-prompt-input>
+          </kai-view>
+        </kai-view-stack>
+
+        <kai-tab-bar id="tabbar" slot="footer" value="home" label="Widget navigation">
+          <kai-tab-bar-item value="home" icon="home">Home</kai-tab-bar-item>
+          <kai-tab-bar-item id="tab-messages" value="messages" icon="message-square">Messages</kai-tab-bar-item>
+        </kai-tab-bar>
+      </kai-panel>
+    </kai-dock>
+
+    <script type="module" src="./support-widget.js"></script>
+  </body>
+</html>
