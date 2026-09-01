@@ -38,7 +38,7 @@ interface Props extends Record<string, unknown> {
   /** Dense single-line rows (a leading dot + title, no message count). */
   compact?: boolean;
   /** Show the built-in search box above the list. Default `true`. Set
-   *  `searchable="false"` (or `el.searchable = false`) to hide it — the
+   *  `searchable="false"` (or `el.searchable = false`) to hide it: the
    *  widget-box case, where the facade's own list view renders no search and
    *  a fine-grain composition previously had no way to match it (2026-08-31
    *  composition spike, phase 3 round 2). Same default-true flag convention

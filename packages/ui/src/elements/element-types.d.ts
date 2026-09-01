@@ -723,7 +723,7 @@ export interface KaiConversationsElement extends HTMLElement {
   defaultCollapsed?: boolean;
   /** Dense single-line rows (a leading dot + title, no message count). */
   compact?: boolean;
-  /** Show the built-in search box above the list. Default `true`. Set `searchable="false"` (or `el.searchable = false`) to hide it — the widget-box case, where the facade's own list view renders no search and a fine-grain composition previously had no way to match it (2026-08-31 composition spike, phase 3 round 2). Same default-true flag convention as `<kai-prompt-input attach>`: `<kai-conversations searchable>` and omitting it are both ON. Hidden, the `focus()`/`clear()` methods reach no input and `kai-search` never fires. */
+  /** Show the built-in search box above the list. Default `true`. Set `searchable="false"` (or `el.searchable = false`) to hide it: the widget-box case, where the facade's own list view renders no search and a fine-grain composition previously had no way to match it (2026-08-31 composition spike, phase 3 round 2). Same default-true flag convention as `<kai-prompt-input attach>`: `<kai-conversations searchable>` and omitting it are both ON. Hidden, the `focus()`/`clear()` methods reach no input and `kai-search` never fires. */
   searchable?: boolean;
   /** Focus the built-in search input inside the shadow root. */
   focus(options?: FocusOptions): void;
@@ -2618,7 +2618,7 @@ export interface KaiConversationsElementProps {
   defaultCollapsed?: boolean;
   /** Dense single-line rows (a leading dot + title, no message count). */
   compact?: boolean;
-  /** Show the built-in search box above the list. Default `true`. Set `searchable="false"` (or `el.searchable = false`) to hide it — the widget-box case, where the facade's own list view renders no search and a fine-grain composition previously had no way to match it (2026-08-31 composition spike, phase 3 round 2). Same default-true flag convention as `<kai-prompt-input attach>`: `<kai-conversations searchable>` and omitting it are both ON. Hidden, the `focus()`/`clear()` methods reach no input and `kai-search` never fires. */
+  /** Show the built-in search box above the list. Default `true`. Set `searchable="false"` (or `el.searchable = false`) to hide it: the widget-box case, where the facade's own list view renders no search and a fine-grain composition previously had no way to match it (2026-08-31 composition spike, phase 3 round 2). Same default-true flag convention as `<kai-prompt-input attach>`: `<kai-conversations searchable>` and omitting it are both ON. Hidden, the `focus()`/`clear()` methods reach no input and `kai-search` never fires. */
   searchable?: boolean;
 }
 

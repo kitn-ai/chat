@@ -214,7 +214,7 @@ export interface ConversationListProps {
   empty?: JSX.Element;
   /** Dense single-line rows (a leading dot + title, no message count). */
   compact?: boolean;
-  /** Show the built-in search box (default `true`). Set `false` to hide it —
+  /** Show the built-in search box (default `true`). Set `false` to hide it,
    *  e.g. a widget-box list where search earns no room (the facade's own
    *  `ConversationPanel` renders no search; 2026-08-31 composition spike,
    *  phase 3 round 2). Hidden, the imperative `focus()`/`clearSearch()`
