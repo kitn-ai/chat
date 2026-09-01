@@ -204,8 +204,15 @@ apart from the patch tables.
 ## 8. The module graph
 
 This decides what could be split into its own package, and it is the layer with
-no automated check at all.
+almost no automated check — one bullet below is the exception.
 
+- **`packages/ui/apps/**` (the three dev-tool apps: `builder`, `theme-studio`,
+  `gallery`) imports `../../src/**` by relative path** — they live outside
+  `src/`, so the library tsconfig (`src/**` only) and the dts emit never see
+  them. Enforced by: `tsconfig.apps.json`, which is in the `typecheck` chain
+  (`packages/ui/package.json`'s `typecheck` script), so a broken relative
+  import into `src/` fails `nx typecheck ui` / `pnpm --filter @kitn.ai/ui run
+  typecheck` — a required CI check.
 - **`wire/` → `state/` is one-directional.** `src/wire/consume.ts` imports runtime
   values from `src/state/parts.ts`; nothing in `src/state/` imports `wire/` outside
   tests. Verify: `grep -rn "from '\.\./wire" packages/ui/src/state/`.
@@ -223,12 +230,12 @@ no automated check at all.
   Element data reaches the MCP by reading `dist/custom-elements.json` at runtime.
 - **Two `exports` subpaths resolve into `src/`**, so `src` has to stay in `files`
   — see §2.
-- **Enforced by: NOTHING.** No dep-cruiser config, no ESLint anywhere in the repo,
-  no test asserting the module graph. The nearest things are shape guards
-  (`verify:dts` over emitted declarations, `verify:ssr` over entry points) and
-  `tsconfig.mcp.json`'s DOM-free `lib`, which is what actually keeps
-  `agent-tooling/mcp/**` honest — and which does not cover the leaf modules at the
-  root of `agent-tooling/`.
+- **Enforced by: NOTHING**, for every bullet above except the `apps/**` one. No
+  dep-cruiser config, no ESLint anywhere in the repo, no test asserting the rest
+  of the module graph. The nearest things are shape guards (`verify:dts` over
+  emitted declarations, `verify:ssr` over entry points) and `tsconfig.mcp.json`'s
+  DOM-free `lib`, which is what actually keeps `agent-tooling/mcp/**` honest —
+  and which does not cover the leaf modules at the root of `agent-tooling/`.
 
 ---
 
@@ -248,6 +255,7 @@ no automated check at all.
 | Anything `packages/ui/theme.css` declares at top level: `@custom-variant dark`, the `--color-*` / `--radius-*` / `--text-*` names in `@theme`, `@utility` rules, and any global class | the **consumer's** Tailwind theme. The file is `@import`ed into their build, so a new declaration here is a new edit to their `dark:` variant, their `rounded-*` / `text-*` scales or their utility namespace, and the list of those edits is prose in `guides/theming.mdx` ("What theme.css changes in a Tailwind build") plus the header comment in `theme.css` itself | Add a `--spacing-*` or a `--font-*` to `@theme` and a consumer's `p-4` or `font-sans` moves with no doc saying so; the two lists drift the day either is edited alone | **NOTHING** for the list. The prefix on global *names* (keyframes, classes) is enforced by `tests/elements/theme-globals.test.ts` (§4); which Tailwind namespaces the file re-points is documented, not derived |
 | `packages/ui/theme.css` | `dist/theme.tokens.css`, a transform of it by `scripts/build-theme-tokens.mjs` on every build (`build:theme`) | Cannot drift, by construction — but the transform decides what a `<link>` consumer gets: it hoists the keyframes, strips `@utility`, drops the `@custom-variant` and keeps `--radius-*` / `--text-*` on `:root`, where Tailwind utilities still read them at runtime. The docs state that residue; the script does not check it | `theme-globals.test.ts` compares the hoisted keyframe set and the scrollbar class back to the source; the residue list is prose |
 | Any link | — | | **NOTHING**. There is no link checker in any workflow |
+| `packages/ui/apps/theme-studio/ThemeStudio.tsx` | `apps/docs/src/components/ThemeStudio.tsx:6`, which re-exports it by a deep relative import (`../../../../packages/ui/apps/theme-studio/ThemeStudio`), and `apps/docs/src/styles/app.css:19`, which `@source`s the same directory so Tailwind's scanner sees classes written there | The docs site's `/theme/editor` page renders the kit's theme-studio app through a shim import; a path or export-shape change on the kit side breaks the shim, and a class added only in `theme-studio` without the `@source` line rescanning it loses its styling on the docs page | `nx build docs`, which compiles the shim import and runs the Tailwind build over the `@source`d directory — wired into `deploy-docs.yml` (push to `main` or manual dispatch), **not** the required `test` job, so a break here is caught on deploy, not on the PR |
 
 ---
 
