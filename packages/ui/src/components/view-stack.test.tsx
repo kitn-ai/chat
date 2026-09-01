@@ -74,6 +74,11 @@ describe('createViewStack — the headless model', () => {
       c.push('chat');
       c.back();
       expect(c.view()).toBe('messages');
+      // The root the drill was entered from, NOT the default root — the leg
+      // the first block build found broken at the element seam (the facade
+      // was re-creating the controller; see the untrack note in
+      // elements/view-stack.tsx and tests/elements/view-stack-element.test.tsx).
+      expect(c.root()).toBe('messages');
       expect(c.drilled()).toBe(false);
     });
   });

@@ -1,4 +1,4 @@
-import { createSignal, createEffect, on, onMount, onCleanup } from 'solid-js';
+import { createSignal, createEffect, on, onMount, onCleanup, untrack } from 'solid-js';
 import { defineWebComponent } from './define';
 import { createViewStack, type ViewEntry, type ViewStackState } from '../components/view-stack';
 
@@ -93,7 +93,18 @@ defineWebComponent<Props, Events>('kai-view-stack', {
 
   const controller = createViewStack({
     entries,
-    initialView: props.view as string | undefined,
+    // UNTRACKED, and that is the bug fix, not tidiness. The facade body runs
+    // inside a TRACKED scope (define.tsx renders `Facade(props, …)` from a JSX
+    // children thunk), so a bare `props.view` read here subscribed the whole
+    // facade to the prop — and the reflect effect below writes the `view`
+    // attribute on every navigation, which loops back into `props.view` and
+    // re-ran the body, silently REPLACING the controller (and all its state)
+    // mid-flight. The replacement booted from the CURRENT view as a deep link,
+    // so a drill entered from a non-default tab root forgot its root: after
+    // `selectTab('messages'); push('chat')`, `back()` landed on 'home'.
+    // `initialView` is a capture-once value by contract; later `view` writes
+    // navigate via the deferred effect below.
+    initialView: untrack(() => props.view as string | undefined),
     onViewChange: (state) => dispatch('kai-view-change', state),
   });
 

@@ -294,23 +294,15 @@ function renderSummaries(summaries) {
 }
 
 // --- Navigation: the stack owns the model; chrome consumes its state. ------
-// WORKAROUND (kit bug, filed with the Task 3.1 report): kai-view-stack's
-// back() from a drill entered from a NON-DEFAULT tab root lands on the
-// default root instead of the root it was entered from (repro: selectTab
-// then push then back on the bare element). Until that lands, the back
-// button routes through selectTab(lastRoot) - identical behavior at this
-// widget's one-deep drill. Swap back to stack.back() when the fix ships.
-let lastRoot = 'home';
 stack.addEventListener('kai-view-change', (e) => {
   const { view, root, drilled } = e.detail;
-  lastRoot = root ?? lastRoot;
   $('back').hidden = !drilled; // drilled shows the back arrow...
   tabbar.hidden = drilled; // ...and hides the tab bar (the stack's rule, consumed not restated)
   tabbar.value = root;
   controller.setView(view); // only 'chat' satisfies the seen rule's view leg
 });
 tabbar.addEventListener('kai-tab-change', (e) => stack.selectTab(e.detail.value));
-$('back').addEventListener('click', () => stack.selectTab(lastRoot));
+$('back').addEventListener('click', () => stack.back());
 $('close').addEventListener('click', () => dock.hide());
 dock.addEventListener('kai-open-change', (e) => controller.setOpen(e.detail.open));
 
