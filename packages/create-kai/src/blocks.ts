@@ -27,15 +27,24 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 
-import {
-  discoverBlocks,
-  generateCdnForm,
-} from '../../ui/src/agent-tooling/blocks/registry';
+import { discoverBlocks } from '../../ui/src/agent-tooling/blocks/registry';
 import type {
   Block,
   BlockManifest,
   RawBlockSource,
 } from '../../ui/src/agent-tooling/blocks/registry';
+// The FORM RENDERING is the kit's shared pure module too (same bundle-import
+// precedent as the registry line above): one renderer serves this planner AND
+// the `kai dev` gallery's per-framework code view, so what the gallery shows
+// is byte-for-byte what `add` writes.
+import {
+  adaptRegistrationForBundler,
+  componentName,
+  renderCdnFormFiles,
+  renderReactForm,
+  renderWcForm,
+  type BlockFormId,
+} from '../../ui/src/agent-tooling/blocks/forms';
 
 import { getIntegration, listIntegrations } from './catalog';
 import type { Integration } from './catalog';
@@ -43,18 +52,9 @@ import type { Axis } from './axes';
 import { getFramework } from './frameworks';
 import { emitRoute } from './routes';
 import type { EmittedFile } from './routes';
-import {
-  bodyToJsx,
-  componentName,
-  kaiTagsIn,
-  renderComponent,
-  renderEntryTypings,
-  renderJsxTypings,
-  wrapEntryScript,
-  wrapWcEntryScript,
-} from './react-form';
 
 export type { Block, BlockManifest };
+export { adaptRegistrationForBundler };
 
 // ---------------------------------------------------------------- discovery
 
@@ -220,7 +220,7 @@ export const FRAMEWORK_SIGNALS: readonly { dep: string; lands: 'react' | 'wc' }[
   { dep: 'solid-js', lands: 'wc' },
 ];
 
-export type BlockForm = 'react' | 'wc' | 'cdn';
+export type BlockForm = BlockFormId;
 
 export type Detection =
   | { kind: 'none' }
@@ -281,23 +281,6 @@ export interface PlanOptions {
   kitVersion: string;
 }
 
-/**
- * Registration is rendered per delivery form. The authored block imports
- * `@kitn.ai/ui/autoloader`, which is a CDN / static-file tool by its own
- * header: it resolves element modules relative to its own URL, and through a
- * bundler every one of those fetches 404s (observed live: thirteen missing
- * `/assets/<element>.js` requests in a built vite app). The `add` form lands
- * in bundled projects, so its scripts register through the register-all
- * bundle instead; the CDN paste form keeps the autoloader, which is its
- * native pattern.
- */
-export function adaptRegistrationForBundler(js: string): string {
-  return js.replace(
-    /import\s+['"]@kitn\.ai\/ui\/autoloader['"];?/g,
-    `import '@kitn.ai/ui/elements'; // add form: register-all (the autoloader is CDN-only and 404s through a bundler)`,
-  );
-}
-
 const blockDir = (form: BlockForm, name: string) =>
   form === 'react' ? path.posix.join('src/blocks', name) : path.posix.join('blocks', name);
 
@@ -335,30 +318,15 @@ export function planAdd(resolved: ResolvedAdd, opts: PlanOptions): AddPlan {
   return plan;
 }
 
+// The three per-form file sets come from the ONE shared renderer
+// (`agent-tooling/blocks/forms.ts` — the gallery serves the identical output);
+// what stays here is what only the CLI knows: where the files land in the
+// consumer's project, and the note printed about them.
+
 function planWcBlock(block: Block, plan: AddPlan): void {
   const dir = blockDir('wc', block.name);
-  const pageEntry = block.manifest.files.find((f) => f.type === 'registry:page');
-  const pageHtml = pageEntry ? (block.files.get(pageEntry.path) as string) : '';
-  // The scripts the page loads as entries get the async-IIFE wrap (see
-  // `wrapWcEntryScript` for the deadlock it prevents); leaf modules ride along
-  // untouched but for the registration rewrite.
-  const entryScripts = new Set(
-    [...pageHtml.matchAll(/<script\s+type="module"\s+src="\.\/([^"]+)"\s*><\/script>/g)].map((m) => m[1]),
-  );
-  for (const entry of block.manifest.files) {
-    let contents = block.files.get(entry.path) as string;
-    if (entry.path.endsWith('.js')) {
-      if (entryScripts.has(entry.path)) {
-        const wrapped = wrapWcEntryScript(contents);
-        if (wrapped.errors.length) throw new Error(`${block.name}: ${wrapped.errors.join('; ')}`);
-        contents = wrapped.code as string;
-      }
-      contents = adaptRegistrationForBundler(contents);
-    }
-    plan.files.push({
-      path: path.posix.join(dir, entry.target ?? path.posix.basename(entry.path)),
-      contents,
-    });
+  for (const file of renderWcForm(block)) {
+    plan.files.push({ path: path.posix.join(dir, file.path), contents: file.content });
   }
   const page = block.manifest.files.find((f) => f.type === 'registry:page');
   plan.notes.push(`${block.name}: web-component form under ${dir}/ (open ${path.posix.join(dir, page?.target ?? '')} through your dev server)`);
@@ -366,60 +334,16 @@ function planWcBlock(block: Block, plan: AddPlan): void {
 
 function planReactBlock(block: Block, plan: AddPlan): void {
   const dir = blockDir('react', block.name);
-  const pageEntry = block.manifest.files.find((f) => f.type === 'registry:page');
-  if (!pageEntry) throw new Error(`${block.name}: no registry:page entry to render the react form from`);
-  const pageHtml = block.files.get(pageEntry.path) as string;
-
-  const scriptNames = [...pageHtml.matchAll(/<script\s+type="module"\s+src="\.\/([^"]+)"\s*><\/script>/g)].map((m) => m[1]);
-  if (scriptNames.length !== 1) {
-    throw new Error(`${block.name}: the react form needs exactly one module script on the page, found ${scriptNames.length}`);
+  for (const file of renderReactForm(block)) {
+    plan.files.push({ path: path.posix.join(dir, file.path), contents: file.content });
   }
-  const entryScript = scriptNames[0];
-  const stylesheets = [...pageHtml.matchAll(/<link\s+rel="stylesheet"\s+href="\.\/([^"]+)"\s*\/?>/g)].map((m) => m[1]);
-
-  const jsx = bodyToJsx(pageHtml);
-  if (jsx.errors.length) throw new Error(`${block.name}: ${jsx.errors.join('; ')}`);
-  const wrapped = wrapEntryScript(block.files.get(entryScript) ?? '');
-  if (wrapped.errors.length) throw new Error(`${block.name}: ${wrapped.errors.join('; ')}`);
-
-  for (const entry of block.manifest.files) {
-    if (entry.type === 'registry:page') continue; // the tsx component IS the page here
-    const target = entry.target ?? path.posix.basename(entry.path);
-    const raw =
-      entry.path === entryScript ? (wrapped.code as string) : (block.files.get(entry.path) as string);
-    plan.files.push({
-      path: path.posix.join(dir, target),
-      contents: entry.path.endsWith('.js') ? adaptRegistrationForBundler(raw) : raw,
-    });
-  }
-  // PascalCase on purpose, and not only as react convention: the component
-  // must NOT share a basename with the entry script, or `bundler` resolution
-  // maps the tsx's own `import('./<entry>.js')` back onto the tsx itself
-  // (js -> tsx substitution) instead of the script's .d.ts.
-  plan.files.push({
-    path: path.posix.join(dir, `${componentName(block.name)}.tsx`),
-    contents: renderComponent({ blockName: block.name, jsx: jsx.jsx as string, entryScript, stylesheets }),
-  });
-  plan.files.push({
-    path: path.posix.join(dir, 'kai-elements.d.ts'),
-    contents: renderJsxTypings(kaiTagsIn(pageHtml)),
-  });
-  plan.files.push({
-    path: path.posix.join(dir, entryScript.replace(/\.js$/, '.d.ts')),
-    contents: renderEntryTypings(entryScript),
-  });
   plan.notes.push(`${block.name}: react form under ${dir}/ (render <${componentName(block.name)} /> from ${dir}/${componentName(block.name)}.tsx)`);
 }
 
 function planCdnBlock(block: Block, opts: PlanOptions, plan: AddPlan): void {
-  if ((block.manifest.registryDependencies ?? []).some((dep) => !dep.startsWith('route:'))) {
-    throw new Error(
-      `${block.name} composes other blocks, and the single-file paste form cannot carry them yet; run \`create-kai add\` inside a project instead`,
-    );
+  for (const file of renderCdnFormFiles(block, { version: opts.kitVersion })) {
+    plan.files.push({ path: file.path, contents: file.content });
   }
-  const form = generateCdnForm(block, { version: opts.kitVersion });
-  if (!form.html) throw new Error(`${block.name}: the paste form cannot be generated: ${form.errors.join('; ')}`);
-  plan.files.push({ path: `${block.name}.html`, contents: form.html });
   plan.notes.push(
     `${block.name}: no project here, so this is the self-contained CDN paste form - open ${block.name}.html directly, or paste it into any page. To scaffold a project around it, run \`npm create kai@latest\`.`,
   );

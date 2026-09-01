@@ -19,6 +19,7 @@ import { generateProject, writeProject, type GeneratedFile, type GenerateOptions
 import { npmArgs, npmInvocation } from './local-kit';
 import { validateConstruct, type Construct, type ConstructProblem } from './schema';
 import { generateCdnForm, type Block, type BlockManifest } from '../blocks/registry';
+import { BLOCK_FORMS, isBlockFormId, renderBlockForm, type FormFile } from '../blocks/forms';
 import { buildableTemplates, inferTemplateId, templateById, type ConstructListing } from './templates';
 
 export type { ConstructListing } from './templates';
@@ -669,6 +670,76 @@ export function isBlockName(name: string): boolean {
   return /^[a-z0-9]+(-[a-z0-9]+)*$/.test(name);
 }
 
+// ── a store-only zip writer for the gallery's Download route ────────────────
+// Decision, recorded per the round-2 brief: node's built-in zlib has DEFLATE
+// but no zip CONTAINER, and nothing in the package's dependency tree ships
+// one (checked: no jszip/adm-zip/archiver/yazl anywhere under packages/ui).
+// The files being zipped are a handful of small text sources, so compression
+// buys nothing worth a new dependency — this is the ~60-line store-only
+// writer (method 0), which any unzip reads. Deterministic on purpose (fixed
+// 1980-01-01 timestamps): the same files always produce the same bytes, so
+// the byte-equality check in verification is stable.
+
+const CRC_TABLE = new Uint32Array(256).map((_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+
+export function crc32(buf: Buffer): number {
+  let c = 0xffffffff;
+  for (const byte of buf) c = CRC_TABLE[(c ^ byte) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+/** The listed files as one uncompressed (store-only) zip. */
+export function storeZip(files: readonly FormFile[]): Buffer {
+  const DOS_DATE = (1 << 5) | 1; // 1980-01-01, the zip epoch — deterministic
+  const locals: Buffer[] = [];
+  const centrals: Buffer[] = [];
+  let offset = 0;
+  for (const file of files) {
+    const name = Buffer.from(file.path, 'utf8');
+    const data = Buffer.from(file.content, 'utf8');
+    const crc = crc32(data);
+    const fixed = (sig: number, extraLead: Buffer): Buffer => {
+      const head = Buffer.alloc(4);
+      head.writeUInt32LE(sig, 0);
+      const meta = Buffer.alloc(22);
+      meta.writeUInt16LE(20, 0); // version needed: 2.0
+      meta.writeUInt16LE(0, 2); // flags
+      meta.writeUInt16LE(0, 4); // method: store
+      meta.writeUInt16LE(0, 6); // mod time
+      meta.writeUInt16LE(DOS_DATE, 8); // mod date
+      meta.writeUInt32LE(crc, 10);
+      meta.writeUInt32LE(data.length, 14); // compressed = uncompressed (store)
+      meta.writeUInt32LE(data.length, 18);
+      return Buffer.concat([head, extraLead, meta]);
+    };
+    const localTail = Buffer.alloc(4);
+    localTail.writeUInt16LE(name.length, 0);
+    localTail.writeUInt16LE(0, 2); // extra length
+    const local = Buffer.concat([fixed(0x04034b50, Buffer.alloc(0)), localTail, name, data]);
+    const centralVersion = Buffer.alloc(2);
+    centralVersion.writeUInt16LE(20, 0); // version made by
+    const centralTail = Buffer.alloc(18);
+    centralTail.writeUInt16LE(name.length, 0);
+    // extra(2) comment(2) disk(2) internal-attrs(2) external-attrs(4): all zero
+    centralTail.writeUInt32LE(offset, 14); // local header offset
+    centrals.push(Buffer.concat([fixed(0x02014b50, centralVersion), centralTail, name]));
+    locals.push(local);
+    offset += local.length;
+  }
+  const centralDir = Buffer.concat(centrals);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(files.length, 8); // entries on this disk
+  eocd.writeUInt16LE(files.length, 10); // entries total
+  eocd.writeUInt32LE(centralDir.length, 12);
+  eocd.writeUInt32LE(offset, 16); // central dir offset
+  return Buffer.concat([...locals, centralDir, eocd]);
+}
+
 export interface GalleryDirs {
   /** dist/gallery — the prebuilt page. */
   pageDir?: string;
@@ -680,7 +751,7 @@ export interface GalleryDirs {
 }
 
 export type GalleryResponse =
-  | { kind: 'file'; type: string; body: string | Buffer; cors?: boolean }
+  | { kind: 'file'; type: string; body: string | Buffer; cors?: boolean; /** save-as filename: the server adds a content-disposition attachment header */ download?: string }
   | { kind: 'redirect'; location: string }
   | { kind: 'missing'; message: string };
 
@@ -736,6 +807,35 @@ export function handleGalleryRequest(url: string, dirs: GalleryDirs): GalleryRes
       // /gallery/preview/ route, and serving the pinned form as html here
       // would offer a second, subtly different live path.
       return { kind: 'file', type: 'text/plain; charset=utf-8', body: readFileSync(file) };
+    }
+    // The delivery-form routes (round-2 owner feedback): the SAME shared
+    // renderer `create-kai add` plans with (`blocks/forms.ts`), so the code
+    // view and the zip a visitor downloads are byte-for-byte what `add`
+    // writes for that framework. `form` answers JSON for the page's code
+    // view; `zip` answers the identical file set as a store-only zip. The
+    // cdn form pins the served package version — the same output as the
+    // built r/<name>.cdn.html, through the same serializer.
+    const formMatch = /^\/gallery\/api\/(form|zip)\/([^/]+)\/([^/]+)$/.exec(path);
+    if (formMatch && isBlockName(formMatch[2])) {
+      const [, route, name, form] = formMatch;
+      if (!isBlockFormId(form)) {
+        return { kind: 'missing', message: `unknown form "${form}" — this release renders: ${BLOCK_FORMS.map((f) => f.id).join(', ')}` };
+      }
+      const file = join(dirs.blocksDir, 'r', `${name}.json`);
+      if (!existsSync(file)) return { kind: 'missing', message: `no block named "${name}" in the registry` };
+      let files: FormFile[];
+      try {
+        const item = JSON.parse(readFileSync(file, 'utf8'));
+        files = renderBlockForm(blockFromRegistryItem(item as Parameters<typeof blockFromRegistryItem>[0]), form, {
+          cdn: { version: dirs.version },
+        });
+      } catch (err) {
+        return { kind: 'missing', message: `the ${form} form cannot be rendered: ${err instanceof Error ? err.message : String(err)}` };
+      }
+      if (route === 'form') {
+        return { kind: 'file', type: 'application/json', body: JSON.stringify({ form, files }) };
+      }
+      return { kind: 'file', type: 'application/zip', body: storeZip(files), download: `${name}-${form}.zip` };
     }
     const previewMatch = /^\/gallery\/preview\/([^/]+)\/$/.exec(path);
     if (previewMatch && isBlockName(previewMatch[1])) {
@@ -1205,6 +1305,7 @@ export async function devBuilder(
           res.writeHead(200, {
             'content-type': galleryOut.type,
             ...(galleryOut.cors ? { 'access-control-allow-origin': '*' } : {}),
+            ...(galleryOut.download ? { 'content-disposition': `attachment; filename="${galleryOut.download}"` } : {}),
           });
           return res.end(galleryOut.body);
         }

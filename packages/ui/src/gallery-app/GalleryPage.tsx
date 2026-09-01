@@ -8,8 +8,20 @@
  * gallery LEADS with the block's FILE TREE — the per-file view + copy and the
  * one-line `npx create-kai add <name>` are the primary affordances, because
  * the shadcn-shaped file tree IS the product. The standalone CDN-paste form
- * is a secondary try-it/download affordance, never presented as the block
- * itself (it renders as a small labeled row under the code panel).
+ * is a secondary try-it affordance, never presented as the block itself (it
+ * renders as a small labeled row under the code panel).
+ *
+ * ROUND-2 OWNER FEEDBACK, also binding: the Code view carries a FRAMEWORK
+ * selector (the delivery-form axis, derived from the shared renderer's
+ * `BLOCK_FORMS`, never hand-listed) — the file tree, per-file contents and
+ * every copy/download affordance re-render for the SELECTED form, so what a
+ * react consumer copies is the react form `add` would write, byte for byte
+ * (one renderer: `agent-tooling/blocks/forms.ts`). Web components — the
+ * authored truth — is the default form. Download (a zip of the selected
+ * form, served by the gallery's GET zip route) sits in the code header
+ * beside the per-file Copy, which is an icon button with an accessible
+ * label; the install one-liner stays primary and says out loud that `add`
+ * auto-detects the framework.
  *
  * The grammar mirrors shadcn's /blocks (spec B-G): category nav → live
  * preview iframe sized by `meta.iframeHeight`, viewport toggles,
@@ -20,22 +32,24 @@
  * DOGFOOD, per the same ruling: the page composes the kit's own pieces —
  * `WorkSurface` (preview frame through the kit's `Artifact` sandbox, device
  * toggles, the Preview|Code segmented toggle, open-in-new-tab), `FileTree`
- * over the block's add-form file list, and `CodeBlock`/`CodeBlockCode` per
- * selected file with the copy header. Gaps this page hits are findings for
- * the round's report, not workarounds.
+ * over the selected form's file list, and `CodeBlock`/`CodeBlockCode` per
+ * selected file. Gaps this page hits are findings for the round's report,
+ * not workarounds.
  */
 import { type JSX, For, Show, createMemo, createSignal } from 'solid-js';
+import { Check, Copy, Download } from 'lucide-solid';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
 import { WorkSurface } from '../components/work-surface';
 import { FileTree, type FileTreeFile } from '../components/file-tree';
-import { CodeBlock, CodeBlockCode } from '../components/code-block';
+import { CodeBlock, CodeBlockCode, CodeBlockGroup } from '../components/code-block';
+import { BLOCK_FORMS, type BlockFormId, type FormFile } from '../agent-tooling/blocks/forms';
 
-/** One gallery entry: the registry item's browse fields plus the add-form
- *  file contents (from the per-block item JSON, `dist/blocks/r/<name>.json`
- *  — the public integration surface). `previewSrc` is the live preview URL
- *  the server generates; the story leaves it unset and passes a stub
- *  `preview` element instead. */
+/** One gallery entry: the registry item's browse fields plus the rendered
+ *  DELIVERY FORMS (from the server's /gallery/api/form/ route — the shared
+ *  renderer, so each form is byte-identical to what `add` writes).
+ *  `previewSrc` is the live preview URL the server generates; the story
+ *  leaves it unset and passes a stub `preview` element instead. */
 export interface GalleryBlock {
   name: string;
   title: string;
@@ -43,7 +57,9 @@ export interface GalleryBlock {
   categories: string[];
   /** `meta.iframeHeight` from the manifest — sizes the preview surface. */
   iframeHeight?: string;
-  files: { path: string; content: string }[];
+  /** Rendered files per delivery form. Only the forms present are offered
+   *  (menu honesty); `wc` — the authored truth — is the default tab. */
+  forms: Partial<Record<BlockFormId, FormFile[]>>;
   /** The manifest's `docs` string — printed under the block, the same text
    *  the CLI prints on install. */
   docs?: string;
@@ -52,8 +68,8 @@ export interface GalleryBlock {
   /** Stub preview content for story/offline use, rendered when
    *  `previewSrc` is absent (WorkSurface's own fallback path). */
   preview?: JSX.Element;
-  /** The standalone CDN-paste form (secondary try-it/download affordance).
-   *  The row does not render without it. */
+  /** The standalone CDN-paste form (secondary try-it affordance). The row
+   *  does not render without it. */
   cdnHtml?: string;
 }
 
@@ -65,6 +81,7 @@ export function languageFor(path: string): string {
     case 'css': return 'css';
     case 'js': case 'mjs': return 'javascript';
     case 'ts': return 'typescript';
+    case 'tsx': return 'tsx';
     case 'json': return 'json';
     default: return 'text';
   }
@@ -76,18 +93,32 @@ export function installCommandFor(name: string): string {
   return `npx create-kai add ${name}`;
 }
 
+/** The server's zip route for one block's selected form — one derivation,
+ *  shared by the Download button and the tests (the dev server's
+ *  `handleGalleryRequest` owns the matching route). */
+export function zipHrefFor(name: string, form: BlockFormId): string {
+  return `/gallery/api/zip/${name}/${form}`;
+}
+
+/** The delivery forms this block actually carries, in BLOCK_FORMS order —
+ *  derived from the shared axis, offered only when present (menu honesty). */
+export function formsAvailable(block: Pick<GalleryBlock, 'forms'>): { id: BlockFormId; label: string }[] {
+  return BLOCK_FORMS.filter((form) => (block.forms[form.id]?.length ?? 0) > 0).map((f) => ({ ...f }));
+}
+
 const COPIED_MS = 2000;
 
-/** A small copy-to-clipboard button used by the install one-liner and the
- *  CDN-form row. The acknowledged state swaps the label so a screen reader
- *  hears the same confirmation a sighted user sees. */
-function CopyTextButton(props: { text: string; label: string; variant?: 'outline' | 'ghost' }): JSX.Element {
+/** Icon copy button (round-2 owner feedback: icons, not text labels). The
+ *  accessible name carries the acknowledged state, so a screen reader hears
+ *  the same confirmation the icon swap shows. */
+function CopyIconButton(props: { text: string; label: string }): JSX.Element {
   const [copied, setCopied] = createSignal(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
   return (
     <Button
-      variant={props.variant ?? 'outline'}
-      size="sm"
+      variant="ghost"
+      size="icon-sm"
+      aria-label={copied() ? 'Copied' : props.label}
       onClick={() => {
         void Promise.resolve(navigator.clipboard?.writeText(props.text)).catch(() => {});
         setCopied(true);
@@ -95,7 +126,9 @@ function CopyTextButton(props: { text: string; label: string; variant?: 'outline
         timer = setTimeout(() => setCopied(false), COPIED_MS);
       }}
     >
-      {copied() ? 'Copied' : props.label}
+      <Show when={copied()} fallback={<Copy size={14} aria-hidden="true" />}>
+        <Check size={14} aria-hidden="true" class="text-emerald-500" />
+      </Show>
     </Button>
   );
 }
@@ -112,8 +145,9 @@ export interface GalleryPageProps {
 export function GalleryPage(props: GalleryPageProps): JSX.Element {
   const [category, setCategory] = createSignal<string>('all');
   const [selectedName, setSelectedName] = createSignal<string | undefined>(props.initial);
-  // Per-block selected file, keyed by block name so switching blocks and
-  // coming back keeps the reader's place.
+  // Per-block selected form, and per-block-and-form selected file, so
+  // switching blocks or forms and coming back keeps the reader's place.
+  const [activeForms, setActiveForms] = createSignal<Record<string, BlockFormId>>({});
   const [activeFiles, setActiveFiles] = createSignal<Record<string, string>>({});
 
   const categories = createMemo(() => {
@@ -131,13 +165,29 @@ export function GalleryPage(props: GalleryPageProps): JSX.Element {
     return list.find((b) => b.name === selectedName()) ?? list[0];
   });
 
-  const activeFile = (block: GalleryBlock): { path: string; content: string } => {
-    const wanted = activeFiles()[block.name];
-    return block.files.find((f) => f.path === wanted) ?? block.files[0];
+  const activeForm = (block: GalleryBlock): BlockFormId => {
+    const offered = formsAvailable(block);
+    const wanted = activeForms()[block.name];
+    return offered.find((f) => f.id === wanted)?.id ?? offered[0]?.id ?? 'wc';
+  };
+
+  const formFiles = (block: GalleryBlock): FormFile[] => block.forms[activeForm(block)] ?? [];
+
+  const activeFile = (block: GalleryBlock): FormFile => {
+    const files = formFiles(block);
+    const wanted = activeFiles()[`${block.name}:${activeForm(block)}`];
+    return files.find((f) => f.path === wanted) ?? files[0] ?? { path: '', content: '' };
   };
 
   const treeFiles = (block: GalleryBlock): FileTreeFile[] =>
-    block.files.map((f) => ({ path: f.path, code: f.content, language: languageFor(f.path) }));
+    formFiles(block).map((f) => ({ path: f.path, code: f.content, language: languageFor(f.path) }));
+
+  const downloadZip = (block: GalleryBlock): void => {
+    const a = document.createElement('a');
+    a.href = zipHrefFor(block.name, activeForm(block));
+    a.download = '';
+    a.click();
+  };
 
   return (
     <div class="flex h-full min-h-0 flex-col bg-background text-foreground">
@@ -210,17 +260,21 @@ export function GalleryPage(props: GalleryPageProps): JSX.Element {
                   </div>
                   {/* The install one-liner: a PRIMARY affordance (owner
                       ruling), beside the title so it reads first. */}
-                  <div class="flex items-center gap-2">
-                    <code class="rounded-md border border-border bg-muted px-2.5 py-1.5 font-mono text-xs text-foreground">
-                      {installCommandFor(block().name)}
-                    </code>
-                    <CopyTextButton text={installCommandFor(block().name)} label="Copy" />
+                  <div class="flex flex-col items-end gap-1">
+                    <div class="flex items-center gap-1">
+                      <code class="rounded-md border border-border bg-muted px-2.5 py-1.5 font-mono text-xs text-foreground">
+                        {installCommandFor(block().name)}
+                      </code>
+                      <CopyIconButton text={installCommandFor(block().name)} label="Copy install command" />
+                    </div>
+                    <p class="text-xs text-muted-foreground">add auto-detects your framework</p>
                   </div>
                 </div>
 
                 {/* Preview / Code — WorkSurface's own toggle. The Code tab is
-                    the file tree + per-file code view (the add form: the
-                    block as the consumer receives it). */}
+                    the framework selector + file tree + per-file code view:
+                    the block as the SELECTED framework's consumer receives it
+                    (one shared renderer with `add`). */}
                 <div style={{ height: block().iframeHeight ?? '720px' }} class="min-h-0">
                   <WorkSurface
                     src={block().previewSrc}
@@ -233,23 +287,76 @@ export function GalleryPage(props: GalleryPageProps): JSX.Element {
                     showUrlBar
                     showOpenInNewTab
                     code={
-                      <div class="flex h-full min-h-0">
-                        <div class="w-60 shrink-0 overflow-y-auto border-r border-border p-2">
-                          <FileTree
-                            files={treeFiles(block())}
-                            activeFile={activeFile(block()).path}
-                            onSelect={(path) =>
-                              setActiveFiles((prev) => ({ ...prev, [block().name]: path }))
-                            }
-                          />
+                      <div class="flex h-full min-h-0 flex-col">
+                        {/* The framework axis — derived from BLOCK_FORMS,
+                            offered only where the form exists. */}
+                        <div
+                          role="group"
+                          aria-label="Framework"
+                          class="flex items-center gap-1 border-b border-border px-2 py-1.5"
+                        >
+                          <For each={formsAvailable(block())}>
+                            {(form) => (
+                              <button
+                                type="button"
+                                class={cn(
+                                  'rounded-md px-2.5 py-1 text-xs transition-colors',
+                                  activeForm(block()) === form.id
+                                    ? 'bg-muted font-medium text-foreground'
+                                    : 'text-muted-foreground hover:text-foreground',
+                                )}
+                                aria-pressed={activeForm(block()) === form.id}
+                                onClick={() =>
+                                  setActiveForms((prev) => ({ ...prev, [block().name]: form.id }))
+                                }
+                              >
+                                {form.label}
+                              </button>
+                            )}
+                          </For>
                         </div>
-                        <div class="min-w-0 flex-1 overflow-auto p-3">
-                          <CodeBlock copy copyText={activeFile(block()).content}>
-                            <CodeBlockCode
-                              code={activeFile(block()).content}
-                              language={languageFor(activeFile(block()).path)}
+                        <div class="flex min-h-0 flex-1">
+                          <div class="w-60 shrink-0 overflow-y-auto border-r border-border p-2">
+                            <FileTree
+                              files={treeFiles(block())}
+                              activeFile={activeFile(block()).path}
+                              onSelect={(path) =>
+                                setActiveFiles((prev) => ({
+                                  ...prev,
+                                  [`${block().name}:${activeForm(block())}`]: path,
+                                }))
+                              }
                             />
-                          </CodeBlock>
+                          </div>
+                          <div class="min-w-0 flex-1 overflow-auto p-3">
+                            <CodeBlock>
+                              {/* The code header: the file's name, its Copy
+                                  (icon, accessible label) and Download — the
+                                  selected form's files as a zip — side by
+                                  side at the top (round-2 owner feedback). */}
+                              <CodeBlockGroup class="border-b border-border py-1 pl-3 pr-2">
+                                <span class="truncate font-mono text-xs text-muted-foreground">
+                                  {activeFile(block()).path}
+                                </span>
+                                <div class="flex shrink-0 items-center gap-1">
+                                  <CopyIconButton text={activeFile(block()).content} label="Copy file" />
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    aria-label={`Download the ${BLOCK_FORMS.find((f) => f.id === activeForm(block()))?.label ?? ''} files as a zip`}
+                                    onClick={() => downloadZip(block())}
+                                  >
+                                    <Download size={14} aria-hidden="true" />
+                                    Download
+                                  </Button>
+                                </div>
+                              </CodeBlockGroup>
+                              <CodeBlockCode
+                                code={activeFile(block()).content}
+                                language={languageFor(activeFile(block()).path)}
+                              />
+                            </CodeBlock>
+                          </div>
                         </div>
                       </div>
                     }
@@ -257,28 +364,16 @@ export function GalleryPage(props: GalleryPageProps): JSX.Element {
                 </div>
 
                 {/* The standalone CDN-paste form — SECONDARY, labeled as the
-                    try-it/download affordance, never presented as the block. */}
+                    try-it affordance, never presented as the block. Its
+                    download moved up into the code header (select the CDN
+                    single-file form there). */}
                 <Show when={block().cdnHtml}>
                   {(cdn) => (
                     <div class="flex flex-wrap items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground">
                       <span>
                         Try it standalone: a single generated HTML file running this block off the CDN.
                       </span>
-                      <CopyTextButton text={cdn()} label="Copy CDN form" variant="ghost" />
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          const url = URL.createObjectURL(new Blob([cdn()], { type: 'text/html' }));
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = `${block().name}.html`;
-                          a.click();
-                          URL.revokeObjectURL(url);
-                        }}
-                      >
-                        Download
-                      </Button>
+                      <CopyIconButton text={cdn()} label="Copy CDN form" />
                     </div>
                   )}
                 </Show>
