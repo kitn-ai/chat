@@ -727,6 +727,8 @@ export interface ConversationsProps extends WebComponentProps {
   defaultCollapsed?: boolean;
   /** Dense single-line rows (a leading dot + title, no message count). */
   compact?: boolean;
+  /** Show the built-in search box above the list. Default `true`. Set `searchable="false"` (or `el.searchable = false`) to hide it — the widget-box case, where the facade's own list view renders no search and a fine-grain composition previously had no way to match it (2026-08-31 composition spike, phase 3 round 2). Same default-true flag convention as `<kai-prompt-input attach>`: `<kai-conversations searchable>` and omitting it are both ON. Hidden, the `focus()`/`clear()` methods reach no input and `kai-search` never fires. */
+  searchable?: boolean;
   /** The rail was collapsed or expanded (via the toggle, the reopen button, or a `collapse()`/`expand()`/`toggle()` call). */
   onCollapseToggle?: (event: CustomEvent<{ collapsed: boolean }>) => void;
   /** A conversation was selected. The selection event in BOTH modes: a batteries data row, or an activated `<kai-conversation-item>` child (click, Enter or Space). */
@@ -741,7 +743,7 @@ export interface ConversationsProps extends WebComponentProps {
 
 export const Conversations = /*#__PURE__*/ createWebComponent<ConversationsProps>(
   'kai-conversations',
-  ["theme","groups","conversations","activeId","collapsed","defaultCollapsed","compact"],
+  ["theme","groups","conversations","activeId","collapsed","defaultCollapsed","compact","searchable"],
   { onCollapseToggle: 'kai-collapse-toggle', onConversationSelect: 'kai-conversation-select', onNewChat: 'kai-new-chat', onSearch: 'kai-search', onToggleSidebar: 'kai-toggle-sidebar' },
   () => import('@kitn.ai/ui/elements/conversation-list'),
 );
