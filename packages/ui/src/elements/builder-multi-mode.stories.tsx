@@ -615,6 +615,14 @@ const meta = { title: 'Labs/Builder/Multi-mode', parameters: { layout: 'fullscre
 export default meta;
 type Story = StoryObj;
 
+// BuilderPanel/BuilderLayout are internal to the builder app (src/components/builder-panel.tsx,
+// builder-layout.tsx) -- neither ships in a public @kitn.ai/ui entry point. The snippet below
+// names the real composition and wiring rather than a package import; ChatThread and
+// ConversationList ARE public (@kitn.ai/ui) and are shown as the two modes actually use them.
+const src = (code: string) => ({
+  parameters: { docs: { source: { code, language: 'tsx' } } },
+});
+
 /**
  * "Multi-mode" (T-4: working name, provisional — see the module doc
  * comment): a top-level segmented mode switcher, mirroring perplexity-pro's
@@ -633,4 +641,31 @@ type Story = StoryObj;
  */
 export const MultiMode: Story = {
   render: () => <MultiModeBuilderDemo />,
+  ...src(`<BuilderLayout
+  name={construct.name}
+  panel={
+    <BuilderPanel
+      value={construct}
+      onChange={setConstruct}
+      sections={{ layout: false, widget: 'never', provider: true, home: false }}
+    />
+    // ...plus this screen's own Modes list editor and Composer section
+  }
+  preview={
+    // Switching the top-level mode swaps the whole working surface
+    activeMode === 'assistant' ? (
+      <div class="flex h-full">
+        <ConversationList groups={groups} conversations={conversations} activeId={activeId} onSelect={setActiveId} />
+        <ChatThread messages={messages} chatTitle={construct.header?.title} onSubmit={sendMessage} />
+      </div>
+    ) : (
+      <div class="flex h-full">
+        <div class="flex-1">{/* the work pane */}</div>
+        <ChatThread class="w-96 shrink-0" messages={messages} chatTitle={construct.header?.title} onSubmit={sendMessage} />
+      </div>
+    )
+  }
+  viewport={viewport}
+  onViewportChange={setViewport}
+/>`),
 };

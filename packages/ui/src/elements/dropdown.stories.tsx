@@ -29,6 +29,9 @@ const meta = {
 export default meta;
 type Story = StoryObj;
 
+// Hand-written HTML for the "Show code" panel (real consumer markup, not JSX).
+const src = (code: string) => ({ docs: { source: { language: 'html', code } } });
+
 /**
  * The sibling of `kai-menu`, split by who owns the body. `kai-menu` renders a JSON
  * `items` tree; `kai-dropdown` hands you the surface and projects whatever you slot
@@ -52,6 +55,13 @@ export const SlottedRows: Story = {
       <div role="menuitem" tabindex="-1" style={{ padding: '6px 8px', cursor: 'pointer', color: 'var(--color-destructive)' }}>Delete</div>
     </kai-dropdown>
   ),
+  parameters: src(`<kai-dropdown label="Row actions">
+  <span slot="trigger" aria-hidden="true">&#8942;</span>
+  <div role="menuitem" tabindex="-1">Rename</div>
+  <div role="menuitem" tabindex="-1">Duplicate</div>
+  <div role="separator"></div>
+  <div role="menuitem" tabindex="-1">Delete</div>
+</kai-dropdown>`),
 };
 
 /**
@@ -72,4 +82,9 @@ export const LabelledTrigger: Story = {
       <button type="button" role="menuitem" style={{ display: 'block', width: '100%', padding: '6px 8px', 'text-align': 'left' }}>Name</button>
     </kai-dropdown>
   ),
+  parameters: src(`<kai-dropdown trigger-label="Sort by" trigger-icon-trailing="chevron-down">
+  <button type="button" role="menuitem">Newest</button>
+  <button type="button" role="menuitem">Oldest</button>
+  <button type="button" role="menuitem">Name</button>
+</kai-dropdown>`),
 };

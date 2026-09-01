@@ -126,9 +126,11 @@ export const ICON_NAMES: readonly string[] = Object.keys(NAMED_ICONS).sort();
 /** Render an item icon.
  *
  *  Resolution order:
- *  1. Known icon name (e.g. `"paperclip"`) → lucide-solid component.
- *  2. URL / absolute path / data-URI → `<img>`.
- *  3. Anything else → `<span>` text fallback.
+ *  1. Known icon name (e.g. `"paperclip"`) resolves to its lucide-solid component.
+ *  2. URL / absolute path / data-URI renders an `<img>`.
+ *  3. An icon-shaped name that is NOT in the roster renders a fallback glyph
+ *     and console.errors, in dev and prod alike (P-8: decide loudly, non-fatal).
+ *  4. Anything else (emoji, arbitrary text) renders a `<span>` text fallback.
  *  Returns `null` when `icon` is undefined/empty.
  *
  *  The img and span branches render different markup, so they accept different
@@ -144,15 +146,22 @@ export function renderIcon(
     return <Named class={opts?.imgClass ?? opts?.class ?? 'mr-2 size-4 shrink-0'} />;
   }
   const isUrl = /^(https?:|\/|data:)/.test(icon);
-  // DEV footgun guard: a kebab/identifier-shaped string that isn't a URL and
-  // isn't a known name is almost certainly a typo'd/unregistered icon (e.g.
-  // `icon="share"` before it was added) — it would silently paint as literal
-  // text. Warn in dev only; emoji/arbitrary text passes through untouched.
-  if (import.meta.env.DEV && !isUrl && /^[a-z][a-z0-9-]*$/.test(icon)) {
-    console.warn(
-      `[kai-icon] unknown icon name "${icon}" — rendering as text. ` +
-        'Add it to NAMED_ICONS in src/ui/icon.tsx, or pass a URL / an inline SVG via slot="icon".',
+  // Fail-loud guard (P-8, blocks-and-parts spec 2026-08-31; spike finding
+  // F-7): a kebab/identifier-shaped string that isn't a URL and isn't a known
+  // name is almost certainly a typo'd/unregistered icon (e.g. `icon="send"`
+  // before it was added). The old guard was `import.meta.env.DEV`-only, so
+  // prod painted the literal word as if it were a label, silently — the one
+  // spike finding where current behavior actively misled. Now, in DEV and
+  // PROD alike: console.error AND a visible fallback glyph instead of the raw
+  // text (decide loudly, non-fatal). Emoji/arbitrary text still passes
+  // through untouched below — only icon-shaped names are guarded.
+  if (!isUrl && /^[a-z][a-z0-9-]*$/.test(icon)) {
+    console.error(
+      `[kai-icon] unknown icon name "${icon}" — rendering a fallback glyph. ` +
+        'Add it to NAMED_ICONS in src/ui/icon.tsx, or pass a URL / an inline SVG via slot="icon". ' +
+        'The full roster is exported as ICON_NAMES.',
     );
+    return <CircleAlert class={opts?.imgClass ?? opts?.class ?? 'size-4 shrink-0'} />;
   }
   return isUrl
     ? <img src={icon} alt="" class={opts?.imgClass ?? opts?.class ?? 'size-4 shrink-0'} />

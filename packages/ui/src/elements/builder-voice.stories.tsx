@@ -629,6 +629,14 @@ const meta = { title: 'Labs/Builder/Voice', parameters: { layout: 'fullscreen' }
 export default meta;
 type Story = StoryObj;
 
+// BuilderPanel/BuilderLayout are internal to the builder app (src/components/builder-panel.tsx,
+// builder-layout.tsx) -- neither ships in a public @kitn.ai/ui entry point. The snippet below
+// names the real composition and wiring rather than a package import; AudioVisualizer, Captions
+// and ChatThread ARE public (@kitn.ai/ui) and are shown as this preview actually uses them.
+const src = (code: string) => ({
+  parameters: { docs: { source: { code, language: 'tsx' } } },
+});
+
 /**
  * The Voice template's builder, reshaped to a workspace-like layout in an
  * owner design round: a centered `AudioVisualizer` + `Captions` (the new
@@ -643,4 +651,25 @@ type Story = StoryObj;
  */
 export const Voice: Story = {
   render: () => <VoiceBuilderDemo />,
+  ...src(`<BuilderLayout
+  name={construct.name}
+  panel={
+    <BuilderPanel
+      value={construct}
+      onChange={setConstruct}
+      sections={{ layout: false, widget: 'never', provider: true, home: false }}
+    />
+    // ...plus this screen's own Layout and Visualizer sections
+  }
+  preview={
+    <div class="flex h-full flex-col items-center justify-center gap-6">
+      <AudioVisualizer variant={variant} state={state} size="xl" label={construct.header?.title + ' voice level'} />
+      <Captions segments={captionSegments} variant={captionVariant} />
+      {/* transcript: a real ChatThread, dockable start or end, collapsible */}
+      <ChatThread class="w-96" messages={messages} chatTitle={construct.header?.title} onSubmit={sendMessage} />
+    </div>
+  }
+  viewport={viewport}
+  onViewportChange={setViewport}
+/>`),
 };

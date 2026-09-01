@@ -343,6 +343,7 @@ defineWebComponent<Props, Events>('kai-chat', {
     headerStart={slot('header-start')}
     headerEnd={slot('header-end')}
     headerFull={slot('header')}
+    homeFull={slot('home')}
     sidebar={slot('sidebar')}
     empty={slot('empty')}
     composer={slot('composer')}

@@ -84,9 +84,14 @@ export function argTypesFor(tag: string): Record<string, unknown> {
       }
     }
 
-    // 4. Function / function-bearing object: contains `=>` in raw type string
+    // 4. Function / function-bearing object: contains `=>` in raw type string.
+    // A function-typed prop on a kai-* element is always an event handler
+    // (`onSubmit`, `onMessageAction`, ...), so it belongs in the Events group
+    // in the Controls/Docs panel rather than sorted alongside plain props.
+    // See lint-story-conventions.mjs, which enforces the same
+    // `table.category: 'Events'` shape on hand-authored argTypes.
     if (p.type.includes('=>')) {
-      out[p.name] = { control: false };
+      out[p.name] = { control: false, table: { category: 'Events' } };
       continue;
     }
 

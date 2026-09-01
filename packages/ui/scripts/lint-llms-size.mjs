@@ -21,7 +21,19 @@
 // why the growth is genuinely needed, and why trimming or restructuring
 // (pointers from llms.txt into external artifacts, thinner tables, moving
 // detail behind the Custom Elements Manifest) was not the better fix.
-const MAX_LLMS_FULL_BYTES = 328 * 1024; // 335,872
+//
+// 2026-08-31 raise: 328 → 344 KiB. Measured 341,927 bytes at 96 elements /
+// 123 state/wire exports. What grew: blocks-and-parts phase 1 — SEVEN new
+// public elements (kai-panel, kai-panel-header, kai-tab-bar, kai-tab-bar-item,
+// kai-view-stack, kai-view, kai-row: ~5 KB of generated element reference) plus
+// the new "Icon roster" section (owner-ruled P-8: the 77 curated names were
+// enumerated NOWHERE an agent could see, so unknown names got guessed and
+// painted as literal text — spike finding F-7; ~2.7 KB, indexed from llms.txt
+// per FULL_ONLY_SECTIONS). Neither is trimmable without unshipping the thing:
+// the elements are real public API and the roster's whole value is being the
+// complete list inline. New headroom is ~2 KiB — deliberately tight, the next
+// batch of elements pays its own toll here again.
+const MAX_LLMS_FULL_BYTES = 344 * 1024; // 352,256
 
 // THE FLOOR IS A TRUNCATION TRIPWIRE, NOT A TARGET. This repo has already
 // shipped the failure it guards: running gen-llms.mjs standalone silently

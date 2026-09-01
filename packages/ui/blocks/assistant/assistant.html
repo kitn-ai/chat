@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Assistant</title>
+    <link rel="stylesheet" href="./assistant.css" />
+  </head>
+  <body>
+    <!-- The full-page assistant on the kit's own parts: a kai-conversations
+         rail (its built-in header, search and New chat), a top bar carrying
+         the kai-model-switcher recipe, and the thread + composer column.
+         The rail rows are built by assistant.js (item mode, the documented
+         consumer-owned loop); the conversation lifecycle is the headless
+         controller from @kitn.ai/ui/stores. -->
+    <div class="app">
+      <kai-conversations id="conversations" class="rail"></kai-conversations>
+
+      <main class="main">
+        <header class="topbar">
+          <h1>Assistant</h1>
+          <!-- The model switcher recipe: a standalone leaf element. Models in
+               as a JS property, selection out via kai-model-change. -->
+          <kai-model-switcher id="models"></kai-model-switcher>
+        </header>
+
+        <kai-thread id="thread">
+          <kai-empty
+            slot="empty"
+            empty-title="What can I help with?"
+            description="Ask anything, or start from a suggestion below."
+          ></kai-empty>
+        </kai-thread>
+        <kai-prompt-input id="prompt" placeholder="Ask anything"></kai-prompt-input>
+      </main>
+    </div>
+
+    <script type="module" src="./assistant.js"></script>
+  </body>
+</html>

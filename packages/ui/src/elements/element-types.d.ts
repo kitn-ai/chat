@@ -404,6 +404,8 @@ export interface KaiChatElement extends HTMLElement {
   headerEnd?: boolean;
   /** REPLACE: full custom header in place of the built-in title/model/context bar. */
   headerFull?: boolean;
+  /** REPLACE: custom home-tab content in place of the built-in home screen (greeting, recent-conversation card, links). Rendered only while the home view is showing, so it is meaningful only when `home` is set; the tab bar and navigation stay the kit's own. Set by the facade when light-DOM `slot="home"` content is projected (region slots, P-6). */
+  homeFull?: boolean;
   /** INJECT: left sidebar column (e.g. a conversation list / your own nav). */
   sidebar?: boolean;
   /** REPLACE: custom zero-state rendered in the message area while the thread is empty (replaces the empty message list only; the composer and its suggestions still render). */
@@ -706,6 +708,10 @@ export interface KaiConversationItemElement extends HTMLElement {
   active?: boolean;
   /** Dense single-line row padding. */
   compact?: boolean;
+  /** Row density: `default`, `compact` (same as the `compact` flag), or `panel`, the widget-panel presentation matching the facade panel's measured row box (12px/10px padding, a 40px single-line row). Previously that box was a private interior class a composition could only approximate by smuggling padding through slotted spans (2026-08-31 composition spike, phase 3 round 3). An explicit density wins over `compact`. */
+  density?: "default" | "compact" | "panel";
+  /** Show the unread indicator dot at the row's trailing edge, inside the activation surface and before the `menu` region, with a screen-reader "Unread" label. Drive it from `isConversationUnread` (exported from the package root and from `dist/stores.js`). */
+  unread?: boolean;
 }
 
 export interface KaiConversationsElement extends HTMLElement {
@@ -723,6 +729,8 @@ export interface KaiConversationsElement extends HTMLElement {
   defaultCollapsed?: boolean;
   /** Dense single-line rows (a leading dot + title, no message count). */
   compact?: boolean;
+  /** Row density for the data rows: `default`, `compact` (same as the `compact` flag), or `panel`, the widget-panel presentation matching the facade panel's measured row box (12px/10px padding, a 40px single-line row with a right-aligned relative time and an optional preview line carrying the unread dot). An explicit density wins over `compact`. Item mode is unaffected: slotted `<kai-conversation-item>` rows carry their own `density` attribute. */
+  density?: "default" | "compact" | "panel";
   /** Show the built-in search box above the list. Default `true`. Set `searchable="false"` (or `el.searchable = false`) to hide it: the widget-box case, where the facade's own list view renders no search and a fine-grain composition previously had no way to match it (2026-08-31 composition spike, phase 3 round 2). Same default-true flag convention as `<kai-prompt-input attach>`: `<kai-conversations searchable>` and omitting it are both ON. Hidden, the `focus()`/`clear()` methods reach no input and `kai-search` never fires. */
   searchable?: boolean;
   /** Focus the built-in search input inside the shadow root. */
@@ -1231,6 +1239,18 @@ export interface KaiPaneGroupElement extends HTMLElement {
   focus(): void;
 }
 
+export interface KaiPanelElement extends HTMLElement {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** Standalone widget-box chrome: border, radius and shadow on the panel itself. Off (the default), the panel inherits its container's radius and clips to it, the right posture inside an already-framed container such as `kai-dock`'s floating panel. */
+  frame?: boolean;
+}
+
+export interface KaiPanelHeaderElement extends HTMLElement {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+}
+
 export interface KaiPopoverElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
@@ -1413,6 +1433,17 @@ export interface KaiResponseStreamElement extends HTMLElement {
   speed?: number;
   /** Element tag to render as. */
   as?: string;
+}
+
+export interface KaiRowElement extends HTMLElement {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** Pressable row: renders real button semantics (click, Enter, Space) and fires `kai-click` on activation. Ignored when `href` is set. */
+  interactive?: boolean;
+  /** Navigate on press: the row renders as a real anchor opening in a new tab. An href outside the kit's safe URL schemes renders a plain non-interactive row instead (label visible, nothing clickable). */
+  href?: string;
+  /** Show a trailing chevron affordance at the row's end. */
+  chevron?: boolean;
 }
 
 export interface KaiScopePickerElement extends HTMLElement {
@@ -1685,6 +1716,42 @@ export interface KaiSwitchElement extends HTMLElement {
   focus(options?: FocusOptions): void;
 }
 
+export interface KaiTabBarElement extends HTMLElement {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** Controlled selected value. Set the property or the `value` attribute and drive it from your app in response to `kai-tab-change`. Omit for uncontrolled: the bar manages its own selection, seeded from `defaultValue`, else the first enabled tab. */
+  value?: string;
+  /** Initial selected value when uncontrolled (the `default-value` attribute in plain HTML). */
+  defaultValue?: string;
+  /** Icon-only mode: every tab hides its label visually. The slotted labels still name the tabs for assistive tech. */
+  iconOnly?: boolean;
+  /** Accessible name for the tablist (default "Navigation"). */
+  label?: string;
+  /** Select a tab by value (fires `kai-tab-change`). Ignores unknown and disabled values. */
+  select(next: string): void;
+  /** Focus the active tab (or the first focusable tab). */
+  focus(): void;
+}
+
+export interface KaiTabBarItemElement extends HTMLElement {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** The tab's identity: the `value` attribute (host `id` is the fallback). It is the `value` in the bar's `kai-tab-change` detail. */
+  value?: string;
+  /** Named icon from the kit roster (e.g. "home", "message-square"). The icon renders at the element's own default size, so equal glyphs across tabs need no consumer sizing. */
+  icon?: string;
+  /** Unread dot on the icon's corner. Reaches the tab's accessible name too: a dot alone is invisible to assistive tech. */
+  dot?: boolean;
+  /** Count badge on the icon's corner; wins over `dot` when both are set. Reaches the accessible name too. */
+  badge?: string | number;
+  /** Disabled tabs are skipped by arrow keys and cannot be selected. */
+  disabled?: boolean;
+  /** Selected state. Inside `<kai-tab-bar>` the bar drives it from its `value`; the active tab retints with the primary token. */
+  active?: boolean;
+  /** Hide the label visually (the slotted text still names the tab for assistive tech). Inside `<kai-tab-bar>` the bar drives it from its own `icon-only` attribute. */
+  iconOnly?: boolean;
+}
+
 export interface KaiTabsElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
@@ -1853,6 +1920,34 @@ export interface KaiTooltipElement extends HTMLElement {
   toggle(): void;
 }
 
+export interface KaiViewElement extends HTMLElement {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** The view's name: what `push()` / `selectTab()` / the stack's `view` attribute address. Attribute: `name`. */
+  name?: string;
+  /** Marks this view as a TAB ROOT: it shows the tab bar and never a back affordance, and a tab switch lands on it directly. Views without it are DRILL views, reached by `push()` and left by `back()`. Attribute: `tab-root`. */
+  tabRoot?: boolean;
+}
+
+export interface KaiViewStackElement extends HTMLElement {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** Deep link / initial view name; reflected to the `view` ATTRIBUTE as navigation happens, so `kai-view-stack[view="chat"]` selectors follow. Setting it later navigates (tab root selects that tab; a drill view replaces the top while drilled, or pushes from a root). */
+  view?: string;
+  /** READ-ONLY reflection of the drilled state, present while a pushed (non-root) view is showing. THE rule this element owns: drilled hides the tab bar and shows a back affordance, so a sibling tab bar hides itself on `kai-view-stack[drilled]` (or from `kai-view-change`), and a header shows its back arrow the same way. */
+  drilled?: boolean;
+  /** Drill into a view (fires `kai-view-change`). A tab-root name routes to `selectTab`; unknown names are ignored. */
+  push(name: string): void;
+  /** Pop one drilled view. No-op at a tab root. */
+  back(): void;
+  /** Swap the current view without touching history. */
+  replace(name: string): void;
+  /** Switch tab roots and clear any drill. Ignores non-root names. */
+  selectTab(name: string): void;
+  /** Deep-link navigation: what the `view` attribute drives. */
+  navigate(name: string): void;
+}
+
 export interface KaiVoiceInputElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
@@ -1968,6 +2063,8 @@ declare global {
     'kai-pane': KaiPaneElement;
     'kai-pane-grid': KaiPaneGridElement;
     'kai-pane-group': KaiPaneGroupElement;
+    'kai-panel': KaiPanelElement;
+    'kai-panel-header': KaiPanelHeaderElement;
     'kai-popover': KaiPopoverElement;
     'kai-progress-bar': KaiProgressBarElement;
     'kai-prompt-dock': KaiPromptDockElement;
@@ -1978,6 +2075,7 @@ declare global {
     'kai-resizable': KaiResizableElement;
     'kai-resizable-item': KaiResizableItemElement;
     'kai-response-stream': KaiResponseStreamElement;
+    'kai-row': KaiRowElement;
     'kai-scope-picker': KaiScopePickerElement;
     'kai-screen': KaiScreenElement;
     'kai-scroll-area': KaiScrollAreaElement;
@@ -1996,6 +2094,8 @@ declare global {
     'kai-status': KaiStatusElement;
     'kai-suggestions': KaiSuggestionsElement;
     'kai-switch': KaiSwitchElement;
+    'kai-tab-bar': KaiTabBarElement;
+    'kai-tab-bar-item': KaiTabBarItemElement;
     'kai-tabs': KaiTabsElement;
     'kai-tasks': KaiTasksElement;
     'kai-text-shimmer': KaiTextShimmerElement;
@@ -2004,6 +2104,8 @@ declare global {
     'kai-toast-region': KaiToastRegionElement;
     'kai-tool': KaiToolElement;
     'kai-tooltip': KaiTooltipElement;
+    'kai-view': KaiViewElement;
+    'kai-view-stack': KaiViewStackElement;
     'kai-voice-input': KaiVoiceInputElement;
     'kai-voice-output': KaiVoiceOutputElement;
     'kai-workspace': KaiWorkspaceElement;
@@ -2075,6 +2177,8 @@ declare module 'react' {
       'kai-pane': KaiElementJsxProps;
       'kai-pane-grid': KaiElementJsxProps;
       'kai-pane-group': KaiElementJsxProps;
+      'kai-panel': KaiElementJsxProps;
+      'kai-panel-header': KaiElementJsxProps;
       'kai-popover': KaiElementJsxProps;
       'kai-progress-bar': KaiElementJsxProps;
       'kai-prompt-dock': KaiElementJsxProps;
@@ -2085,6 +2189,7 @@ declare module 'react' {
       'kai-resizable': KaiElementJsxProps;
       'kai-resizable-item': KaiElementJsxProps;
       'kai-response-stream': KaiElementJsxProps;
+      'kai-row': KaiElementJsxProps;
       'kai-scope-picker': KaiElementJsxProps;
       'kai-screen': KaiElementJsxProps;
       'kai-scroll-area': KaiElementJsxProps;
@@ -2103,6 +2208,8 @@ declare module 'react' {
       'kai-status': KaiElementJsxProps;
       'kai-suggestions': KaiElementJsxProps;
       'kai-switch': KaiElementJsxProps;
+      'kai-tab-bar': KaiElementJsxProps;
+      'kai-tab-bar-item': KaiElementJsxProps;
       'kai-tabs': KaiElementJsxProps;
       'kai-tasks': KaiElementJsxProps;
       'kai-text-shimmer': KaiElementJsxProps;
@@ -2111,6 +2218,8 @@ declare module 'react' {
       'kai-toast-region': KaiElementJsxProps;
       'kai-tool': KaiElementJsxProps;
       'kai-tooltip': KaiElementJsxProps;
+      'kai-view': KaiElementJsxProps;
+      'kai-view-stack': KaiElementJsxProps;
       'kai-voice-input': KaiElementJsxProps;
       'kai-voice-output': KaiElementJsxProps;
       'kai-workspace': KaiElementJsxProps;
@@ -2363,6 +2472,8 @@ export interface KaiChatElementProps {
   headerEnd?: boolean;
   /** REPLACE: full custom header in place of the built-in title/model/context bar. */
   headerFull?: boolean;
+  /** REPLACE: custom home-tab content in place of the built-in home screen (greeting, recent-conversation card, links). Rendered only while the home view is showing, so it is meaningful only when `home` is set; the tab bar and navigation stay the kit's own. Set by the facade when light-DOM `slot="home"` content is projected (region slots, P-6). */
+  homeFull?: boolean;
   /** INJECT: left sidebar column (e.g. a conversation list / your own nav). */
   sidebar?: boolean;
   /** REPLACE: custom zero-state rendered in the message area while the thread is empty (replaces the empty message list only; the composer and its suggestions still render). */
@@ -2601,6 +2712,10 @@ export interface KaiConversationItemElementProps {
   active?: boolean;
   /** Dense single-line row padding. */
   compact?: boolean;
+  /** Row density: `default`, `compact` (same as the `compact` flag), or `panel`, the widget-panel presentation matching the facade panel's measured row box (12px/10px padding, a 40px single-line row). Previously that box was a private interior class a composition could only approximate by smuggling padding through slotted spans (2026-08-31 composition spike, phase 3 round 3). An explicit density wins over `compact`. */
+  density?: "default" | "compact" | "panel";
+  /** Show the unread indicator dot at the row's trailing edge, inside the activation surface and before the `menu` region, with a screen-reader "Unread" label. Drive it from `isConversationUnread` (exported from the package root and from `dist/stores.js`). */
+  unread?: boolean;
 }
 
 export interface KaiConversationsElementProps {
@@ -2618,6 +2733,8 @@ export interface KaiConversationsElementProps {
   defaultCollapsed?: boolean;
   /** Dense single-line rows (a leading dot + title, no message count). */
   compact?: boolean;
+  /** Row density for the data rows: `default`, `compact` (same as the `compact` flag), or `panel`, the widget-panel presentation matching the facade panel's measured row box (12px/10px padding, a 40px single-line row with a right-aligned relative time and an optional preview line carrying the unread dot). An explicit density wins over `compact`. Item mode is unaffected: slotted `<kai-conversation-item>` rows carry their own `density` attribute. */
+  density?: "default" | "compact" | "panel";
   /** Show the built-in search box above the list. Default `true`. Set `searchable="false"` (or `el.searchable = false`) to hide it: the widget-box case, where the facade's own list view renders no search and a fine-grain composition previously had no way to match it (2026-08-31 composition spike, phase 3 round 2). Same default-true flag convention as `<kai-prompt-input attach>`: `<kai-conversations searchable>` and omitting it are both ON. Hidden, the `focus()`/`clear()` methods reach no input and `kai-search` never fires. */
   searchable?: boolean;
 }
@@ -3038,6 +3155,18 @@ export interface KaiPaneGroupElementProps {
   focused?: boolean;
 }
 
+export interface KaiPanelElementProps {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** Standalone widget-box chrome: border, radius and shadow on the panel itself. Off (the default), the panel inherits its container's radius and clips to it, the right posture inside an already-framed container such as `kai-dock`'s floating panel. */
+  frame?: boolean;
+}
+
+export interface KaiPanelHeaderElementProps {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+}
+
 export interface KaiPopoverElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
@@ -3194,6 +3323,17 @@ export interface KaiResponseStreamElementProps {
   speed?: number;
   /** Element tag to render as. */
   as?: string;
+}
+
+export interface KaiRowElementProps {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** Pressable row: renders real button semantics (click, Enter, Space) and fires `kai-click` on activation. Ignored when `href` is set. */
+  interactive?: boolean;
+  /** Navigate on press: the row renders as a real anchor opening in a new tab. An href outside the kit's safe URL schemes renders a plain non-interactive row instead (label visible, nothing clickable). */
+  href?: string;
+  /** Show a trailing chevron affordance at the row's end. */
+  chevron?: boolean;
 }
 
 export interface KaiScopePickerElementProps {
@@ -3440,6 +3580,38 @@ export interface KaiSwitchElementProps {
   value?: string;
 }
 
+export interface KaiTabBarElementProps {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** Controlled selected value. Set the property or the `value` attribute and drive it from your app in response to `kai-tab-change`. Omit for uncontrolled: the bar manages its own selection, seeded from `defaultValue`, else the first enabled tab. */
+  value?: string;
+  /** Initial selected value when uncontrolled (the `default-value` attribute in plain HTML). */
+  defaultValue?: string;
+  /** Icon-only mode: every tab hides its label visually. The slotted labels still name the tabs for assistive tech. */
+  iconOnly?: boolean;
+  /** Accessible name for the tablist (default "Navigation"). */
+  label?: string;
+}
+
+export interface KaiTabBarItemElementProps {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** The tab's identity: the `value` attribute (host `id` is the fallback). It is the `value` in the bar's `kai-tab-change` detail. */
+  value?: string;
+  /** Named icon from the kit roster (e.g. "home", "message-square"). The icon renders at the element's own default size, so equal glyphs across tabs need no consumer sizing. */
+  icon?: string;
+  /** Unread dot on the icon's corner. Reaches the tab's accessible name too: a dot alone is invisible to assistive tech. */
+  dot?: boolean;
+  /** Count badge on the icon's corner; wins over `dot` when both are set. Reaches the accessible name too. */
+  badge?: string | number;
+  /** Disabled tabs are skipped by arrow keys and cannot be selected. */
+  disabled?: boolean;
+  /** Selected state. Inside `<kai-tab-bar>` the bar drives it from its `value`; the active tab retints with the primary token. */
+  active?: boolean;
+  /** Hide the label visually (the slotted text still names the tab for assistive tech). Inside `<kai-tab-bar>` the bar drives it from its own `icon-only` attribute. */
+  iconOnly?: boolean;
+}
+
 export interface KaiTabsElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
@@ -3576,6 +3748,24 @@ export interface KaiTooltipElementProps {
   defaultOpen?: boolean;
   /** Turn the tooltip off while keeping the trigger mounted (hover/focus and `show()` no longer open it). */
   disabled?: boolean;
+}
+
+export interface KaiViewElementProps {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** The view's name: what `push()` / `selectTab()` / the stack's `view` attribute address. Attribute: `name`. */
+  name?: string;
+  /** Marks this view as a TAB ROOT: it shows the tab bar and never a back affordance, and a tab switch lands on it directly. Views without it are DRILL views, reached by `push()` and left by `back()`. Attribute: `tab-root`. */
+  tabRoot?: boolean;
+}
+
+export interface KaiViewStackElementProps {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** Deep link / initial view name; reflected to the `view` ATTRIBUTE as navigation happens, so `kai-view-stack[view="chat"]` selectors follow. Setting it later navigates (tab root selects that tab; a drill view replaces the top while drilled, or pushes from a root). */
+  view?: string;
+  /** READ-ONLY reflection of the drilled state, present while a pushed (non-root) view is showing. THE rule this element owns: drilled hides the tab bar and shows a back affordance, so a sibling tab bar hides itself on `kai-view-stack[drilled]` (or from `kai-view-change`), and a header shows its back arrow the same way. */
+  drilled?: boolean;
 }
 
 export interface KaiVoiceInputElementProps {
@@ -3953,6 +4143,14 @@ export interface KaiPaneGroupElementEvents {
   onKaiTabMenu?: (event: CustomEvent<{ id: string }>) => void;
 }
 
+export interface KaiPanelElementEvents {
+
+}
+
+export interface KaiPanelHeaderElementEvents {
+
+}
+
 export interface KaiPopoverElementEvents {
   /** The popover opened or closed (click, Escape, outside-click, or a method). */
   onKaiOpenChange?: (event: CustomEvent<{ open: boolean }>) => void;
@@ -4017,6 +4215,11 @@ export interface KaiResizableItemElementEvents {
 export interface KaiResponseStreamElementEvents {
   /** Streaming finished. */
   onKaiComplete?: (event: CustomEvent) => void;
+}
+
+export interface KaiRowElementEvents {
+  /** The row was activated (click, Enter or Space) while `interactive` is set and no `href` is present. Non-bubbling: listen on the element itself. */
+  onKaiClick?: (event: CustomEvent) => void;
 }
 
 export interface KaiScopePickerElementEvents {
@@ -4110,6 +4313,15 @@ export interface KaiSwitchElementEvents {
   onKaiChange?: (event: CustomEvent<{ checked: boolean }>) => void;
 }
 
+export interface KaiTabBarElementEvents {
+  /** A tab was selected (click, Enter/Space, or arrow-key move). `value` is the item's `value` attribute, else its host `id`. */
+  onKaiTabChange?: (event: CustomEvent<{ value: string }>) => void;
+}
+
+export interface KaiTabBarItemElementEvents {
+
+}
+
 export interface KaiTabsElementEvents {
   /** A tab was selected (click, Enter/Space, or arrow-key move). `value` is the item's id. */
   onKaiTabChange?: (event: CustomEvent<{ value: string }>) => void;
@@ -4149,6 +4361,15 @@ export interface KaiToolElementEvents {
 export interface KaiTooltipElementEvents {
   /** The tooltip opened or closed (by hover/focus, outside-click, or a method). */
   onKaiOpenChange?: (event: CustomEvent<{ open: boolean }>) => void;
+}
+
+export interface KaiViewElementEvents {
+
+}
+
+export interface KaiViewStackElementEvents {
+  /** The visible view or the drilled flag changed (push, back, replace, tab switch, or a `view` attribute write). `detail`: `{ view, root, drilled, stack }`; `root` is what the tab bar should mark active, defined even while drilled. */
+  onKaiViewChange?: (event: CustomEvent<{ view: string | undefined; root: string | undefined; drilled: boolean; stack: string[] }>) => void;
 }
 
 export interface KaiVoiceInputElementEvents {
@@ -4297,6 +4518,10 @@ declare module 'vue' {
     KaiPaneGrid: KaiVueElement<KaiPaneGridElementProps, KaiPaneGridElementEvents>;
     'kai-pane-group': KaiVueElement<KaiPaneGroupElementProps, KaiPaneGroupElementEvents>;
     KaiPaneGroup: KaiVueElement<KaiPaneGroupElementProps, KaiPaneGroupElementEvents>;
+    'kai-panel': KaiVueElement<KaiPanelElementProps, KaiPanelElementEvents>;
+    KaiPanel: KaiVueElement<KaiPanelElementProps, KaiPanelElementEvents>;
+    'kai-panel-header': KaiVueElement<KaiPanelHeaderElementProps, KaiPanelHeaderElementEvents>;
+    KaiPanelHeader: KaiVueElement<KaiPanelHeaderElementProps, KaiPanelHeaderElementEvents>;
     'kai-popover': KaiVueElement<KaiPopoverElementProps, KaiPopoverElementEvents>;
     KaiPopover: KaiVueElement<KaiPopoverElementProps, KaiPopoverElementEvents>;
     'kai-progress-bar': KaiVueElement<KaiProgressBarElementProps, KaiProgressBarElementEvents>;
@@ -4317,6 +4542,8 @@ declare module 'vue' {
     KaiResizableItem: KaiVueElement<KaiResizableItemElementProps, KaiResizableItemElementEvents>;
     'kai-response-stream': KaiVueElement<KaiResponseStreamElementProps, KaiResponseStreamElementEvents>;
     KaiResponseStream: KaiVueElement<KaiResponseStreamElementProps, KaiResponseStreamElementEvents>;
+    'kai-row': KaiVueElement<KaiRowElementProps, KaiRowElementEvents>;
+    KaiRow: KaiVueElement<KaiRowElementProps, KaiRowElementEvents>;
     'kai-scope-picker': KaiVueElement<KaiScopePickerElementProps, KaiScopePickerElementEvents>;
     KaiScopePicker: KaiVueElement<KaiScopePickerElementProps, KaiScopePickerElementEvents>;
     'kai-screen': KaiVueElement<KaiScreenElementProps, KaiScreenElementEvents>;
@@ -4353,6 +4580,10 @@ declare module 'vue' {
     KaiSuggestions: KaiVueElement<KaiSuggestionsElementProps, KaiSuggestionsElementEvents>;
     'kai-switch': KaiVueElement<KaiSwitchElementProps, KaiSwitchElementEvents>;
     KaiSwitch: KaiVueElement<KaiSwitchElementProps, KaiSwitchElementEvents>;
+    'kai-tab-bar': KaiVueElement<KaiTabBarElementProps, KaiTabBarElementEvents>;
+    KaiTabBar: KaiVueElement<KaiTabBarElementProps, KaiTabBarElementEvents>;
+    'kai-tab-bar-item': KaiVueElement<KaiTabBarItemElementProps, KaiTabBarItemElementEvents>;
+    KaiTabBarItem: KaiVueElement<KaiTabBarItemElementProps, KaiTabBarItemElementEvents>;
     'kai-tabs': KaiVueElement<KaiTabsElementProps, KaiTabsElementEvents>;
     KaiTabs: KaiVueElement<KaiTabsElementProps, KaiTabsElementEvents>;
     'kai-tasks': KaiVueElement<KaiTasksElementProps, KaiTasksElementEvents>;
@@ -4369,6 +4600,10 @@ declare module 'vue' {
     KaiTool: KaiVueElement<KaiToolElementProps, KaiToolElementEvents>;
     'kai-tooltip': KaiVueElement<KaiTooltipElementProps, KaiTooltipElementEvents>;
     KaiTooltip: KaiVueElement<KaiTooltipElementProps, KaiTooltipElementEvents>;
+    'kai-view': KaiVueElement<KaiViewElementProps, KaiViewElementEvents>;
+    KaiView: KaiVueElement<KaiViewElementProps, KaiViewElementEvents>;
+    'kai-view-stack': KaiVueElement<KaiViewStackElementProps, KaiViewStackElementEvents>;
+    KaiViewStack: KaiVueElement<KaiViewStackElementProps, KaiViewStackElementEvents>;
     'kai-voice-input': KaiVueElement<KaiVoiceInputElementProps, KaiVoiceInputElementEvents>;
     KaiVoiceInput: KaiVueElement<KaiVoiceInputElementProps, KaiVoiceInputElementEvents>;
     'kai-voice-output': KaiVueElement<KaiVoiceOutputElementProps, KaiVoiceOutputElementEvents>;

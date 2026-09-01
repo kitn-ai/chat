@@ -410,6 +410,14 @@ const meta = { title: 'Labs/Builder/Assistant', parameters: { layout: 'fullscree
 export default meta;
 type Story = StoryObj;
 
+// BuilderPanel/BuilderLayout are internal to the builder app (src/components/builder-panel.tsx,
+// builder-layout.tsx) -- neither ships in a public @kitn.ai/ui entry point. The snippet below
+// names the real composition and wiring rather than a package import; ChatThread and
+// ConversationList ARE public (@kitn.ai/ui) and are shown as this preview actually uses them.
+const src = (code: string) => ({
+  parameters: { docs: { source: { code, language: 'tsx' } } },
+});
+
 /**
  * The Assistant template's builder: panel on the left scoped to Identity,
  * Provider, Theme, Capabilities, an empty-state greeting, and the
@@ -421,4 +429,37 @@ type Story = StoryObj;
  */
 export const Assistant: Story = {
   render: () => <AssistantBuilderDemo />,
+  ...src(`<BuilderLayout
+  name={construct.name}
+  panel={
+    <BuilderPanel
+      value={construct}
+      onChange={setConstruct}
+      sections={{ layout: false, widget: 'never', provider: true, home: false }}
+    />
+    // ...plus this screen's own Empty-state-greeting and Message-actions sections
+  }
+  preview={
+    <div class="flex overflow-hidden rounded-2xl border border-border">
+      <ConversationList
+        groups={groups}
+        conversations={conversations}
+        activeId={activeId}
+        onSelect={setActiveId}
+        onNewChat={() => setActiveId('new')}
+      />
+      <ChatThread
+        messages={messages}
+        chatTitle={construct.header?.title}
+        suggestions={construct.capabilities?.starters}
+        models={models}
+        currentModel={modelId}
+        onModelChange={setModelId}
+        onSubmit={sendMessage}
+      />
+    </div>
+  }
+  viewport={viewport}
+  onViewportChange={setViewport}
+/>`),
 };

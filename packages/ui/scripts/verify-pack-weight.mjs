@@ -383,8 +383,20 @@ if (SELF_TEST) {
  * audit is ordinary tree growth since 2026-08-28, still under the old
  * ceiling on its own. Margin rule unchanged: 10.0087 + ~0.29 MiB of
  * headroom -> 10.30 MiB.
+ *
+ * 10.30 -> 10.60 MiB (2026-08-31, blocks-and-parts phase 1): tripped at
+ * 10.32 MiB (over by 0.02). Deliberate feature weight: SEVEN new public
+ * elements (kai-panel + kai-panel-header, kai-tab-bar + kai-tab-bar-item,
+ * kai-view-stack + kai-view, kai-row) with their src + dist per-element
+ * chunks + react wrappers + generated reference rows, plus
+ * `createConversationController` in stores and the icon-roster section in
+ * llms-full.txt (which has its own byte ceiling in lint-llms-size.mjs,
+ * raised the same day with its own note). No new corpus, no duplicate
+ * artifact — the growth is the API surface itself. Margin rule unchanged:
+ * 10.32 + ~0.29 MiB of headroom -> 10.60 MiB (rounded to the same 0.05
+ * grain the prior entries use).
  */
-const MAX_UNPACKED_BYTES = 10.30 * 1024 * 1024;
+const MAX_UNPACKED_BYTES = 10.60 * 1024 * 1024;
 
 const kib = (n) => `${(n / 1024).toFixed(1)} KiB`;
 const mib = (n) => `${(n / 1024 / 1024).toFixed(2)} MiB`;

@@ -3,7 +3,7 @@
 
 # @kitn.ai/ui
 
-> Framework-agnostic, Shadow-DOM web components for building AI chat interfaces — works in React, Vue, Angular, Svelte, or plain HTML. 89 custom elements, every one prefixed `kai-` (e.g. `<kai-chat>`, `<kai-artifact>`): streaming responses, markdown + code rendering, reasoning/tool panels, attachments, conversation sidebar, voice input. Zero framework dependency for consumers; the SolidJS runtime it is authored in is bundled in, so the host needs nothing.
+> Framework-agnostic, Shadow-DOM web components for building AI chat interfaces — works in React, Vue, Angular, Svelte, or plain HTML. 96 custom elements, every one prefixed `kai-` (e.g. `<kai-chat>`, `<kai-artifact>`): streaming responses, markdown + code rendering, reasoning/tool panels, attachments, conversation sidebar, voice input. Zero framework dependency for consumers; the SolidJS runtime it is authored in is bundled in, so the host needs nothing.
 
 ## Install
 
@@ -37,7 +37,7 @@ Drop an element into any framework (React, Vue, plain HTML). Data in via JS prop
 - `<kai-prompt-input>` — standalone composer with send button.
 
 **Layer 2 — composable primitives** (`import { … } from '@kitn.ai/ui'`):
-All 89 elements are also exported individually. Use them for custom layouts or features `<kai-chat>` does not expose (ChainOfThought, FeedbackBar, ThinkingBar, VoiceInput, …). Your bundler tree-shakes the rest.
+All 96 elements are also exported individually. Use them for custom layouts or features `<kai-chat>` does not expose (ChainOfThought, FeedbackBar, ThinkingBar, VoiceInput, …). Your bundler tree-shakes the rest.
 
 ## Key rules for the web components
 
@@ -151,10 +151,11 @@ For Tailwind builds: `@import "@kitn.ai/ui/theme.css"` in your CSS.
 
 ## Docs
 
-- Element reference (all 89 elements, every prop/event/method/slot/part): the "Element reference" section of ./llms-full.txt — https://kitn.dev/llms-full.txt
+- Element reference (all 96 elements, every prop/event/method/slot/part): the "Element reference" section of ./llms-full.txt — https://kitn.dev/llms-full.txt
 - Programmatic layer (`@kitn.ai/ui/state` + `@kitn.ai/ui/wire`: streaming folds, the mock responder, the SSE readers/encoders): the "Programmatic layer" section of llms-full.txt
 - How to build a chat app in 5 steps (install → pick a layer → handle submit + stream → wire features → theme, with working code): the "How to build a chat app in 5 steps" section of llms-full.txt
 - Streaming recipe (the two rules that bite: reassign new references per chunk, fold deltas onto the trailing text part): the "Streaming recipe" section of llms-full.txt
+- Icon roster (every name `kai-icon` and the elements' `icon` props resolve; anything else fails loud): the "Icon roster" section of llms-full.txt
 - Machine-readable Custom Elements Manifest: https://unpkg.com/@kitn.ai/ui/dist/custom-elements.json
 - Working examples: https://github.com/kitn-ai/ui/tree/main/examples
 - Storybook: https://storybook.kitn.dev
@@ -1247,7 +1248,15 @@ any integration with the `kai` MCP `scaffold` tool to get the full preamble.
 
 ---
 
-## Element reference (89 elements, generated from custom-elements.json)
+## Icon roster (77 names, derived from NAMED_ICONS in src/ui/icon.tsx)
+
+Every name `kai-icon` (and every `icon` prop/attribute across the elements) resolves — derived from the `NAMED_ICONS` map in `src/ui/icon.tsx` (also exported at runtime as `ICON_NAMES`). An icon-shaped name outside this roster renders a fallback glyph and logs a console error, in dev and prod alike; URLs render an `<img>`, and emoji/arbitrary text passes through as text.
+
+`archive` · `arrow-down` · `arrow-left` · `arrow-right` · `arrow-up` · `audio-lines` · `bell` · `book-open` · `bookmark` · `box` · `briefcase` · `check` · `chevron-down` · `chevron-left` · `chevron-right` · `chevron-up` · `circle` · `circle-alert` · `circle-check` · `circle-x` · `clock` · `code` · `copy` · `desktop` · `download` · `ellipsis` · `external-link` · `eye` · `eye-off` · `file-text` · `flag` · `folder` · `git-branch` · `git-pull-request` · `github` · `globe` · `home` · `image` · `info` · `laptop` · `link` · `list-filter` · `lock` · `maximize-2` · `message-circle` · `message-square` · `mic` · `minimize-2` · `minus` · `mobile` · `monitor` · `moon` · `more-horizontal` · `panel-left` · `panel-right` · `paperclip` · `pencil` · `play` · `plus` · `rotate-ccw` · `rotate-cw` · `search` · `settings` · `share` · `sliders-horizontal` · `smartphone` · `smile` · `sparkles` · `square` · `square-pen` · `sun` · `tablet` · `trash` · `triangle-alert` · `upload` · `workflow` · `x`
+
+---
+
+## Element reference (96 elements, generated from custom-elements.json)
 
 Every element also accepts the `theme` attribute. Array/object properties are marked with a `—` attribute: they must be set as JS properties.
 
@@ -1623,6 +1632,7 @@ _No events._
 | `headerStart` | `header-start` | `undefined \| false \| true` | Whether the host has `slot="header-start"` content (left of the title). Set by the `<kai-chat>` facade so a custom control forces the header open. |
 | `headerEnd` | `header-end` | `undefined \| false \| true` | Whether the host has `slot="header-end"` content (right of the controls). |
 | `headerFull` | `header-full` | `undefined \| false \| true` | REPLACE: full custom header in place of the built-in title/model/context bar. |
+| `homeFull` | `home-full` | `undefined \| false \| true` | REPLACE: custom home-tab content in place of the built-in home screen (greeting, recent-conversation card, links). Rendered only while the home view is showing, so it is meaningful only when `home` is set; the tab bar and navigation stay the kit's own. Set by the facade when light-DOM `slot="home"` content is projected (region slots, P-6). |
 | `sidebar` | `sidebar` | `undefined \| false \| true` | INJECT: left sidebar column (e.g. a conversation list / your own nav). |
 | `empty` | `empty` | `undefined \| false \| true` | REPLACE: custom zero-state rendered in the message area while the thread is empty (replaces the empty message list only; the composer and its suggestions still render). |
 | `composer` | `composer` | `undefined \| false \| true` | REPLACE: full custom composer in place of the built-in prompt input. The projected content wires its own submit (the data-flow boundary). |
@@ -1683,6 +1693,7 @@ _No events._
 | `header-end` | inject | Trailing header controls. |
 | `header` | replace | Full custom header; replaces the built-in title/model/context bar. |
 | `sidebar` | inject | Left column (your nav / conversation list). Fixed width; use compose-your-own for resizable. |
+| `home` | replace | Custom home-tab content in place of the built-in home screen (greeting, recent-conversation card, links). Rendered only while the home view is showing, so it needs the `home` property set; the tab bar and navigation stay built in. |
 | `empty` | replace | Custom zero-state rendered in the message area while the thread is empty. Replaces the empty message list only; the composer and any suggestions still render. |
 | `composer` | replace | Full custom composer; you own submit + loading, drive the thread via messages. |
 | `composer-actions` | inject | Accessory row above the composer. |
@@ -2054,6 +2065,8 @@ _No events._
 | `conversationId` | `conversation-id` | `undefined \| string` | The row's identity: the `conversation-id` attribute (host `id` is the fallback). Inside `<kai-conversations>` it is handed to the container's selection contract (`kai-conversation-select`); standalone it is the `id` in this element's own `kai-select` detail. |
 | `active` | `active` | `undefined \| false \| true` | Selected state. Reflected as `aria-current` on the row body and a `data-active` styling hook on the row; inside a container the container drives it from its `activeId`, standalone you set it yourself. |
 | `compact` | `compact` | `undefined \| false \| true` | Dense single-line row padding. |
+| `density` | `density` | `undefined \| "default" \| "compact" \| "panel"` | Row density: `default`, `compact` (same as the `compact` flag), or `panel`, the widget-panel presentation matching the facade panel's measured row box (12px/10px padding, a 40px single-line row). Previously that box was a private interior class a composition could only approximate by smuggling padding through slotted spans (2026-08-31 composition spike, phase 3 round 3). An explicit density wins over `compact`. |
+| `unread` | `unread` | `undefined \| false \| true` | Show the unread indicator dot at the row's trailing edge, inside the activation surface and before the `menu` region, with a screen-reader "Unread" label. Drive it from `isConversationUnread` (exported from the package root and from `dist/stores.js`). |
 
 **Events** (non-bubbling `CustomEvent`s — listen directly on the element):
 
@@ -2077,6 +2090,7 @@ _No events._
 | `::part(body)` | The activation surface inside the row (button role; carries aria-current and the roving tabindex). The focus ring paints here. — `kai-conversation-item::part(body) { outline-offset: 2px }` |
 | `::part(row)` | The whole row surface. Carries `data-active` while selected. — `kai-conversation-item::part(row) { border-radius: 0.5rem }` |
 | `::part(title)` | The title line (the default slot renders inside it). — `kai-conversation-item::part(title) { font-weight: 600 }` |
+| `::part(unread)` | The unread indicator dot at the body's trailing edge, before the `menu` region (renders only while the `unread` flag is set; a screen-reader "Unread" label rides along). — `kai-conversation-item::part(unread) { background: var(--color-primary) }` |
 | `::part(leading)` | Leading region before the title (an icon or avatar). |
 | `::part(meta)` | Meta region under the title (a timestamp or status line). |
 | `::part(menu)` | Your own row menu (a popover trigger). Never selects the row. |
@@ -2096,6 +2110,7 @@ _No events._
 | `collapsed` | `collapsed` | `undefined \| false \| true` | Controlled collapsed state. Set as a JS property (`el.collapsed = true`) to drive the rail from your app, updating it in response to `kai-collapse-toggle`. Omit for uncontrolled (the element manages it). Collapsed shrinks the rail to a floating reopen button. |
 | `defaultCollapsed` | `default-collapsed` | `undefined \| false \| true` | Initial collapsed state when uncontrolled (default false). Use the `default-collapsed` attribute to start collapsed in plain HTML. |
 | `compact` | `compact` | `undefined \| false \| true` | Dense single-line rows (a leading dot + title, no message count). |
+| `density` | `density` | `undefined \| "default" \| "compact" \| "panel"` | Row density for the data rows: `default`, `compact` (same as the `compact` flag), or `panel`, the widget-panel presentation matching the facade panel's measured row box (12px/10px padding, a 40px single-line row with a right-aligned relative time and an optional preview line carrying the unread dot). An explicit density wins over `compact`. Item mode is unaffected: slotted `<kai-conversation-item>` rows carry their own `density` attribute. |
 | `searchable` | `searchable` | `undefined \| false \| true` | Show the built-in search box above the list. Default `true`. Set `searchable="false"` (or `el.searchable = false`) to hide it: the widget-box case, where the facade's own list view renders no search and a fine-grain composition previously had no way to match it (2026-08-31 composition spike, phase 3 round 2). Same default-true flag convention as `<kai-prompt-input attach>`: `<kai-conversations searchable>` and omitting it are both ON. Hidden, the `focus()`/`clear()` methods reach no input and `kai-search` never fires. |
 
 **Events** (non-bubbling `CustomEvent`s — listen directly on the element):
@@ -2990,6 +3005,65 @@ _No events._
 
 ---
 
+### `kai-panel` / `Panel`
+
+**Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
+
+| Property | Attribute | Type | Description |
+|---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
+| `frame` | `frame` | `undefined \| false \| true` | Standalone widget-box chrome: border, radius and shadow on the panel itself. Off (the default), the panel inherits its container's radius and clips to it, the right posture inside an already-framed container such as `kai-dock`'s floating panel. |
+
+_No events._
+
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | The view content that fills the body region (a `<kai-thread>`, a `<kai-view-stack>`, a home screen). Stretched to fill the remaining height between the `header` and `footer` slots. |
+| `header` | inject | The header region above the view container: put a `<kai-panel-header>` there, or anything. Keeps its natural height and never scrolls away. |
+| `footer` | inject | The row below the view container (a "Powered by" line, a disclaimer). Keeps its natural height and never scrolls away. |
+
+**Styleable parts** (restyle from outside via `kai-panel::part(name)`):
+
+| Part | Description |
+|---|---|
+| `::part(panel)` | The panel frame itself: the flex column that fills the host. With the `frame` flag it carries the standalone border, radius and shadow. — `kai-panel::part(panel) { border-radius: 1.25rem }` |
+| `::part(body)` | The view container between header and footer: fills the remaining height, clips, and anchors floating children. — `kai-panel::part(body) { background: var(--color-muted) }` |
+| `::part(header)` | The header region above the view container: put a `<kai-panel-header>` there, or anything. Keeps its natural height and never scrolls away. |
+| `::part(footer)` | The row below the view container (a "Powered by" line, a disclaimer). Keeps its natural height and never scrolls away. |
+
+---
+
+### `kai-panel-header` / `PanelHeader`
+
+**Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
+
+| Property | Attribute | Type | Description |
+|---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
+
+_No events._
+
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | The title text. `start` and `end` are the clusters around it: back arrows and close buttons are slotted content, never props. |
+| `start` | inject | The leading cluster, before the title: a back arrow, an avatar. |
+| `end` | inject | The trailing cluster, after the title: a close or overflow button. |
+
+**Styleable parts** (restyle from outside via `kai-panel-header::part(name)`):
+
+| Part | Description |
+|---|---|
+| `::part(header)` | The 56px header row itself (bottom border included). — `kai-panel-header::part(header) { border-bottom: none }` |
+| `::part(start)` | The leading cluster wrapper (the `start` slot renders inside it). — `kai-panel-header::part(start) { gap: 0.25rem }` |
+| `::part(title)` | The title line (the default slot renders inside it). — `kai-panel-header::part(title) { font-weight: 700 }` |
+| `::part(end)` | The trailing cluster wrapper (the `end` slot renders inside it). — `kai-panel-header::part(end) { gap: 0.25rem }` |
+
+---
+
 ### `kai-popover` / `Popover`
 
 **Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
@@ -3300,6 +3374,45 @@ _No events._
 | Event | `detail` type | Description |
 |---|---|---|
 | `kai-complete` | `CustomEvent` | Streaming finished. |
+
+---
+
+### `kai-row` / `Row`
+
+**Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
+
+| Property | Attribute | Type | Description |
+|---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
+| `interactive` | `interactive` | `undefined \| false \| true` | Pressable row: renders real button semantics (click, Enter, Space) and fires `kai-click` on activation. Ignored when `href` is set. |
+| `href` | `href` | `undefined \| string` | Navigate on press: the row renders as a real anchor opening in a new tab. An href outside the kit's safe URL schemes renders a plain non-interactive row instead (label visible, nothing clickable). |
+| `chevron` | `chevron` | `undefined \| false \| true` | Show a trailing chevron affordance at the row's end. |
+
+**Events** (non-bubbling `CustomEvent`s — listen directly on the element):
+
+| Event | `detail` type | Description |
+|---|---|---|
+| `kai-click` | `CustomEvent` | The row was activated (click, Enter or Space) while `interactive` is set and no `href` is present. Non-bubbling: listen on the element itself. |
+
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | The row title. `leading`, `subtitle` and `trailing` are the named regions around it. |
+| `leading` | inject | Leading region before the title (an icon or avatar). |
+| `subtitle` | inject | Secondary line under the title. |
+| `trailing` | inject | Right-aligned trailing region (a timestamp, value, or badge). |
+
+**Styleable parts** (restyle from outside via `kai-row::part(name)`):
+
+| Part | Description |
+|---|---|
+| `::part(row)` | The whole row surface: the button when interactive, the anchor when `href` is set, a plain div otherwise. — `kai-row::part(row) { border-radius: 0 }` |
+| `::part(title)` | The title line (the default slot renders inside it). — `kai-row::part(title) { font-weight: 600 }` |
+| `::part(chevron)` | The trailing chevron affordance (renders only with the `chevron` flag). — `kai-row::part(chevron) { color: var(--color-primary) }` |
+| `::part(leading)` | Leading region before the title (an icon or avatar). |
+| `::part(subtitle)` | Secondary line under the title. |
+| `::part(trailing)` | Right-aligned trailing region (a timestamp, value, or badge). |
 
 ---
 
@@ -3786,6 +3899,76 @@ _No events._
 
 ---
 
+### `kai-tab-bar` / `TabBar`
+
+**Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
+
+| Property | Attribute | Type | Description |
+|---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
+| `value` | `value` | `undefined \| string` | Controlled selected value. Set the property or the `value` attribute and drive it from your app in response to `kai-tab-change`. Omit for uncontrolled: the bar manages its own selection, seeded from `defaultValue`, else the first enabled tab. |
+| `defaultValue` | `default-value` | `undefined \| string` | Initial selected value when uncontrolled (the `default-value` attribute in plain HTML). |
+| `iconOnly` | `icon-only` | `undefined \| false \| true` | Icon-only mode: every tab hides its label visually. The slotted labels still name the tabs for assistive tech. |
+| `label` | `label` | `undefined \| string` | Accessible name for the tablist (default "Navigation"). |
+
+**Events** (non-bubbling `CustomEvent`s — listen directly on the element):
+
+| Event | `detail` type | Description |
+|---|---|---|
+| `kai-tab-change` | `CustomEvent<{ value: string }>` | A tab was selected (click, Enter/Space, or arrow-key move). `value` is the item's `value` attribute, else its host `id`. |
+
+**Methods** (call on the element instance: `document.querySelector('kai-tab-bar').select(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `select` | `(next: string): void` | Select a tab by value (fires `kai-tab-change`). Ignores unknown and disabled values. |
+| `focus` | `(): void` | Focus the active tab (or the first focusable tab). |
+
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | The `<kai-tab-bar-item>` tabs, direct children in tab order. |
+
+**Styleable parts** (restyle from outside via `kai-tab-bar::part(name)`):
+
+| Part | Description |
+|---|---|
+| `::part(tablist)` | The bar itself: the `role="tablist"` row the item children slot into. — `kai-tab-bar::part(tablist) { border-top: 1px solid var(--color-border) }` |
+
+---
+
+### `kai-tab-bar-item` / `TabBarItem`
+
+**Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
+
+| Property | Attribute | Type | Description |
+|---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
+| `value` | `value` | `undefined \| string` | The tab's identity: the `value` attribute (host `id` is the fallback). It is the `value` in the bar's `kai-tab-change` detail. |
+| `icon` | `icon` | `undefined \| string` | Named icon from the kit roster (e.g. "home", "message-square"). The icon renders at the element's own default size, so equal glyphs across tabs need no consumer sizing. |
+| `dot` | `dot` | `undefined \| false \| true` | Unread dot on the icon's corner. Reaches the tab's accessible name too: a dot alone is invisible to assistive tech. |
+| `badge` | `badge` | `undefined \| string \| number` | Count badge on the icon's corner; wins over `dot` when both are set. Reaches the accessible name too. |
+| `disabled` | `disabled` | `undefined \| false \| true` | Disabled tabs are skipped by arrow keys and cannot be selected. |
+| `active` | `active` | `undefined \| false \| true` | Selected state. Inside `<kai-tab-bar>` the bar drives it from its `value`; the active tab retints with the primary token. |
+| `iconOnly` | `icon-only` | `undefined \| false \| true` | Hide the label visually (the slotted text still names the tab for assistive tech). Inside `<kai-tab-bar>` the bar drives it from its own `icon-only` attribute. |
+
+_No events._
+
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | The tab's label text (it also names the tab for assistive tech, even in icon-only mode). |
+
+**Styleable parts** (restyle from outside via `kai-tab-bar-item::part(name)`):
+
+| Part | Description |
+|---|---|
+| `::part(tab)` | The tab button (icon-over-label column). Carries `data-active` while selected. — `kai-tab-bar-item::part(tab) { gap: 2px }` |
+
+---
+
 ### `kai-tabs` / `Tabs`
 
 **Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
@@ -4016,6 +4199,60 @@ _No events._
 | Slot | Mode | Description |
 |---|---|---|
 | _(default)_ | inject | The TRIGGER the tooltip describes. The tip text is the `text` prop. |
+
+---
+
+### `kai-view` / `View`
+
+**Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
+
+| Property | Attribute | Type | Description |
+|---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
+| `name` | `name` | `undefined \| string` | The view's name: what `push()` / `selectTab()` / the stack's `view` attribute address. Attribute: `name`. |
+| `tabRoot` | `tab-root` | `undefined \| false \| true` | Marks this view as a TAB ROOT: it shows the tab bar and never a back affordance, and a tab switch lands on it directly. Views without it are DRILL views, reached by `push()` and left by `back()`. Attribute: `tab-root`. |
+
+_No events._
+
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | This view's content. It stays mounted while hidden, so switching views resets nothing. |
+
+---
+
+### `kai-view-stack` / `ViewStack`
+
+**Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
+
+| Property | Attribute | Type | Description |
+|---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
+| `view` | `view` | `undefined \| string` | Deep link / initial view name; reflected to the `view` ATTRIBUTE as navigation happens, so `kai-view-stack[view="chat"]` selectors follow. Setting it later navigates (tab root selects that tab; a drill view replaces the top while drilled, or pushes from a root). |
+| `drilled` | `drilled` | `undefined \| false \| true` | READ-ONLY reflection of the drilled state, present while a pushed (non-root) view is showing. THE rule this element owns: drilled hides the tab bar and shows a back affordance, so a sibling tab bar hides itself on `kai-view-stack[drilled]` (or from `kai-view-change`), and a header shows its back arrow the same way. |
+
+**Events** (non-bubbling `CustomEvent`s — listen directly on the element):
+
+| Event | `detail` type | Description |
+|---|---|---|
+| `kai-view-change` | `CustomEvent<{ view: string \| undefined; root: string \| undefined; drilled: false \| true; stack: string[] }>` | The visible view or the drilled flag changed (push, back, replace, tab switch, or a `view` attribute write). `detail`: `{ view, root, drilled, stack }`; `root` is what the tab bar should mark active, defined even while drilled. |
+
+**Methods** (call on the element instance: `document.querySelector('kai-view-stack').push(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `push` | `(name: string): void` | Drill into a view (fires `kai-view-change`). A tab-root name routes to `selectTab`; unknown names are ignored. |
+| `back` | `(): void` | Pop one drilled view. No-op at a tab root. |
+| `replace` | `(name: string): void` | Swap the current view without touching history. |
+| `selectTab` | `(name: string): void` | Switch tab roots and clear any drill. Ignores non-root names. |
+| `navigate` | `(name: string): void` | Deep-link navigation: what the `view` attribute drives. |
+
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | The named `<kai-view>` children: tab roots (`tab-root`) side by side behind a tab bar, the rest drill views reached by `push()`. |
 
 ---
 

@@ -1,0 +1,71 @@
+/* in-app-assistant: layout-only CSS. The chrome (panel surface, header,
+ * rows, thread, composer) is painted by the kai elements from kit tokens, so
+ * a --kai-color-* override on :root retints everything at once; nothing here
+ * restates a palette. What remains is the host page's stand-in styling and
+ * the aside's geometry - the genuinely minimal css a block carries. */
+
+html, body { height: 100%; }
+body { margin: 0; background: #fff; font: 14px system-ui, sans-serif; }
+@media (prefers-color-scheme: dark) { body { background: #0b1020; color: #e2e8f0; } }
+
+/* The host stand-in: replace this with your app. It only reserves the
+ * aside's width so content never hides behind the panel. */
+.host { padding: 2rem; margin-inline-end: 380px; }
+.host h1 { margin: 0 0 0.25rem; font-size: 1.25rem; }
+.host-note { margin: 0 0 1.5rem; color: color-mix(in srgb, currentColor 60%, transparent); }
+.host-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; max-width: 40rem; }
+.host-card { border: 1px solid color-mix(in srgb, currentColor 15%, transparent); border-radius: 0.75rem; padding: 1rem; }
+.host-card h2 { margin: 0 0 0.25rem; font-size: 0.875rem; }
+.host-card p { margin: 0; color: color-mix(in srgb, currentColor 60%, transparent); }
+
+/* The docked aside: a persistent panel on the inline end edge. */
+.assistant {
+  position: fixed; inset-block: 0; inset-inline-end: 0; width: 380px;
+  display: flex; flex-direction: column;
+  border-inline-start: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+
+/* The elements' shared base sheet sets :host{display:block}, which outranks
+ * the UA's [hidden] rule, so the chrome this block toggles with `.hidden`
+ * needs the author-level rule (the same fix kai-view carries internally). */
+kai-button[hidden] { display: none; }
+
+/* The panel fills the aside; the stack fills the panel body. */
+kai-panel { display: block; height: 100%; }
+kai-view-stack { display: flex; flex-direction: column; min-height: 0; }
+kai-view { flex: 1; min-height: 0; }
+/* CAUTION: an author `display` rule on a kai-view host would override the
+ * element's own :host([hidden]){display:none}, un-hiding inactive views.
+ * Every display rule below is therefore guarded with :not([hidden]), and
+ * this belt-and-braces rule keeps the stack's toggle winning regardless. */
+kai-view[hidden] { display: none !important; }
+
+/* Chat root: thread flexes, composer sits below. */
+kai-view[name='chat']:not([hidden]) { display: flex; flex-direction: column; }
+kai-view[name='chat'] kai-thread { flex: 1; min-height: 0; display: block; }
+kai-view[name='chat'] kai-prompt-input { display: block; padding: 0 1rem 1rem; }
+
+/* Drilled history: the list fills; the New conversation pill floats. */
+kai-view[name='history']:not([hidden]) { position: relative; display: flex; flex-direction: column; }
+kai-view[name='history'] kai-conversations { flex: 1; min-height: 0; display: block; }
+/* The right-aligned relative time slotted into each row's menu region:
+ * type scale only; the muted tint comes from currentColor. */
+kai-conversation-item .row-time { font-size: 0.75rem; color: color-mix(in srgb, currentColor 60%, transparent); }
+.new-pill { position: absolute; bottom: 0.75rem; left: 50%; transform: translateX(-50%); }
+.new-pill::part(button) { border-radius: 999px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); }
+
+/* COPY of the kit's unread default (theme.tokens.css --color-unread), with
+ * the same --kai- knob first so a theme override still wins. */
+.unread-dot {
+  width: 6px; height: 6px; border-radius: 999px; align-self: center;
+  background: var(--kai-color-unread, hsl(0 84% 60%));
+}
+.unread-dot[hidden] { display: none; }
+
+/* Small screens: the assistant takes the viewport; the host scrolls under
+ * it. Whether to hide it behind a launcher instead is the consumer's layout
+ * call (the support-widget block is that answer). */
+@media (max-width: 640px) {
+  .host { margin-inline-end: 0; }
+  .assistant { inset: 0; width: auto; border-inline-start: 0; }
+}

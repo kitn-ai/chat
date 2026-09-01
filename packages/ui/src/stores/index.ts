@@ -33,3 +33,12 @@ export {
   LEGACY_THREAD_MIGRATED_TITLE,
 } from '../primitives/conversation-store';
 export type { ConversationStore } from '../primitives/conversation-store';
+// The headless conversation controller (P-5, blocks-and-parts spec): the
+// mint/save/restore/markRead policy as one framework-free factory, shipped on
+// this same self-contained entry so CDN pages and the facade share ONE policy.
+export { createConversationController } from './conversation-controller';
+export type {
+  ConversationController,
+  ConversationControllerHooks,
+  ConversationControllerOp,
+} from './conversation-controller';

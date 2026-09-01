@@ -5,7 +5,7 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/colla
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { ScrollArea } from '../ui/scroll-area';
-import { ConversationItem } from './conversation-item';
+import { ConversationItem, type ConversationRowDensity } from './conversation-item';
 import type { ConversationSummary, ConversationGroup } from '../types';
 
 /**
@@ -214,6 +214,12 @@ export interface ConversationListProps {
   empty?: JSX.Element;
   /** Dense single-line rows (a leading dot + title, no message count). */
   compact?: boolean;
+  /** Row density for the data rows: `default`, `compact` (same as the
+   *  `compact` flag), or `panel`, the widget-panel presentation matching the
+   *  facade panel's measured row box (P-7, blocks-and-parts design
+   *  2026-08-31). An explicit density wins over `compact`. Item mode is
+   *  unaffected: slotted rows carry their own density. */
+  density?: ConversationRowDensity;
   /** Show the built-in search box (default `true`). Set `false` to hide it,
    *  e.g. a widget-box list where search earns no room (the facade's own
    *  `ConversationPanel` renders no search; 2026-08-31 composition spike,
@@ -253,7 +259,7 @@ export interface ConversationListController {
 }
 
 export function ConversationList(props: ConversationListProps) {
-  const [local] = splitProps(props, ['groups', 'conversations', 'activeId', 'onSelect', 'onNewChat', 'onToggleSidebar', 'header', 'footer', 'empty', 'compact', 'searchable', 'onSearchChange', 'controllerRef', 'items', 'itemsKeyDown', 'itemsClick', 'class']);
+  const [local] = splitProps(props, ['groups', 'conversations', 'activeId', 'onSelect', 'onNewChat', 'onToggleSidebar', 'header', 'footer', 'empty', 'compact', 'density', 'searchable', 'onSearchChange', 'controllerRef', 'items', 'itemsKeyDown', 'itemsClick', 'class']);
   const [searchQuery, setSearchQuery] = createSignal('');
   // Item mode: the consumer's own rows replace the data rendering wholesale.
   const itemMode = createMemo(() => local.items != null);
@@ -385,7 +391,7 @@ export function ConversationList(props: ConversationListProps) {
               const convs = createMemo(() => groupedConversations().get(group.id) ?? []);
               return (
                 <Show when={convs().length > 0}>
-                  <GroupSection name={group.name} count={convs().length} conversations={convs()} activeId={local.activeId} onSelect={local.onSelect} compact={local.compact} />
+                  <GroupSection name={group.name} count={convs().length} conversations={convs()} activeId={local.activeId} onSelect={local.onSelect} compact={local.compact} density={local.density} />
                 </Show>
               );
             }}
@@ -393,11 +399,11 @@ export function ConversationList(props: ConversationListProps) {
           <Show when={ungrouped().length > 0}>
             <Show
               when={local.compact}
-              fallback={<GroupSection name="Ungrouped" count={ungrouped().length} conversations={ungrouped()} activeId={local.activeId} onSelect={local.onSelect} />}
+              fallback={<GroupSection name="Ungrouped" count={ungrouped().length} conversations={ungrouped()} activeId={local.activeId} onSelect={local.onSelect} density={local.density} />}
             >
               <div class="space-y-0.5 py-1">
                 <For each={ungrouped()}>
-                  {(conv) => <ConversationItem conversation={conv} isActive={conv.id === local.activeId} onSelect={local.onSelect} compact />}
+                  {(conv) => <ConversationItem conversation={conv} isActive={conv.id === local.activeId} onSelect={local.onSelect} compact density={local.density} />}
                 </For>
               </div>
             </Show>
@@ -413,7 +419,7 @@ export function ConversationList(props: ConversationListProps) {
   );
 }
 
-function GroupSection(props: { name: string; count: number; conversations: ConversationSummary[]; activeId?: string; onSelect: (id: string) => void; compact?: boolean }) {
+function GroupSection(props: { name: string; count: number; conversations: ConversationSummary[]; activeId?: string; onSelect: (id: string) => void; compact?: boolean; density?: ConversationRowDensity }) {
   const [open, setOpen] = createSignal(true);
   return (
     <Collapsible open={open()} onOpenChange={setOpen}>
@@ -426,7 +432,7 @@ function GroupSection(props: { name: string; count: number; conversations: Conve
       <CollapsibleContent>
         <div class="pl-2 mt-0.5 space-y-0.5">
           <For each={props.conversations}>
-            {(conv) => <ConversationItem conversation={conv} isActive={conv.id === props.activeId} onSelect={props.onSelect} compact={props.compact} />}
+            {(conv) => <ConversationItem conversation={conv} isActive={conv.id === props.activeId} onSelect={props.onSelect} compact={props.compact} density={props.density} />}
           </For>
         </div>
       </CollapsibleContent>

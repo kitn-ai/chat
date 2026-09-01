@@ -270,3 +270,55 @@ export const DropIn: Story = {
     },
   },
 };
+
+// ── 5. REPLACE (home): custom home-tab content (region slots, P-6). The
+//      widget's navigation chrome (Home/Messages tab bar, drills, back
+//      arrow) stays built in; only the home view's CONTENT is stood in for.
+//      An absent slot changes nothing: the built-in home screen renders. ──────
+function HomeSlotDemo() {
+  let el: (ChatEl & { home?: object }) | undefined;
+  onMount(() => {
+    if (!el) return;
+    el.messages = [];
+    el.home = { greeting: { title: 'Hey there' } }; // object prop: JS property, never an attribute
+    onCleanup(attachKaiActions(el));
+  });
+  return (
+    <kai-chat ref={(e) => (el = e as ChatEl)} style={{ display: 'block', height: '100vh' }}>
+      <div slot="home" style="display:flex;flex-direction:column;gap:12px;padding:20px;font:14px/1.5 system-ui;color:var(--color-foreground)">
+        <h2 style="margin:0;font-size:20px;font-weight:600;display:flex;align-items:center;gap:8px">
+          <Sparkles size={20} /> Your own home tab
+        </h2>
+        <p style="margin:0;color:var(--color-muted-foreground)">
+          Anything can live here: an FAQ, a status banner, a product tour. The
+          Messages tab and the drilled chat keep working around it.
+        </p>
+        <kai-button variant="default"
+          ref={(e) => onMount(() => onCleanup(attachKaiActions(e)))}>Browse the FAQ</kai-button>
+      </div>
+    </kai-chat>
+  );
+}
+export const HomeSlot: Story = {
+  name: 'Custom home tab (slot="home")',
+  render: () => <HomeSlotDemo />,
+  parameters: {
+    docs: {
+      source: {
+        language: 'html',
+        code: `<kai-chat>
+  <div slot="home">
+    <h2>Your own home tab</h2>
+    <p>An FAQ, a status banner, a product tour.</p>
+  </div>
+</kai-chat>
+
+<script type="module">
+  const chat = document.querySelector('kai-chat');
+  chat.messages = [];
+  chat.home = { greeting: { title: 'Hey there' } }; // enables the home view + tab bar
+</script>`,
+      },
+    },
+  },
+};

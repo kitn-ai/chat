@@ -250,4 +250,16 @@ export const Pricing: Story = {
       </div>
     );
   },
+  parameters: {
+    docs: {
+      source: {
+        language: 'tsx',
+        code: `// Token-only screen: design tokens + raw markup, deliberately built without
+// feature components. The single kit element in use is <kai-icon name="sparkles">
+// for the "Most popular" badge glyph - everything else (cards, billing toggle,
+// feature rows, CTAs) is hand-rolled markup over the --color-*/radius/shadow
+// tokens.`,
+      },
+    },
+  },
 };

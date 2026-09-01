@@ -2,7 +2,7 @@ import { customElement } from 'solid-element';
 import { ChatConfig } from '../primitives/chat-config';
 import { ELEMENT_CSS } from './css';
 import { elementDiagnosticsWanted, installElementDiagnostics } from './element-diagnostics';
-import { createEffect, createSignal, onCleanup, Show, type JSX } from 'solid-js';
+import { createEffect, createSignal, onCleanup, Show, untrack, type JSX } from 'solid-js';
 
 /**
  * Shared constructable stylesheet, built once and adopted by every element's
@@ -507,14 +507,34 @@ export function defineWebComponent<P extends Record<string, unknown>, E = Record
         <div classList={{ dark: isDark() }} style={{ display: 'contents', color: 'var(--color-foreground)' }}>
           <div ref={portalNode} />
           <ChatConfig portalMount={portalNode}>
-            {Facade(props as unknown as P, {
-              element,
-              dispatch,
-              flag,
-              reflectFlag,
-              expose,
-              dark: isDark,
-            })}
+            {/* UNTRACKED, deliberately — the facade body must run ONCE. As a bare
+                call in a JSX child position this expression lives inside a tracked
+                thunk (the compiler's insert effect, via ChatConfig's children
+                getter), so without the untrack any bare `props.x` read at the
+                facade body's top level — a signal seed, a controller creation —
+                subscribed the WHOLE body, and a later change to that prop silently
+                re-ran it, recreating every piece of facade state. Worse, a facade
+                that also REFLECTS that prop as an attribute looped on its own:
+                reflect → attributeChangedCallback → props → full body re-run
+                (kai-view-stack's back()-lands-on-the-wrong-root bug, commit
+                6744a412; kai-pane-group's select()-goes-dead bug, pinned in
+                tests/elements/pane-group-element.test.tsx). This matches how Solid
+                itself runs components (createComponent untracks the body):
+                reactivity flows through the returned JSX's own effects, which are
+                created under the owner and unaffected by untrack. A facade needing
+                a live prop read uses a thunk, memo or effect — same as any Solid
+                component. Seam pinned by the facade-bodies-run-once test in
+                tests/elements/define.test.tsx. */}
+            {untrack(() =>
+              Facade(props as unknown as P, {
+                element,
+                dispatch,
+                flag,
+                reflectFlag,
+                expose,
+                dark: isDark,
+              }),
+            )}
           </ChatConfig>
         </div>
       </>

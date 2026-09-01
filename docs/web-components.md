@@ -3,14 +3,14 @@
 ## Overview
 
 <!-- spec:overview -->
-`@kitn.ai/ui` ships 89 framework-agnostic custom elements built on the SolidJS kit.
+`@kitn.ai/ui` ships 96 framework-agnostic custom elements built on the SolidJS kit.
 
 | Tag | Purpose |
 |-----|---------|
 | `<kai-chat>` | Full chat UI — message list plus prompt input |
 | `<kai-conversations>` | Sidebar conversation browser with group support |
 | `<kai-prompt-input>` | Standalone text-input area with send button |
-| + 86 composable primitives | See the full roster below |
+| + 93 composable primitives | See the full roster below |
 <!-- /spec:overview -->
 
 Each element renders into its own **Shadow DOM** so the host page's CSS cannot leak in, and the kit's Tailwind classes cannot leak out. SolidJS and all kit dependencies are bundled inside the element bundle — the host does not need SolidJS.
@@ -158,6 +158,7 @@ Every element also accepts a `theme` attribute (`'light' | 'dark' | 'auto'`, def
 | `headerStart` | `header-start` | `undefined | false | true` | — | Whether the host has `slot="header-start"` content (left of the title). Set by the `<kai-chat>` facade so a custom control forces the header open. |
 | `headerEnd` | `header-end` | `undefined | false | true` | — | Whether the host has `slot="header-end"` content (right of the controls). |
 | `headerFull` | `header-full` | `undefined | false | true` | — | REPLACE: full custom header in place of the built-in title/model/context bar. |
+| `homeFull` | `home-full` | `undefined | false | true` | — | REPLACE: custom home-tab content in place of the built-in home screen (greeting, recent-conversation card, links). Rendered only while the home view is showing, so it is meaningful only when `home` is set; the tab bar and navigation stay the kit's own. Set by the facade when light-DOM `slot="home"` content is projected (region slots, P-6). |
 | `sidebar` | `sidebar` | `undefined | false | true` | — | INJECT: left sidebar column (e.g. a conversation list / your own nav). |
 | `empty` | `empty` | `undefined | false | true` | — | REPLACE: custom zero-state rendered in the message area while the thread is empty (replaces the empty message list only; the composer and its suggestions still render). |
 | `composer` | `composer` | `undefined | false | true` | — | REPLACE: full custom composer in place of the built-in prompt input. The projected content wires its own submit (the data-flow boundary). |
@@ -222,6 +223,7 @@ Project your own markup with `slot="name"` on a light-DOM child.
 | `header-end` | inject | Trailing header controls. |
 | `header` | replace | Full custom header; replaces the built-in title/model/context bar. |
 | `sidebar` | inject | Left column (your nav / conversation list). Fixed width; use compose-your-own for resizable. |
+| `home` | replace | Custom home-tab content in place of the built-in home screen (greeting, recent-conversation card, links). Rendered only while the home view is showing, so it needs the `home` property set; the tab bar and navigation stay built in. |
 | `empty` | replace | Custom zero-state rendered in the message area while the thread is empty. Replaces the empty message list only; the composer and any suggestions still render. |
 | `composer` | replace | Full custom composer; you own submit + loading, drive the thread via messages. |
 | `composer-actions` | inject | Accessory row above the composer. |
@@ -379,6 +381,7 @@ The full app shell in one tag — a collapsible conversation-list sidebar (left)
 | `collapsed` | `collapsed` | `undefined | false | true` | — | Controlled collapsed state. Set as a JS property (`el.collapsed = true`) to drive the rail from your app, updating it in response to `kai-collapse-toggle`. Omit for uncontrolled (the element manages it). Collapsed shrinks the rail to a floating reopen button. |
 | `defaultCollapsed` | `default-collapsed` | `undefined | false | true` | — | Initial collapsed state when uncontrolled (default false). Use the `default-collapsed` attribute to start collapsed in plain HTML. |
 | `compact` | `compact` | `undefined | false | true` | — | Dense single-line rows (a leading dot + title, no message count). |
+| `density` | `density` | `undefined | "default" | "compact" | "panel"` | — | Row density for the data rows: `default`, `compact` (same as the `compact` flag), or `panel`, the widget-panel presentation matching the facade panel's measured row box (12px/10px padding, a 40px single-line row with a right-aligned relative time and an optional preview line carrying the unread dot). An explicit density wins over `compact`. Item mode is unaffected: slotted `<kai-conversation-item>` rows carry their own `density` attribute. |
 | `searchable` | `searchable` | `undefined | false | true` | `true` | Show the built-in search box above the list. Default `true`. Set `searchable="false"` (or `el.searchable = false`) to hide it: the widget-box case, where the facade's own list view renders no search and a fine-grain composition previously had no way to match it (2026-08-31 composition spike, phase 3 round 2). Same default-true flag convention as `<kai-prompt-input attach>`: `<kai-conversations searchable>` and omitting it are both ON. Hidden, the `focus()`/`clear()` methods reach no input and `kai-search` never fires. |
 
 #### Events
@@ -3848,3 +3851,11 @@ Two human/agent-readable files are generated from the manifest by `scripts/gen-l
 - **`llms-full.txt`** (~54 KB) — everything in `llms.txt` plus a generated props/events table for each element, a streaming recipe, and a build-a-chat-app runbook.
 
 Both files are at the repo root, the npm package root (`node_modules/@kitn.ai/ui/llms.txt`), and https://kitn.dev/llms.txt.
+
+## Icon roster
+
+<!-- spec:icon-roster -->
+Every name `kai-icon` (and every `icon` prop/attribute across the elements) resolves — 77 names, derived from the `NAMED_ICONS` map in `src/ui/icon.tsx` (also exported at runtime as `ICON_NAMES`). An icon-shaped name outside this roster renders a fallback glyph and logs a console error, in dev and prod alike; URLs render an `<img>`, and emoji/arbitrary text passes through as text.
+
+`archive` · `arrow-down` · `arrow-left` · `arrow-right` · `arrow-up` · `audio-lines` · `bell` · `book-open` · `bookmark` · `box` · `briefcase` · `check` · `chevron-down` · `chevron-left` · `chevron-right` · `chevron-up` · `circle` · `circle-alert` · `circle-check` · `circle-x` · `clock` · `code` · `copy` · `desktop` · `download` · `ellipsis` · `external-link` · `eye` · `eye-off` · `file-text` · `flag` · `folder` · `git-branch` · `git-pull-request` · `github` · `globe` · `home` · `image` · `info` · `laptop` · `link` · `list-filter` · `lock` · `maximize-2` · `message-circle` · `message-square` · `mic` · `minimize-2` · `minus` · `mobile` · `monitor` · `moon` · `more-horizontal` · `panel-left` · `panel-right` · `paperclip` · `pencil` · `play` · `plus` · `rotate-ccw` · `rotate-cw` · `search` · `settings` · `share` · `sliders-horizontal` · `smartphone` · `smile` · `sparkles` · `square` · `square-pen` · `sun` · `tablet` · `trash` · `triangle-alert` · `upload` · `workflow` · `x`
+<!-- /spec:icon-roster -->

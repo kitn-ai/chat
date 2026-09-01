@@ -30,8 +30,35 @@ function Demo(props: { template: BuildableTemplate }) {
 const meta = { title: 'Labs/Builder/Derived panel', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 
-export const SupportWidget: StoryObj = { render: () => <Demo template={buildableTemplates().find((t) => t.id === 'widget')!} /> };
-export const InAppAssistant: StoryObj = { render: () => <Demo template={buildableTemplates().find((t) => t.id === 'inAppAssistant')!} /> };
-export const Assistant: StoryObj = { render: () => <Demo template={buildableTemplates().find((t) => t.id === 'assistant')!} /> };
-export const Research: StoryObj = { render: () => <Demo template={buildableTemplates().find((t) => t.id === 'research')!} /> };
-export const Workspace: StoryObj = { render: () => <Demo template={buildableTemplates().find((t) => t.id === 'workspace')!} /> };
+// DerivedBuilderPanel is internal to the builder app (src/components/builder-panel-derived.tsx,
+// consumed by src/builder-app/App.tsx) -- it ships in no public @kitn.ai/ui entry point, so the
+// snippet below shows real call-site usage rather than a package import.
+const src = (code: string) => ({
+  parameters: { docs: { source: { code, language: 'tsx' } } },
+});
+
+export const SupportWidget: StoryObj = {
+  render: () => <Demo template={buildableTemplates().find((t) => t.id === 'widget')!} />,
+  ...src(`<DerivedBuilderPanel
+  value={construct}
+  onChange={setConstruct}
+  template={widgetTemplate}
+  problems={validateConstruct(construct).ok ? [] : validateConstruct(construct).problems}
+/>`),
+};
+export const InAppAssistant: StoryObj = {
+  render: () => <Demo template={buildableTemplates().find((t) => t.id === 'inAppAssistant')!} />,
+  ...src(`<DerivedBuilderPanel value={construct} onChange={setConstruct} template={inAppAssistantTemplate} problems={problems} />`),
+};
+export const Assistant: StoryObj = {
+  render: () => <Demo template={buildableTemplates().find((t) => t.id === 'assistant')!} />,
+  ...src(`<DerivedBuilderPanel value={construct} onChange={setConstruct} template={assistantTemplate} problems={problems} />`),
+};
+export const Research: StoryObj = {
+  render: () => <Demo template={buildableTemplates().find((t) => t.id === 'research')!} />,
+  ...src(`<DerivedBuilderPanel value={construct} onChange={setConstruct} template={researchTemplate} problems={problems} />`),
+};
+export const Workspace: StoryObj = {
+  render: () => <Demo template={buildableTemplates().find((t) => t.id === 'workspace')!} />,
+  ...src(`<DerivedBuilderPanel value={construct} onChange={setConstruct} template={workspaceTemplate} problems={problems} />`),
+};

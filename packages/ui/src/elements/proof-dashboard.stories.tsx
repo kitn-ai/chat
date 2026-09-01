@@ -301,6 +301,14 @@ export const Dashboard: Story = {
         story:
           'PROOF: an Analytics Dashboard built only from --color-* design tokens and raw markup (no kai-* feature components; lucide-solid supplies the glyphs). Demonstrates the surface hierarchy (recessed page / bg-card panels / sunken wells), token-driven deltas + charts, and free light/dark via the toggle. See the source for the GAP notes on components and tokens the kit could add.',
       },
+      source: {
+        language: 'tsx',
+        code: `// Showcase composition: an Analytics Dashboard built ENTIRELY from the kit's
+// design tokens (--color-*, bg-surface/bg-card/bg-surface-sunken, .kai-elevation)
+// and raw markup + lucide-solid glyphs. No kai-* elements are used here - it
+// exists to prove the token system alone can dress a real-world screen.
+// See proof-dashboard.stories.tsx for the full markup.`,
+      },
     },
   },
 };

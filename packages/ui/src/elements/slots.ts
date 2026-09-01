@@ -27,6 +27,7 @@ export const CHAT_SLOTS: SlotDef[] = [
   { name: 'header-end',       mode: 'inject',  doc: 'Trailing header controls.' },
   { name: 'header',           mode: 'replace', part: true, doc: 'Full custom header; replaces the built-in title/model/context bar.' },
   { name: 'sidebar',          mode: 'inject',  part: true, doc: 'Left column (your nav / conversation list). Fixed width; use compose-your-own for resizable.' },
+  { name: 'home',             mode: 'replace', doc: 'Custom home-tab content in place of the built-in home screen (greeting, recent-conversation card, links). Rendered only while the home view is showing, so it needs the `home` property set; the tab bar and navigation stay built in.' },
   { name: 'empty',            mode: 'replace', doc: 'Custom zero-state rendered in the message area while the thread is empty. Replaces the empty message list only; the composer and any suggestions still render.' },
   { name: 'composer',         mode: 'replace', doc: 'Full custom composer; you own submit + loading, drive the thread via messages.' },
   { name: 'composer-actions', mode: 'inject',  doc: 'Accessory row above the composer.' },
@@ -94,6 +95,11 @@ export const CONVERSATION_ITEM_PARTS: PartDef[] = [
     name: 'title',
     doc: 'The title line (the default slot renders inside it).',
     recipe: 'kai-conversation-item::part(title) { font-weight: 600 }',
+  },
+  {
+    name: 'unread',
+    doc: 'The unread indicator dot at the body\'s trailing edge, before the `menu` region (renders only while the `unread` flag is set; a screen-reader "Unread" label rides along).',
+    recipe: 'kai-conversation-item::part(unread) { background: var(--color-primary) }',
   },
 ];
 
@@ -719,6 +725,105 @@ export const AUDIO_VISUALIZER_PARTS: PartDef[] = [
   },
 ];
 
+/** Slots of `<kai-panel>` — the widget panel frame (blocks-and-parts P-1). The
+ *  default slot is the view container. */
+export const PANEL_SLOTS: SlotDef[] = [
+  { name: 'header', mode: 'inject', part: true, doc: 'The header region above the view container: put a `<kai-panel-header>` there, or anything. Keeps its natural height and never scrolls away.' },
+  { name: 'footer', mode: 'inject', part: true, doc: 'The row below the view container (a "Powered by" line, a disclaimer). Keeps its natural height and never scrolls away.' },
+];
+
+/** Styleable `::part`s of `<kai-panel>`. (`header`/`footer` are covered by
+ *  their slot defs' `part: true` flags.) */
+export const PANEL_PARTS: PartDef[] = [
+  {
+    name: 'panel',
+    doc: 'The panel frame itself: the flex column that fills the host. With the `frame` flag it carries the standalone border, radius and shadow.',
+    recipe: 'kai-panel::part(panel) { border-radius: 1.25rem }',
+  },
+  {
+    name: 'body',
+    doc: 'The view container between header and footer: fills the remaining height, clips, and anchors floating children.',
+    recipe: 'kai-panel::part(body) { background: var(--color-muted) }',
+  },
+];
+
+/** Slots of `<kai-panel-header>` — the default slot is the title text. */
+export const PANEL_HEADER_SLOTS: SlotDef[] = [
+  { name: 'start', mode: 'inject', doc: 'The leading cluster, before the title: a back arrow, an avatar.' },
+  { name: 'end', mode: 'inject', doc: 'The trailing cluster, after the title: a close or overflow button.' },
+];
+
+/** Styleable `::part`s of `<kai-panel-header>`. */
+export const PANEL_HEADER_PARTS: PartDef[] = [
+  {
+    name: 'header',
+    doc: 'The 56px header row itself (bottom border included).',
+    recipe: 'kai-panel-header::part(header) { border-bottom: none }',
+  },
+  {
+    name: 'start',
+    doc: 'The leading cluster wrapper (the `start` slot renders inside it).',
+    recipe: 'kai-panel-header::part(start) { gap: 0.25rem }',
+  },
+  {
+    name: 'title',
+    doc: 'The title line (the default slot renders inside it).',
+    recipe: 'kai-panel-header::part(title) { font-weight: 700 }',
+  },
+  {
+    name: 'end',
+    doc: 'The trailing cluster wrapper (the `end` slot renders inside it).',
+    recipe: 'kai-panel-header::part(end) { gap: 0.25rem }',
+  },
+];
+
+/** Styleable `::part`s of `<kai-tab-bar>` (the tabs themselves are your
+ *  slotted `<kai-tab-bar-item>` children). */
+export const TAB_BAR_PARTS: PartDef[] = [
+  {
+    name: 'tablist',
+    doc: 'The bar itself: the `role="tablist"` row the item children slot into.',
+    recipe: 'kai-tab-bar::part(tablist) { border-top: 1px solid var(--color-border) }',
+  },
+];
+
+/** Styleable `::part`s of `<kai-tab-bar-item>`. */
+export const TAB_BAR_ITEM_PARTS: PartDef[] = [
+  {
+    name: 'tab',
+    doc: 'The tab button (icon-over-label column). Carries `data-active` while selected.',
+    recipe: 'kai-tab-bar-item::part(tab) { gap: 2px }',
+  },
+];
+
+/** Slots of `<kai-row>` — the generic mobile list row (blocks-and-parts P-4).
+ *  The default slot is the title; these are the named regions around it. */
+export const ROW_SLOTS: SlotDef[] = [
+  { name: 'leading', mode: 'inject', part: true, doc: 'Leading region before the title (an icon or avatar).' },
+  { name: 'subtitle', mode: 'inject', part: true, doc: 'Secondary line under the title.' },
+  { name: 'trailing', mode: 'inject', part: true, doc: 'Right-aligned trailing region (a timestamp, value, or badge).' },
+];
+
+/** Styleable `::part`s of `<kai-row>`. (`leading`/`subtitle`/`trailing` are
+ *  covered by their slot defs' `part: true` flags.) */
+export const ROW_PARTS: PartDef[] = [
+  {
+    name: 'row',
+    doc: 'The whole row surface: the button when interactive, the anchor when `href` is set, a plain div otherwise.',
+    recipe: 'kai-row::part(row) { border-radius: 0 }',
+  },
+  {
+    name: 'title',
+    doc: 'The title line (the default slot renders inside it).',
+    recipe: 'kai-row::part(title) { font-weight: 600 }',
+  },
+  {
+    name: 'chevron',
+    doc: 'The trailing chevron affordance (renders only with the `chevron` flag).',
+    recipe: 'kai-row::part(chevron) { color: var(--color-primary) }',
+  },
+];
+
 export const ELEMENT_COMPOSITION: Record<string, ElementComposition> = {
   'kai-chat': { slots: CHAT_SLOTS, parts: CHAT_PARTS },
   'kai-command': { parts: COMMAND_PARTS },
@@ -770,6 +875,13 @@ export const ELEMENT_COMPOSITION: Record<string, ElementComposition> = {
   'kai-tooltip': { children: 'The TRIGGER the tooltip describes. The tip text is the `text` prop.' },
   'kai-code-block': { parts: CODE_BLOCK_PARTS },
   'kai-audio-visualizer': { parts: AUDIO_VISUALIZER_PARTS },
+  'kai-panel': { slots: PANEL_SLOTS, parts: PANEL_PARTS, children: 'The view content that fills the body region (a `<kai-thread>`, a `<kai-view-stack>`, a home screen). Stretched to fill the remaining height between the `header` and `footer` slots.' },
+  'kai-panel-header': { slots: PANEL_HEADER_SLOTS, parts: PANEL_HEADER_PARTS, children: 'The title text. `start` and `end` are the clusters around it: back arrows and close buttons are slotted content, never props.' },
+  'kai-tab-bar': { parts: TAB_BAR_PARTS, children: 'The `<kai-tab-bar-item>` tabs, direct children in tab order.' },
+  'kai-tab-bar-item': { parts: TAB_BAR_ITEM_PARTS, children: 'The tab\'s label text (it also names the tab for assistive tech, even in icon-only mode).' },
+  'kai-view-stack': { children: 'The named `<kai-view>` children: tab roots (`tab-root`) side by side behind a tab bar, the rest drill views reached by `push()`.' },
+  'kai-view': { children: 'This view\'s content. It stays mounted while hidden, so switching views resets nothing.' },
+  'kai-row': { slots: ROW_SLOTS, parts: ROW_PARTS, children: 'The row title. `leading`, `subtitle` and `trailing` are the named regions around it.' },
 };
 
 /**

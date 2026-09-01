@@ -85,6 +85,49 @@ export function shorten(type) {
 }
 
 // ---------------------------------------------------------------------------
+// Icon roster (P-8, blocks-and-parts spec 2026-08-31; spike finding F-7): the
+// curated icon names were enumerated NOWHERE a doc reader or agent could see,
+// so unknown names were guessed and painted as literal text. The roster here
+// is DERIVED from the `NAMED_ICONS` map in src/ui/icon.tsx — the same map
+// `ICON_NAMES` (the runtime export) derives from — never a hand list. The
+// extraction is textual because this script runs on the unbuilt tree and the
+// map lives in a Solid .tsx module a Node script cannot import; a zero-match
+// extraction is a HARD FAILURE (checks-that-prove-nothing), so a refactor of
+// the map's shape breaks the build loudly instead of shipping an empty roster.
+// ---------------------------------------------------------------------------
+export function iconNames(root) {
+  const src = readFileSync(resolve(root, 'src/ui/icon.tsx'), 'utf8');
+  const block = src.match(/const NAMED_ICONS[^=]*=\s*\{([\s\S]*?)\n\};/);
+  if (!block) {
+    throw new Error(
+      'gen-web-components-md: could not find the NAMED_ICONS map in src/ui/icon.tsx. ' +
+        'The icon roster is derived from that map; update iconNames() to match its new shape.',
+    );
+  }
+  const names = [...block[1].matchAll(/^\s*(?:'([^'\n]+)'|([A-Za-z_$][\w$]*))\s*:/gm)]
+    .map((m) => m[1] ?? m[2]);
+  if (names.length === 0) {
+    throw new Error(
+      'gen-web-components-md: extracted ZERO icon names from NAMED_ICONS in src/ui/icon.tsx. ' +
+        'An empty roster would regenerate the docs section into nothing silently; failing instead.',
+    );
+  }
+  return [...new Set(names)].sort();
+}
+
+function iconRosterBlock(root) {
+  const names = iconNames(root);
+  return (
+    `\nEvery name \`kai-icon\` (and every \`icon\` prop/attribute across the elements) resolves — ` +
+    `${names.length} names, derived from the \`NAMED_ICONS\` map in \`src/ui/icon.tsx\` ` +
+    `(also exported at runtime as \`ICON_NAMES\`). An icon-shaped name outside this roster ` +
+    `renders a fallback glyph and logs a console error, in dev and prod alike; ` +
+    `URLs render an \`<img>\`, and emoji/arbitrary text passes through as text.\n\n` +
+    `${names.map((n) => `\`${n}\``).join(' · ')}\n`
+  );
+}
+
+// ---------------------------------------------------------------------------
 // The Overview block.
 //
 // Everything OUTSIDE a `<!-- spec:… -->` marker in docs/web-components.md is
@@ -261,6 +304,19 @@ export function writeWebComponentsMd(root, elements) {
         md = md.replace(headingRe, `$1\n${start}${block}${end}\n`);
       }
     }
+  }
+
+  // Icon roster region (P-8) — replace in place, or append the whole section
+  // (heading + markers) on first run: unlike the overview this wraps no
+  // hand-written prose, so a deterministic append is safe and needs no manual
+  // marker placement before the first regeneration.
+  {
+    const start = '<!-- spec:icon-roster -->';
+    const end = '<!-- /spec:icon-roster -->';
+    const block = `${start}${iconRosterBlock(root)}${end}`;
+    const re = new RegExp(`${start}[\\s\\S]*?${end}`);
+    if (re.test(md)) md = md.replace(re, block);
+    else md = `${md.trimEnd()}\n\n## Icon roster\n\n${block}\n`;
   }
 
   writeFileSync(path, md);

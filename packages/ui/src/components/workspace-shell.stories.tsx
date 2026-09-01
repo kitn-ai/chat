@@ -20,21 +20,25 @@ const meta = {
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
-    // Panel scope; `parameters.docs.controls` below filters the autodocs table
-    // only. The Playground wires exactly these, so anything else would be inert.
+    // This list gates BOTH the interactive Controls panel and the autodocs
+    // ArgsTable -- a row missing here does not render on the Docs page even
+    // when `docs.controls.exclude` below does not name it (verified live on
+    // pane-group.stories.tsx) -- so the two event callbacks live here too,
+    // alongside the props the Playground actually wires up.
     controls: {
       include: [
         'defaultStartCollapsed', 'defaultEndCollapsed',
         'startWidth', 'startMinWidth', 'startMaxWidth',
         'endWidth', 'endMinWidth', 'endMaxWidth',
         'collapseBelow', 'drawerBelow', 'compact', 'class',
+        'onAsideToggle', 'onAsideResize',
       ],
     },
     docs: {
-      // The five region props and the two event callbacks take JSX / functions,
-      // so a control panel row for them would do nothing. They stay documented
-      // (argTypes below) with `control: false` rather than being hidden. Everything
-      // excluded here is inferred from the props interface but is not something the
+      // The five region props take JSX, so a control panel row for them
+      // would do nothing. They stay documented (argTypes below) with
+      // `control: false` rather than being hidden. Everything excluded here
+      // is inferred from the props interface but is not something the
       // Playground wires up, so a row for it would be inert.
       controls: { exclude: ['controllerRef', 'startCollapsed', 'endCollapsed'] },
       description: componentDescription([
@@ -84,6 +88,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const IMPORT = `import { WorkspaceShell } from '@kitn.ai/ui/solid';`;
+const src = (code: string) => ({
+  parameters: { docs: { source: { code: `${IMPORT}\n\n${code}`, language: 'tsx' } } },
+});
+
 /**
  * Every region filled, with the widths and the collapse state on the controls.
  * Drag the handles between the columns, or use the buttons in `main` to toggle
@@ -123,6 +132,20 @@ export const Playground: Story = {
       </div>
     );
   },
+  ...src(`const [startCollapsed, setStartCollapsed] = createSignal(false);
+const [endCollapsed, setEndCollapsed] = createSignal(false);
+
+<WorkspaceShell
+  header={<AppBar />}
+  start={<FileTree />}
+  end={<Inspector />}
+  footer={<StatusBar />}
+  startCollapsed={startCollapsed()}
+  endCollapsed={endCollapsed()}
+  onAsideToggle={(d) => (d.side === 'start' ? setStartCollapsed : setEndCollapsed)(d.collapsed)}
+>
+  <Main />
+</WorkspaceShell>`),
 };
 
 export const FiveRegions: Story = {
@@ -138,6 +161,14 @@ export const FiveRegions: Story = {
       </WorkspaceShell>
     </div>
   ),
+  ...src(`<WorkspaceShell
+  header={<AppBar />}
+  start={<FileTree />}
+  end={<Inspector />}
+  footer={<StatusBar />}
+>
+  <Main />
+</WorkspaceShell>`),
 };
 
 export const CollapseAndDrawer: Story = {
@@ -165,4 +196,16 @@ export const CollapseAndDrawer: Story = {
       </div>
     );
   },
+  ...src(`let api: WorkspaceShellController;
+
+<WorkspaceShell
+  start={<StartAside />}
+  end={<EndAside />}
+  collapseBelow={720}
+  drawerBelow={560}
+  controllerRef={(c) => (api = c)}
+  onAsideToggle={(d) => console.log(d.side, d.collapsed)}
+>
+  <button onClick={() => api.toggleAside('start')}>toggle start</button>
+</WorkspaceShell>`),
 };

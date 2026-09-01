@@ -1,0 +1,63 @@
+/* support-widget: layout-only CSS. The chrome (panel surface, header, tab
+ * bar, rows, list density) is painted by the kai elements from kit tokens,
+ * so a --kai-color-* override on :root retints everything at once; nothing
+ * here restates a palette. What remains is page layout and the home tab's
+ * spacing - the genuinely minimal css a block carries. */
+
+body { margin: 0; background: #fff; }
+@media (prefers-color-scheme: dark) { body { background: #0b1020; } }
+
+.host-stand-in {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  margin: 0; color: #94a3b8; font: 14px system-ui, sans-serif;
+  text-align: center; max-width: 28rem; padding: 0 1rem;
+}
+
+/* The elements' shared base sheet sets :host{display:block}, which outranks
+ * the UA's [hidden] rule, so the chrome this block toggles with `.hidden`
+ * needs the author-level rule (the same fix kai-view carries internally). */
+kai-tab-bar[hidden], kai-button[hidden], kai-row[hidden] { display: none; }
+
+/* The panel fills the dock's floating box; the stack fills the panel body. */
+kai-panel { display: block; height: 100%; }
+kai-view-stack { display: flex; flex-direction: column; min-height: 0; }
+kai-view { flex: 1; min-height: 0; }
+/* CAUTION: an author `display` rule on a kai-view host would override the
+ * element's own :host([hidden]){display:none}, un-hiding inactive views.
+ * Every display rule below is therefore guarded with :not([hidden]), and
+ * this belt-and-braces rule keeps the stack's toggle winning regardless. */
+kai-view[hidden] { display: none !important; }
+
+/* Home tab: spacing only; colors inherit from the panel's token-painted
+ * surface. currentColor mixes keep the hairlines theme-correct in both
+ * schemes without restating a token default. */
+kai-view[name='home']:not([hidden]) {
+  display: flex; flex-direction: column; gap: 1rem;
+  padding: 1.25rem; overflow-y: auto;
+  font: 14px system-ui, sans-serif;
+}
+.greeting { display: flex; flex-direction: column; gap: 0.25rem; }
+.greeting h2 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+.greeting .subtitle { margin: 0; font-size: 0.875rem; color: color-mix(in srgb, currentColor 60%, transparent); }
+kai-row.recent-card { border: 1px solid color-mix(in srgb, currentColor 15%, transparent); border-radius: 0.75rem; }
+.home-links { border: 1px solid color-mix(in srgb, currentColor 15%, transparent); border-radius: 0.75rem; overflow: hidden; }
+/* COPY of the kit's unread default (theme.tokens.css --color-unread), with
+ * the same --kai- knob first so a theme override still wins. */
+.unread-dot {
+  width: 6px; height: 6px; border-radius: 999px;
+  background: var(--kai-color-unread, hsl(0 84% 60%));
+}
+
+/* Messages tab: the list fills; the New conversation pill floats. */
+kai-view[name='messages']:not([hidden]) { position: relative; display: flex; flex-direction: column; }
+kai-view[name='messages'] kai-conversations { flex: 1; min-height: 0; display: block; }
+/* The right-aligned relative time slotted into each row's menu region:
+ * type scale only; the muted tint comes from currentColor. */
+kai-conversation-item .row-time { font-size: 0.75rem; color: color-mix(in srgb, currentColor 60%, transparent); }
+.new-pill { position: absolute; bottom: 0.75rem; left: 50%; transform: translateX(-50%); }
+.new-pill::part(button) { border-radius: 999px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); }
+
+/* Drilled chat: thread flexes, composer sits below. */
+kai-view[name='chat']:not([hidden]) { display: flex; flex-direction: column; }
+kai-view[name='chat'] kai-thread { flex: 1; min-height: 0; display: block; }
+kai-view[name='chat'] kai-prompt-input { display: block; padding: 0 1rem 1rem; }

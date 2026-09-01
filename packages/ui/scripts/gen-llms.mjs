@@ -26,6 +26,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // A separate module because it parses declarations with the TypeScript API,
 // which nothing else in this file needs.
 import { buildProgrammaticSection } from './gen-llms-programmatic.mjs';
+// The icon roster, derived from the NAMED_ICONS map in src/ui/icon.tsx — the
+// SAME extraction docs/web-components.md's icon-roster region uses (P-8), so
+// the two artifacts cannot disagree about what resolves.
+import { iconNames } from './gen-web-components-md.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -450,6 +454,23 @@ export const FULL_ONLY_SECTIONS = [
       '- Streaming recipe (the two rules that bite: reassign new references per chunk, fold deltas onto the trailing text part): the "Streaming recipe" section of llms-full.txt',
     render: () => STREAMING_RECIPE,
   },
+  {
+    key: 'Icon roster',
+    pointer: () =>
+      '- Icon roster (every name `kai-icon` and the elements\' `icon` props resolve; anything else fails loud): the "Icon roster" section of llms-full.txt',
+    render: ({ icons }) =>
+      [
+        `## Icon roster (${icons.length} names, derived from NAMED_ICONS in src/ui/icon.tsx)`,
+        '',
+        'Every name `kai-icon` (and every `icon` prop/attribute across the elements) resolves — ' +
+          'derived from the `NAMED_ICONS` map in `src/ui/icon.tsx` (also exported at runtime as ' +
+          '`ICON_NAMES`). An icon-shaped name outside this roster renders a fallback glyph and ' +
+          'logs a console error, in dev and prod alike; URLs render an `<img>`, and ' +
+          'emoji/arbitrary text passes through as text.',
+        '',
+        icons.map((n) => `\`${n}\``).join(' · '),
+      ].join('\n'),
+  },
 ];
 
 // The order sections appear in llms-full.txt: prose first, the big generated
@@ -459,6 +480,7 @@ const FULL_BODY_ORDER = [
   'How to build a chat app in 5 steps',
   'Streaming recipe',
   'Programmatic layer',
+  'Icon roster',
   'Element reference',
 ];
 
@@ -568,7 +590,12 @@ export function generate(elementsInput) {
   // Derived from dist/state/*.d.ts + dist/wire/*.d.ts — the layer a builder
   // that leaves <kai-chat> writes against, previously on no surface (F-46).
   const programmatic = buildProgrammaticSection();
-  const ctx = { count, elementSection, programmaticMarkdown: programmatic.markdown };
+  const ctx = {
+    count,
+    elementSection,
+    programmaticMarkdown: programmatic.markdown,
+    icons: iconNames(root),
+  };
 
   // Every full-only section, rendered, with its key/heading/pointer coupling
   // enforced LOUDLY at generation time. A section whose heading no longer

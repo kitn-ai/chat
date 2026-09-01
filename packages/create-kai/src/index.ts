@@ -17,10 +17,12 @@ import { readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 
+import { runAdd } from './add';
 import { ZERO_CONFIG, defaultNameForTarget, normalizeGateway, parseArgs, validateProjectName } from './args';
 import { answerAxis, gatewayAxis, layoutAxis } from './axes';
 import type { AxisIo } from './axes';
@@ -95,10 +97,33 @@ Options
   --list [--json]      print the framework / feature / gateway matrix and exit
   -h, --help           this
   -v, --version        print version
+
+Blocks
+  add <block>          write a block from the registry into an existing project
+  add --list           print the blocks this release ships
 `;
 
 async function main(): Promise<number> {
-  const args = parseArgs(process.argv.slice(2));
+  const rawArgv = process.argv.slice(2);
+
+  // `add` is a subcommand beside the wizard, not another axis of it: the
+  // wizard is the from-scratch door, `add` the into-an-existing-project door.
+  // Routed before `parseArgs` so `add` owns its own flags (`--list` means the
+  // block registry there, not the framework matrix).
+  if (rawArgv[0] === 'add') {
+    return runAdd(rawArgv.slice(1), {
+      cwd: process.cwd(),
+      blocksRoot: path.join(path.dirname(fileURLToPath(import.meta.url)), 'blocks'),
+      kitRange: DEFAULT_KIT_RANGE,
+      kitVersion: __KIT_VERSION__,
+      interactive: Boolean(process.stdout.isTTY),
+      io: clackAxisIo,
+      out: (line) => console.log(line),
+      error: (line) => console.error(pc.red(line)),
+    });
+  }
+
+  const args = parseArgs(rawArgv);
 
   if (args.errors.length > 0) {
     for (const error of args.errors) console.error(pc.red(`create-kai: ${error}`));

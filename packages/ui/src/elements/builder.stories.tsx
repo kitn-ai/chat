@@ -187,6 +187,13 @@ const meta = { title: 'Labs/Builder/Support widget', parameters: { layout: 'full
 export default meta;
 type Story = StoryObj;
 
+// BuilderPanel/BuilderLayout are internal to the builder app (src/components/builder-panel.tsx,
+// builder-layout.tsx) -- neither ships in a public @kitn.ai/ui entry point, so the snippet below
+// names the real composition and wiring rather than a package import.
+const src = (code: string) => ({
+  parameters: { docs: { source: { code, language: 'tsx' } } },
+});
+
 /**
  * The Support widget template's builder: panel on the left scoped to
  * exactly this template's controls (Identity, Provider, Widget chrome —
@@ -203,4 +210,17 @@ type Story = StoryObj;
  */
 export const SupportWidget: Story = {
   render: () => <SupportWidgetBuilderDemo />,
+  ...src(`<BuilderLayout
+  name={construct.name}
+  panel={
+    <BuilderPanel
+      value={construct}
+      onChange={setConstruct}
+      sections={{ layout: false, widget: 'always', provider: true }}
+    />
+  }
+  preview={<SupportWidgetPreview construct={construct} viewport={viewport} />}
+  viewport={viewport}
+  onViewportChange={setViewport}
+/>`),
 };

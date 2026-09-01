@@ -26,7 +26,7 @@
  * runs the story body UNTRACKED. Drive it with `render(() => meta.render(args))`
  * instead and the broken story passes, because Solid's own `render` tracks.
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import type { JSX } from 'solid-js';
 import { createSignal, createComponent } from 'solid-js';
@@ -65,6 +65,67 @@ describe('curated icon set', () => {
     // A duplicate hand-written list is how the Playground control went stale.
     expect([...ICON_NAMES]).toEqual([...ICON_NAMES].sort());
     expect(new Set(ICON_NAMES).size).toBe(ICON_NAMES.length);
+  });
+
+  it('the docs generator extracts the IDENTICAL roster (P-8: derived, never a copy)', async () => {
+    // gen-web-components-md.mjs cannot import this Solid module, so it derives
+    // the roster TEXTUALLY from the same NAMED_ICONS map. This parity pin is
+    // what keeps that extraction honest: a map refactor that the regex stops
+    // matching (or half-matches) fails here by name, not as a silently thinner
+    // docs section.
+    // Imported by runtime file URL (not a literal specifier): the src tsconfig
+    // has no allowJs, so a literal import of the .mjs is a TS7016 — and in the
+    // jsdom project import.meta.url is Vite's http URL, which Node's loader
+    // refuses, so the path anchors on the vitest cwd (packages/ui) instead.
+    const { pathToFileURL } = await import('node:url');
+    const { resolve: resolvePath } = await import('node:path');
+    const pkgRoot = process.cwd();
+    const genUrl = pathToFileURL(resolvePath(pkgRoot, 'scripts/gen-web-components-md.mjs')).href;
+    const { iconNames } = (await import(/* @vite-ignore */ genUrl)) as {
+      iconNames: (root: string) => string[];
+    };
+    expect(iconNames(pkgRoot)).toEqual([...ICON_NAMES]);
+  });
+});
+
+describe('unknown icon names fail loud in PROD (P-8, spike F-7)', () => {
+  // The defect this pins: `icon="send"` (before `send` existed) painted the
+  // literal word "send" in production, silently, because the unknown-name
+  // guard was `import.meta.env.DEV`-only. The blocks-and-parts ruling (P-8,
+  // 2026-08-31 spec): prod renders a visible fallback glyph AND says so on
+  // the console. This test runs the PROD path by flipping the env flag, so
+  // it was observed FAILING against the old DEV-only console.warn guard
+  // before the fix landed (acceptance gate: watch it fail first).
+  it('an icon-shaped unknown name paints a fallback glyph and console.errors, with DEV off', () => {
+    const env = import.meta.env as { DEV: boolean };
+    const wasDev = env.DEV;
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      env.DEV = false;
+      const { container } = render(() => <span>{renderIcon('definitely-not-a-registered-icon')}</span>);
+      // Loud on the console, in prod.
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('definitely-not-a-registered-icon'));
+      // Visible fallback glyph, never the raw text painted as if it were a label.
+      expect(svgOf(container)).not.toBeNull();
+      expect(container.textContent).not.toContain('definitely-not-a-registered-icon');
+    } finally {
+      env.DEV = wasDev;
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('emoji and arbitrary text still pass through untouched (only icon-shaped names are guarded)', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { container } = render(() => <span>{renderIcon('🙂')}</span>);
+      expect(container.textContent).toContain('🙂');
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
   });
 });
 

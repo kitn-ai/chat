@@ -1,6 +1,4 @@
-import { Show } from 'solid-js';
-import { cn } from '../utils/cn';
-import { renderIcon } from '../ui/icon';
+import { TAB_BAR_CLASS, tabBarTabClass, tabBarItemAccessibleName, TabBarItemContent } from './tab-bar';
 
 export interface WidgetTabBarProps {
   active: 'home' | 'messages';
@@ -17,56 +15,40 @@ export interface WidgetTabBarProps {
  * The widget's Home/Messages tab bar (Intercom-pattern chrome, H-2/H-6). Real
  * `tablist`/`tab` semantics — this is a persistent view switch within the
  * widget, not page navigation, so it is not `<Nav>`'s `role="page"` dialect.
+ *
+ * A thin two-tab preset over the public tab-bar part (P-2/P-9): the bar and
+ * tab chrome are `TAB_BAR_CLASS`/`tabBarTabClass`, each tab's interior is
+ * `TabBarItemContent`, and the accessible-name rule is
+ * `tabBarItemAccessibleName` — the exact pieces the data-driven `TabBar`
+ * renders, so the facade and every composed block paint the same tabs.
  */
 export function WidgetTabBar(props: WidgetTabBarProps) {
   const home = () => props.homeLabel ?? 'Home';
   const messages = () => props.messagesLabel ?? 'Messages';
-  const messagesLabel = () => (props.unread ? `${messages()} (unread)` : messages());
 
   return (
-    <nav
-      role="tablist"
-      aria-label="Widget navigation"
-      class="flex h-14 shrink-0 items-stretch border-t border-border bg-background"
-    >
+    <nav role="tablist" aria-label="Widget navigation" class={TAB_BAR_CLASS}>
       <button
         type="button"
         role="tab"
         data-kai-tab-home
         aria-selected={props.active === 'home'}
-        aria-label={home()}
+        aria-label={tabBarItemAccessibleName(home())}
         onClick={() => props.onChange('home')}
-        class={cn(
-          'flex flex-1 flex-col items-center justify-center gap-0.5 text-xs transition-colors',
-          props.active === 'home' ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
-        )}
+        class={tabBarTabClass(props.active === 'home')}
       >
-        {renderIcon('home', { class: 'size-5' })}
-        <span>{home()}</span>
+        <TabBarItemContent icon="home" label={home()} />
       </button>
       <button
         type="button"
         role="tab"
         data-kai-tab-messages
         aria-selected={props.active === 'messages'}
-        aria-label={messagesLabel()}
+        aria-label={tabBarItemAccessibleName(messages(), { dot: props.unread })}
         onClick={() => props.onChange('messages')}
-        class={cn(
-          'flex flex-1 flex-col items-center justify-center gap-0.5 text-xs transition-colors',
-          props.active === 'messages' ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
-        )}
+        class={tabBarTabClass(props.active === 'messages')}
       >
-        <span class="relative">
-          {renderIcon('message-square', { class: 'size-5' })}
-          <Show when={props.unread}>
-            <span
-              data-kai-tab-unread
-              aria-hidden="true"
-              class="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-unread"
-            />
-          </Show>
-        </span>
-        <span>{messages()}</span>
+        <TabBarItemContent icon="message-square" dot={props.unread} label={messages()} />
       </button>
     </nav>
   );

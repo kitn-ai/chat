@@ -976,6 +976,14 @@ const meta = { title: 'Labs/Builder/Workspace', parameters: { layout: 'fullscree
 export default meta;
 type Story = StoryObj;
 
+// BuilderPanel/BuilderLayout are internal to the builder app (src/components/builder-panel.tsx,
+// builder-layout.tsx) -- neither ships in a public @kitn.ai/ui entry point. The snippet below
+// names the real composition and wiring rather than a package import; WorkspaceShell, WorkSurface,
+// AppHeader and ChatThread ARE public (@kitn.ai/ui) and are shown as this preview actually uses them.
+const src = (code: string) => ({
+  parameters: { docs: { source: { code, language: 'tsx' } } },
+});
+
 /**
  * The Workspace template's builder: a resizable split — a chat rail
  * (`WorkspaceShell`'s `start`) beside a large work pane (`children`).
@@ -1008,4 +1016,25 @@ type Story = StoryObj;
  */
 export const Workspace: Story = {
   render: () => <WorkspaceBuilderDemo />,
+  ...src(`<BuilderLayout
+  name={construct.name}
+  panel={
+    <BuilderPanel
+      value={construct}
+      onChange={setConstruct}
+      sections={{ layout: false, widget: 'never', provider: true, home: false }}
+    />
+    // ...plus this screen's own Work surface, App header, Composer, and Message actions sections
+  }
+  preview={
+    <div class="flex h-full flex-col">
+      <AppHeader title={construct.header?.title} actions={headerActions} onActionSelect={runHeaderAction} />
+      <WorkspaceShell start={<ChatThread messages={messages} chatTitle={construct.header?.title} onSubmit={sendMessage} />}>
+        <WorkSurface preview={previewContent} code={codeContent} tab={activeTab} onTabChange={setActiveTab} />
+      </WorkspaceShell>
+    </div>
+  }
+  viewport={viewport}
+  onViewportChange={setViewport}
+/>`),
 };
