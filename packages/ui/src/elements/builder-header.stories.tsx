@@ -34,7 +34,22 @@ const src = (code: string) => ({
 // `--color-primary` directly rather than the `--kai-color-primary`
 // indirection: the indirection only re-resolves where `--color-primary`
 // itself is declared, so setting it on a descendant div never lands).
-const BRAND_STYLE = { '--color-primary': '#EC2295' } as const;
+//
+// PAIRED with its own foreground, and that is not cosmetic. `--color-primary`
+// and `--color-primary-foreground` are one pair in theme.css; overriding only
+// the background leaves the theme's near-white (light, hsl(0 0% 98%)) or
+// near-black (dark, hsl(45 4% 11%)) on top of magenta, and those were chosen
+// against the kit's own neutral primary. Measured on #EC2295 they are 4.02:1
+// and 4.20:1 — under WCAG AA's 4.5:1 for normal-size text. That is a real
+// legibility problem, not an axe false positive, and it is what failed this
+// story's Save button and user bubble. #EC2295 clears 4.5:1 against NO
+// near-white at all, so the readable partner is a near-black: hsl(45 4% 5%)
+// measures 4.84:1, in the same warm near-black family theme.css's `.dark`
+// block already uses for this very token. Mirrors `apps/builder/App.tsx`.
+const BRAND_STYLE = {
+  '--color-primary': '#EC2295',
+  '--color-primary-foreground': 'hsl(45 4% 5%)',
+} as const;
 
 /** The header over a stubbed builder body: a fixed panel column and a
  *  preview CANVAS. The canvas is the thing the light/dark toggle flips —

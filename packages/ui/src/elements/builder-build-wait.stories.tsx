@@ -39,7 +39,14 @@ const src = (code: string) => ({
 // `--color-primary` DIRECTLY, because the `--kai-color-primary` indirection
 // only re-resolves where `--color-primary` is declared, so setting it on a
 // descendant never reaches the accent. The component itself stays token-only.
-const BRAND_STYLE = { '--color-primary': '#EC2295' } as const;
+// Paired with its own foreground: overriding `--color-primary` alone leaves the
+// theme's near-white/near-black on magenta at 4.02:1 / 4.20:1, under WCAG AA's
+// 4.5:1 for normal text (it failed builder-header.stories.tsx's axe run).
+// hsl(45 4% 5%) measures 4.84:1. Same constant as `apps/builder/App.tsx`.
+const BRAND_STYLE = {
+  '--color-primary': '#EC2295',
+  '--color-primary-foreground': 'hsl(45 4% 5%)',
+} as const;
 
 /** How long each phase is held before the story moves on. Deliberately not
  *  uniform — the install step is the long one in a real boot, and a wait that

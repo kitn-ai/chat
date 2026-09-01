@@ -38,7 +38,19 @@ import { Dialog } from '../../src/ui/dialog';
 // only re-resolves where `--color-primary` itself is DECLARED
 // (`:root`/`:host`/`.dark`), so setting the indirection var on a descendant
 // div never reaches it — see the story's own comment for the full story.
-export const BRAND_STYLE = { '--color-primary': '#EC2295' } as const;
+// PAIRED with its own foreground. `--color-primary` and
+// `--color-primary-foreground` are one pair in theme.css; overriding only the
+// background leaves the theme's near-white (light) / near-black (dark) on top
+// of magenta, and both were chosen against the kit's neutral primary. Measured
+// on #EC2295 they are 4.02:1 and 4.20:1 — under WCAG AA's 4.5:1 for
+// normal-size text, which is what the header's Save button and the preview's
+// user bubble render at. #EC2295 clears 4.5:1 against NO near-white, so the
+// readable partner is a near-black: hsl(45 4% 5%) measures 4.84:1, the same
+// warm near-black family theme.css's `.dark` block uses for this token.
+export const BRAND_STYLE = {
+  '--color-primary': '#EC2295',
+  '--color-primary-foreground': 'hsl(45 4% 5%)',
+} as const;
 
 /** The pre-panel canvas, shared by every step before the panel takes over the
  *  viewport. It exists as ONE function because the variant and name steps
