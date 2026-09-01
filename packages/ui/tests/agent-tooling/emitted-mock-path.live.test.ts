@@ -42,15 +42,30 @@ import { writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scaffold } from '../../src/agent-tooling/mcp/tools/scaffold';
-import { DEFAULT_MOCK_REPLIES } from '../../src/state/mock';
+// The expected thread is DERIVED from the same script the scaffolder emits,
+// not restated: a re-authored script moves these assertions on its own.
+import { scaffoldMockScript } from '../../src/agent-tooling/construct/mock-script';
+import type { MockTurn } from '../../src/state/mock';
 
 const PKG = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 /** Outside `tests/` and outside `src/` — see emitted-card-path.live.test.ts. */
 const TMP_DIR = resolve(PKG, '.tmp-emitted-mock');
 
-// jsdom does not implement Element.scrollTo, and mounting <kai-chat> calls it
-// through the stick-to-bottom primitive on a rAF. Same shim as the element suites.
-if (!Element.prototype.scrollTo) (Element.prototype as unknown as { scrollTo: () => void }).scrollTo = () => {};
+// jsdom gaps, as no-op stubs — the same set emitted-maximal-surface.live.test.ts
+// carries, for the same measured reason: the scripted reply now streams a
+// REASONING part, whose disclosure measures with a ResizeObserver, and the
+// emitted handler wraps the turn in try/catch — so a missing global does not
+// crash, it is swallowed into `stream.abort()` and the thread carries the error
+// text where the scripted reply should be. Without these stubs the source part
+// never arrived and the tool test's turns settled instantly with no tool part.
+const proto = Element.prototype as unknown as Record<string, unknown>;
+proto.scrollTo ??= () => {};
+proto.scrollIntoView ??= () => {};
+(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 
 const SEP = '// ── src/main.ts ──';
 
@@ -127,9 +142,10 @@ describe('the EMITTED zero-config scaffold really streams, with no backend', () 
       };
       chat.dispatchEvent(new CustomEvent('kai-submit', { detail: { value: 'hello there' } }));
 
-      // The canned reply streams token by token at 24ms; wait for the turn to
-      // settle rather than for a fixed duration.
-      for (let i = 0; i < 400 && chat.loading !== false; i += 1) {
+      // The scripted reply streams token by token at 24ms — the rich script
+      // (reasoning + text + citation) runs several seconds — so wait for the
+      // turn to settle rather than for a fixed duration.
+      for (let i = 0; i < 2000 && chat.loading !== false; i += 1) {
         await new Promise((r) => setTimeout(r, 10));
       }
       await new Promise((r) => setTimeout(r, 50));
@@ -143,13 +159,18 @@ describe('the EMITTED zero-config scaffold really streams, with no backend', () 
       expect(chat.messages[0].role).toBe('user');
       expect(chat.messages[1].role).toBe('assistant');
 
-      // 3. ONE text part holding the WHOLE reply — which is `appendTextPart`
-      //    folding onto the trailing part. A per-token part list, or a truncated
-      //    reply, both mean the streaming fold is broken.
+      // 3. The scripted RICH first turn, derived from the shared script the
+      //    scaffolder emits (chat-only surface, so no tool call): a reasoning
+      //    part, ONE text part holding the WHOLE reply — `appendTextPart`
+      //    folding onto the trailing part; per-token parts or a truncated
+      //    reply both mean the fold is broken — and the scripted citation.
+      //    This is the named residue of the construct round: the framework
+      //    scaffolds used to boot into plain text.
+      const scripted = scaffoldMockScript({ tools: false }).replies[0] as MockTurn;
       const parts = chat.messages[1].parts;
-      expect(parts).toHaveLength(1);
-      expect(parts[0].type).toBe('text');
-      expect(parts[0].text).toBe(DEFAULT_MOCK_REPLIES[0]);
+      expect(parts.map((p) => p.type)).toEqual(['reasoning', 'text', 'source']);
+      expect(parts[0].text).toBe(scripted.reasoning);
+      expect(parts[1].text).toBe(scripted.text);
 
       // 4. It is ON SCREEN. A distinctive slice of the canned reply, so this
       //    cannot be satisfied by placeholder or empty-state copy.
@@ -157,6 +178,81 @@ describe('the EMITTED zero-config scaffold really streams, with no backend', () 
       expect(root.textContent).toContain('no provider was contacted');
 
       // 5. The turn settled, so the composer is usable again.
+      expect(chat.loading).toBe(false);
+    } finally {
+      rmSync(TMP_DIR, { recursive: true, force: true });
+      (globalThis as unknown as { fetch: unknown }).fetch = realFetch;
+    }
+  });
+
+  /**
+   * The kai-tool surface's scripted call SETTLES. The wire only ever announces
+   * a call; the emitted settle loop (MOCK_TOOL_OUTPUTS + applyToolOutput) is
+   * the mock's host side, and nothing above this layer can see whether it runs:
+   * scaffold.test.ts asserts its wording, verify:scaffold compiles it, and a
+   * loop that never fired would leave the row spinning at input-available
+   * forever — a worse first run than the plain text this round replaced.
+   *
+   * Two submits: the script's first reply is the no-tool introduction, its
+   * second announces the demo call.
+   */
+  it('the agentic surface settles the scripted tool call to output-available', async () => {
+    const out = await scaffold.handler({
+      useCase: 'agentic',
+      integration: 'mock',
+      placement: 'full-page',
+      framework: 'html',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    const front = text.split('=== (2) BACKEND ROUTE ===')[0];
+    const at = front.indexOf(SEP);
+    expect(at, 'the html target emits no src/main.ts module').toBeGreaterThan(-1);
+    const main = front.slice(front.indexOf('\n', at) + 1);
+
+    document.body.innerHTML = '<kai-chat id="chat"></kai-chat>';
+    const realFetch = globalThis.fetch;
+    (globalThis as unknown as { fetch: unknown }).fetch = (url: unknown) => {
+      throw new Error(`the mock scaffold contacted the network: ${String(url)}`);
+    };
+
+    rmSync(TMP_DIR, { recursive: true, force: true });
+    mkdirSync(TMP_DIR, { recursive: true });
+    const tmp = resolve(TMP_DIR, `main.agentic.${Date.now()}.ts`);
+    writeFileSync(tmp, rewrite(main));
+    try {
+      await import(/* @vite-ignore */ tmp);
+      await customElements.whenDefined('kai-chat');
+      await new Promise((r) => setTimeout(r, 0));
+
+      const chat = document.getElementById('chat') as HTMLElement & {
+        messages: {
+          role: string;
+          parts: { type: string; text?: string; tool?: { type: string; state: string; output?: unknown } }[];
+        }[];
+        loading: boolean;
+      };
+      const settle = async () => {
+        for (let i = 0; i < 2000 && chat.loading !== false; i += 1) {
+          await new Promise((r) => setTimeout(r, 10));
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      };
+      chat.dispatchEvent(new CustomEvent('kai-submit', { detail: { value: 'hello' } }));
+      await settle();
+      chat.dispatchEvent(new CustomEvent('kai-submit', { detail: { value: 'show me a tool call' } }));
+      await settle();
+
+      expect(chat.messages).toHaveLength(4);
+      const scripted = scaffoldMockScript({ tools: true });
+      const call = (scripted.replies[1] as MockTurn).toolCalls?.[0];
+      expect(call, 'the shared script no longer announces a call on its second reply').toBeDefined();
+      const toolPart = chat.messages[3].parts.find((p) => p.type === 'tool');
+      expect(toolPart, 'the announced call never reached the thread as a tool part').toBeDefined();
+      expect(toolPart!.tool!.type).toBe(call!.name);
+      // THE claim: settled, not spinning. And with the SCRIPTED output, so the
+      // row shows a result a first-run reader can actually see.
+      expect(toolPart!.tool!.state).toBe('output-available');
+      expect(toolPart!.tool!.output).toEqual(scripted.toolOutputs[call!.name]);
       expect(chat.loading).toBe(false);
     } finally {
       rmSync(TMP_DIR, { recursive: true, force: true });

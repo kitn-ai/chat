@@ -21,11 +21,17 @@
  *
  * Starter provenance (C-6): each starter is the schema-expressible subset
  * of its Labs/Builder story's seed state (or the owner-widget fixture
- * lineage, for widget) — titles, starters, accents, capability toggles,
- * trigger lists, header/shell chrome. Stub message threads, pane anatomy
- * and other non-vocabulary story state do NOT carry over. All providers
- * are `{ mode: 'mock' }` (B-14 — the wizard's own keyless-first-run
- * promise), regardless of what the story used.
+ * lineage, for widget) — titles, starters, capability toggles, trigger
+ * lists, header/shell/work-surface chrome. ACCENTS DO NOT CARRY OVER
+ * (owner ruling, 2026-08-30): a starter must not pre-commit somebody's
+ * brand, so `theme.accent` and `theme.unreadColor` are omitted everywhere
+ * and the kit's own `--color-primary` neutral applies in both modes. The
+ * stories keep their accents — they are the design surface that
+ * demonstrates accenting works — and `builder-app/App.tsx`'s BRAND_STYLE
+ * is the kitn product identity on the builder's own canvases and is
+ * explicitly out of scope. Stub message threads, pane CONTENT and other
+ * non-vocabulary story state do NOT carry over. All providers are
+ * `{ mode: 'mock' }` (B-14 — the wizard's own keyless-first-run promise).
  */
 import type { Construct } from './schema';
 import { CONSTRUCT_SCHEMA_URL } from './schema-url';
@@ -46,6 +52,12 @@ export interface TemplateVariant {
 export interface TemplateControlSection {
   id: string;
   paths: readonly string[];
+  /** Path-keyed one-liners rendered under the control, saying why the
+   *  starter leaves it off ON PURPOSE (S-4). A section's PRESENCE is the
+   *  discovery surface; a hint is why the default inside it is off. Data,
+   *  not vocabulary (T-3) — every key must be one of this section's own
+   *  `paths`, which templates.test.ts pins. */
+  hints?: Readonly<Record<string, string>>;
 }
 
 export interface BuildableTemplate {
@@ -71,10 +83,18 @@ export type TemplateEntry = BuildableTemplate | StoryOnlyTemplate;
 // components: the ids are the contract phase 3's panel binds to.
 const IDENTITY: TemplateControlSection = { id: 'identity', paths: ['name'] };
 const THEME: TemplateControlSection = { id: 'theme', paths: ['theme.accent', 'theme.mode', 'theme.unreadColor'] };
+// Title only — widget keeps this one. The spec's S-3 row
+// "header.themeToggle (widget only)" has NO hint site here: this manifest
+// carries no `header.themeToggle` path, so there is no control to hang a
+// hint on. The section's ABSENCE is itself the statement.
 const HEADER: TemplateControlSection = { id: 'header', paths: ['header.title'] };
 const HEADER_CHROME: TemplateControlSection = {
   id: 'header',
   paths: ['header.title', 'header.themeToggle', 'header.actions'],
+  hints: {
+    'header.actions':
+      'Each button dispatches `kai-header-action` for your app to handle — nothing happens until you listen.',
+  },
 };
 const EMPTY: TemplateControlSection = { id: 'empty', paths: ['empty.title', 'empty.description', 'empty.icon'] };
 const HOME: TemplateControlSection = { id: 'home', paths: ['home'] };
@@ -88,6 +108,12 @@ const CAPABILITIES: TemplateControlSection = {
     'capabilities.reasoning',
     'capabilities.reasoningOpen',
   ],
+  hints: {
+    'capabilities.history':
+      'Endpoint needs a thread route you host. Local keeps history in this browser — no backend, nothing metered.',
+    'capabilities.reasoningOpen':
+      'Off by owner ruling (2026-08-26): the thinking panel starts closed and opens on click.',
+  },
 };
 const MESSAGE_ACTIONS: TemplateControlSection = {
   id: 'messageActions',
@@ -99,13 +125,46 @@ const WIDGET_CHROME: TemplateControlSection = {
   paths: ['widget.position', 'widget.launcherIcon', 'widget.defaultOpen'],
 };
 const ASIDE: TemplateControlSection = { id: 'aside', paths: ['aside.position', 'aside.width'] };
+const WORK_SURFACE: TemplateControlSection = {
+  id: 'workSurface',
+  paths: [
+    'workSurface.kind',
+    'workSurface.url',
+    'workSurface.codeUrl',
+    'workSurface.chrome.deviceToggle',
+    'workSurface.chrome.urlBar',
+    'workSurface.chrome.openInNewTab',
+    'workSurface.chrome.expand',
+    'workSurface.chrome.codeView',
+  ],
+  hints: {
+    // Both hints rewritten 2026-08-30 with the one-way coupling: the toggle no
+    // longer needs a URL to be switched on, so the old "leave it blank and the
+    // tab stays hidden" was describing a rule that no longer exists.
+    'workSurface.codeUrl':
+      'The Code tab reads source from this URL. Leave it blank and the tab says so — it never frames a missing page.',
+    'workSurface.chrome.codeView':
+      'Shows the Preview|Code toggle. Fine to switch on before you have a Code URL.',
+  },
+};
 const COMPOSER_TRIGGERS: TemplateControlSection = {
   id: 'composerTriggers',
   paths: ['composer.triggers.slash', 'composer.triggers.mention'],
 };
 const SHELL: TemplateControlSection = { id: 'shell', paths: ['shell.commandPalette', 'shell.userMenu'] };
-const CARDS: TemplateControlSection = { id: 'cards', paths: ['cards'] };
-const PROVIDER: TemplateControlSection = { id: 'provider', paths: ['provider'] };
+const CARDS: TemplateControlSection = {
+  id: 'cards',
+  paths: ['cards'],
+  // Rewritten with S-1's scripted mocks: the old "the mock provider never
+  // emits one" stopped being true when mockScriptFor started scripting a
+  // `kai_<card>` call for any construct that declares a card.
+  hints: { cards: 'Cards arrive as tool calls from a model. Declare one and the mock scripts a call to it, so it renders keylessly.' },
+};
+const PROVIDER: TemplateControlSection = {
+  id: 'provider',
+  paths: ['provider'],
+  hints: { provider: 'Endpoint needs your own chat route. Mock streams locally, with no key and no bill.' },
+};
 
 // ── Support widget — owner-widget fixture lineage (B-14), de-branded ────────
 const widgetStarter: Construct = {
@@ -114,7 +173,7 @@ const widgetStarter: Construct = {
   layout: 'widget',
   provider: { mode: 'mock' },
   header: { title: 'Support' },
-  theme: { unreadColor: '#38BDF8', mode: 'system' },
+  theme: { mode: 'system' },
   empty: {
     title: "Hi, we're here to help",
     description: 'Ask us about orders, refunds, and more.',
@@ -135,6 +194,11 @@ const widgetStarter: Construct = {
     attachments: { accept: ['image/*', 'application/pdf'] },
     history: { persistence: 'local' },
     conversations: true,
+    // Stated, not implied — the anchored-on-the-default convention (B-4), so
+    // the fact is visible and editable in the template's own JSON.
+    reasoning: 'full',
+    // The owner's A3 default matrix (builder-message-actions.tsx).
+    messageActions: { user: ['edit'], assistant: ['copy', 'like', 'dislike'] },
   },
 };
 
@@ -144,19 +208,38 @@ const inAppAssistantStarter: Construct = {
   name: 'in-app-assistant',
   layout: 'aside',
   provider: { mode: 'mock' },
-  header: { title: 'Assistant' },
+  header: { title: 'Assistant', themeToggle: true },
   // Dark-by-default (owner ruling, dark round): every buildable starter
   // EXCEPT widget ships mode: 'dark' — widget is embedded in a host site and
   // follows IT, not its own preference (T-3: this is registry data, not a
   // schema default; 'system' stays the schema's own default for anyone
   // hand-authoring a construct).
-  theme: { accent: '#0ea5e9', mode: 'dark' },
+  theme: { mode: 'dark' },
   // codegen's own defaults, stated so the geometry is visible/editable.
   aside: { position: 'end', width: '380px' },
+  empty: {
+    title: 'What can I help with?',
+    description: 'Ask about this page, or anything else.',
+  },
+  composer: {
+    triggers: {
+      slash: [
+        { id: 'summarize', label: 'summarize', description: 'Summarize the thread so far' },
+        { id: 'explain', label: 'explain', description: 'Explain the current page' },
+      ],
+      mention: [
+        { id: 'docs', label: 'docs', description: 'Search the documentation' },
+        { id: 'support', label: 'support', description: 'Hand off to a person' },
+      ],
+    },
+  },
   capabilities: {
     starters: ['Deploy payments to production', 'Check the canary status'],
     attachments: { accept: ['image/*', 'application/pdf'] },
     history: { persistence: 'local' },
+    conversations: true,
+    reasoning: 'full',
+    messageActions: { user: ['edit'], assistant: ['copy', 'like', 'dislike'] },
   },
 };
 
@@ -166,10 +249,11 @@ const assistantStarter: Construct = {
   name: 'daily-assistant',
   layout: 'fullscreen',
   provider: { mode: 'mock' },
-  header: { title: 'Assistant' },
+  header: { title: 'Assistant', themeToggle: true },
   // Dark-by-default (owner ruling, dark round) — see inAppAssistantStarter's
   // note above.
-  theme: { accent: '#7c3aed', mode: 'dark' },
+  theme: { mode: 'dark' },
+  shell: { commandPalette: true, userMenu: { name: 'Ada', plan: 'Pro' } },
   empty: {
     title: 'What can I help with?',
     description: 'Ask anything, or start from a suggestion below.',
@@ -179,6 +263,8 @@ const assistantStarter: Construct = {
     attachments: { accept: ['image/*', 'application/pdf'] },
     history: { persistence: 'local' },
     conversations: true,
+    reasoning: 'full',
+    messageActions: { user: ['edit'], assistant: ['copy', 'like', 'dislike'] },
   },
 };
 
@@ -188,14 +274,20 @@ const researchStarter: Construct = {
   name: 'research-assistant',
   layout: 'fullscreen',
   provider: { mode: 'mock' },
-  header: { title: 'Research' },
+  header: { title: 'Research', themeToggle: true },
   // Dark-by-default (owner ruling, dark round) — see inAppAssistantStarter's
   // note above.
-  theme: { accent: '#0f766e', mode: 'dark' },
+  theme: { mode: 'dark' },
+  empty: {
+    title: 'What do you want to know?',
+    description: 'Answers come back with their sources attached.',
+  },
   capabilities: {
     starters: ['How does the wire adapter work?', 'What are message parts?'],
     attachments: { accept: ['application/pdf'] },
     history: { persistence: 'local' },
+    conversations: true,
+    reasoning: 'full',
     // The template's defining fact, stated even though it matches the emit
     // default (B-4): the row already renders; strip: true is the visible
     // switch this template exists around.
@@ -209,10 +301,10 @@ const researchStarter: Construct = {
 
 // ── Workspace — builder-workspace.stories.tsx lineage ───────────────────────
 // The base starter is the artifact-preview shape; the two variants (ruling
-// 11, identities from builder-workspace-variants.tsx) differ only where the
-// schema can see (C-6): name and starter prompts. Triggers are ON here and
-// ONLY here — the ruling-8 default-on matrix IS this data (B-14); there is
-// no separate matrix field to drift.
+// 11, identities from builder-workspace-variants.tsx) differ where the schema
+// can see (C-6). Triggers are ON here and on the in-app assistant — the two
+// agentic shapes, per the 2026-08-30 default-on ruling; the matrix IS this
+// data (B-14), there is no separate matrix field to drift.
 const workspaceTriggers: NonNullable<Construct['composer']> = {
   triggers: {
     slash: [
@@ -244,24 +336,65 @@ const workspaceBase: Construct = {
   // Dark-by-default (owner ruling, dark round) — see inAppAssistantStarter's
   // note above. Both variants below spread ...workspaceBase without
   // overriding theme, so this covers artifactPreview and appPreview too.
-  theme: { accent: '#ea580c', mode: 'dark' },
+  theme: { mode: 'dark' },
+  empty: {
+    title: 'What should we build?',
+    description: 'Describe it, and it takes shape in the work surface beside this chat.',
+  },
+  // The template's whole point, and the reason this round exists: a split
+  // layout with no workSurface previews as a chat beside an empty column.
+  // Every chrome key is STATED, never left to a default — what the builder
+  // panel shows and what the pane renders can then never disagree.
+  workSurface: {
+    kind: 'artifact',
+    url: '/work-surface.html',
+    chrome: { deviceToggle: false, urlBar: false, openInNewTab: false, expand: true, codeView: false },
+  },
   shell: { commandPalette: true, userMenu: { name: 'Ada', plan: 'Pro' } },
   composer: workspaceTriggers,
   capabilities: {
     starters: ['Build a pricing table', 'Add a dark mode toggle'],
     attachments: { accept: ['image/*'] },
     history: { persistence: 'local' },
+    conversations: true,
+    reasoning: 'full',
+    messageActions: { user: ['edit'], assistant: ['copy', 'like', 'dislike'] },
   },
 };
 
 const workspaceArtifactPreview: Construct = {
   ...workspaceBase,
   name: 'artifact-workspace',
+  // A clean framed surface: one expand control, no browser chrome. The
+  // difference from appPreview below is what the two variant CARDS promise,
+  // and until 2026-08-30 the two starters delivered none of it.
+  // `codeView` stays OFF here on the owner's ruling: an artifact pane frames a
+  // finished thing, not a source tree, so a Code tab beside it would be
+  // chrome the variant does not claim. appPreview below is the one that does.
+  workSurface: {
+    kind: 'artifact',
+    url: '/work-surface.html',
+    chrome: { deviceToggle: false, urlBar: false, openInNewTab: false, expand: true, codeView: false },
+  },
 };
 
 const workspaceAppPreview: Construct = {
   ...workspaceBase,
   name: 'app-workspace',
+  // Full browser chrome: device toggle, address bar, open-in-new-tab, expand,
+  // and the Preview|Code toggle. `codeView: true` with no `codeUrl` is valid
+  // vocabulary (owner ruling, 2026-08-30) and it is what this variant needs:
+  // the app-preview surface it is modeled on shows both tabs, so shipping the
+  // toggle off meant nobody ever saw it. With no source pointed at it the tab
+  // renders WorkSurface's own empty state naming `workSurface.codeUrl` — an
+  // honest "nothing here yet", never a 404. No `codeUrl` is set because there
+  // is no honest offline file to point at; the placeholder codegen emits is
+  // the PREVIEW's page, not source.
+  workSurface: {
+    kind: 'preview',
+    url: '/work-surface.html',
+    chrome: { deviceToggle: true, urlBar: true, openInNewTab: true, expand: true, codeView: true },
+  },
   capabilities: {
     ...workspaceBase.capabilities,
     starters: ['Build a landing page for a coffee shop', 'Make the hero work on mobile'],
@@ -275,7 +408,7 @@ export const TEMPLATES: readonly TemplateEntry[] = [
     description: 'A floating chat that lives in the corner of your site.',
     availability: 'buildable',
     starter: widgetStarter,
-    controls: [IDENTITY, THEME, HEADER, HOME, CAPABILITIES, WIDGET_CHROME, PROVIDER],
+    controls: [IDENTITY, THEME, HEADER, EMPTY, HOME, CAPABILITIES, MESSAGE_ACTIONS, WIDGET_CHROME, PROVIDER],
   },
   {
     id: 'inAppAssistant',
@@ -290,7 +423,7 @@ export const TEMPLATES: readonly TemplateEntry[] = [
     // on Workspace/Assistant/Research). Voice/Reveal-mode/Rail-placement
     // stay absent — those are the story's own labeled preview-only,
     // T-5-deferred fields with no construct vocabulary at all.
-    controls: [IDENTITY, THEME, HEADER, ASIDE, COMPOSER_TRIGGERS, CAPABILITIES, MESSAGE_ACTIONS, CARDS, PROVIDER],
+    controls: [IDENTITY, THEME, HEADER_CHROME, EMPTY, ASIDE, COMPOSER_TRIGGERS, CAPABILITIES, MESSAGE_ACTIONS, CARDS, PROVIDER],
   },
   {
     id: 'assistant',
@@ -302,7 +435,7 @@ export const TEMPLATES: readonly TemplateEntry[] = [
     // chrome / Shell section (Command palette toggle, User menu) that
     // wasn't wired here — same already-working vocabulary as Workspace's
     // SHELL section.
-    controls: [IDENTITY, THEME, HEADER, SHELL, EMPTY, CAPABILITIES, MESSAGE_ACTIONS, PROVIDER],
+    controls: [IDENTITY, THEME, HEADER_CHROME, SHELL, EMPTY, CAPABILITIES, MESSAGE_ACTIONS, PROVIDER],
   },
   {
     id: 'research',
@@ -310,7 +443,7 @@ export const TEMPLATES: readonly TemplateEntry[] = [
     description: 'Search-first answers with cited sources.',
     availability: 'buildable',
     starter: researchStarter,
-    controls: [IDENTITY, THEME, HEADER, CAPABILITIES, SOURCES, MESSAGE_ACTIONS, PROVIDER],
+    controls: [IDENTITY, THEME, HEADER_CHROME, EMPTY, CAPABILITIES, SOURCES, MESSAGE_ACTIONS, PROVIDER],
   },
   {
     id: 'workspace',
@@ -338,10 +471,12 @@ export const TEMPLATES: readonly TemplateEntry[] = [
       IDENTITY,
       THEME,
       HEADER_CHROME,
+      WORK_SURFACE,
       SHELL,
       COMPOSER_TRIGGERS,
       CAPABILITIES,
       MESSAGE_ACTIONS,
+      EMPTY,
       PROVIDER,
     ],
   },
@@ -352,6 +487,28 @@ export const TEMPLATES: readonly TemplateEntry[] = [
     availability: 'story-only',
   },
 ];
+
+/** One row of the builder's home-screen list: a construct FILE on disk,
+ *  placed back into its template family (`inferTemplateId`). Produced by the
+ *  dev server's directory scan (`dev.ts: listConstructs`), consumed by the
+ *  builder page — it lives HERE because this module is the shared,
+ *  browser-safe home of template identity (dev.ts is Node-only and emits no
+ *  declaration, so a type imported from it would break the dist d.ts
+ *  boundary the build verifies). `valid: false` rows are still listed
+ *  (decide loudly) but carry no template metadata. */
+export interface ConstructListing {
+  /** Basename in the scanned directory, e.g. `acme-support.construct.json`. */
+  file: string;
+  /** The construct's own `name` (the emitted tag); for an invalid file, the
+   *  basename minus the extension — the only honest identity available. */
+  name: string;
+  templateId?: BuildableTemplateId;
+  /** Human template label derived via inferTemplateId → templateById. */
+  templateName?: string;
+  /** File mtime, ISO — "last modified" on the home screen. */
+  updatedAt: string;
+  valid: boolean;
+}
 
 export function buildableTemplates(): readonly BuildableTemplate[] {
   return TEMPLATES.filter((t): t is BuildableTemplate => t.availability === 'buildable');

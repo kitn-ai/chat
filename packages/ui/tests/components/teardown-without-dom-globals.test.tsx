@@ -94,6 +94,23 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '../../src');
 const FRAGILE_GLOBALS = [
   'document',
   'window',
+  // The EventTarget methods, and they are here because `window === globalThis`
+  // (vitest's populateGlobal sets `global.window = global`; a browser page says
+  // the same). So `const win = window` captures the GLOBAL OBJECT — which
+  // survives teardown — while the copied `addEventListener` /
+  // `removeEventListener` accessors on it are deleted with every other key and
+  // bare Node has no original to restore. `win.removeEventListener` at cleanup
+  // is then undefined: a TypeError instead of the ReferenceError the capture
+  // was meant to fix. Without these three keys this harness passed FileUpload
+  // while the emitted project's real teardown failed it (CI run 33459714818).
+  // The fix is to capture the FUNCTION at setup (`win.removeEventListener
+  // .bind(win)`) — the rule the raf primitives already follow for
+  // `cancelAnimationFrame`. `document` captures are unaffected: the document is
+  // a real jsdom object whose methods live on its own prototype, not on
+  // globalThis.
+  'addEventListener',
+  'removeEventListener',
+  'dispatchEvent',
   'customElements',
   'navigator',
   'CSSStyleSheet',

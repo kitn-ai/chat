@@ -261,9 +261,10 @@ export function composeConstruct(a: WizardAnswers): unknown {
     delete capabilities.attachments;
   }
   if (a.history) {
-    // A starter that already persists keeps its exact shape (research keeps
-    // history WITHOUT a conversation list — its own defining shape); only
-    // history created from nothing gets the local+conversations pair.
+    // A starter that already persists keeps its exact shape (every persisting
+    // starter ships its own history+conversations pair — pass it through,
+    // never rebuild it); only history created from nothing gets the
+    // local+conversations pair.
     if (!construct.capabilities?.history || construct.capabilities.history.persistence === 'none') {
       capabilities.history = { persistence: 'local' };
       capabilities.conversations = true;
@@ -481,6 +482,11 @@ export const WIZARD_REGISTRY: Record<string, RegistryEntry> = {
     status: 'not-asked',
     reason:
       'aside geometry (position/width) is seeded by the in-app-assistant template starter and passes through untouched; hand-edit the construct file to move or resize the rail',
+  },
+  workSurface: {
+    status: 'not-asked',
+    reason:
+      "layout-scoped work-surface pane (kind/url/codeUrl/chrome), valid only on layout: 'split' — the same class as widget/aside: template data the workspace starter seeds (url and every chrome key stated) and the wizard passes through untouched; hand-edit the construct file, or use the builder, to point it at a real surface or change its chrome",
   },
   composer: {
     status: 'not-asked',

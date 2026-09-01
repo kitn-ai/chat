@@ -29,6 +29,8 @@ Skip npm entirely and load from a CDN. For quick prototypes this works immediate
   import 'https://cdn.jsdelivr.net/npm/@kitn.ai/ui/dist/kai.es.js';
 </script>
 ```
+
+`kai.es.js` registers every element in one fetch — the right shape for a `<kai-chat>` page, which pulls most of the kit anyway. A page placing only an element or two does better with the [autoloader](/guides/loading/#autoloader), which fetches each element on demand. The streaming helpers work here too: `dist/state.js` and `dist/wire.js` are self-contained ES modules, so `@kitn.ai/ui/state` and `@kitn.ai/ui/wire` load from the same CDN URLs with no bundler.
 </Aside>
 
 ## The property / event contract
@@ -224,7 +226,18 @@ For the full API of any element — all properties, events, and their types — 
 
 ## Theming
 
-By default each element is styled inside its own Shadow DOM and needs no external CSS. To override design tokens (colors, radii, spacing), load `theme.tokens.css` — the compiled plain-CSS build. A raw `<link>` can't use `theme.css` itself: that file is Tailwind v4 *source* (its tokens live in an `@theme` block a plain stylesheet load discards whole), so it only works when a bundler runs Tailwind over it.
+Each element styles itself inside its own Shadow DOM and needs no external CSS. To retheme the elements, set **`--kai-color-*`** custom properties on `:root` (or a scoping selector) — inherited custom properties cross the shadow boundary, and every element resolves its colors through the `--kai-` names:
+
+```html
+<style>
+  :root {
+    --kai-color-primary: hsl(322 84% 60%);
+    --kai-color-primary-foreground: hsl(0 0% 100%);
+  }
+</style>
+```
+
+The unprefixed `--color-*` names do **not** work here: each shadow root declares them on `:host`, which beats anything inherited from your `:root`. No stylesheet link is needed either — the elements carry their own CSS. Load `theme.tokens.css` only when you want the kit's `--color-*` tokens for your **own** page chrome around the elements:
 
 ```html
 <!-- local install -->
@@ -234,4 +247,4 @@ By default each element is styled inside its own Shadow DOM and needs no externa
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@kitn.ai/ui/dist/theme.tokens.css" />
 ```
 
-Then override any `--color-*` or `--radius-*` custom properties on `:root` or a scoping selector.
+(Not `theme.css` — that file is Tailwind v4 *source*; a plain `<link>` discards its `@theme` block whole.) Full token list, dark mode, and typography: [Theming](/guides/theming/).

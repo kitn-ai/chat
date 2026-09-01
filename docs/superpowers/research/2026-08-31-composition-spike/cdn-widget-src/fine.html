@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>fine-grain support widget — no kai-chat</title>
+    <!-- Chrome palette comes from the kit's own tokens, not invented colors:
+         theme.tokens.css publishes --color-* (resolved from the --kai-color-*
+         knobs) for exactly this — host-page/light-DOM chrome. Its dark scope
+         is the `.dark` class, so the inline script below keeps <html> in sync
+         with prefers-color-scheme, matching the elements' theme="auto". -->
+    <link rel="stylesheet" href="/kit/theme.tokens.css" />
+    <script>
+      const mq = matchMedia('(prefers-color-scheme: dark)');
+      const sync = () => document.documentElement.classList.toggle('dark', mq.matches);
+      sync();
+      mq.addEventListener('change', sync);
+    </script>
+    <style>
+      body { margin: 0; background: #fff; }
+      @media (prefers-color-scheme: dark) { body { background: #0b1020; } }
+
+      /* Everything below styles LIGHT DOM that fine.js owns. FINDING (F-2 in
+         phase3-fine-grain.md): without <kai-chat> there is no panel chrome —
+         header, view routing, the widget tab bar, the home screen — so the
+         page carries its own layout CSS. Every color is a kit token. */
+      .widget {
+        display: flex; flex-direction: column; height: 100%;
+        font: 14px system-ui, sans-serif;
+        color: var(--color-foreground); background: var(--color-background);
+        border-radius: inherit; overflow: hidden;
+      }
+      .widget header {
+        display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+        height: 3.5rem; box-sizing: border-box; flex-shrink: 0;
+        padding: 0 1.25rem; border-bottom: 1px solid var(--color-border);
+      }
+      .widget header .title { font-weight: 600; font-size: 0.875rem; }
+      .widget header .controls { display: flex; align-items: center; gap: 0.5rem; }
+      .views { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+      .view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+      .view[hidden], [hidden] { display: none !important; }
+
+      /* Home view (hand-built — no kai-home element exists, F-1). Mirrors
+         HomePanel: p-5, gap-4, xl semibold greeting, bordered recent card,
+         full-width CTA with trailing arrow, bordered link rows. */
+      .home { padding: 1.25rem; gap: 1rem; overflow-y: auto; }
+      .home .greeting { display: flex; flex-direction: column; gap: 0.25rem; }
+      .home h2 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+      .home .subtitle { margin: 0; font-size: 0.875rem; color: var(--color-muted-foreground); }
+      .recent-card {
+        display: flex; flex-direction: column; gap: 0.25rem; box-sizing: border-box; width: 100%;
+        text-align: start; border: 1px solid var(--color-border); border-radius: 0.75rem;
+        padding: 1rem; background: transparent; color: inherit; font: inherit; cursor: pointer;
+      }
+      .recent-card:hover { background: var(--color-accent); }
+      .recent-card .top { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 600; }
+      .recent-card .top .t { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .recent-card .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--color-unread); flex-shrink: 0; }
+      .recent-card .time { flex-shrink: 0; font-size: 0.75rem; font-weight: 400; color: var(--color-muted-foreground); }
+      .recent-card .preview {
+        font-size: 0.875rem; color: var(--color-muted-foreground);
+        overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+      }
+      /* Facade CTA is a full-width filled button, label left, arrow right. */
+      #cta { display: block; width: 100%; }
+      #cta::part(button) { justify-content: space-between; }
+      .home-links { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--color-border); border-radius: 0.75rem; }
+      .home-link {
+        display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+        padding: 0.75rem; text-decoration: none; color: inherit;
+      }
+      .home-link:hover { background: var(--color-accent); }
+      .home-link .lead { display: flex; min-width: 0; align-items: center; gap: 0.5rem; }
+      .home-link .lead kai-icon, .home-link > kai-icon { color: var(--color-muted-foreground); }
+      .home-link .text { display: flex; min-width: 0; flex-direction: column; text-align: start; }
+      .home-link .row-title { font-size: 0.875rem; font-weight: 500; }
+      .home-link .row-sub { font-size: 0.75rem; color: var(--color-muted-foreground); }
+
+      .chat-view kai-thread { flex: 1; min-height: 0; display: block; }
+      .chat-view kai-prompt-input { display: block; padding: 0 1rem 1rem; }
+      .list-view { position: relative; }
+      /* Round 3 spacing, matched to the facade's MEASURED list (fine-drive
+         computed styles): rows start 8px below the header (facade pt-2; the
+         item region's own py-1 gives 4, the host pads the other 4) and each
+         row reads px-3 py-2.5 x 40px tall — the item element's default
+         density is 10/8, so the slotted title/time carry the last 2px. */
+      .list-view kai-conversations { flex: 1; min-height: 0; display: block; padding-top: 4px; }
+      .list-view .row-title { display: inline-block; padding: 2px 0 2px 2px; font-weight: 600; }
+      .list-view .row-time { font-size: 0.75rem; color: var(--color-muted-foreground); padding-right: 2px; }
+      /* The facade's floating pill, matched to its MEASURED computed styles
+         (round 3): 38px tall, 8px/16px padding, 14px/500 text, rounded-full,
+         1px border-border, background fill, shadow-md. */
+      .list-view .new-pill { position: absolute; bottom: 0.75rem; left: 50%; transform: translateX(-50%); }
+      .list-view .new-pill::part(button) {
+        border-radius: 999px;
+        height: auto;
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+        line-height: 1.25rem; /* measured: facade pill is 38px tall (20px line) */
+        font-weight: 500;
+        color: var(--color-foreground);
+        border: 1px solid var(--color-border);
+        background: var(--color-background);
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+      }
+      .list-view .new-pill::part(button):hover { background: var(--color-muted); }
+
+      /* Widget tab bar (hand-built — mirrors the facade's WidgetTabBar:
+         icon-over-label columns, not kai-tabs' segmented pills; see the
+         fidelity section of the report). */
+      .tabbar {
+        display: flex; align-items: stretch; height: 3.5rem; flex-shrink: 0;
+        border-top: 1px solid var(--color-border); background: var(--color-background);
+      }
+      .tabbar button {
+        flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 0.125rem; font-size: 0.75rem; font-family: inherit;
+        background: none; border: none; cursor: pointer; color: var(--color-muted-foreground);
+      }
+      .tabbar button:hover { color: var(--color-foreground); }
+      .tabbar button[aria-selected="true"] { color: var(--color-primary); }
+      .tabbar .glyph { position: relative; display: inline-flex; }
+      .tabbar .glyph .dot {
+        position: absolute; right: -2px; top: -2px; width: 6px; height: 6px;
+        border-radius: 999px; background: var(--color-unread);
+      }
+    </style>
+  </head>
+  <body>
+    <p style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); margin: 0; color: #94a3b8; font: 14px system-ui, sans-serif; text-align: center; max-width: 28rem; padding: 0 1rem;">This blank page stands in for your site. The chat widget is in the bottom-right corner. (Fine-grain composition — same widget, no &lt;kai-chat&gt;.)</p>
+
+    <!-- The dock stays: it is launcher shell, not chat. -->
+    <kai-dock id="dock" label="Support" position="bottom-end" hide-close>
+      <div class="widget" slot="panel">
+        <header>
+          <span class="title">Support</span>
+          <span class="controls">
+            <!-- Facade header model: back arrow only on a drilled chat,
+                 close always; no list toggle (the list lives on the
+                 Messages tab, H-2/H-3). -->
+            <kai-button id="back" variant="ghost" size="icon-sm" icon="arrow-left" label="Back" hidden></kai-button>
+            <kai-button id="close" variant="ghost" size="icon-sm" icon="x" label="Close Support"></kai-button>
+          </span>
+        </header>
+
+        <div class="views">
+          <!-- Home tab: hand-built (F-1 — the facade's `home` prop has no
+               fine-grain element behind it). -->
+          <div class="view home" id="view-home">
+            <div class="greeting">
+              <h2>How can we help? &#x1F44B;</h2>
+              <p class="subtitle">Orders, refunds, anything.</p>
+            </div>
+            <button class="recent-card" id="recent-card" hidden>
+              <span class="top">
+                <span class="t" id="recent-title"></span>
+                <span class="dot" id="recent-dot" hidden></span>
+                <span class="time" id="recent-time"></span>
+              </span>
+              <span class="preview" id="recent-preview"></span>
+            </button>
+            <kai-button id="cta" full align="start" icon-trailing="arrow-right">Send us a message</kai-button>
+            <div class="home-links">
+              <a class="home-link" href="https://ui.kitn.ai" target="_blank" rel="noreferrer noopener">
+                <span class="lead">
+                  <kai-icon name="book-open" size="sm"></kai-icon>
+                  <span class="text">
+                    <span class="row-title">Help center</span>
+                    <span class="row-sub">Guides and FAQs</span>
+                  </span>
+                </span>
+                <kai-icon name="chevron-right" size="sm"></kai-icon>
+              </a>
+            </div>
+          </div>
+
+          <!-- Messages tab, list level. kai-conversations is the sidebar rail
+               (F-8): to approximate the facade's widget-styled panel it runs
+               in ITEM mode (fine.js builds kai-conversation-item rows), the
+               built-in "Chats"/toggle/new header is replaced with an empty
+               slot, and the facade's floating "New conversation" pill is
+               rebuilt in light DOM. -->
+          <div class="view list-view" id="view-list" hidden>
+            <!-- searchable="false": the round-2 KIT fix (the facade's widget
+                 list renders no search; this element previously had no way
+                 to drop it — F-8, now closed). -->
+            <kai-conversations id="conversations" searchable="false">
+              <span slot="header"></span>
+            </kai-conversations>
+            <kai-button id="new-conversation" class="new-pill" variant="outline" size="sm">New conversation</kai-button>
+          </div>
+
+          <!-- Drilled chat: the thread + the composer, tab bar hidden,
+               back arrow showing — the facade's navigation model. -->
+          <div class="view chat-view" id="view-chat" hidden>
+            <kai-thread id="thread">
+              <kai-empty
+                slot="empty"
+                empty-title="Hi, we're here to help"
+                description="Ask us about orders, refunds, and more."
+              ></kai-empty>
+            </kai-thread>
+            <kai-prompt-input id="prompt" placeholder="Ask anything"></kai-prompt-input>
+          </div>
+        </div>
+
+        <!-- Hand-built widget tab bar (icon-over-label, facade-style).
+             kai-tabs could not reproduce this look — see the report. -->
+        <nav class="tabbar" id="tabbar" role="tablist" aria-label="Widget navigation">
+          <!-- size="lg" = 20px, the facade WidgetTabBar's size-5, and the
+               same explicit size on BOTH icons (round 2: they rendered
+               visibly unequal at the default). -->
+          <button type="button" role="tab" id="tab-home" aria-selected="true" aria-label="Home">
+            <kai-icon name="home" size="lg"></kai-icon>
+            <span>Home</span>
+          </button>
+          <button type="button" role="tab" id="tab-messages" aria-selected="false" aria-label="Messages">
+            <span class="glyph">
+              <kai-icon name="message-square" size="lg"></kai-icon>
+              <span class="dot" id="tab-unread-dot" hidden></span>
+            </span>
+            <span>Messages</span>
+          </button>
+        </nav>
+      </div>
+    </kai-dock>
+
+    <script type="module">
+      import '/kit/elements/autoloader.js';
+      import './fine.js';
+    </script>
+  </body>
+</html>

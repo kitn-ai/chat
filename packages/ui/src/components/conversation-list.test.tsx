@@ -77,6 +77,24 @@ describe('children mode wins over the conversations prop', () => {
     // And no built-in empty state competes with the consumer's items.
     expect(container.textContent).not.toContain('No conversations yet');
   });
+
+  it('searchable={false} removes the search box; default keeps it (both modes)', () => {
+    // Hidden in item mode (the widget-box case the prop exists for)...
+    const hidden = render(() => (
+      <ConversationList {...baseProps} conversations={[]} items={<div>row</div>} searchable={false} />
+    ));
+    expect(hidden.container.querySelector('input[aria-label="Search chats"]')).toBeNull();
+    // ...and in data mode with rows present.
+    const hiddenData = render(() => (
+      <ConversationList {...baseProps} conversations={[conv('c1', 'One')]} searchable={false} />
+    ));
+    expect(hiddenData.container.querySelector('input[aria-label="Search chats"]')).toBeNull();
+    // Unset stays ON — the default must not flip under existing consumers.
+    const shown = render(() => (
+      <ConversationList {...baseProps} conversations={[conv('c1', 'One')]} />
+    ));
+    expect(shown.container.querySelector('input[aria-label="Search chats"]')).not.toBeNull();
+  });
 });
 
 describe('readConversationItemId', () => {

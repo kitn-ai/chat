@@ -72,7 +72,21 @@ describe('delete-on-empty (B-21)', () => {
 
   it('an empty string deletes the key (all schema strings are min(1))', () => {
     const next = setAtPath(assistant, 'header.title', '');
-    expect(getAtPath(next, 'header')).toBeUndefined(); // title was header's only member
+    expect(getAtPath(next, 'header.title')).toBeUndefined();
+    // The assistant starter's header also carries themeToggle (2026-08-30
+    // default-on round), so the parent legitimately survives — pruning is
+    // proven below on a header whose title really IS its only member.
+    expect(getAtPath(next, 'header')).toEqual({ themeToggle: true });
+  });
+
+  it('emptying a header whose title is its only member prunes the header itself', () => {
+    const base = validateConstruct({
+      name: 'acme-y', layout: 'fullscreen', provider: { mode: 'mock' },
+      header: { title: 'Hi' },
+    });
+    if (!base.ok) throw new Error('fixture invalid');
+    const next = setAtPath(base.construct, 'header.title', '');
+    expect(getAtPath(next, 'header')).toBeUndefined();
   });
 });
 
@@ -128,10 +142,24 @@ describe('RULE_VISIBILITY (B-20 — the key-set-equality drift guard)', () => {
   });
 
   it('the two settled treatments carry their targets', () => {
-    expect(RULE_VISIBILITY['widget-layout-scope']).toEqual({ treatment: 'hide-section', section: 'widget' });
-    expect(RULE_VISIBILITY['aside-layout-scope']).toEqual({ treatment: 'hide-section', section: 'aside' });
+    expect(RULE_VISIBILITY['widget-layout-scope']).toEqual({ treatment: 'hide-section', section: 'widget', layout: 'widget' });
+    expect(RULE_VISIBILITY['aside-layout-scope']).toEqual({ treatment: 'hide-section', section: 'aside', layout: 'aside' });
+    expect(RULE_VISIBILITY['work-surface-layout-scope']).toEqual({
+      treatment: 'hide-section',
+      section: 'workSurface',
+      layout: 'split',
+    });
+    expect(RULE_VISIBILITY['work-surface-code-view'].treatment).toBe('show-requires');
     expect(RULE_VISIBILITY['conversations-need-history'].treatment).toBe('disable-with-reason');
     expect(RULE_VISIBILITY['reasoning-open-scope'].treatment).toBe('disable-with-reason');
     expect(RULE_VISIBILITY['history-endpoint-url'].treatment).toBe('show-requires');
+  });
+
+  it('every hide-section rule states a layout that is a real layout enum member — a section id is NOT a layout', () => {
+    const layouts = (schemaNodeAt('layout') as unknown as { options: readonly string[] }).options;
+    for (const [id, vis] of Object.entries(RULE_VISIBILITY)) {
+      if (vis.treatment !== 'hide-section') continue;
+      expect(layouts, `${id} scopes to a layout that does not exist`).toContain(vis.layout);
+    }
   });
 });

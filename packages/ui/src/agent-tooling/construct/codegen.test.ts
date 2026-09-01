@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -995,6 +995,42 @@ describe('accent contrast (paired --kai-color-primary-foreground)', () => {
     expect(notice).toMatch(/^accent 'var\(--brand\)' not parseable for contrast/);
     expect(notice).toMatch(/without CSS contrast-color\(\) support/);
   });
+
+  // Review finding (pre-merge, 2026-08-31): the pairing used to be gated on
+  // `accent` alone, so a construct that sets its primary ONLY through
+  // theme.tokens got the kit's near-white default foreground on any custom
+  // primary — white-on-yellow. The gate is the EFFECTIVE primary now.
+  it('a token-only --kai-color-primary (no accent) still gets the paired foreground floor and the @supports override', () => {
+    const element = file(
+      generateProject(
+        construct({ theme: { mode: 'system', tokens: { light: { '--kai-color-primary': '#ffff00' } } } }),
+      ),
+      'src/element.tsx',
+    );
+    expect(element).toContain(':host { --kai-color-primary-foreground: #000000; }'); // yellow → black text
+    expect(element).toContain('@supports (color: contrast-color(red))');
+    expect(element).toContain('contrast-color(var(--kai-color-primary))');
+  });
+
+  it('a token light primary overriding an accent pairs the foreground with the TOKEN (the value that wins), not the accent', () => {
+    const element = file(
+      generateProject(
+        construct({
+          theme: { mode: 'system', accent: '#e91e63', tokens: { light: { '--kai-color-primary': '#ffff00' } } },
+        }),
+      ),
+      'src/element.tsx',
+    );
+    expect(element).toContain('--kai-color-primary-foreground: #000000'); // yellow wins → black
+    expect(element).not.toContain('--kai-color-primary-foreground: #ffffff');
+  });
+
+  it('accentContrastNotice fires for an unparseable token-only primary the same way it does for an accent', () => {
+    const notice = accentContrastNotice(
+      construct({ theme: { mode: 'system', tokens: { light: { '--kai-color-primary': 'var(--brand)' } } } }),
+    );
+    expect(notice).toMatch(/not parseable for contrast/);
+  });
 });
 
 describe('endpoint provider', () => {
@@ -1403,6 +1439,52 @@ describe('writeProject', () => {
     const manifest = JSON.parse(readFileSync(join(dir, '.kai-manifest.json'), 'utf8')) as string[];
     expect(manifest).toEqual(projectB.map((f) => f.path).sort());
   });
+
+  it('a byte-identical regen touches ZERO files (no mtime bump — a rewritten vite.config.ts restarts the preview Vite server)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-construct-'));
+    const project = generateProject(construct());
+    writeProject(project, dir);
+    const paths = [...project.map((f) => f.path), '.kai-manifest.json'];
+    const before = new Map(paths.map((p) => [p, statSync(join(dir, p)).mtimeMs]));
+
+    // Filesystem mtime resolution can swallow a rewrite that lands in the
+    // same tick; the gap makes "unchanged mtime" mean "no write happened".
+    await new Promise((r) => setTimeout(r, 20));
+    const overwritten = writeProject(generateProject(construct()), dir);
+
+    expect(overwritten).toEqual([]);
+    for (const p of paths) {
+      expect(statSync(join(dir, p)).mtimeMs, `${p} was rewritten`).toBe(before.get(p));
+    }
+  });
+
+  it('a regen with ONE changed file writes only that file — and the prune manifest still covers the FULL emitted list', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kai-construct-'));
+    writeProject(generateProject(construct()), dir);
+    // A hand-edit to one file (the case eject warns about) — regen must put
+    // the generated content back, and touch nothing else.
+    writeFileSync(join(dir, 'src/App.tsx'), '// hand-edited\n');
+    const project = generateProject(construct());
+    const before = new Map(project.map((f) => [f.path, statSync(join(dir, f.path)).mtimeMs]));
+    await new Promise((r) => setTimeout(r, 20));
+
+    const overwritten = writeProject(project, dir);
+
+    expect(overwritten).toEqual(['src/App.tsx']);
+    expect(readFileSync(join(dir, 'src/App.tsx'), 'utf8')).not.toContain('hand-edited');
+    for (const f of project) {
+      if (f.path === 'src/App.tsx') continue;
+      expect(statSync(join(dir, f.path)).mtimeMs, `${f.path} was rewritten`).toBe(before.get(f.path));
+    }
+    // The CRITICAL constraint (a changed-only sink upstream got this wrong and
+    // pruned the project): the manifest is built from the FULL emitted list,
+    // never the changed subset, so nothing unchanged is pruned on the NEXT run.
+    const manifest = JSON.parse(readFileSync(join(dir, '.kai-manifest.json'), 'utf8')) as string[];
+    expect(manifest).toEqual(project.map((f) => f.path).sort());
+    // And the next full regen prunes nothing: every file still stands.
+    writeProject(generateProject(construct()), dir);
+    for (const f of project) expect(existsSync(join(dir, f.path))).toBe(true);
+  });
 });
 
 describe('capabilities.conversations', () => {
@@ -1695,7 +1777,13 @@ describe('header.themeToggle + header.actions (B-10)', () => {
       header: { actions: [{ label: 'Docs', variant: 'ghost' }, { label: 'Share' }] },
     })), 'src/App.tsx');
     expect(app).toContain('variant="ghost"');
-    expect(app).toContain(`new CustomEvent('kai-header-action', { detail: { label: ${JSON.stringify('Docs')} } })`);
+    // The dispatch moved behind ONE shared `dispatchHeaderAction` closure
+    // (S-11: it also carries the once-per-label DEV reminder), so each Button
+    // passes its stringified label to that seam instead of composing its own
+    // CustomEvent inline. The event itself is unchanged — asserted at the
+    // closure, which is now the single site that constructs it.
+    expect(app).toContain(`onClick={() => dispatchHeaderAction(${JSON.stringify('Docs')})}`);
+    expect(app).toContain("new CustomEvent('kai-header-action', { detail: { label } })");
     expect(app).toContain(`{${JSON.stringify('Share')}}`);
   });
 
@@ -1771,6 +1859,147 @@ describe('shell (B-10)', () => {
   });
 });
 
+describe('the app header strip — `split` composes the promoted AppHeader (2026-08-30)', () => {
+  // The owner-reported defect: the emitted Workspace rendered its header chrome
+  // as a text "Theme" button, no search at all and a bare avatar, all inside
+  // ChatThread's own header row (so, inside the chat rail's width). The story
+  // `src/elements/builder-workspace.stories.tsx` is the binding acceptance
+  // surface; its `AppHeader` is now a real component and codegen composes THAT.
+  const split = (over: Record<string, unknown> = {}): Construct =>
+    construct({
+      layout: 'split',
+      header: {
+        title: 'Workspace',
+        themeToggle: true,
+        actions: [
+          { label: 'Share', variant: 'outline' },
+          { label: 'Deploy', variant: 'default' },
+        ],
+      },
+      shell: { commandPalette: true, userMenu: { name: 'Ada', plan: 'Pro' } },
+      ...over,
+    } as never);
+
+  const appOf = (c: Construct) => file(generateProject(c), 'src/App.tsx');
+
+  it('composes <AppHeader> with every T-5 key mapped to its own prop — and imports it from the kit', () => {
+    const app = appOf(split());
+    expect(app).toContain(', AppHeader');
+    expect(app).toContain('<AppHeader');
+    // header.title
+    expect(app).toContain('title={"Workspace"}');
+    // shell.commandPalette -> the search affordance (NOT a rejected
+    // `header.search` key), wired to the palette this file actually emits.
+    expect(app).toContain('showSearch={true}');
+    expect(app).toContain('onSearch={() => setPaletteOpen(true)}');
+    // header.themeToggle
+    expect(app).toContain('showThemeToggle={true}');
+    expect(app).toContain('dark={themeDark()}');
+    expect(app).toContain('onToggleDark={toggleTheme}');
+    // header.actions
+    expect(app).toContain('actions={[{"label":"Share","variant":"outline"},{"label":"Deploy","variant":"default"}]}');
+    expect(app).toContain('onActionSelect={(action) => dispatchHeaderAction(action.label)}');
+    // shell.userMenu (NOT a rejected `header.user` key)
+    expect(app).toContain('user={{"name":"Ada","plan":"Pro"}}');
+    expect(app).toContain("new CustomEvent('kai-user-menu', { detail: { item } })");
+  });
+
+  it('the strip sits ABOVE the split, as a SIBLING of WorkspaceShell — not inside ChatThread\'s header row', () => {
+    const app = appOf(split());
+    // The whole point of the defect: nothing lands in headerEndContent anymore.
+    expect(app).not.toMatch(/\bheaderEndContent=\{/);
+    // ...and no re-derived copy of the arrangement: the old inline pieces are gone.
+    expect(app).not.toContain('aria-label="Toggle theme"');
+    expect(app).not.toContain(', Dropdown, DropdownTrigger');
+    // Order in the emitted JSX: the AppHeader element opens before the shell.
+    expect(app.indexOf('<AppHeader')).toBeGreaterThan(-1);
+    expect(app.indexOf('<AppHeader')).toBeLessThan(app.indexOf('<WorkspaceShell'));
+    // The frame is a flex column and the shell is its flexing item, so the
+    // strip spans the frame instead of reserving space inside a column.
+    expect(app).toContain("'flex-direction': 'column'");
+    expect(app).toContain('<WorkspaceShell class="min-h-0 flex-1"');
+  });
+
+  it('the rail keeps its own title row: chatTitle is still emitted alongside the strip (the story ships both)', () => {
+    const app = appOf(split());
+    expect(app).toContain('chatTitle={"Workspace"}');
+  });
+
+  it('MENU-HONESTY: no palette, no search prop at all — never a search button with nothing behind it', () => {
+    const app = appOf(split({ shell: { userMenu: { name: 'Ada' } } }));
+    expect(app).not.toContain('showSearch');
+    expect(app).not.toContain('onSearch');
+    // Paired against a vacuous pass: the strip really did render, with the
+    // pieces this construct DOES declare.
+    expect(app).toContain('<AppHeader');
+    expect(app).toContain('user={{"name":"Ada"}}');
+  });
+
+  it('each piece is independently optional — a title-only split emits the strip and nothing else in it', () => {
+    const app = appOf(split({ header: { title: 'Workspace' }, shell: undefined }));
+    expect(app).toContain('<AppHeader');
+    expect(app).toContain('title={"Workspace"}');
+    expect(app).not.toContain('showThemeToggle');
+    expect(app).not.toContain('actions={');
+    expect(app).not.toContain('user={');
+  });
+
+  it('a bare split (no header, no shell) emits NO strip at all and keeps the old frame', () => {
+    const app = appOf(construct({ layout: 'split' }));
+    expect(app).not.toContain('AppHeader');
+    expect(app).toContain("<div style={{ height: '100dvh' }}>");
+    expect(app).toContain('<WorkspaceShell class="h-full"');
+  });
+
+  it('the theme toggle resolves the mode it displays — the PROPERTY first, then the attribute, then the system', () => {
+    const app = appOf(split());
+    // Regression from the live builder: a construct declares its mode through
+    // defineWebComponent's prop DEFAULT, so a dark element can carry no `theme`
+    // ATTRIBUTE at all. Reading only the attribute drew the light-mode icon on a
+    // dark app.
+    expect(app).toContain('(props.host as HTMLElement & { theme?: string }).theme');
+    expect(app).toContain("props.host.getAttribute('theme')");
+    expect(app).toContain("matchMedia('(prefers-color-scheme: dark)')");
+    expect(app).toContain("props.host.setAttribute('theme', next ? 'dark' : 'light')");
+    // ONE closure: the palette's own "Toggle theme" row runs the same one.
+    expect(app).toContain("if (id === 'toggle-theme') toggleTheme();");
+  });
+
+  it('every other layout keeps its header-end row untouched — this is scoped to `split` on purpose', () => {
+    const app = appOf(
+      construct({
+        layout: 'fullscreen',
+        header: { title: 'Workspace', themeToggle: true, actions: [{ label: 'Share' }] },
+        shell: { userMenu: { name: 'Ada' } },
+      } as never),
+    );
+    expect(app).not.toContain('AppHeader');
+    expect(app).toContain('headerEndContent={');
+    expect(app).toContain('aria-label="Toggle theme"');
+  });
+
+  it('untrusted header text is JSON.stringify\'d at every emit site, and cannot break out of the JSX', () => {
+    const title = '</div><b>x</b>';
+    const label = '"><img onerror=alert(1) src=x>';
+    const user = { name: '"><b>', plan: 'Pro' };
+    const app = appOf(split({ header: { title, actions: [{ label }] }, shell: { userMenu: user } }));
+    expect(app).toContain(`title={${JSON.stringify(title)}}`);
+    expect(app).toContain(`actions={${JSON.stringify([{ label }])}}`);
+    expect(app).toContain(`user={${JSON.stringify(user)}}`);
+    // The payload's own double quote is what makes this matter: a raw JSX
+    // attribute string (title="...") would be CLOSED by it. JSON.stringify
+    // produces a real JS string-literal EXPRESSION instead, so the quote lands
+    // escaped and there is no attribute to break out of.
+    expect(app).toContain('\\"><b>');
+    expect(app).not.toContain('title="');
+    expect(app).not.toContain('label="');
+  });
+
+  it('is deterministic', () => {
+    expect(generateProject(split())).toEqual(generateProject(split()));
+  });
+});
+
 it('is deterministic across the full phase-1 vocabulary', () => {
   const full = () => construct({
     layout: 'aside',
@@ -1784,4 +2013,211 @@ it('is deterministic across the full phase-1 vocabulary', () => {
     },
   });
   expect(generateProject(full())).toEqual(generateProject(full()));
+});
+
+describe('workSurface — the split pane renders (2026-08-30)', () => {
+  const ws = (over: Record<string, unknown> = {}) =>
+    construct({
+      layout: 'split',
+      workSurface: { kind: 'artifact', url: '/work-surface.html', chrome: { expand: true }, ...over },
+    } as never);
+
+  it('imports WorkSurface only when workSurface is declared (the emitted project runs noUnusedLocals)', () => {
+    expect(file(generateProject(ws()), 'src/App.tsx')).toContain(', WorkSurface');
+    expect(file(generateProject(construct({ layout: 'split' })), 'src/App.tsx')).not.toContain('WorkSurface');
+  });
+
+  it('emits the surface as <slot name="pane"> FALLBACK, so a consumer projection still wins', () => {
+    const app = file(generateProject(ws()), 'src/App.tsx');
+    expect(app).toMatch(/<slot name="pane">[^]*<WorkSurface[^]*<\/slot>/);
+    expect(app).toContain('projection WINS');
+  });
+
+  it('follows the story: chat is the resizable START rail, the surface fills the main region', () => {
+    const app = file(generateProject(ws()), 'src/App.tsx');
+    expect(app).toContain('startWidth={360}');
+    expect(app).toContain('startMinWidth={280}');
+    expect(app).toContain('startMaxWidth={520}');
+    expect(app).toMatch(/start=\{[^]*<ChatThread/);
+  });
+
+  it('threads url, kind and every chrome flag through as real props', () => {
+    const app = file(
+      generateProject(ws({ kind: 'preview', chrome: { deviceToggle: true, urlBar: true, openInNewTab: true, expand: true } })),
+      'src/App.tsx',
+    );
+    expect(app).toContain('src={"/work-surface.html"}');
+    expect(app).toContain('variant="preview"');
+    expect(app).toContain('iframeTitle={"App preview"}');
+    expect(app).toContain('showDeviceToggle={true}');
+    expect(app).toContain('showUrlBar={true}');
+    expect(app).toContain('showOpenInNewTab={true}');
+    expect(app).toContain('showExpand={true}');
+    expect(app).toContain('showCodeView={false}');
+  });
+
+  it('kind: artifact gets the framed-card look and its own iframe title', () => {
+    const app = file(generateProject(ws()), 'src/App.tsx');
+    expect(app).toContain('variant="artifact"');
+    expect(app).toContain('iframeTitle={"Work surface"}');
+  });
+
+  it('an absent chrome key emits false — off-by-default, never an implicit prop', () => {
+    const app = file(generateProject(ws({ chrome: undefined })), 'src/App.tsx');
+    expect(app).toContain('showDeviceToggle={false}');
+    expect(app).toContain('showExpand={false}');
+  });
+
+  it('expand is wired to WorkspaceShell.startCollapsed, the mechanism the story ruled on', () => {
+    const app = file(generateProject(ws()), 'src/App.tsx');
+    expect(app).toContain('const [surfaceExpanded, setSurfaceExpanded] = createSignal(false)');
+    expect(app).toContain('startCollapsed={surfaceExpanded()}');
+    expect(app).toContain('onExpandedChange={setSurfaceExpanded}');
+  });
+
+  it('codeView threads codeSrc through', () => {
+    const app = file(generateProject(ws({ codeUrl: '/src.html', chrome: { codeView: true } })), 'src/App.tsx');
+    expect(app).toContain('showCodeView={true}');
+    expect(app).toContain('codeSrc={"/src.html"}');
+  });
+
+  it('codeView with NO codeUrl still emits the toggle and no codeSrc — components/work-surface.tsx owns the empty state (owner ruling, 2026-08-30)', () => {
+    const app = file(generateProject(ws({ chrome: { codeView: true } })), 'src/App.tsx');
+    expect(app).toContain('showCodeView={true}');
+    expect(app).not.toContain('codeSrc=');
+    // No second placeholder page gets written for a source nobody pointed at.
+    expect(generateProject(ws({ chrome: { codeView: true } })).map((f) => f.path)).toEqual(
+      expect.not.arrayContaining(['public/work-surface-source.html']),
+    );
+  });
+
+  it('emits public/work-surface.html at a CONSTANT path for a relative url — never derived from construct text', () => {
+    expect(generateProject(ws()).map((f) => f.path)).toContain('public/work-surface.html');
+    const html = file(generateProject(ws()), 'public/work-surface.html');
+    expect(html).toContain('Your work surface');
+    expect(file(generateProject(ws({ kind: 'preview' })), 'public/work-surface.html')).toContain('Your app preview');
+  });
+
+  it('does NOT emit the placeholder for an absolute url — that page is somebody else\'s', () => {
+    expect(generateProject(ws({ url: 'https://example.com/app' })).map((f) => f.path)).not.toContain(
+      'public/work-surface.html',
+    );
+  });
+
+  it('a path-traversal url cannot move the write target — the filename is a constant', () => {
+    const files = generateProject(ws({ url: '/../../etc/passwd' }));
+    expect(files.filter((f) => f.path.startsWith('public/')).map((f) => f.path)).toEqual(['public/work-surface.html']);
+  });
+
+  it('split WITHOUT workSurface: the empty pane no longer reserves a column', () => {
+    const app = file(generateProject(construct({ layout: 'split' })), 'src/App.tsx');
+    expect(app).toContain('<slot name="pane" />');
+    expect(app).toContain('paneProjected()');
+    expect(app).toContain('MutationObserver');
+    expect(app).toContain('end={paneProjected()');
+  });
+
+  it('header actions carry a once-per-label DEV reminder naming the seam', () => {
+    const app = file(
+      generateProject(construct({ header: { title: 'X', actions: [{ label: 'Share' }] } } as never)),
+      'src/App.tsx',
+    );
+    expect(app).toContain('import.meta.env.DEV');
+    expect(app).toContain("addEventListener('kai-header-action'");
+    expect(app).toContain('dispatchHeaderAction');
+  });
+});
+
+describe('theme.tokens emission (full palette persistence)', () => {
+  const themed = (tokens: NonNullable<NonNullable<Construct['theme']>['tokens']>, extra: Partial<NonNullable<Construct['theme']>> = {}) =>
+    construct({ theme: { mode: 'system', ...extra, tokens } });
+
+  it('light tokens + radius + fonts land on the HOST via setProperty, exactly like accent', () => {
+    const element = file(
+      generateProject(
+        themed({
+          light: { '--kai-color-background': 'hsl(266 30% 96%)' },
+          radius: '1.1rem',
+          fonts: { '--kai-font-base': 'Georgia, serif' },
+        }),
+      ),
+      'src/element.tsx',
+    );
+    expect(element).toContain(
+      'ctx.element.style.setProperty("--kai-color-background", "hsl(266 30% 96%)");',
+    );
+    expect(element).toContain('ctx.element.style.setProperty("--kai-radius", "1.1rem");');
+    expect(element).toContain('ctx.element.style.setProperty("--kai-font-base", "Georgia, serif");');
+  });
+
+  it('tokens WIN over accent on the same knob: accent setProperty emits first, token after (last write wins)', () => {
+    const element = file(
+      generateProject(
+        themed({ light: { '--kai-color-primary': 'hsl(200 90% 40%)' } }, { accent: '#e91e63' }),
+      ),
+      'src/element.tsx',
+    );
+    const accentAt = element.indexOf("setProperty('--kai-color-primary', \"#e91e63\")");
+    const tokenAt = element.indexOf('setProperty("--kai-color-primary", "hsl(200 90% 40%)")');
+    expect(accentAt).toBeGreaterThan(-1);
+    expect(tokenAt).toBeGreaterThan(accentAt);
+  });
+
+  it('dark tokens emit as a .dark rule in the shadow <style> — the wrapper defineWebComponent classes, NOT setProperty (an inline custom property has no mode)', () => {
+    const element = file(
+      generateProject(
+        themed({
+          dark: {
+            '--kai-color-background': 'hsl(150 30% 8%)',
+            '--kai-color-primary': 'hsl(150 60% 60%)',
+          },
+        }),
+      ),
+      'src/element.tsx',
+    );
+    // The rule rides the same emitted <style> mechanism as the accent-contrast
+    // :host block; values were validated at the schema doorway.
+    expect(element).toContain('.dark {');
+    expect(element).toContain('--kai-color-background: hsl(150 30% 8%);');
+    expect(element).toContain('--kai-color-primary: hsl(150 60% 60%);');
+    // Dark values must never ride setProperty — that would apply in BOTH modes.
+    expect(element).not.toContain('setProperty("--kai-color-background"');
+  });
+
+  it('dark tokens compose with the accent contrast block in ONE <style>', () => {
+    const element = file(
+      generateProject(
+        themed({ dark: { '--kai-color-background': 'hsl(150 30% 8%)' } }, { accent: '#e91e63' }),
+      ),
+      'src/element.tsx',
+    );
+    expect(element).toContain('--kai-color-primary-foreground');
+    expect(element).toContain('.dark {');
+    // One <style> element, not two.
+    expect(element.match(/<style>/g)?.length).toBe(1);
+  });
+
+  it('codegen re-asserts dark values before interpolating into CSS text (unreachable via validateConstruct, loud if bypassed)', () => {
+    const c = construct();
+    const bypassed = {
+      ...c,
+      theme: { mode: 'system', tokens: { dark: { '--kai-color-background': 'red; } * { color: red' } } },
+    } as unknown as Construct;
+    expect(() => generateProject(bypassed)).toThrow(/unsafe value/);
+    const badKey = {
+      ...c,
+      theme: { mode: 'system', tokens: { dark: { '--kai-radius': '1rem' } } },
+    } as unknown as Construct;
+    expect(() => generateProject(badKey)).toThrow(/--kai-color-\*/);
+  });
+
+  it('tokens without accent/unreadColor still produce a ctx-taking facade; no tokens at all keeps the plain facade', () => {
+    const withTokens = file(
+      generateProject(themed({ light: { '--kai-color-background': 'white' } })),
+      'src/element.tsx',
+    );
+    expect(withTokens).toContain('(_props, ctx) =>');
+    const plain = file(generateProject(construct()), 'src/element.tsx');
+    expect(plain).toContain('() => <App />');
+  });
 });

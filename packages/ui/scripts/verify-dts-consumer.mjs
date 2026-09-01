@@ -113,6 +113,10 @@ const PROBE_TYPES = {
   // inside templates.ts, with zero cross-file dependency, so it would
   // exercise nothing this guard cares about.
   './construct/templates': 'BuildableTemplate',
+  // dist/stores/index.d.ts re-exports ConversationStore across the relative
+  // '../primitives/conversation-store' specifier — exactly the resolution
+  // path this guard exists to exercise (it degrades to `any` when broken).
+  './stores': 'ConversationStore',
 };
 
 /** Entries whose declarations reach nothing through a RELATIVE specifier, so

@@ -194,6 +194,17 @@ const TOP_LEVEL_VALUES = {
   aside: { position: 'start', width: '320px' },
   composer: { triggers: { slash: [{ id: 'help', label: 'Help' }], mention: [{ id: 'docs', label: 'Docs' }] } },
   shell: { commandPalette: true, userMenu: { name: 'Ada Lovelace', plan: 'Pro' } },
+  // A codeUrl needs chrome.codeView (schema rule work-surface-code-view — the
+  // coupling runs ONE way since 2026-08-30; codeView alone is valid and the
+  // Code tab then renders its own empty state). The valuer sets both because
+  // its job is to exercise the FULL shape. Both urls are relative so the probe
+  // never reaches the network.
+  workSurface: {
+    kind: 'preview',
+    url: '/work-surface.html',
+    codeUrl: '/work-surface-source.html',
+    chrome: { deviceToggle: true, urlBar: true, openInNewTab: true, expand: true, codeView: true },
+  },
 };
 for (const key of missingValuers(topLevelKeys, TOP_LEVEL_VALUES)) {
   fail(
@@ -206,7 +217,7 @@ for (const key of missingValuers(topLevelKeys, TOP_LEVEL_VALUES)) {
 /** Layout-scoped keys (schema superRefine couplings): the key's solo cell
  *  only exists on its one valid layout — the same class of cross-field
  *  handling fixtureFor already does for reasoningOpen/conversations. */
-const TOP_LEVEL_LAYOUT_SCOPE = { widget: 'widget', aside: 'aside' };
+const TOP_LEVEL_LAYOUT_SCOPE = { widget: 'widget', aside: 'aside', workSurface: 'split' };
 
 function topLevelFixtureFor(layout, keys, index) {
   const fixture = {

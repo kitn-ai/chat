@@ -293,3 +293,84 @@ describe('createMockResponder — scripted tool calls (F-35)', () => {
     expect(second.turn.finishReason).toBe('tool_calls');
   });
 });
+
+describe('createMockResponder — scripted reasoning and citations (S-1)', () => {
+  // The template-purpose audit's S-1: a mock turn could only say plain text, so
+  // reasoning blocks and citation strips were unobservable in EVERY emitted
+  // starter. These pin that a scripted turn takes the SAME parse path a real
+  // provider's reasoning/annotations take — no hand-rolled folding anywhere.
+
+  it('scripted reasoning arrives as ONE reasoning part BEFORE the text, via the real parser', async () => {
+    const respond = createMockResponder({
+      ...quiet,
+      delayMs: 0,
+      replies: [{ reasoning: 'The user asked about X. Check the docs first.', text: 'Here is the answer.' }],
+    });
+    const { messages, turn } = await runTurn(respond);
+
+    expect(messages[0].parts.map((p) => p.type)).toEqual(['reasoning', 'text']);
+    const reasoning = messages[0].parts[0] as { type: 'reasoning'; text: string };
+    // Round trip: the whitespace-preserving tokenizer must rebuild it exactly.
+    expect(reasoning.text).toBe('The user asked about X. Check the docs first.');
+    expect(turn.text).toBe('Here is the answer.');
+  });
+
+  it('scripted sources arrive as source parts AFTER the text, one per citation', async () => {
+    const respond = createMockResponder({
+      ...quiet,
+      delayMs: 0,
+      replies: [{
+        text: 'Cited answer.',
+        sources: [
+          { url: 'https://ui.kitn.ai/wire/', title: 'Wire adapters', snippet: 'The kit parses, the consumer fetches.' },
+          { url: 'https://ui.kitn.ai/state/' },
+        ],
+      }],
+    });
+    const { messages } = await runTurn(respond);
+
+    expect(messages[0].parts.map((p) => p.type)).toEqual(['text', 'source', 'source']);
+    const first = messages[0].parts[1] as { type: 'source'; source: { url?: string; title?: string; snippet?: string } };
+    expect(first.source.url).toBe('https://ui.kitn.ai/wire/');
+    expect(first.source.title).toBe('Wire adapters');
+    // `snippet` rides the wire as the annotation's `content` field and comes
+    // back as `snippet` — the field mapping is part of the contract.
+    expect(first.source.snippet).toBe('The kit parses, the consumer fetches.');
+    const second = messages[0].parts[2] as { type: 'source'; source: { url?: string; title?: string } };
+    expect(second.source).toEqual({ url: 'https://ui.kitn.ai/state/' });
+  });
+
+  it('a full turn orders parts reasoning -> text -> sources -> tool, and still finishes tool_calls', async () => {
+    const respond = createMockResponder({
+      ...quiet,
+      delayMs: 0,
+      replies: [{
+        reasoning: 'Think.',
+        text: 'Answer.',
+        sources: [{ url: 'https://ui.kitn.ai/' }],
+        toolCalls: [{ name: 'search_docs', arguments: { query: 'parts' } }],
+      }],
+    });
+    const { messages, turn } = await runTurn(respond);
+
+    expect(messages[0].parts.map((p) => p.type)).toEqual(['reasoning', 'text', 'source', 'tool']);
+    expect(turn.finishReason).toBe('tool_calls');
+  });
+
+  it('reasoning and annotation frames still carry the mock marker and model id', async () => {
+    const respond = createMockResponder({
+      ...quiet,
+      delayMs: 0,
+      replies: [{ reasoning: 'why', text: 'what', sources: [{ url: 'https://ui.kitn.ai/' }] }],
+    });
+    const frames = (await collect(respond('hi')))
+      .split('\n\n')
+      .filter((f) => f.startsWith('data: ') && !f.includes('[DONE]'))
+      .map((f) => JSON.parse(f.slice(6)) as Record<string, unknown>);
+    expect(frames.length).toBeGreaterThan(0);
+    for (const f of frames) {
+      expect(f[MOCK_MARKER_KEY]).toBe(MOCK_MARKER);
+      expect(f.model).toBe(MOCK_MODEL_ID);
+    }
+  });
+});

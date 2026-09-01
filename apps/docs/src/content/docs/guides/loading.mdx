@@ -13,7 +13,7 @@ There are three ways to get the `kai-*` elements onto a page. They render the sa
 |---|---|---|
 | **Register all** | `@kitn.ai/ui/elements` | The default. You use several elements, or you just want it to work. Works in SSR. |
 | **Per-element** | `@kitn.ai/ui/elements/chat` | You use only a couple of elements and your build tree-shakes. |
-| **Autoloader** | `<script>` (CDN / static) | No build step — a CDN or static page. Loads each element on demand. |
+| **Autoloader** | `<script>` (CDN / static) | No build step and a handful of elements. Loads each element on demand. |
 
 <Aside type="tip" title="Register all is the easy default">
 `import '@kitn.ai/ui/elements'` registers every element in one import and works everywhere, including SSR. Reach for the other two only when you have a specific reason — a build that tree-shakes, or a no-build CDN page.
@@ -26,6 +26,14 @@ import '@kitn.ai/ui/elements';
 ```
 
 One import, every `kai-*` element registered. The simplest setup, and the SSR-safe entry point — the import is side-effect-only and doesn't touch `document` until the browser runs it, so it won't throw in a server render.
+
+The same bundle works with no build at all — a single self-contained fetch from a CDN:
+
+```html
+<script type="module">
+  import 'https://cdn.jsdelivr.net/npm/@kitn.ai/ui/dist/kai.es.js';
+</script>
+```
 
 ## Per-element imports
 
@@ -64,6 +72,8 @@ Per-element imports are client-only. In SSR frameworks (Next.js, Nuxt, SvelteKit
 ## Autoloader
 
 The autoloader watches the DOM and registers each element on demand — only the tags present on a given page are ever loaded.
+
+That on-demand loading is paid in requests: each element's module and its dependencies arrive as separate fetches. On a page using a few elements — a `<kai-markdown>` here, a `<kai-code-block>` there — that's the cheapest path by far. A `<kai-chat>` page is close to its worst case: the chat transitively pulls most of the kit, so the autoloader downloads nearly the same bytes as the register-all bundle across many more requests. For a no-build chat page, load [`dist/kai.es.js`](#register-all-default) instead — one fetch, everything registered.
 
 It is a **CDN / static-file** tool: load it from a `<script type="module">` tag. It is **not** importable through a bundler — Vite and webpack relocate it away from the element files and its on-demand imports 404. In a bundled app, use [per-element imports](#per-element-imports) instead.
 

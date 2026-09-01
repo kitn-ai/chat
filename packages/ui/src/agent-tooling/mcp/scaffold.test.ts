@@ -984,8 +984,10 @@ describe('scaffold', () => {
     // the optional route, whose Vite-middleware wrapper mentions fetch in prose.
     const front = text.split('=== (2) BACKEND ROUTE ===')[0];
     expect(front).not.toContain("fetch('/api");
-    // the reply comes from the kit's shared responder, not a copy in this file
-    expect(front).toContain('createMockResponder()');
+    // the reply comes from the kit's shared responder, scripted by the shared
+    // MOCK_SCRIPT — the code line, not the prose above it, which also names the
+    // function and once let this assertion pass vacuously
+    expect(front).toContain('const mockResponse = createMockResponder({ replies: MOCK_SCRIPT });');
     // the run note still says the app needs no backend; the route is optional
     expect(text).toMatch(/No backend or API key needed/i);
     expect(text).toContain('# OPTIONAL');
@@ -2532,9 +2534,12 @@ describe('scaffolds import the wire adapter for real backends', () => {
       placement: 'full-page',
     });
     const code = frontEnd(out);
-    // ONE implementation: the responder comes from the package.
+    // ONE implementation: the responder comes from the package, scripted with
+    // the shared MOCK_SCRIPT (scaffoldMockScript) rather than a bare call whose
+    // default replies were plain text — the rich first-run demo, not a copy.
     expect(code).toMatch(/import \{[^}]*\bcreateMockResponder\b[^}]*\} from '@kitn\.ai\/ui\/state';/);
-    expect(code).toContain('const mockResponse = createMockResponder();');
+    expect(code).toContain('const mockResponse = createMockResponder({ replies: MOCK_SCRIPT });');
+    expect(code).toContain('const MOCK_SCRIPT: MockReply[] = ');
     // …and it is read by the SAME reader a provider's response goes through.
     expect(code).toContain("from '@kitn.ai/ui/wire'");
     expect(code).toContain('await readOpenAIStream(res, stream);');
@@ -2552,6 +2557,52 @@ describe('scaffolds import the wire adapter for real backends', () => {
     expect(wireImport, 'no @kitn.ai/ui/wire import found').not.toBeNull();
     expect(wireImport![1]).not.toContain('toOpenAIMessages');
     expect(code).toContain('parts:');
+  });
+
+  /**
+   * The mock's scripted tool call must be SETTLED, and only where it is scripted.
+   *
+   * The script announces a demo call exactly on kai-tool surfaces (the one
+   * capability gate the registry knows), and the wire only ever announces —
+   * answering is the host's side of the seam. Without the settle loop the tool
+   * row parks at input-available and spins forever, which is a worse first run
+   * than plain text was. On chat-only surfaces the script announces no call, so
+   * the map and the loop must be absent (noUnusedLocals would reject the map,
+   * and the loop would reference a const that does not exist).
+   */
+  it.each(REAL_FRAMEWORKS)('%s mock kai-tool surface settles its scripted call; chat-only emits no settle', async (framework) => {
+    const withTool = frontEnd(
+      await scaffold.handler({
+        framework,
+        useCase: 'agentic',
+        integration: 'mock',
+        placement: 'full-page',
+      }),
+    );
+    expect(withTool).toContain('const MOCK_TOOL_OUTPUTS: Record<string, Record<string, unknown>> = ');
+    expect(withTool).toContain('for (const call of turn.toolCalls) {');
+    expect(withTool).toContain('applyToolOutput(stream, call.id, MOCK_TOOL_OUTPUTS[call.name]');
+    // The scripted call names the same demo tool the real scaffolds declare in
+    // toolSchemaLines, so the settled row and a live tools array describe ONE tool.
+    expect(withTool).toContain('"search"');
+    // The mock never emits the LIVE loop (no backend for a second round), so the
+    // settle must not have dragged it in.
+    expect(withTool).not.toContain('MAX_TOOL_ROUNDS');
+
+    const chatOnly = frontEnd(
+      await scaffold.handler({
+        framework,
+        useCase: 'drop-in-chat',
+        integration: 'mock',
+        placement: 'full-page',
+      }),
+    );
+    expect(chatOnly).not.toContain('MOCK_TOOL_OUTPUTS');
+    expect(chatOnly).not.toContain('applyToolOutput');
+    // The chat-only script still scripts the rest of the rich thread.
+    expect(chatOnly).toContain('"reasoning"');
+    expect(chatOnly).toContain('"sources"');
+    expect(chatOnly).not.toContain('"toolCalls"');
   });
 
   it('emits the multi-round tool loop LIVE, with a runner it actually defines', async () => {

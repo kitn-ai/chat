@@ -27,6 +27,10 @@ import { encodableMediaTypes } from '../../../wire/media-types';
 // these records are already validated by their own tests and by
 // `lint:catalog-drift`.
 import { surfaceRecipes } from '../../catalog/surfaces';
+// The mock's scripted first conversation, shared with the construct templates
+// (mock-script.ts is a leaf: types + the templates data leaf, no zod). One
+// authored copy of the demo conversation instead of a second one growing here.
+import { scaffoldMockScript, type MockScript } from '../../construct/mock-script';
 
 /**
  * scaffold — the keystone tool. Composes a working chat surface from four axes:
@@ -379,6 +383,14 @@ function realStreamBody(opts: {
    */
   mock?: boolean;
   /**
+   * Mock only: the surface's script announces a demo tool call, so the emitted
+   * module declares `MOCK_TOOL_OUTPUTS` and the read is followed by a settle
+   * loop. Without it an announced call parks at `input-available` and the tool
+   * row spins forever — the wire only ANNOUNCES calls; answering them is the
+   * host's side of the seam, and for the mock the host is that map.
+   */
+  mockSettlesTools?: boolean;
+  /**
    * The workspace block's cancellation story: an expression for the turn's
    * AbortSignal, put on the fetch. The controller comes from
    * `createThreadSessions().begin(id)` in the block's prelude, so switching
@@ -390,7 +402,7 @@ function realStreamBody(opts: {
   const {
     pad, read, commitSet, setterAdapter, setLoading, bodyPayload, strictRoles = false, toolLoop, thread,
     cards = false, valueSource = 'e.detail.value', afterValue = [], afterTurn = [], mock = false, filesExpr,
-    fetchSignal,
+    fetchSignal, mockSettlesTools = false,
   } = opts;
   const asConst = strictRoles ? ' as const' : '';
   // Under strict TS an un-annotated array literal widens the part's `type` to
@@ -446,6 +458,18 @@ function realStreamBody(opts: {
     `${indent}// Everything below this line is already the real path and stays as it is.`,
     `${indent}const res = mockResponse(value);`,
     `${indent}const turn = await readOpenAIStream(res, stream);`,
+    ...(mockSettlesTools
+      ? [
+          `${indent}// The wire only ever ANNOUNCES a tool call — running it and answering is`,
+          `${indent}// the HOST's side of the seam. The mock's host is MOCK_TOOL_OUTPUTS: settle`,
+          `${indent}// each announced call so its row reaches output-available instead of`,
+          `${indent}// spinning forever. A real backend's tool loop replaces this — scaffold`,
+          `${indent}// again with a provider to see it.`,
+          `${indent}for (const call of turn.toolCalls) {`,
+          `${indent}  applyToolOutput(stream, call.id, MOCK_TOOL_OUTPUTS[call.name] ?? { note: 'no scripted output for this call' });`,
+          `${indent}}`,
+        ]
+      : []),
   ];
 
   const realRequest = (indent: string): string[] => [
@@ -792,6 +816,9 @@ function wireImportLines(opts: {
   cardTools?: boolean;
   /** the `mock` integration → import the shared responder, not a fetch encoder */
   mock?: boolean;
+  /** mock whose script announces a tool call → the settle loop calls
+   *  `applyToolOutput` (mock never emits the tool LOOP, so no duplicate). */
+  mockSettlesTools?: boolean;
   /**
    * The attachments capability → `type AttachmentData`.
    *
@@ -810,13 +837,15 @@ function wireImportLines(opts: {
   /** the workspace BLOCK → the thread/persistence helpers from the state entry */
   workspaceBlock?: boolean;
 }): string[] {
-  const { pad = '', typed, toolLoop = false, setMessagesType = false, cards = false, cardTools: emitsCardTools = false, mock = false, attachments = false, workspaceBlock = false } = opts;
+  const { pad = '', typed, toolLoop = false, setMessagesType = false, cards = false, cardTools: emitsCardTools = false, mock = false, mockSettlesTools = false, attachments = false, workspaceBlock = false } = opts;
   const stateNames = [
     ...(workspaceBlock ? ['bindThreadMessages'] : []),
     'createAssistantStream',
     // The mock's canned reply comes from the kit, not from a copy pasted into
     // this file. One implementation, shared with create-kai and the starters.
-    ...(mock ? ['createMockResponder'] : []),
+    // `type MockReply` annotates the emitted MOCK_SCRIPT so a consumer editing
+    // the script (it is data, and the comment above it says to) gets checked.
+    ...(mock ? ['createMockResponder', 'type MockReply'] : []),
     ...(workspaceBlock ? ['createSaveScheduler', 'createThreadSessions', 'parseStoredThread'] : []),
     ...(attachments ? ['type AttachmentData'] : []),
     ...(typed ? ['type ChatMessage'] : []),
@@ -828,6 +857,10 @@ function wireImportLines(opts: {
     'readOpenAIStream',
     ...(mock ? [] : ['toOpenAIMessages']),
     ...(toolLoop ? ['applyToolOutput', 'applyToolFailure'] : []),
+    // The mock's settle loop answers its script's announced call with the same
+    // helper the live loop uses. Mutually exclusive with `toolLoop` (mock never
+    // emits the loop), so the name cannot be imported twice.
+    ...(mock && mockSettlesTools ? ['applyToolOutput'] : []),
   ].join(', ');
   // Same noUnusedLocals rule as above, one entry finer: `cardTools` is named only
   // when the integration's route actually forwards a tools array, because on the
@@ -848,21 +881,63 @@ function wireImportLines(opts: {
 }
 
 /**
- * The mock responder, declared at MODULE scope.
+ * The mock responder + its scripted conversation, declared at MODULE scope.
  *
  * Module scope rather than inside the submit handler because the responder owns
  * the cursor into its canned replies: rebuilt per turn it would answer with the
  * first reply forever, and the seeded conversation would stop making sense on
  * the second message.
+ *
+ * The script comes from `scaffoldMockScript` (construct/mock-script.ts) — the
+ * same module the construct templates script their mock conversations from —
+ * gated on the one capability the surface registry knows (`hasToolPanel`). A
+ * bare `createMockResponder()` used to stand here, which meant every framework
+ * scaffold booted into plain text while every construct template booted into a
+ * rich thread; now the first run shows reasoning, citations and (on kai-tool
+ * surfaces) a settled tool row through the kit's real parser.
  */
-function mockResponderInit(pad = ''): string[] {
+function mockResponderInit(script: MockScript | null, pad = ''): string[] {
+  if (!script) return [];
+  const hasOutputs = Object.keys(script.toolOutputs).length > 0;
+  // JSON is valid TS: the literal is emitted as data the consumer is invited to
+  // edit, with `MockReply[]` (imported above) keeping those edits checked.
+  const decl = (prefix: string, value: unknown): string[] => {
+    const json = JSON.stringify(value, null, 2).split('\n');
+    const lines = [`${pad}${prefix}${json[0]}`, ...json.slice(1).map((l) => `${pad}${l}`)];
+    lines[lines.length - 1] += ';';
+    return lines;
+  };
   return [
     `${pad}// The kit's own mock responder — no backend, no key, no network. It streams`,
     `${pad}// canned SSE frames through the same reader a real provider's response uses,`,
     `${pad}// and marks every one of them as a mock. Shared with create-kai and the`,
     `${pad}// starters, so there is one implementation of this and not seven.`,
-    `${pad}const mockResponse = createMockResponder();`,
+    `${pad}//`,
+    `${pad}// MOCK_SCRIPT is this surface's first conversation: reasoning, citations${hasOutputs ? ',' : ' —'}`,
+    ...(hasOutputs
+      ? [`${pad}// and a tool call the settle step in onSubmit answers — every part streamed`]
+      : [`${pad}// every part streamed`]),
+    `${pad}// through the kit's real parser, so the first run SHOWS the rendering paths`,
+    `${pad}// a live model would use. Edit it freely — it is data, not wiring.`,
+    ...decl('const MOCK_SCRIPT: MockReply[] = ', script.replies),
+    ...(hasOutputs
+      ? [
+          `${pad}// Scripted outputs for the demo tool call above. The wire only ever`,
+          `${pad}// ANNOUNCES a call — executing it and answering is the host's side of the`,
+          `${pad}// seam — so the mock's "host" is this map plus the settle loop in onSubmit.`,
+          `${pad}// It disappears with the mock: a real backend's tool loop replaces it.`,
+          ...decl('const MOCK_TOOL_OUTPUTS: Record<string, Record<string, unknown>> = ', script.toolOutputs),
+        ]
+      : []),
+    `${pad}const mockResponse = createMockResponder({ replies: MOCK_SCRIPT });`,
   ];
+}
+
+/** The mock script's one registry-derived gate, shared by every renderer: the
+ *  surface renders `kai-tool`, so the script announces a demo call and the
+ *  emitted module settles it. Null when the integration is not `mock`. */
+function mockSettlesTools(ctx: RenderCtx): boolean {
+  return Object.keys(ctx.mockScript?.toolOutputs ?? {}).length > 0;
 }
 
 /** The POST body for a real backend. `toOpenAIMessages` keeps tool calls and
@@ -1796,6 +1871,10 @@ interface RenderCtx {
   label: string;
   /** mock = stream the reply client-side (no fetch, no backend, no key) */
   isMock: boolean;
+  /** the mock's scripted first conversation (`scaffoldMockScript`), gated on
+   *  the one capability the registry knows — whether the surface renders
+   *  kai-tool. Null exactly when `isMock` is false. */
+  mockScript: MockScript | null;
   /** SCAF-8: non-undefined when the integration forwards a model param */
   defaultModel?: string;
   /** the surface renders kai-tool AND the route forwards a tools array, so the
@@ -2300,12 +2379,13 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
       cards: ctx.emitCards,
       cardTools: ctx.cardProvider !== null,
       mock: ctx.isMock,
+      mockSettlesTools: mockSettlesTools(ctx),
       attachments,
       workspaceBlock: block,
     }),
     `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     ``,
-    ...(ctx.isMock ? [...mockResponderInit(), ``] : []),
+    ...(ctx.isMock ? [...mockResponderInit(ctx.mockScript), ``] : []),
     ...modelLines,
     ...attachmentModuleLines,
     ...(block ? [...blockThreadStoreLines(''), ``] : []),
@@ -2399,6 +2479,7 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
             'chat.messages ?? []',
           ),
       mock: ctx.isMock,
+      mockSettlesTools: mockSettlesTools(ctx),
       ...(block ? { fetchSignal: 'controller.signal', afterValue: blockPrelude } : {}),
       // ONE call site, in the `finally`, and deliberately not also on submit. The
       // finally sees the WHOLE turn — the user's message and the assistant's — so
@@ -2605,7 +2686,7 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
     ? 'CustomEvent<{ value: string; attachments: AttachmentData[] }>'
     : 'CustomEvent<{ value: string }>';
 
-  const mockInit = isMock ? mockResponderInit() : [];
+  const mockInit = isMock ? mockResponderInit(ctx.mockScript) : [];
 
   // SCAF-9: no fabricated seed — see SAMPLE_AGENTIC_MESSAGE for the three ways
   // one broke a real app. In BLOCK mode the thread state is the block's
@@ -2764,6 +2845,7 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
     cards: ctx.emitCards,
     thread: block ? blockReactThread : REACT_THREAD,
     mock: isMock,
+    mockSettlesTools: mockSettlesTools(ctx),
     ...(block ? { fetchSignal: 'controller.signal' } : {}),
     ...attachmentSubmitOpts,
     ...(block
@@ -2873,6 +2955,7 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
         cards: ctx.emitCards,
         cardTools: ctx.cardProvider !== null,
         mock: isMock,
+        mockSettlesTools: mockSettlesTools(ctx),
         attachments,
         workspaceBlock: block,
       }),
@@ -2933,6 +3016,7 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
       cards: ctx.emitCards,
       cardTools: ctx.cardProvider !== null,
       mock: isMock,
+      mockSettlesTools: mockSettlesTools(ctx),
       attachments,
       workspaceBlock: block,
     }),
@@ -3104,6 +3188,7 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
       ? blockLiveThread(blockRead)
       : liveThreadBinding('messages.value', '(fn) => { messages.value = fn(messages.value); }'),
     mock: isMock,
+    mockSettlesTools: mockSettlesTools(ctx),
     ...(block ? { fetchSignal: 'controller.signal' } : {}),
     ...attachmentSubmitOpts,
     ...(block
@@ -3117,7 +3202,7 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
   });
 
   // SCAF-10: ChatMessage declaration for strict-TS Vue consumers.
-  const mockInit = isMock ? mockResponderInit() : [];
+  const mockInit = isMock ? mockResponderInit(ctx.mockScript) : [];
 
   // SCAF-8: model const at module scope so onSubmit closes over it.
   const modelInit = defaultModel
@@ -3266,6 +3351,7 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
       cards: ctx.emitCards,
       cardTools: ctx.cardProvider !== null,
       mock: isMock,
+      mockSettlesTools: mockSettlesTools(ctx),
       attachments,
       workspaceBlock: block,
     }),
@@ -3446,6 +3532,7 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
       ? blockLiveThread(blockRead)
       : liveThreadBinding('messages', '(fn) => { messages = fn(messages); }'),
     mock: isMock,
+    mockSettlesTools: mockSettlesTools(ctx),
     ...(block ? { fetchSignal: 'controller.signal' } : {}),
     ...attachmentSubmitOpts,
     ...(block
@@ -3459,7 +3546,7 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
   });
 
   // SCAF-10: ChatMessage declaration for strict-TS Svelte consumers.
-  const mockInit = isMock ? mockResponderInit('  ') : [];
+  const mockInit = isMock ? mockResponderInit(ctx.mockScript, '  ') : [];
 
   // SCAF-8: model const at script scope so onSubmit closes over it.
   const modelInit = defaultModel
@@ -3645,6 +3732,7 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
       cards: ctx.emitCards,
       cardTools: ctx.cardProvider !== null,
       mock: isMock,
+      mockSettlesTools: mockSettlesTools(ctx),
       attachments,
       workspaceBlock: block,
     }),
@@ -3873,7 +3961,7 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
     ? 'CustomEvent<{ value: string; attachments: AttachmentData[] }>'
     : 'CustomEvent<{ value: string }>';
 
-  const mockInit = isMock ? mockResponderInit() : [];
+  const mockInit = isMock ? mockResponderInit(ctx.mockScript) : [];
 
   // SCAF-9: no fabricated seed — see SAMPLE_AGENTIC_MESSAGE. In BLOCK mode the
   // thread state is the block's multi-thread store (same shape as renderJsx).
@@ -4009,6 +4097,7 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
     cards: ctx.emitCards,
     thread: block ? blockReactThread : REACT_THREAD,
     mock: isMock,
+    mockSettlesTools: mockSettlesTools(ctx),
     ...(block ? { fetchSignal: 'controller.signal' } : {}),
     ...attachmentSubmitOpts,
     ...(block
@@ -4113,6 +4202,7 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
       cards: ctx.emitCards,
       cardTools: ctx.cardProvider !== null,
       mock: isMock,
+      mockSettlesTools: mockSettlesTools(ctx),
       attachments,
       workspaceBlock: block,
     }),
@@ -4320,6 +4410,7 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
     cards: ctx.emitCards,
     thread: block ? blockLiveThread(blockRead) : accessorThreadBinding(read, commit, setter),
     mock: isMock,
+    mockSettlesTools: mockSettlesTools(ctx),
     ...(block ? { fetchSignal: 'controller.signal' } : {}),
     ...attachmentSubmitOpts,
     ...(block
@@ -4508,13 +4599,14 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
       cards: ctx.emitCards,
       cardTools: ctx.cardProvider !== null,
       mock: isMock,
+      mockSettlesTools: mockSettlesTools(ctx),
       attachments,
       workspaceBlock: block,
     }),
     ``,
     `// ${ctx.label} — ${p.note}. empty-state hint: ${emptyHint}`,
     ...(p.altNote ?? []).map((l) => `// ${l}`),
-    ...(isMock ? mockResponderInit() : []),
+    ...(isMock ? mockResponderInit(ctx.mockScript) : []),
     ``,
     ...modelInit,
     ...attachmentModuleInit,
@@ -4786,6 +4878,7 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
     ...(attachments ? { filesExpr: 'files' } : {}),
     ...(block ? { fetchSignal: 'controller.signal' } : {}),
     mock: isMock,
+    mockSettlesTools: mockSettlesTools(ctx),
   });
 
   const modelInit = defaultModel
@@ -5065,13 +5158,14 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
       cards: ctx.emitCards,
       cardTools: ctx.cardProvider !== null,
       mock: isMock,
+      mockSettlesTools: mockSettlesTools(ctx),
       workspaceBlock: block,
     }),
     ``,
     `// ${ctx.label} — ${p.note}. empty-state hint: ${emptyHint}`,
     ...(p.altNote ?? []).map((l) => `// ${l}`),
     ``,
-    ...(isMock ? [...mockResponderInit(), ``] : []),
+    ...(isMock ? [...mockResponderInit(ctx.mockScript), ``] : []),
     ...(block ? [...blockThreadStoreLines(''), ``] : []),
     ...cardsInit,
     `// Narrow a part to ONE variant, or false. One read, one cast — and the JSX`,
@@ -5448,9 +5542,16 @@ export function renderSurface(req: SurfaceRequest): string {
   // It does NOT require `emitTools`: an integration that builds its tools
   // server-side (langgraph, mastra, pi) still streams tool calls back, and the
   // loop that answers them is the same loop.
+  //
+  // `mock` gets no loop, but on a kai-tool surface its SCRIPT still announces a
+  // demo call, settled inline after the read from MOCK_TOOL_OUTPUTS (see
+  // `mockResponderInit` / `mockSettlesTools`) — otherwise the panel the surface
+  // renders is one no zero-config run could ever fill.
   const emitToolLoop = !isMock && hasToolPanel(components);
-  // Cards need a MODEL to ask for one, so `mock` (which streams a canned reply in
-  // the browser and never sees a tool call) is out for the same reason the loop is.
+  const mockScript = isMock ? scaffoldMockScript({ tools: hasToolPanel(components) }) : null;
+  // Cards need a MODEL to fill their declared schema, so `mock` (whose script is
+  // canned data, not a model that could be offered a card tool) is out — the
+  // construct templates own the keyless card demo.
   const emitCards = !isMock && bearsCards(components);
   // Only shape card tools when the array is really forwarded AND we know which
   // envelope this route's provider takes. Either half missing means the registry
@@ -5471,6 +5572,7 @@ export function renderSurface(req: SurfaceRequest): string {
     suggestions,
     label: surfaceLabel(components),
     isMock,
+    mockScript,
     defaultModel,
     emitTools,
     emitToolLoop,

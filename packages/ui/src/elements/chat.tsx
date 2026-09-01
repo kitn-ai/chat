@@ -41,19 +41,17 @@ type Props = Omit<ChatThreadProps,
   // Excluded from `Props` for the same reason `onValueChange`/`onSubmit`/etc
   // are excluded above: it is not a property a consumer of `<kai-chat>` sets.
   | 'onConversationLoad'
-  // `hostOpen`/`onUnreadChange` (unread indicators, 2026-08-26) are the SAME
-  // "types without forwarding" trap as `onConversationLoad` above, for the
-  // same reason: this facade does not read either off the host element and
-  // forward it onto `<ChatThread>` below. Both exist for a caller composing
-  // `ChatThread` directly as a Solid component with its OWN show/hide chrome
-  // to report through `hostOpen` and its own sibling control (a `Dock`'s
-  // `unread` badge) to mirror `onUnreadChange` onto — the construct engine's
-  // emitted App is the motivating case (codegen.ts's `emitChatThreadUnreadProps`),
-  // exactly like `headerEndContent`/`emptyContent` below. `<kai-chat>` has no
-  // such sibling chrome of its own to report to or read from, so there is
-  // nothing here for either prop to DO — left unexcluded, `gen-element-api.mjs`
-  // would still type them into the public API and docs as settable properties
-  // that silently do nothing when set.
+  // `hostOpen` is re-declared below (own element-facing doc comment, same
+  // reason as `conversations`/`store`); `onUnreadChange` is wired internally
+  // (JSX prop on `<ChatThread>` below) as a dispatched `kai-unread-change`
+  // event, matching every other ChatThread callback on this element. Both
+  // were EXCLUDED entirely until the 2026-08-31 composition spike: the old
+  // reasoning was that `<kai-chat>` has no sibling chrome of its own to
+  // report to — true, but a CONSUMER composing this element beside their own
+  // launcher/dock (the spike's hand-composed widget) is exactly such sibling
+  // chrome, and without this seam the kit-owned unread computation was
+  // unreachable from the public element surface (report: research/
+  // 2026-08-31-composition-spike, "Real gap 1").
   | 'hostOpen' | 'onUnreadChange'
   // `headerEndContent`/`emptyContent` are JSX.Element escape hatches for a caller
   // composing `ChatThread` directly as a Solid component (see their doc comments in
@@ -148,6 +146,19 @@ type Props = Omit<ChatThreadProps,
      *  (only when the URL passes the kit's own scheme allowlist). Omit for the
      *  no-home widget (chat view only, unchanged). */
     home?: HomeConfig;
+    /** Whether the chrome that HOSTS this element is currently VISIBLE to the
+     *  visitor, e.g. a composed launcher/dock's open state. Set as a JS
+     *  PROPERTY (`el.hostOpen = open`), never an attribute: the default is
+     *  `true` and an HTML attribute's presence can only ever say "true", so
+     *  there is no attribute form that expresses the one value worth setting
+     *  (`false`). Meaningful only with `conversations` on, where it is the
+     *  third leg of "seen": the active conversation is marked read only while
+     *  it is active AND the chat view is showing AND this is `true`. Leave it
+     *  unset for any layout with no show/hide concept (fullscreen, aside,
+     *  split); that just means unread never distinguishes "closed" from
+     *  "open". The companion of the `kai-unread-change` event: set this from
+     *  your launcher's open state, mirror that event onto its badge. */
+    hostOpen?: boolean;
   };
 
 interface Events {
@@ -188,6 +199,16 @@ interface Events {
   /** A `home.links` entry with no `href` was activated (tapped/clicked/Enter).
    *  Meaningful only when `home` is set. */
   'kai-home-link': { entry: HomeLinkEntry };
+  /** "Is any conversation OTHER than the currently-seen one unread" changed.
+   *  This is the same value this element already renders as the dot on its
+   *  own header list toggle, reported outward so a sibling control with no
+   *  view into the internal conversation-summary state (a composed launcher's
+   *  badge, a `kai-dock`'s `unread` prop) can mirror it: set `dock.unread =
+   *  event.detail.unread`. Fires on every change, including the initial
+   *  `false`. Only meaningful with `conversations` on; pairs with the
+   *  `hostOpen` property, which is what lets "arrived while the widget was
+   *  closed" count as unread for the active conversation too. */
+  'kai-unread-change': { unread: boolean };
 }
 
 defineWebComponent<Props, Events>('kai-chat', {
@@ -199,6 +220,7 @@ defineWebComponent<Props, Events>('kai-chat', {
   actionsReveal: 'always', cardTypes: undefined, cardSchemas: undefined, accept: undefined,
   reasoning: undefined, reasoningOpen: undefined, conversations: false, store: undefined,
   home: undefined, userActions: undefined, assistantActions: undefined, hideSources: false,
+  hostOpen: true,
 }, (props, { dispatch, flag, reflectFlag, element, expose }) => {
   // `messages` is an untyped boundary: a consumer can hand it anything at
   // runtime (a pre-0.20.0 `{ id, role, content }` array, in particular). Skip
@@ -253,6 +275,25 @@ defineWebComponent<Props, Events>('kai-chat', {
     /** Scroll the message viewport to the newest message. Defaults to `'smooth'`;
      *  pass `'instant'` to jump without animating. */
     scrollToBottom: (behavior?: ScrollBehavior) => controller?.scrollToBottom(behavior),
+    /** Force the widget back to its default landing view: `'home'` when the
+     *  `home` property is set, `'chat'` otherwise (a no-op if already there, or
+     *  if neither `home` nor `conversations` is on). This element has no
+     *  knowledge of whatever chrome hosts it, so it cannot know when that host
+     *  closes; a composed launcher/dock calls this on every hide so the NEXT
+     *  open lands on the default screen rather than wherever the conversations
+     *  list was left. `kai-dock`'s `kai-open-change` fires on every close path
+     *  (header X, launcher toggle, Escape), so one listener covers all three. */
+    closeConversationsList: () => controller?.closeConversationsList(),
+    /** Start a fresh conversation, on the same path as the list view's "+ New
+     *  conversation" row: clears the active conversation id, returns to the
+     *  chat view, and delivers `[]` through `kai-conversation-load` (set
+     *  `el.messages = event.detail.messages` like every other load; this
+     *  element never updates `messages` for you). The seam a composed app's
+     *  own "New conversation" control drives (B-10; the construct shell
+     *  palette's entry rides the same controller call). No id is minted until
+     *  the first message (C-6), so calling this on an already-empty new
+     *  conversation is a harmless no-op. */
+    startNewConversation: () => controller?.startNewConversation(),
   });
 
   return (
@@ -278,6 +319,11 @@ defineWebComponent<Props, Events>('kai-chat', {
     conversations={flag('conversations')}
     store={props.store as ConversationStore | undefined}
     onConversationLoad={(messages, id) => dispatch('kai-conversation-load', { id, messages })}
+    /* Composed-launcher seam (composition spike, 2026-08-31): `!== false` so
+       an attribute-shaped truthy write-back (a string) still reads open, the
+       `scrollButton` pattern — only an explicit `false` closes. */
+    hostOpen={props.hostOpen !== false}
+    onUnreadChange={(unread) => dispatch('kai-unread-change', { unread })}
     home={props.home as HomeConfig | undefined}
     onHomeLink={(entry) => dispatch('kai-home-link', { entry })}
     /* F-26: card parts emit off THIS element as the bubbling `kai-card` event,

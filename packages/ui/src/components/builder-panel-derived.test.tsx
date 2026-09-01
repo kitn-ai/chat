@@ -197,3 +197,54 @@ describe('edits go through construct-form-paths', () => {
     expect(screen.getByText(/must be a valid custom-element tag/)).toBeInTheDocument();
   });
 });
+
+describe('work-surface section visibility (2026-08-30)', () => {
+  it('renders on layout: split — the Workspace template', () => {
+    const { container } = render(() => <Controlled template={tpl('workspace')} />);
+    expect(container.querySelector('[data-derived-section="workSurface"]')).toBeInTheDocument();
+    expect(screen.getByText('Work surface')).toBeInTheDocument();
+  });
+
+  it('is hidden on every non-split layout, even if a manifest asks for it', () => {
+    const workspace = tpl('workspace');
+    for (const other of ['widget', 'inAppAssistant', 'assistant', 'research'] as const) {
+      const hybrid = { ...tpl(other), controls: workspace.controls } as BuildableTemplate;
+      const { container, unmount } = render(() => <Controlled template={hybrid} />);
+      expect(
+        container.querySelector('[data-derived-section="workSurface"]'),
+        `${other} must not show the work-surface section`,
+      ).toBeNull();
+      unmount();
+    }
+  });
+
+  it('labels the work-surface fields the way the design story labels them', () => {
+    render(() => <Controlled template={tpl('workspace')} />);
+    for (const label of ['Pane kind', 'Preview URL', 'Device toggle', 'URL bar', 'Open in new tab', 'Expand', 'Code view']) {
+      expect(screen.getByText(label), label).toBeInTheDocument();
+    }
+  });
+
+  it('the widget and aside sections still hide correctly after the layout-scope fix', () => {
+    const { container: widgetPanel } = render(() => <Controlled template={tpl('widget')} />);
+    expect(widgetPanel.querySelector('[data-derived-section="widget"]')).toBeInTheDocument();
+    cleanup();
+    const { container: asidePanel } = render(() => <Controlled template={tpl('inAppAssistant')} />);
+    expect(asidePanel.querySelector('[data-derived-section="aside"]')).toBeInTheDocument();
+    expect(asidePanel.querySelector('[data-derived-section="widget"]')).toBeNull();
+  });
+});
+
+describe('hints (S-4 — off reads as a choice, not an absence)', () => {
+  it('renders the manifest hint under its control', () => {
+    render(() => <Controlled template={tpl('workspace')} />);
+    expect(screen.getByText(/Endpoint needs your own chat route/)).toBeInTheDocument();
+    expect(screen.getByText(/Local keeps history in this browser/)).toBeInTheDocument();
+  });
+
+  it('renders no hint for a path that has none', () => {
+    const { container } = render(() => <Controlled template={tpl('widget')} />);
+    const identity = container.querySelector('[data-derived-section="identity"]')!;
+    expect(identity.querySelector('[data-derived-hint]')).toBeNull();
+  });
+});

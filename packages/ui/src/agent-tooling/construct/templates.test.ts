@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import type { Construct } from './schema';
 import { ConstructSchema, CONSTRUCT_SCHEMA_URL } from './schema';
 import { TEMPLATES, buildableTemplates, templateById, inferTemplateId } from './templates';
 
@@ -79,11 +80,63 @@ describe('registry shape (B-13 / C-4)', () => {
 });
 
 describe('starter content rules (B-14 / B-4)', () => {
-  it('Workspace is the ONLY buildable template whose starters carry composer.triggers (the ruling-8 default-on matrix, expressed as starter data)', () => {
+  it('composer.triggers ship on exactly the two agentic shapes (Workspace and the in-app assistant)', () => {
+    const withTriggers = buildableTemplates()
+      .filter((t) => [t.starter, ...(t.variants ?? []).map((v) => v.starter)].some((s) => s.composer?.triggers !== undefined))
+      .map((t) => t.id);
+    expect(withTriggers.sort()).toEqual(['inAppAssistant', 'workspace']);
+  });
+
+  it('no starter pre-commits anybody\'s brand: theme.accent and theme.unreadColor are omitted everywhere (S-7/S-8)', () => {
+    for (const { name, starter } of starterCases) {
+      expect(starter.theme?.accent, `${name} carries an accent`).toBeUndefined();
+      expect(starter.theme?.unreadColor, `${name} carries an unreadColor`).toBeUndefined();
+    }
+  });
+
+  it('everything free, local and reversible ships ON — a person cannot switch off an option they never saw (S-2)', () => {
+    for (const { name, starter } of starterCases) {
+      expect(starter.capabilities?.starters?.length, name).toBeGreaterThan(0);
+      expect(starter.capabilities?.attachments, name).toBeDefined();
+      expect(starter.capabilities?.history?.persistence, name).toBe('local');
+      expect(starter.capabilities?.conversations, name).toBe(true);
+      expect(starter.capabilities?.reasoning, name).toBe('full');
+      expect(starter.capabilities?.messageActions, name).toEqual({
+        user: ['edit'],
+        assistant: ['copy', 'like', 'dislike'],
+      });
+      expect(starter.empty, name).toBeDefined();
+    }
+  });
+
+  it('anything needing a backend or an invoice stays OFF (S-3)', () => {
+    for (const { name, starter } of starterCases) {
+      expect(starter.provider, name).toEqual({ mode: 'mock' });
+      expect(starter.capabilities?.history?.url, name).toBeUndefined();
+      expect(starter.capabilities?.reasoningOpen, name).toBeUndefined();
+      expect(starter.cards, name).toBeUndefined();
+    }
+  });
+
+  it('every hint is keyed by a path its own section actually edits — a hint on a control nobody renders is invisible', () => {
     for (const t of buildableTemplates()) {
-      const all = [t.starter, ...(t.variants ?? []).map((v) => v.starter)];
-      const hasTriggers = all.some((s) => s.composer?.triggers !== undefined);
-      expect(hasTriggers, t.id).toBe(t.id === 'workspace');
+      for (const s of t.controls) {
+        for (const path of Object.keys(s.hints ?? {})) {
+          expect(s.paths, `${t.id}/${s.id}: hint on "${path}"`).toContain(path);
+        }
+      }
+    }
+  });
+
+  it('every template offers an Empty-state section, so the starter\'s own empty copy is editable (S-5)', () => {
+    for (const t of buildableTemplates()) {
+      expect(t.controls.map((s) => s.id), t.id).toContain('empty');
+    }
+  });
+
+  it('Workspace offers the Work surface section (S-5), and no other template does', () => {
+    for (const t of buildableTemplates()) {
+      expect(t.controls.some((s) => s.id === 'workSurface'), t.id).toBe(t.id === 'workspace');
     }
   });
 
@@ -101,6 +154,54 @@ describe('starter content rules (B-14 / B-4)', () => {
         );
       }
     }
+  });
+
+  it('the two Workspace variants differ in what the PANE LOOKS LIKE, not just in name and prompts (W-12)', () => {
+    const ws = buildableTemplates().find((t) => t.id === 'workspace')!;
+    const artifact = ws.variants!.find((v) => v.id === 'artifactPreview')!.starter;
+    const app = ws.variants!.find((v) => v.id === 'appPreview')!.starter;
+
+    expect(artifact.workSurface?.kind).toBe('artifact');
+    expect(app.workSurface?.kind).toBe('preview');
+
+    expect(artifact.workSurface?.chrome).toEqual({
+      deviceToggle: false, urlBar: false, openInNewTab: false, expand: true, codeView: false,
+    });
+    expect(app.workSurface?.chrome).toEqual({
+      deviceToggle: true, urlBar: true, openInNewTab: true, expand: true, codeView: true,
+    });
+
+    // The tell that this is a real difference and not a renamed one.
+    expect(JSON.stringify(artifact.workSurface)).not.toBe(JSON.stringify(app.workSurface));
+  });
+
+  it('appPreview ships the Preview|Code toggle ON and artifactPreview does not — an app preview is a code surface, a framed artifact is not (owner ruling, 2026-08-30)', () => {
+    const ws = buildableTemplates().find((t) => t.id === 'workspace')!;
+    const artifact = ws.variants!.find((v) => v.id === 'artifactPreview')!.starter;
+    const app = ws.variants!.find((v) => v.id === 'appPreview')!.starter;
+
+    expect(app.workSurface?.chrome?.codeView).toBe(true);
+    expect(artifact.workSurface?.chrome?.codeView).toBe(false);
+    // Neither points at source: the tab renders WorkSurface's own empty state,
+    // and a starter must never ship a codeUrl it has no offline file for.
+    expect(app.workSurface?.codeUrl).toBeUndefined();
+    expect(artifact.workSurface?.codeUrl).toBeUndefined();
+  });
+
+  it('the two variants emit DIFFERENT Artifact/WorkSurface props, not merely a different name', async () => {
+    const { generateProject } = await import('./codegen');
+    const ws = buildableTemplates().find((t) => t.id === 'workspace')!;
+    const appOf = (starter: Construct) =>
+      generateProject(starter).find((f) => f.path === 'src/App.tsx')!.code;
+    const a = appOf(ws.variants!.find((v) => v.id === 'artifactPreview')!.starter);
+    const b = appOf(ws.variants!.find((v) => v.id === 'appPreview')!.starter);
+
+    expect(a).toContain('showDeviceToggle={false}');
+    expect(b).toContain('showDeviceToggle={true}');
+    expect(a).toContain('variant="artifact"');
+    expect(b).toContain('variant="preview"');
+    expect(a).toContain('iframeTitle={"Work surface"}');
+    expect(b).toContain('iframeTitle={"App preview"}');
   });
 });
 

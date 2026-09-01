@@ -85,6 +85,11 @@ describe('the description model is big enough for the loops below to mean anythi
   });
 });
 
+// This file runs standalone in seconds (`pnpm exec vitest run
+// tests/scripts/rendered-description-style.test.ts` from packages/ui, after a
+// build has refreshed element-meta.json): any agent adding or editing element
+// JSDoc must run it before reporting, because targeted suites skip it and the
+// slip otherwise surfaces only in full-suite CI (three times on 2026-08-31).
 describe('no rendered description uses an em dash (apps/docs/STYLE.md)', () => {
   it('is zero, and names every offender', () => {
     const offenders = RENDERED.filter((r) => r.text.includes('—')).map(

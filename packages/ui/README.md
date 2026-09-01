@@ -12,7 +12,7 @@ It can be consumed two ways:
 - **Composable components** across three layers: headless primitives → accessible UI primitives (built in-house, WCAG 2.1 AA — no third-party UI dependency) → AI feature components. `npm run verify:solid-coverage` prints the current element and component counts.
 - **Shadow-DOM web components** — zero CSS conflicts in any host. The host's styles can't leak in; the kit's Tailwind can't leak out.
 - **Load it your way** — register every element in one import, cherry-pick per-element with a bundler, or drop in a CDN autoloader that loads each on demand. Syntax highlighting loads lazily, per language, only when you render code.
-- **Tailwind v4** design tokens — rebrand by overriding `--color-*` custom properties.
+- **Tailwind v4** design tokens — rebrand every element by overriding `--kai-color-*` custom properties on `:root`.
 
 ## Install
 
@@ -80,7 +80,9 @@ The URLs above track the **latest** release — handy for trying things out. **F
 
 > **Pin `0.25.0` or newer.** Every version from `0.14.1` through `0.24.0` is covered by a [critical security advisory](https://github.com/kitn-ai/ui/security/advisories) and is deprecated on npm. `npm install` warns you about a deprecated version; **a CDN fetch does not**, so an old pinned URL in a page keeps serving the vulnerable bundle silently.
 
-SolidJS and the kit's CSS are bundled in, and the lazy code-highlighting chunks load from the same CDN on demand. To override design tokens, also include `theme.tokens.css` — the browser-ready compiled build:
+One fetch registers everything — right for a `<kai-chat>` page, which pulls most of the kit anyway. A page placing only an element or two can load `dist/elements/autoloader.js` instead, which fetches each element on demand (see [Loading](#loading)).
+
+SolidJS and the kit's CSS are bundled in, and the lazy code-highlighting chunks load from the same CDN on demand. To retheme the elements, set `--kai-color-*` custom properties on `:root` — no stylesheet needed (see [Theming](#theming)). Include `theme.tokens.css` only when you want the kit's `--color-*` tokens for your own page chrome around the elements:
 
 ```html
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@kitn.ai/ui/dist/theme.tokens.css">

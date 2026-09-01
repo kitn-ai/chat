@@ -12,6 +12,12 @@
 
 @import './tokens.css';
 
+/* The theme editor lives in the kit (packages/ui/src/theme-studio-app/) and is
+   re-exported by src/components/ThemeStudio.tsx. It sits outside this app's
+   root, so Tailwind's automatic source detection misses it — scan it
+   explicitly or the /theme/editor page loses its utility classes. */
+@source '../../../../packages/ui/src/theme-studio-app';
+
 /* Design-system colors → Tailwind utilities. `inline` emits var() refs so they
    track the active theme at runtime. Components use ONLY these. */
 @theme inline {

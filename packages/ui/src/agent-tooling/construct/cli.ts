@@ -9,6 +9,8 @@ import { spawn } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { validateConstruct, type Construct } from './schema';
 import { accentContrastNotice, emitTypes, generateProject, writeProject } from './codegen';
+import { basename, sep } from 'node:path';
+import { classifyKit, localKitNotice, localKitStartDir, npmArgs, npmInvocation, packLocalKit, unbuiltMessage } from './local-kit';
 
 export interface CliIo {
   log: (s: string) => void;
@@ -22,7 +24,7 @@ const USAGE = `usage: npx @kitn.ai/ui <command>   (or \`kai <command>\` once @ki
   kai validate <construct.json>          check a construct, print problems with paths
   kai eject <construct.json> <outDir>    write the generated Solid project (it's yours)
   kai dev <construct.json>               live preview with reload-on-edit
-  kai dev --builder [construct.json]     visual builder + live preview (no file = start from a template)
+  kai dev --builder [name|construct.json]  visual builder + live preview (no arg = your constructs, or the template picker)
   kai compile <construct.json> [outDir]  one self-registering .js
 `;
 
@@ -38,6 +40,33 @@ export function homeRecentConversationWarning(construct: Construct): string | nu
     return 'warning: home.recentConversation is set but capabilities.conversations is not — the recent-conversation card will render nothing without it.';
   }
   return null;
+}
+
+/** Decide loudly (W-6): the work surface is slot FALLBACK, so a consumer
+ *  projecting their own pane REPLACES it. That is the intended behaviour and
+ *  the one thing a reader cannot infer from the construct file alone. */
+export function workSurfaceProjectionNotice(construct: Construct): string | null {
+  if (!construct.workSurface) return null;
+  return 'note: workSurface renders as <slot name="pane"> fallback — a child with slot="pane" projected by the consumer replaces it.';
+}
+
+/** The other half, equally loud: a split with no work surface has no second
+ *  column until something is projected. Silence here is what made the empty
+ *  pane look like a bug rather than a choice. */
+export function splitWithoutWorkSurfaceNotice(construct: Construct): string | null {
+  if (construct.layout !== 'split' || construct.workSurface) return null;
+  return 'note: layout "split" with no workSurface — the pane stays hidden until a child with slot="pane" is projected. Add a workSurface to render one.';
+}
+
+/** Every generation-time notice, in one order, for whichever host prints them
+ *  (validate · eject · dev's first run and every regen). One list, so a new
+ *  notice reaches all of them rather than the two somebody remembered. */
+export function generationNotices(construct: Construct): string[] {
+  return [
+    accentContrastNotice(construct),
+    workSurfaceProjectionNotice(construct),
+    splitWithoutWorkSurfaceNotice(construct),
+  ].filter((n): n is string => n !== null);
 }
 
 export function loadConstruct(path: string, io: CliIo): Construct | null {
@@ -65,6 +94,27 @@ export function loadConstruct(path: string, io: CliIo): Construct | null {
   return out.construct;
 }
 
+/**
+ * Eject must survive the shared tarball cache moving on (pre-merge review,
+ * 2026-08-31): `packLocalKit` keeps ONE tarball per checkout and evicts the
+ * older ones on every dist/ rebuild, so an ejected package.json pinning the
+ * cache's ABSOLUTE path breaks with ENOENT on the first `npm install` after
+ * any rebuild. Copy the tarball INTO the ejected project and depend on it by
+ * a RELATIVE `file:` spec instead. Dev workdirs (`.kai/`) keep the absolute
+ * cache path — they are regenerated on every open, so eviction is harmless
+ * there. Exported for its unit test (the checkout classification that feeds
+ * it needs a real built tree, which a unit run must not depend on).
+ */
+export function vendorLocalKit(tarball: string, outDirAbs: string, io: CliIo): string {
+  const vendorRel = join('vendor', basename(tarball));
+  mkdirSync(join(outDirAbs, 'vendor'), { recursive: true });
+  copyFileSync(tarball, join(outDirAbs, vendorRel));
+  io.log(`vendored this checkout's kit into ${join(outDirAbs, vendorRel)} — the ejected project installs that copy.`);
+  // Always forward slashes: this lands in package.json, where npm reads
+  // `file:` specs with posix separators on every platform.
+  return `file:${vendorRel.split(sep).join('/')}`;
+}
+
 /** `--ui <spec>` extraction shared by `dev` and `compile`. NB: guard the -1
  *  case — `i !== uiFlag + 1` with uiFlag === -1 would drop index 0. */
 function parseUiFlag(rest: string[]): { uiSpec: string | undefined; positional: string[] } {
@@ -84,6 +134,54 @@ export function parseDevArgs(rest: string[]): { uiSpec: string | undefined; buil
   return { uiSpec, builder, path };
 }
 
+/**
+ * Which `@kitn.ai/ui` the generated project depends on, for the three
+ * subcommands that emit one. `undefined` means "leave codegen's default
+ * alone" — the published `^<version>`, byte-for-byte today's behaviour.
+ *
+ * ONE call site per subcommand rather than a default buried in codegen: this
+ * decision spawns npm and can fail, and both belong to the CLI layer, not to
+ * a pure emitter. See local-kit.ts for why a checkout defaults to its own
+ * build and why an install must not notice this exists — including the
+ * silence on the `published` and `explicit` paths, which is what makes an
+ * installed package byte-identical rather than merely equivalent.
+ */
+function resolveUiSpec(
+  explicit: string | undefined,
+  io: CliIo,
+): { ok: true; uiSpec: string | undefined; localTarball?: string } | { ok: false } {
+  const origin = classifyKit(explicit, localKitStartDir());
+  switch (origin.kind) {
+    case 'explicit':
+      return { ok: true, uiSpec: origin.uiSpec };
+    case 'published':
+      return { ok: true, uiSpec: undefined };
+    case 'unbuilt':
+      io.error(unbuiltMessage(origin));
+      return { ok: false };
+    case 'checkout': {
+      let packed;
+      try {
+        packed = packLocalKit(origin.pkgRoot);
+      } catch (err) {
+        io.error(
+          `packing this checkout's @kitn.ai/ui failed: ${err instanceof Error ? err.message : String(err)}\n` +
+            `  Pass --ui <version|tarball|path> to choose a kit explicitly.`,
+        );
+        return { ok: false };
+      }
+      io.log(localKitNotice(origin.pkgRoot, packed.tarball, packed.packed));
+      // `localTarball` rides along so EJECT can vendor a copy into the
+      // project it writes: the cache path below is eviction-happy (one
+      // tarball per checkout — packLocalKit deletes the older ones on every
+      // dist/ rebuild), fine for `.kai/` dev workdirs that regenerate per
+      // open, fatal for an ejected project whose package.json would pin an
+      // absolute path that stops existing (npm install → ENOENT).
+      return { ok: true, uiSpec: packed.tarball, localTarball: packed.tarball };
+    }
+  }
+}
+
 export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<number> {
   const [command, ...rest] = argv;
   switch (command) {
@@ -93,6 +191,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       io.log(`valid construct: <${construct.name}> (layout: ${construct.layout}, provider: ${construct.provider.mode})`);
       const warning = homeRecentConversationWarning(construct);
       if (warning) io.log(warning);
+      for (const n of generationNotices(construct)) io.log(n);
       return 0;
     }
     case 'eject': {
@@ -104,28 +203,41 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       }
       const construct = loadConstruct(path, io);
       if (!construct) return 1;
-      const overwritten = writeProject(generateProject(construct, { uiSpec }), resolve(outDir));
+      const kit = resolveUiSpec(uiSpec, io);
+      if (!kit.ok) return 1;
+      const ejectUiSpec =
+        kit.localTarball !== undefined ? vendorLocalKit(kit.localTarball, resolve(outDir), io) : kit.uiSpec;
+      const overwritten = writeProject(generateProject(construct, { uiSpec: ejectUiSpec }), resolve(outDir));
       if (overwritten.length > 0) {
         io.log(`overwriting ${overwritten.length} existing file(s)`);
       }
-      const notice = accentContrastNotice(construct);
-      if (notice) io.log(notice);
+      for (const n of generationNotices(construct)) io.log(n);
       io.log(`ejected <${construct.name}> to ${resolve(outDir)} — npm install && npm run dev. The source is yours.`);
       return 0;
     }
     case 'dev': {
       const { uiSpec, builder, path } = parseDevArgs(rest);
+      // The kit is resolved per branch, always AFTER the usage check and
+      // BEFORE anything is generated or served: the one line saying which kit
+      // this preview runs belongs on screen at startup, a checkout with no
+      // build must fail here rather than minutes later inside a preview whose
+      // imports do not exist, and a bad invocation must not spawn `npm pack`
+      // on its way to printing the usage it was always going to print.
       if (builder) {
+        const kit = resolveUiSpec(uiSpec, io);
+        if (!kit.ok) return 1;
         const { devBuilder } = await import('./dev');
-        await devBuilder(path, { io, uiSpec });
+        await devBuilder(path, { io, uiSpec: kit.uiSpec });
         return 0; // unreachable; devBuilder never resolves
       }
       if (!path) {
         io.error(USAGE);
         return 2;
       }
+      const kit = resolveUiSpec(uiSpec, io);
+      if (!kit.ok) return 1;
       const { dev } = await import('./dev');
-      await dev(path, { io, uiSpec });
+      await dev(path, { io, uiSpec: kit.uiSpec });
       return 0; // unreachable; dev() never resolves
     }
     case 'compile': {
@@ -137,15 +249,20 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       }
       const construct = loadConstruct(path, io);
       if (!construct) return 1;
+      const kit = resolveUiSpec(uiSpec, io);
+      if (!kit.ok) return 1;
       const outDir = resolve(outArg ?? 'dist-construct');
       const { workDirFor, ensureInstalled } = await import('./dev');
       const dir = workDirFor(construct.name, process.cwd());
-      const files = generateProject(construct, { uiSpec });
+      const files = generateProject(construct, { uiSpec: kit.uiSpec });
       writeProject(files, dir);
       await ensureInstalled(dir, files, io);
+      const npm = npmInvocation();
       await new Promise<void>((done, fail) => {
-        const child = spawn('npm', ['run', 'build'], { cwd: dir, stdio: 'inherit' });
+        const child = spawn(npm.command, npmArgs(['run', 'build'], npm.shell), { cwd: dir, stdio: 'inherit', shell: npm.shell });
         child.on('exit', (code) => (code === 0 ? done() : fail(new Error(`vite build exited ${code}`))));
+        // Spawn failures land on 'error', not 'exit' — fail loudly, don't hang.
+        child.on('error', (err) => fail(new Error(`npm run build failed to start: ${err.message}`)));
       });
       mkdirSync(outDir, { recursive: true });
       copyFileSync(join(dir, 'dist', `${construct.name}.js`), join(outDir, `${construct.name}.js`));

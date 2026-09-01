@@ -11,6 +11,11 @@
  * fetchStore (the recast of codegen.ts's emitHistorySetup endpoint behavior —
  * same key shapes, same x-kai-user-id header, same decide-loudly failure
  * mode, now reusable instead of inlined per-construct).
+ *
+ * Reachable two ways, deliberately: the package root (bundler consumers) and
+ * the self-contained `@kitn.ai/ui/stores` entry (dist/stores.js, zero bare
+ * imports) for no-bundler/CDN pages, which cannot load the solid-importing
+ * root bundle — see src/stores/index.ts for the decision record.
  */
 import type { ConversationSummary } from '../types';
 import type { ChatMessage } from '../elements/chat-types';
@@ -61,6 +66,35 @@ export function byRecency(
   const at = Date.parse(a.updatedAt ?? '');
   const bt = Date.parse(b.updatedAt ?? '');
   return (Number.isNaN(bt) ? -Infinity : bt) - (Number.isNaN(at) ? -Infinity : at);
+}
+
+/**
+ * Whether a conversation should show an unread indicator (owner round,
+ * 2026-08-26). `lastReadAt`'s own doc (`types.ts`) has the full contract;
+ * this is the one place that reads it, so every surface — the batteries list
+ * row (`ConversationItem`), the widget-box `ConversationPanel`, the home
+ * screen's recent card, `ChatThread`'s own `anyUnread` badge/`onUnreadChange`
+ * report, and any consumer-composed launcher deriving its own badge from
+ * `store.list()` — derives it identically rather than each restating the
+ * comparison. Lives HERE (beside the `ConversationStore` contract whose
+ * `markRead` writes the field it reads) rather than in a component, and is
+ * re-exported from the package root: it is headless data logic, not
+ * rendering.
+ *
+ * Absent `lastReadAt` reads as NOT unread — the decide-loudly default for a
+ * store that never implements `ConversationStore.markRead` at all (every
+ * summary it returns leaves the field undefined forever, so this always
+ * returns `false` for it) rather than guessing "probably unread" from a
+ * signal the store never actually provided. Defensive `Date.parse`, same
+ * pattern as `byRecency` above: an unparsable date reads as not unread
+ * rather than throwing.
+ */
+export function isConversationUnread(conv: Pick<ConversationSummary, 'updatedAt' | 'lastReadAt'>): boolean {
+  if (!conv.lastReadAt) return false;
+  const updated = Date.parse(conv.updatedAt);
+  const read = Date.parse(conv.lastReadAt);
+  if (Number.isNaN(updated) || Number.isNaN(read)) return false;
+  return updated > read;
 }
 
 function threadKey(name: string, userId: string | undefined, id: string): string {

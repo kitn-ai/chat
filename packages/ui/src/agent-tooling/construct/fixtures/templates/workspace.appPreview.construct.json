@@ -20,8 +20,22 @@
     ]
   },
   "theme": {
-    "accent": "#ea580c",
     "mode": "dark"
+  },
+  "empty": {
+    "title": "What should we build?",
+    "description": "Describe it, and it takes shape in the work surface beside this chat."
+  },
+  "workSurface": {
+    "kind": "preview",
+    "url": "/work-surface.html",
+    "chrome": {
+      "deviceToggle": true,
+      "urlBar": true,
+      "openInNewTab": true,
+      "expand": true,
+      "codeView": true
+    }
   },
   "shell": {
     "commandPalette": true,
@@ -70,6 +84,18 @@
     },
     "history": {
       "persistence": "local"
+    },
+    "conversations": true,
+    "reasoning": "full",
+    "messageActions": {
+      "user": [
+        "edit"
+      ],
+      "assistant": [
+        "copy",
+        "like",
+        "dislike"
+      ]
     }
   }
 }

@@ -28,6 +28,7 @@ import { z } from 'zod';
 import { isSafeUrl } from '../../primitives/url-scheme-policy';
 import { CHAT_MESSAGE_ACTIONS } from '../../elements/chat-actions';
 import { BUTTON_VARIANT_NAMES } from '../../ui/button-variant-names';
+import { KNOWN_THEME_TOKENS, themeTokenValueProblem } from './theme-token-policy';
 
 export { CONSTRUCT_SCHEMA_URL } from './schema-url';
 
@@ -46,6 +47,103 @@ const TriggerEntrySchema = z
     description: z.string().min(1).optional(),
   })
   .strict();
+
+/** One `--kai-*` name → value map inside `theme.tokens`. Keys and values are
+ *  both checked in ThemeTokensSchema's superRefine below — a zod record's key
+ *  schema can't carry the allow-list message we want (naming the exact knob
+ *  that isn't vocabulary, the same voice as validateConstruct's
+ *  unrecognized-key handling). */
+const TokenRecordSchema = z.record(z.string(), z.string());
+
+/** Full theme-palette persistence (the builder's embedded ThemeStudio posts
+ *  exactly this shape — its `ThemePayload`, src/theme-studio-app/
+ *  ThemeStudio.tsx, minus the message `type`). Every part of that payload is
+ *  persisted here: `light` carries the light colors PLUS the root-scope knobs
+ *  the studio rides along in it (`--kai-text-*` rungs, `--kai-tracking`,
+ *  `--kai-shadow-color`); `dark` carries the dark colors; `radius` is the
+ *  `--kai-radius` value (e.g. "0.6rem"); `fonts` the two `--kai-font-*`
+ *  knobs. Nothing in the payload is silently dropped.
+ *
+ *  Key names MUST be knobs the kit really declares (KNOWN_THEME_TOKENS —
+ *  derived, never hand-typed; see theme-token-policy.ts) — an unknown key is
+ *  rejected loudly, naming it. `dark` keys are additionally restricted to
+ *  `--kai-color-*`: only the color knobs have a `.dark`-scope re-resolution
+ *  in theme.css, so a non-color knob under `dark` would silently theme
+ *  nothing — rejected instead (decide loudly). `fonts` keys must be
+ *  `--kai-font-*` for the same reason in reverse.
+ *
+ *  Values pass themeTokenValueProblem (theme-token-policy.ts): light values
+ *  only ever ride setProperty (opaque, injection-proof), but dark values land
+ *  in generated CSS TEXT, so every value gets the same conservative charset
+ *  bound at this doorway. */
+const ThemeTokensSchema = z
+  .object({
+    /** Light-mode `--kai-*` overrides (+ the studio's root-scope knobs). Set
+     *  on the HOST via setProperty in the emitted facade. NOTE: with no
+     *  paired `dark` entry a light value applies in BOTH modes — the same
+     *  one-knob-both-modes semantics a consumer gets setting `--kai-*` on
+     *  `:root` (theme.css's `.dark` block re-reads the same knob names). */
+    light: TokenRecordSchema.optional(),
+    /** Dark-mode `--kai-color-*` overrides. Emitted as a `.dark { }` rule in
+     *  the shadow `<style>` (see codegen.ts's emitElement for the mechanism). */
+    dark: TokenRecordSchema.optional(),
+    /** The `--kai-radius` value, e.g. "0.6rem". */
+    radius: z.string().min(1).optional(),
+    /** The font knobs: `--kai-font-base` / `--kai-font-code`. */
+    fonts: TokenRecordSchema.optional(),
+  })
+  .strict()
+  .superRefine((tokens, ctx) => {
+    const checkRecord = (
+      record: Record<string, string> | undefined,
+      field: 'light' | 'dark' | 'fonts',
+      keyRule?: { prefix: string; reason: string },
+    ) => {
+      for (const [name, value] of Object.entries(record ?? {})) {
+        if (!KNOWN_THEME_TOKENS.has(name)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [field, name],
+            message: `"${name}" is not a --kai-* knob the kit declares — see the theming guide for the token list`,
+          });
+        } else if (keyRule && !name.startsWith(keyRule.prefix)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [field, name],
+            message: `"${name}" is not valid under "${field}" — ${keyRule.reason}`,
+          });
+        }
+        const problem = themeTokenValueProblem(value);
+        if (problem) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [field, name],
+            message: `value ${problem}`,
+          });
+        }
+      }
+    };
+    checkRecord(tokens.light, 'light');
+    checkRecord(tokens.dark, 'dark', {
+      prefix: '--kai-color-',
+      reason:
+        'only --kai-color-* knobs have a dark-scope re-resolution in theme.css; a mode-less knob belongs in "light" (it applies in both modes)',
+    });
+    checkRecord(tokens.fonts, 'fonts', {
+      prefix: '--kai-font-',
+      reason: 'only --kai-font-* knobs belong here',
+    });
+    if (tokens.radius !== undefined) {
+      const problem = themeTokenValueProblem(tokens.radius);
+      if (problem) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['radius'],
+          message: `value ${problem}`,
+        });
+      }
+    }
+  });
 
 const ProviderSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('mock') }).strict(),
@@ -115,6 +213,11 @@ export const ConstructSchema = z
          *  as-is. */
         unreadColor: z.string().optional(),
         mode: z.enum(['light', 'dark', 'system']).default('system'),
+        /** Full `--kai-*` palette persistence — see ThemeTokensSchema above.
+         *  Precedence with `accent`/`unreadColor`: those emit first, tokens
+         *  after, so a token naming the same knob (e.g. --kai-color-primary)
+         *  WINS — the full palette is the finer-grained wish. */
+        tokens: ThemeTokensSchema.optional(),
       })
       .strict()
       .optional(),
@@ -385,6 +488,76 @@ export const ConstructSchema = z
       })
       .strict()
       .optional(),
+    /** Layout-scoped work-surface pane, `layout: 'split'` only (superRefine
+     *  below, mirroring `widget`/`aside`). Fills the split's main region,
+     *  which otherwise reserves a column and renders nothing — the defect
+     *  this key exists to remove. Emitted as `<slot name="pane">` FALLBACK
+     *  content, so a consumer projecting their own pane still WINS (native
+     *  slot semantics: assigned nodes replace fallback).
+     *
+     *  Backed by `components/work-surface.tsx`'s `WorkSurface`, promoted from
+     *  `elements/builder-workspace.stories.tsx` — the approved design AND a
+     *  working implementation. Every key below is one real affordance that
+     *  component ships; an affordance with no mechanism is not here.
+     *
+     *  TOP-LEVEL, not a capability: it is layout chrome, the same class as
+     *  `widget`/`aside`, and the placement is forced by the gate as well —
+     *  `scripts/verify-construct.mjs` can only layout-scope TOP-LEVEL keys
+     *  (`TOP_LEVEL_LAYOUT_SCOPE`); a capability valid only on `split` would
+     *  make every non-split capability cell fail validation.
+     *
+     *  `sandbox` is deliberately NOT exposed — the same reasoning
+     *  `ArtifactCardData` already records: a surface someone else authored
+     *  must not be able to widen its own sandbox. */
+    workSurface: z
+      .object({
+        /** What the pane FRAMES it as. `'preview'` fills the canvas edge to
+         *  edge (a browser preview); `'artifact'` centers the content in a
+         *  bordered card on the muted backdrop (a framed artifact). Also
+         *  picks the iframe's accessible title. It does NOT imply any
+         *  chrome: every affordance below is stated explicitly, so what the
+         *  builder panel shows and what the pane renders can never disagree. */
+        kind: z.enum(['artifact', 'preview']),
+        /** What the pane frames. REQUIRED — an optional url reproduces
+         *  exactly the empty pane this round exists to remove. Reaches an
+         *  iframe `src`, so isSafeUrl in superRefine below, the same shape
+         *  as `widget.launcherIcon` / `empty.icon`. */
+        url: z.string().min(1),
+        /** What the Code tab frames. OPTIONAL even with `chrome.codeView` on:
+         *  the tab then renders `WorkSurface`'s own empty state, which says
+         *  what it reads and names this key (owner ruling, 2026-08-30). The
+         *  coupling runs ONE way (superRefine below) — a source with no tab to
+         *  show it is unreachable, so `codeUrl` alone is still rejected. Same
+         *  url policy as `url`. */
+        codeUrl: z.string().min(1).optional(),
+        /** Per-affordance toolbar chrome. Each key is ONE affordance
+         *  `WorkSurface` really ships; absent means OFF, the same
+         *  off-by-default convention as every capability in this file. */
+        chrome: z
+          .object({
+            /** Desktop/tablet/mobile canvas widths, scoping the PREVIEW
+             *  branch only (never the Code view) — Lovable's own rule,
+             *  carried through the story. */
+            deviceToggle: z.boolean().optional(),
+            /** The read-only address bar (lock icon + address text). */
+            urlBar: z.boolean().optional(),
+            /** The open-in-new-tab button. */
+            openInNewTab: z.boolean().optional(),
+            /** The expand toggle. Collapses the chat rail via
+             *  WorkspaceShell's own controlled `startCollapsed` — NOT the
+             *  kai-resizable maximize protocol, which WorkspaceShell does
+             *  not carry (recorded in the story's own module comment). */
+            expand: z.boolean().optional(),
+            /** The Preview|Code segmented toggle. Stands alone — with no
+             *  `codeUrl` the Code tab renders its empty state rather than
+             *  refusing to validate. */
+            codeView: z.boolean().optional(),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
     /** Construct-wide shell chrome (10a): both members reuse REAL kit
      *  pieces — command.tsx's CommandList behind a codegen-emitted overlay
      *  (opened on Mod+K; entries DERIVE from what this construct enables —
@@ -641,6 +814,74 @@ export const CROSS_FIELD_RULES: readonly CrossFieldRule[] = [
           code: z.ZodIssueCode.custom,
           path: ['capabilities', 'history', 'url'],
           message: 'url is only valid with "endpoint" persistence',
+        });
+      }
+    },
+  },
+  {
+    id: 'work-surface-layout-scope',
+    paths: ['layout', 'workSurface'],
+    check: (construct, ctx) => {
+      if (construct.workSurface && construct.layout !== 'split') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['workSurface'],
+          message: '"workSurface" is only valid on layout: "split"',
+        });
+      }
+    },
+  },
+  {
+    id: 'work-surface-url',
+    paths: ['workSurface.url'],
+    check: (construct, ctx) => {
+      if (construct.workSurface && !isSafeUrl(construct.workSurface.url)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['workSurface', 'url'],
+          message: 'url must be an http(s)/mailto or relative URL — no javascript:/data: schemes',
+        });
+      }
+    },
+  },
+  {
+    id: 'work-surface-code-url',
+    paths: ['workSurface.codeUrl'],
+    check: (construct, ctx) => {
+      const codeUrl = construct.workSurface?.codeUrl;
+      if (codeUrl && !isSafeUrl(codeUrl)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['workSurface', 'codeUrl'],
+          message: 'codeUrl must be an http(s)/mailto or relative URL — no javascript:/data: schemes',
+        });
+      }
+    },
+  },
+  {
+    id: 'work-surface-code-view',
+    paths: ['workSurface.codeUrl', 'workSurface.chrome.codeView'],
+    check: (construct, ctx) => {
+      const ws = construct.workSurface;
+      if (!ws) return;
+      // ONE direction, not two (owner ruling, 2026-08-30). The reverse
+      // coupling — `codeView` requiring a `codeUrl` — was rejected as an
+      // authoring error, which made the toggle impossible to switch on in the
+      // builder panel and kept the Preview|Code control off every starter.
+      // `codeView` alone is now valid: WorkSurface's Code branch renders its
+      // own empty state naming `workSurface.codeUrl`, in the same voice as the
+      // preview placeholder page codegen already ships. An honest empty state
+      // is not a dead affordance — the tab still tells you something true —
+      // and it retires the "a relative codeUrl frames a 404" concern with it,
+      // because the no-source path now renders a page instead of fetching one.
+      //
+      // A `codeUrl` with no `codeView` stays rejected: the tab is the only
+      // thing that reads it, so the key would be dead weight in the file.
+      if (ws.codeUrl && !ws.chrome?.codeView) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['workSurface', 'codeUrl'],
+          message: 'codeUrl is only valid with "chrome.codeView": true',
         });
       }
     },

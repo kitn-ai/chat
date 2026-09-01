@@ -399,12 +399,15 @@ export function ToastRegion(props: ToastRegionProps) {
   createEffect(() => {
     const t = props.target;
     if (!t || typeof window === 'undefined') { setAnchor(null); return; }
-    // Captured at SETUP and closed over, never re-resolved as a global inside
-    // `onCleanup`: cleanup can run after the host removed the DOM globals (a
-    // `kai-*` release is deferred one microtask past detachment, so an
-    // environment teardown gets in between), and a bare `window` there throws.
+    // Captured at SETUP and closed over, never re-resolved inside `onCleanup`:
+    // cleanup can run after the host removed the DOM globals (a `kai-*` release
+    // is deferred one microtask past detachment, so an environment teardown
+    // gets in between). The FUNCTION, not the view: `window === globalThis`, so
+    // the view capture alone still dies — teardown deletes the
+    // `removeEventListener` key off the global object the capture holds.
     // See tests/components/teardown-without-dom-globals.test.tsx.
     const win = window;
+    const unlisten = win.removeEventListener.bind(win);
     const update = () => {
       const r = t.getBoundingClientRect();
       setAnchor({ top: r.top, left: r.left, right: r.right, bottom: r.bottom, width: r.width });
@@ -416,8 +419,8 @@ export function ToastRegion(props: ToastRegionProps) {
     win.addEventListener('resize', update);
     onCleanup(() => {
       ro.disconnect();
-      win.removeEventListener('scroll', update, true);
-      win.removeEventListener('resize', update);
+      unlisten('scroll', update, true);
+      unlisten('resize', update);
     });
   });
 

@@ -118,6 +118,10 @@
       "types": "./dist/wire/index.d.ts",
       "default": "./dist/wire.js"
     },
+    "./stores": {
+      "types": "./dist/stores/index.d.ts",
+      "default": "./dist/stores.js"
+    },
     "./define": {
       "types": "./dist/define.d.ts",
       "worker": "./dist/define.server.js",
@@ -176,15 +180,16 @@
   "scripts": {
     "prepublishOnly": "npm run build",
     "prebuild": "npm run build:css && npm run build:card-validation",
-    "build": "vite build --config vite.config.ts && vite build --config vite.config.provider.ts && vite build --config vite.config.react.ts && vite build --config vite.config.barrel.ts && vite build --config vite.config.barrel.server.ts && vite build --config vite.config.solid.ts && vite build --config vite.config.solid.server.ts && vite build --config vite.config.state.ts && vite build --config vite.config.wire.ts && vite build --config vite.config.define.ts && vite build --config vite.config.define.server.ts && vite build --config vite.config.diagnostics.ts && vite build --config vite.config.schemas.ts && vite build --config vite.config.mcp.ts && vite build --config vite.config.construct-cli.ts && vite build --config vite.config.construct.ts && vite build --config vite.config.construct-templates.ts && vite build --config vite.config.builder-page.ts && npm run build:elements && npm run dedupe:shiki && npm run verify:elements-bundle && npm run verify:react-wrappers && npm run verify:shader-lazy",
+    "build": "vite build --config vite.config.ts && vite build --config vite.config.provider.ts && vite build --config vite.config.react.ts && vite build --config vite.config.barrel.ts && vite build --config vite.config.barrel.server.ts && vite build --config vite.config.solid.ts && vite build --config vite.config.solid.server.ts && vite build --config vite.config.state.ts && vite build --config vite.config.wire.ts && vite build --config vite.config.stores.ts && vite build --config vite.config.define.ts && vite build --config vite.config.define.server.ts && vite build --config vite.config.diagnostics.ts && vite build --config vite.config.schemas.ts && vite build --config vite.config.mcp.ts && vite build --config vite.config.construct-cli.ts && vite build --config vite.config.construct.ts && vite build --config vite.config.construct-templates.ts && vite build --config vite.config.builder-page.ts && vite build --config vite.config.theme-studio.ts && npm run build:elements && npm run dedupe:shiki && npm run verify:elements-bundle && npm run verify:react-wrappers && npm run verify:shader-lazy",
     "build:elements": "node scripts/gen-elements-manifest.mjs && vite build --config vite.config.elements.ts && node scripts/gen-element-dts.mjs",
-    "postbuild": "npm run build:theme && npm run build:api && npm run build:schemas && npm run build:subpath-dts && npm run verify:dts",
+    "postbuild": "npm run build:theme && npm run build:api && npm run build:schemas && npm run build:subpath-dts && npm run verify:dts && npm run verify:cdn-entries",
     "build:theme": "node scripts/build-theme-tokens.mjs",
     "build:api": "node scripts/gen-elements-manifest.mjs && node scripts/gen-element-api.mjs && node scripts/gen-element-nonscalar.mjs && node scripts/gen-catalog.mjs && node scripts/gen-construct-schema.mjs && node scripts/gen-construct-template-fixtures.mjs",
     "build:schemas": "node scripts/copy-card-schemas.mjs",
     "build:card-validation": "node scripts/gen-card-validation-schemas.mjs",
     "build:subpath-dts": "node scripts/emit-subpath-dts.mjs",
     "verify:card-validation": "node scripts/gen-card-validation-schemas.mjs --self-test && node scripts/gen-card-validation-schemas.mjs --check",
+    "verify:cdn-entries": "node scripts/verify-cdn-entries.mjs --self-test && node scripts/verify-cdn-entries.mjs",
     "verify:consumer": "node scripts/verify-consumer-sideeffects.mjs",
     "verify:construct": "node scripts/verify-construct.mjs --self-test && node scripts/verify-construct.mjs",
     "verify:dts": "node scripts/verify-dts-boundaries.mjs --self-test && node scripts/verify-dts-boundaries.mjs",

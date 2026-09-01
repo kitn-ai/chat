@@ -10,10 +10,11 @@ import {
   parseKitDefaults,
   remValue,
   studioTokens,
-} from '../../../../apps/docs/src/components/theme-tokens';
+} from '../../src/theme-studio-app/theme-tokens';
 
 /**
- * The docs site's theme editor (apps/docs/src/components/ThemeStudio.tsx) exposes
+ * The theme editor (src/theme-studio-app/ThemeStudio.tsx — a standalone app in
+ * this package, also rendered by the docs site's /theme/editor page) exposes
  * a hand-curated list of `--kai-*` knobs. theme.css is where the kit declares
  * them. The two drifted: sixteen color tokens (surfaces, the status family,
  * hover/selected/unread) and one type rung (`--kai-text-compact`) were added to
@@ -45,7 +46,7 @@ describe('theme editor covers every --kai-* token theme.css declares', () => {
 
   it('every token theme.css declares has a knob in the editor', () => {
     const missing = [...declared].filter((t) => !exposed.has(t)).sort();
-    expect(missing, `declared in packages/ui/theme.css but absent from the theme editor's catalog (apps/docs/src/components/theme-tokens.ts): ${missing.join(', ')}`).toEqual([]);
+    expect(missing, `declared in packages/ui/theme.css but absent from the theme editor's catalog (packages/ui/src/theme-studio-app/theme-tokens.ts): ${missing.join(', ')}`).toEqual([]);
   });
 
   it('every color / type-scale knob in the editor is a token theme.css declares', () => {

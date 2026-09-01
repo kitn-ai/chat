@@ -5,59 +5,42 @@ import {
   existsSync,
   readFileSync,
   mkdirSync,
-  readdirSync,
-  statSync,
   utimesSync,
   renameSync,
 } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { runCli, homeRecentConversationWarning, parseDevArgs } from './cli';
+import {
+  runCli,
+  homeRecentConversationWarning,
+  parseDevArgs,
+  workSurfaceProjectionNotice,
+  splitWithoutWorkSurfaceNotice,
+} from './cli';
+import { distFingerprint } from './local-kit';
 import { validateConstruct } from './schema';
 
 const good = { name: 'acme-support', layout: 'widget', provider: { mode: 'mock' } };
+
+/**
+ * Passed by every eject test that is about eject's OUTPUT rather than about
+ * which kit gets installed.
+ *
+ * Since 2026-08-30 an omitted `--ui` means "decide" — and inside this
+ * checkout that decision is `pack this build`, which needs a current dist/
+ * and is fatal without one (local-kit.ts). A test of file writing that goes
+ * red because the tree has not been rebuilt is a test measuring the wrong
+ * thing; `--ui` pins the axis these tests do not care about. The decision
+ * itself is graded in local-kit.test.ts against synthetic checkout and
+ * install trees, where both directions are reachable on any machine.
+ */
+const PINNED_UI = 'file:./kitn.ai-ui-0.0.0-test.tgz';
 
 // packages/ui, three levels up from this file.
 const PKG_ROOT = resolve(import.meta.dirname, '../../..');
 // Gitignored (`.kai-test-cache/` — see .gitignore), derived, never committed.
 const PACK_CACHE_DIR = join(PKG_ROOT, '.kai-test-cache');
-
-/**
- * Content fingerprint of a directory tree — every file's relative path,
- * byte size and mtime folded into one hash, same "hash what actually
- * changed" shape as `installKey()` in dev.ts (which hashes the emitted
- * package.json rather than trusting a version number). A plain version
- * number is NOT enough here: release-please only bumps package.json's
- * version at merge, so the normal mid-branch case is "dist/ rebuilt,
- * version unchanged" — keying the pack cache on version alone would reuse a
- * stale tarball built from a PRIOR dist/, silently defeating the point of
- * packing THIS checkout's own build (the repo's own "a cached build looks
- * exactly like a successful one" trap). Hashing dist/package.json alone
- * isn't enough either — a src-only rebuild changes the compiled JS/d.ts
- * without touching that one file.
- */
-function distFingerprint(distDir: string): string {
-  const hash = createHash('sha256');
-  const walk = (dir: string): string[] => {
-    const out: string[] = [];
-    const entries = [...readdirSync(dir, { withFileTypes: true })].sort((a, b) => a.name.localeCompare(b.name));
-    for (const entry of entries) {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) out.push(...walk(full));
-      else out.push(full);
-    }
-    return out;
-  };
-  for (const file of walk(distDir)) {
-    const stat = statSync(file);
-    hash.update(file.slice(distDir.length));
-    hash.update(String(stat.size));
-    hash.update(String(stat.mtimeMs));
-  }
-  return hash.digest('hex').slice(0, 16);
-}
 
 /**
  * The tarball `compile`'s integration test installs against, packed from
@@ -69,7 +52,11 @@ function distFingerprint(distDir: string): string {
  * honest way to get a spec that has it.
  *
  * Cached under a gitignored dir inside packages/ui, keyed by version AND
- * dist/'s content fingerprint (see distFingerprint) so repeat runs with an
+ * dist/'s content fingerprint — `local-kit.ts`'s `distFingerprint`, imported
+ * rather than re-implemented, because since 2026-08-30 the CLI itself packs
+ * and content-keys this checkout's build the same way and for the same
+ * reason. Two copies of that rule with nothing relating them is exactly how
+ * one of them goes quietly wrong. Repeat runs with an
  * unchanged build don't re-pack, but a rebuilt dist/ with the same version
  * (the normal mid-branch case) does. When dist/ is missing, fails loudly
  * with the exact fix — same convention as the MCP manifest tests' "Missing
@@ -139,7 +126,7 @@ describe('kai CLI', () => {
   it('eject: writes the generated project and names the dir', async () => {
     const out = mkdtempSync(join(tmpdir(), 'kai-eject-'));
     const { io } = collect();
-    expect(await runCli(['eject', tmpConstruct(good), out], io)).toBe(0);
+    expect(await runCli(['eject', tmpConstruct(good), out, '--ui', PINNED_UI], io)).toBe(0);
     expect(existsSync(join(out, 'src/App.tsx'))).toBe(true);
     expect(readFileSync(join(out, 'package.json'), 'utf8')).toContain('"acme-support"');
   });
@@ -151,15 +138,25 @@ describe('kai CLI', () => {
     expect(lines.join('\n')).toMatch(/usage/i);
   });
 
-  it('eject: re-ejecting over existing files says so before the success line', async () => {
+  it('eject: re-ejecting over CHANGED files says so before the success line; a byte-identical re-eject stays quiet', async () => {
     const out = mkdtempSync(join(tmpdir(), 'kai-eject-'));
     const path = tmpConstruct(good);
     const first = collect();
-    expect(await runCli(['eject', path, out], first.io)).toBe(0);
+    expect(await runCli(['eject', path, out, '--ui', PINNED_UI], first.io)).toBe(0);
 
+    // Byte-identical re-eject: writeProject skips every file (no mtime bump —
+    // a rewritten vite.config.ts restarts a running preview server), so
+    // nothing was really overwritten and the notice would be a false alarm.
+    const identical = collect();
+    expect(await runCli(['eject', path, out, '--ui', PINNED_UI], identical.io)).toBe(0);
+    expect(identical.lines.some((l) => /overwriting \d+ existing file/i.test(l))).toBe(false);
+
+    // Hand-edit one generated file, re-eject: THAT is a real clobber of the
+    // caller's edit, and the loud notice lands before the success line.
+    writeFileSync(join(out, 'src/App.tsx'), '// hand-edited\n');
     const second = collect();
-    expect(await runCli(['eject', path, out], second.io)).toBe(0);
-    const overwriteIdx = second.lines.findIndex((l) => /overwriting \d+ existing file/i.test(l));
+    expect(await runCli(['eject', path, out, '--ui', PINNED_UI], second.io)).toBe(0);
+    const overwriteIdx = second.lines.findIndex((l) => /overwriting 1 existing file/i.test(l));
     const ejectedIdx = second.lines.findIndex((l) => /^ejected/.test(l));
     expect(overwriteIdx).toBeGreaterThanOrEqual(0);
     expect(ejectedIdx).toBeGreaterThan(overwriteIdx);
@@ -169,7 +166,7 @@ describe('kai CLI', () => {
     const out = mkdtempSync(join(tmpdir(), 'kai-eject-'));
     const { io, lines } = collect();
     const construct = { ...good, theme: { accent: 'var(--brand)', mode: 'system' } };
-    expect(await runCli(['eject', tmpConstruct(construct), out], io)).toBe(0);
+    expect(await runCli(['eject', tmpConstruct(construct), out, '--ui', PINNED_UI], io)).toBe(0);
     const noticeIdx = lines.findIndex((l) => /not parseable for contrast/.test(l));
     const ejectedIdx = lines.findIndex((l) => /^ejected/.test(l));
     expect(noticeIdx).toBeGreaterThanOrEqual(0);
@@ -179,7 +176,7 @@ describe('kai CLI', () => {
   it('eject: --ui <spec> flows into the emitted package.json dependency, same parse as dev/compile', async () => {
     const out = mkdtempSync(join(tmpdir(), 'kai-eject-ui-'));
     const { io } = collect();
-    const spec = 'file:./kitn.ai-ui-0.0.0-test.tgz';
+    const spec = PINNED_UI;
     expect(await runCli(['eject', tmpConstruct(good), out, '--ui', spec], io)).toBe(0);
     expect(readFileSync(join(out, 'package.json'), 'utf8')).toContain(spec);
   });
@@ -296,5 +293,58 @@ describe('kai dev --builder flag parse (B-22/B-23)', () => {
   });
   it('--ui composes with --builder, same parse dev/compile already use', () => {
     expect(parseDevArgs(['--builder', '--ui', 'file:/x.tgz', 'demo.construct.json'])).toEqual({ uiSpec: 'file:/x.tgz', builder: true, path: 'demo.construct.json' });
+  });
+});
+
+describe('work-surface notices (decide loudly)', () => {
+  it('states that projection wins when a workSurface is declared', () => {
+    const c = validateConstruct({
+      name: 'build-workspace', layout: 'split', provider: { mode: 'mock' },
+      workSurface: { kind: 'artifact', url: '/work-surface.html' },
+    });
+    if (!c.ok) throw new Error('fixture invalid');
+    expect(workSurfaceProjectionNotice(c.construct)).toContain('slot name="pane"');
+    expect(splitWithoutWorkSurfaceNotice(c.construct)).toBeNull();
+  });
+
+  it('states that a bare split has no pane until something is projected', () => {
+    const c = validateConstruct({ name: 'bare-split', layout: 'split', provider: { mode: 'mock' } });
+    if (!c.ok) throw new Error('fixture invalid');
+    expect(splitWithoutWorkSurfaceNotice(c.construct)).toContain('stays hidden');
+    expect(workSurfaceProjectionNotice(c.construct)).toBeNull();
+  });
+
+  it('says nothing on a layout that has no pane at all', () => {
+    const c = validateConstruct({ name: 'acme-support', layout: 'widget', provider: { mode: 'mock' } });
+    if (!c.ok) throw new Error('fixture invalid');
+    expect(workSurfaceProjectionNotice(c.construct)).toBeNull();
+    expect(splitWithoutWorkSurfaceNotice(c.construct)).toBeNull();
+  });
+});
+
+// Pre-merge review, 2026-08-31: packLocalKit's cache keeps ONE tarball per
+// checkout and evicts the rest on every dist/ rebuild, so an ejected project
+// pinning the cache's absolute path hits ENOENT on its first install after a
+// rebuild. Eject vendors a copy and depends on it relatively instead.
+describe('vendorLocalKit — ejected projects own their kit tarball', () => {
+  it('copies the tarball into <outDir>/vendor and returns a RELATIVE file: spec, so evicting the shared cache cannot orphan the project', async () => {
+    const { vendorLocalKit } = await import('./cli');
+    const { rmSync } = await import('node:fs');
+    const cache = mkdtempSync(join(tmpdir(), 'kai-cache-'));
+    const out = mkdtempSync(join(tmpdir(), 'kai-vendor-'));
+    const tarball = join(cache, 'kitn.ai-ui-0.0.0-cafebabe.tgz');
+    writeFileSync(tarball, 'tarball-bytes');
+
+    const { io, lines } = collect();
+    const spec = vendorLocalKit(tarball, out, io);
+
+    expect(spec).toBe('file:vendor/kitn.ai-ui-0.0.0-cafebabe.tgz'); // relative — never the cache's absolute path
+    expect(readFileSync(join(out, 'vendor', 'kitn.ai-ui-0.0.0-cafebabe.tgz'), 'utf8')).toBe('tarball-bytes');
+    expect(lines.join('\n')).toContain('vendored');
+
+    // The eviction that used to orphan the project: the shared cache copy is
+    // gone, the vendored copy still resolves from inside the project.
+    rmSync(tarball, { force: true });
+    expect(existsSync(join(out, 'vendor', 'kitn.ai-ui-0.0.0-cafebabe.tgz'))).toBe(true);
   });
 });

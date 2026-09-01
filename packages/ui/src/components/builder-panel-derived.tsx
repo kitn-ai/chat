@@ -37,6 +37,12 @@ export interface DerivedBuilderPanelProps {
   onChange: (next: Construct) => void; // fires a whole next Construct per edit
   template: BuildableTemplate; // registry entry — controls manifest + starter (section seeds)
   problems?: readonly ConstructProblem[]; // server-side rejections, rendered per path
+  /** Section-header actions, keyed by section id: a small affordance rendered
+   *  to the RIGHT of that section's title (e.g. the Theme section's "Advanced"
+   *  button opening the theme-studio takeover — an App.tsx concern, so the
+   *  CALLER supplies the whole element and this panel only places it). The
+   *  minimal seam: sections had no header-action slot before 2026-08-31. */
+  sectionActions?: Record<string, JSX.Element>;
   class?: string;
 }
 
@@ -67,6 +73,17 @@ const FIELD_LABELS: Record<string, string> = {
   'widget.launcherIcon': 'Launcher icon',
   'widget.defaultOpen': 'Open by default',
   'home.recentConversation': 'Recent conversation',
+  // The design story's own labels (builder-workspace.stories.tsx's
+  // WorkSurfaceSection) — the panel names these controls the way the approved
+  // design names them, never a fresh auto-generated wording.
+  'workSurface.kind': 'Pane kind',
+  'workSurface.url': 'Preview URL',
+  'workSurface.codeUrl': 'Code URL',
+  'workSurface.chrome.deviceToggle': 'Device toggle',
+  'workSurface.chrome.urlBar': 'URL bar',
+  'workSurface.chrome.openInNewTab': 'Open in new tab',
+  'workSurface.chrome.expand': 'Expand',
+  'workSurface.chrome.codeView': 'Code view',
 };
 export function labelFor(path: string): string {
   const named = FIELD_LABELS[path];
@@ -643,8 +660,11 @@ export function DerivedBuilderPanel(props: DerivedBuilderPanelProps): JSX.Elemen
     for (const [, vis] of Object.entries(RULE_VISIBILITY)) {
       if (vis.treatment !== 'hide-section') continue;
       // The rule's precondition: the section's key is layout-scoped; hide
-      // unless the construct's layout matches the section id.
-      if (props.value.layout !== vis.section) hidden.add(vis.section);
+      // unless the construct's layout matches the scope the rule STATES.
+      // Never `vis.section` — that only ever worked because `widget` and
+      // `aside` are named after their layouts, and `workSurface`/`split` is
+      // not (2026-08-30).
+      if (props.value.layout !== vis.layout) hidden.add(vis.section);
     }
     return hidden;
   };
@@ -670,14 +690,30 @@ export function DerivedBuilderPanel(props: DerivedBuilderPanelProps): JSX.Elemen
       <For each={props.template.controls.filter((s) => !hiddenSections().has(s.id))}>
         {(section) => (
           <section class="flex flex-col gap-3 border-b border-border p-4 last:border-b-0" data-derived-section={section.id}>
-            <h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{sectionTitle(section.id)}</h3>
+            <div class="flex min-h-5 items-center justify-between gap-2">
+              <h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{sectionTitle(section.id)}</h3>
+              {props.sectionActions?.[section.id]}
+            </div>
             <For each={section.paths}>
               {(path) => {
                 const Override = FIELD_OVERRIDES[path];
-                return Override ? (
-                  <Dynamic component={Override} path={path} value={props.value} write={props.onChange} />
-                ) : (
-                  <DerivedField path={path} value={props.value} write={props.onChange} disabledReason={disabledReasonFor(path)} />
+                const hint = section.hints?.[path];
+                return (
+                  <>
+                    {Override ? (
+                      <Dynamic component={Override} path={path} value={props.value} write={props.onChange} />
+                    ) : (
+                      <DerivedField path={path} value={props.value} write={props.onChange} disabledReason={disabledReasonFor(path)} />
+                    )}
+                    <Show when={hint}>
+                      {/* One site, not five: DerivedField's enum/string/boolean
+                          branches each render their own label+control inline, so
+                          threading a hint through `Field` would mean five render
+                          sites for one line of text. Same class Field's own hint
+                          uses (builder-panel.tsx's Field), so it looks identical. */}
+                      <p class="text-xs text-muted-foreground" data-derived-hint={path}>{hint}</p>
+                    </Show>
+                  </>
                 );
               }}
             </For>
@@ -695,6 +731,6 @@ const SECTION_TITLES: Record<string, string> = {
   identity: 'Identity', theme: 'Theme', header: 'Header', empty: 'Empty state',
   home: 'Home', capabilities: 'Capabilities', messageActions: 'Message actions',
   sources: 'Sources', widget: 'Widget', aside: 'Aside', composerTriggers: 'Composer triggers',
-  shell: 'Shell', provider: 'Provider', cards: 'Cards',
+  shell: 'Shell', provider: 'Provider', cards: 'Cards', workSurface: 'Work surface',
 };
 function sectionTitle(id: string): string { return SECTION_TITLES[id] ?? id; }

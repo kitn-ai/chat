@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>root-import probe</title></head>
+  <body>
+    <p>Probe: does the root export (where localStorageStore lives) load raw from a CDN URL?</p>
+    <script type="module">
+      window.__rootImport = 'pending';
+      import('/kit/index.js')
+        .then((m) => { window.__rootImport = 'ok: ' + typeof m.localStorageStore; })
+        .catch((e) => { window.__rootImport = 'FAILED: ' + e.message; });
+    </script>
+  </body>
+</html>

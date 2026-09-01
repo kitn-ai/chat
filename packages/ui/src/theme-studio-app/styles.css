@@ -1,0 +1,62 @@
+/* The theme studio's own stylesheet. The studio was born on the docs site and
+   its markup speaks the docs' Tailwind palette (bg-surface, text-ink,
+   border-line, ...). Those utilities are defined LOCALLY here — same token
+   names, same values as apps/docs/src/styles/tokens.css — so the standalone
+   app depends on nothing from Starlight. Dark is the default (the builder's
+   chrome is dark); ?theme=light on the URL flips data-theme (see main.tsx). */
+@import "tailwindcss" source(none);
+@source ".";
+
+:root,
+:root[data-theme='dark'] {
+  --kai-bg: #171716;
+  --kai-surface: #201f1d;
+  --kai-surface-2: #1a1917;
+  --kai-line: #2d2c2a;
+  --kai-ink: #fafafa;
+  --kai-ink-2: #c9c7c2;
+  --kai-ink-3: #a7a5a0;
+}
+
+:root[data-theme='light'] {
+  --kai-bg: #ffffff;
+  --kai-surface: #f9f9fb;
+  --kai-surface-2: #f3f3f6;
+  --kai-line: #e6e6e9;
+  --kai-ink: hsl(220 12% 12%);
+  --kai-ink-2: hsl(220 7% 32%);
+  --kai-ink-3: hsl(220 5% 46%);
+}
+
+/* Design-system tokens → the Tailwind utilities the studio's markup uses.
+   `inline` emits var() refs so they track data-theme at runtime. */
+@theme inline {
+  --color-bg: var(--kai-bg);
+  --color-surface: var(--kai-surface);
+  --color-surface-2: var(--kai-surface-2);
+  --color-line: var(--kai-line);
+  --color-ink: var(--kai-ink);
+  --color-ink-2: var(--kai-ink-2);
+  --color-ink-3: var(--kai-ink-3);
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--kai-bg);
+  color: var(--kai-ink-2);
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+/* Full-height app shell: the studio component fills the viewport with a small
+   gutter (its own root brings the border + rounding). */
+#root {
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0.75rem;
+}
+#root > .theme-studio-root {
+  height: 100%;
+  margin: 0;
+}

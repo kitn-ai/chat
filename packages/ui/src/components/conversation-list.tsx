@@ -214,6 +214,12 @@ export interface ConversationListProps {
   empty?: JSX.Element;
   /** Dense single-line rows (a leading dot + title, no message count). */
   compact?: boolean;
+  /** Show the built-in search box (default `true`). Set `false` to hide it,
+   *  e.g. a widget-box list where search earns no room (the facade's own
+   *  `ConversationPanel` renders no search; 2026-08-31 composition spike,
+   *  phase 3 round 2). Hidden, the imperative `focus()`/`clearSearch()`
+   *  still exist but reach no input, and `onSearchChange` never fires. */
+  searchable?: boolean;
   /** Fired whenever the built-in search box query changes (typing or a
    *  programmatic `clear()`). Lets the facade surface a `kai-search` event. */
   onSearchChange?: (query: string) => void;
@@ -247,7 +253,7 @@ export interface ConversationListController {
 }
 
 export function ConversationList(props: ConversationListProps) {
-  const [local] = splitProps(props, ['groups', 'conversations', 'activeId', 'onSelect', 'onNewChat', 'onToggleSidebar', 'header', 'footer', 'empty', 'compact', 'onSearchChange', 'controllerRef', 'items', 'itemsKeyDown', 'itemsClick', 'class']);
+  const [local] = splitProps(props, ['groups', 'conversations', 'activeId', 'onSelect', 'onNewChat', 'onToggleSidebar', 'header', 'footer', 'empty', 'compact', 'searchable', 'onSearchChange', 'controllerRef', 'items', 'itemsKeyDown', 'itemsClick', 'class']);
   const [searchQuery, setSearchQuery] = createSignal('');
   // Item mode: the consumer's own rows replace the data rendering wholesale.
   const itemMode = createMemo(() => local.items != null);
@@ -318,7 +324,7 @@ export function ConversationList(props: ConversationListProps) {
       >
         {local.header}
       </Show>
-      <Show when={itemMode() || !isEmpty()}>
+      <Show when={local.searchable !== false && (itemMode() || !isEmpty())}>
         <div class="px-3 pb-2">
           <div class="flex items-center gap-2 rounded-md bg-surface-strong px-2.5 py-1.5">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-muted-foreground"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>

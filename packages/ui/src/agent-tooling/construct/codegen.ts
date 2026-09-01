@@ -16,6 +16,8 @@ import { createRequire } from 'node:module';
 import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Construct } from './schema';
+import { KNOWN_THEME_TOKENS, themeTokenValueProblem } from './theme-token-policy';
+import { mockScriptFor } from './mock-script';
 
 export interface GeneratedFile {
   path: string;
@@ -181,9 +183,12 @@ const CONTRAST_COLOR_SUPPORTS = '@supports (color: contrast-color(red))';
  * there's nothing to say — no accent, or the accent parsed fine.
  */
 export function accentContrastNotice(construct: Construct): string | null {
-  const accent = construct.theme?.accent;
-  if (!accent || resolveContrastForeground(accent) !== null) return null;
-  return `accent '${commentSafe(accent)}' not parseable for contrast; foreground left at theme default in browsers without CSS contrast-color() support`;
+  // Same effective-primary rule as emitElement's foreground pairing: a
+  // theme.tokens light --kai-color-primary overrides the accent, and a
+  // token-only primary is paired (and noticed) exactly like an accent.
+  const effective = construct.theme?.tokens?.light?.['--kai-color-primary'] ?? construct.theme?.accent;
+  if (!effective || resolveContrastForeground(effective) !== null) return null;
+  return `accent '${commentSafe(effective)}' not parseable for contrast; foreground left at theme default in browsers without CSS contrast-color() support`;
 }
 
 export function generateProject(construct: Construct, opts: GenerateOptions = {}): GeneratedFile[] {
@@ -198,6 +203,10 @@ export function generateProject(construct: Construct, opts: GenerateOptions = {}
     { path: 'src/App.tsx', code: emitApp(construct) },
   ];
   if (construct.cards) files.push({ path: 'src/cards.ts', code: emitCardsRegistry(construct.cards) });
+  const ws = workSurfaceOf(construct);
+  if (ws && workSurfaceUrlIsRelative(ws.url)) {
+    files.push({ path: WORK_SURFACE_PAGE, code: emitWorkSurfacePage(construct) });
+  }
   return files;
 }
 
@@ -353,6 +362,23 @@ function emitCardTypesProp(c: Construct): string {
  *  (an off-vocabulary call slipping through); it is silently dropped rather
  *  than rendered, matching cardFromToolCall's own "not every kai_ call is
  *  renderable" boundary (see its module header). */
+/** Settle the mock script's announced demo tool calls with their scripted
+ *  outputs, mock mode only. The wire parks an announced call at
+ *  `input-available` — resolving it is the HOST's side of the seam
+ *  (tool-types.ts), and for the mock the host is `MOCK_TOOL_OUTPUTS` plus this
+ *  loop, the same `upsertTool` move a real tool loop makes. `kai_` card calls
+ *  are untouched (never in the map): those settle into cards below. Runs
+ *  before emitApplyCardTools' loop; the two touch disjoint tool names. */
+function emitSettleMockTools(hasOutputs: boolean): string {
+  if (!hasOutputs) return '';
+  return `
+    for (const part of chat.messages().find((m) => m.id === stream.id)?.parts ?? []) {
+      if (part.type !== 'tool' || part.tool.state !== 'input-available' || !part.tool.toolCallId) continue;
+      const output = MOCK_TOOL_OUTPUTS[part.tool.type];
+      if (output) stream.upsertTool(part.tool.toolCallId, { state: 'output-available', output });
+    }`;
+}
+
 function emitApplyCardTools(c: Construct): string {
   if (!c.cards) return '';
   return `
@@ -491,18 +517,73 @@ function emitIndexHtml(c: Construct): string {
 `;
 }
 
+/**
+ * The `.dark { }` rule for `theme.tokens.dark`, emitted into the shadow
+ * `<style>` alongside the accent-contrast block.
+ *
+ * WHY CSS text and not setProperty: an inline custom property on the host has
+ * no mode — dark mode never reaches the host at all. The `theme` attribute
+ * defineWebComponent owns drives a `.dark` class on an inner WRAPPER div
+ * inside the shadow root (see elements/define.tsx), and the injected kit CSS
+ * re-resolves every `--color-*` token on that wrapper (`theme.css`'s
+ * `.dark { --color-x: var(--kai-color-x, <dark default>) }` block). So "dark
+ * only" is expressible exactly one way: a `.dark`-scoped `--kai-color-*`
+ * declaration in a stylesheet INSIDE this shadow root. It works because the
+ * wrapper's OWN `.dark`-rule value beats the light value inherited from the
+ * host's setProperty when the kit's `.dark` block re-resolves `--color-*`
+ * there — and with no `.dark` class (light mode) the rule matches nothing.
+ *
+ * These values land in generated CSS TEXT, not an opaque setProperty string,
+ * so — same conservative posture as the generated `:host` contrast block,
+ * which only ever interpolates a computed `#000000`/`#ffffff` — every name
+ * and value is re-asserted here against the same policy the schema doorway
+ * enforced (theme-token-policy.ts). validateConstruct is the only doorway to
+ * codegen, so a throw here is unreachable in normal operation; it exists
+ * because the `Construct` TYPE alone does not prove validation ran.
+ */
+function emitDarkTokensCss(entries: ReadonlyArray<[string, string]>): string {
+  const lines = entries.map(([name, value]) => {
+    if (!KNOWN_THEME_TOKENS.has(name) || !name.startsWith('--kai-color-')) {
+      throw new Error(
+        `construct codegen: dark theme token "${name}" is not a declared --kai-color-* knob — was this construct validated?`,
+      );
+    }
+    const problem = themeTokenValueProblem(value);
+    if (problem) {
+      throw new Error(
+        `construct codegen: dark theme token "${name}" has an unsafe value (${problem}) — was this construct validated?`,
+      );
+    }
+    return `  ${name}: ${value};`;
+  });
+  return `.dark {\n${lines.join('\n')}\n}`;
+}
+
 function emitElement(c: Construct): string {
   const accent = c.theme?.accent;
   const unreadColor = c.theme?.unreadColor;
+  const tokens = c.theme?.tokens;
+  // Everything mode-less in `theme.tokens` — the light palette (plus the
+  // root-scope knobs the studio rides in it), `--kai-radius`, the font knobs —
+  // lands on the HOST via the exact same setProperty mechanism as `accent`
+  // below, and for the same reasons (host-not-shadow-tree resolution;
+  // injection-proof opaque values). Only `dark` needs CSS text — see
+  // emitDarkTokensCss above.
+  const hostTokenEntries: Array<[string, string]> = [
+    ...Object.entries(tokens?.light ?? {}),
+    ...(tokens?.radius ? ([['--kai-radius', tokens.radius]] as Array<[string, string]>) : []),
+    ...Object.entries(tokens?.fonts ?? {}),
+  ];
+  const darkTokenEntries = Object.entries(tokens?.dark ?? {});
   // `ctx.element` is the host. header.themeToggle/actions and shell.userMenu
   // (B-10) need it to flip the `theme` attribute and to dispatch
   // `kai-header-action`/`kai-user-menu` CustomEvents on the host — the same
   // handle accent/unreadColor already carry via `ctx`, now threaded through
   // to `App` itself (via a `host` prop) rather than consumed only inside
   // this facade.
-  const usesCtx = !!accent || !!unreadColor || needsHost(c);
+  const usesCtx = !!accent || !!unreadColor || hostTokenEntries.length > 0 || needsHost(c);
   const appJsx = needsHost(c) ? '<App host={ctx.element} />' : '<App />';
-  if (!accent && !unreadColor) {
+  if (!accent && !unreadColor && hostTokenEntries.length === 0 && darkTokenEntries.length === 0) {
     // `empty` (Task 14) composes straight into ChatThread's own `emptyContent`
     // prop now (see emitEmptyContentProp's doc) — a plain JSX value passed down
     // through App, not a Portal onto the host — so the facade needs no `ctx` and
@@ -532,24 +613,29 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
   // badge), so there is nothing to contrast-pair against. Emitted
   // unconditionally alongside accent's setProperty call when present, even if
   // `accent` itself is absent — this branch is reached whenever EITHER is set.
-  const unreadColorSetProperty = unreadColor
-    ? `\n  ctx.element.style.setProperty('--kai-color-unread', ${JSON.stringify(unreadColor)});`
-    : '';
-
-  if (!accent) {
-    // unreadColor-only construct: no accent, so none of the contrast-pairing
-    // machinery below applies — just the one setProperty call and `ctx`.
-    const facade = `(_props, ctx) => {${unreadColorSetProperty}
-  return ${appJsx};
-}`;
-    return `import { defineWebComponent } from '@kitn.ai/ui/define';
-import { App } from './App';
-
-// The one facade. Interior stays pure Solid (no nested element registrations);
-// the kit CSS is injected into the shadow root by defineWebComponent itself.
-defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' | 'auto' }, ${facade});
-`;
-  }
+  //
+  // PRECEDENCE (stated once, enforced by emit order): accent/unreadColor set
+  // their knobs FIRST, theme.tokens entries after. setProperty on the same
+  // custom property is last-write-wins, so a token naming the same knob
+  // (e.g. a full palette's own --kai-color-primary) deliberately WINS over
+  // the coarser accent — the full palette is the finer-grained wish.
+  const setPropertyLines: string[] = [
+    ...(accent
+      ? [`  ctx.element.style.setProperty('--kai-color-primary', ${JSON.stringify(accent)});`]
+      : []),
+    ...(unreadColor
+      ? [`  ctx.element.style.setProperty('--kai-color-unread', ${JSON.stringify(unreadColor)});`]
+      : []),
+    ...(hostTokenEntries.length
+      ? [
+          '  // theme.tokens: after accent/unreadColor on purpose — same knob, the token wins.',
+          ...hostTokenEntries.map(
+            ([name, value]) =>
+              `  ctx.element.style.setProperty(${JSON.stringify(name)}, ${JSON.stringify(value)});`,
+          ),
+        ]
+      : []),
+  ];
 
   // The accent has to land on the HOST element, not anywhere inside this
   // shadow root. The kit's --color-primary token is resolved ONCE, by a rule
@@ -585,27 +671,50 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
   // both layers to be plain `:host {}` declarations in one stylesheet, base
   // rule first, @supports override after — ordinary cascade order, no
   // `!important` required.
-  const foreground = resolveContrastForeground(accent);
-  const foregroundCss =
-    foreground !== null
-      ? `:host { --kai-color-primary-foreground: ${foreground}; }\n`
-      : // Not guessed at: an unparseable accent (var(), a named color, a
-        // color-mix()/oklch() call, …) leaves NO base declaration, so the
-        // kit's own theme default stands — except in a browser new enough to
-        // resolve contrast-color() itself, where the @supports block below
-        // still gets it right natively.
-        `/* NOTICE: accent '${commentSafe(accent)}' not parseable for contrast at generation time; the paired foreground falls back to the theme default in browsers without CSS contrast-color() support. */\n`;
-  const styleText =
-    foregroundCss + `${CONTRAST_COLOR_SUPPORTS} {\n  :host { --kai-color-primary-foreground: contrast-color(var(--kai-color-primary)); }\n}`;
+  const styleParts: string[] = [];
+  // Pair the contrast foreground with the primary that actually WINS: a
+  // theme.tokens light entry for --kai-color-primary overrides the accent
+  // (see the precedence note above), so computing the black/white floor from
+  // the overridden accent would pin the wrong foreground in browsers
+  // without contrast-color(). Computed BEFORE the gate, and the gate is on
+  // the effective primary rather than `accent` alone: a construct that sets
+  // its primary only through theme.tokens (no accent) needs the exact same
+  // pairing — gating on `accent` left a token-only custom primary next to
+  // the kit's default near-white foreground (white-on-yellow).
+  const effectivePrimary = tokens?.light?.['--kai-color-primary'] ?? accent;
+  if (effectivePrimary) {
+    const foreground = resolveContrastForeground(effectivePrimary);
+    const foregroundCss =
+      foreground !== null
+        ? `:host { --kai-color-primary-foreground: ${foreground}; }\n`
+        : // Not guessed at: an unparseable accent (var(), a named color, a
+          // color-mix()/oklch() call, …) leaves NO base declaration, so the
+          // kit's own theme default stands — except in a browser new enough to
+          // resolve contrast-color() itself, where the @supports block below
+          // still gets it right natively.
+          `/* NOTICE: accent '${commentSafe(effectivePrimary)}' not parseable for contrast at generation time; the paired foreground falls back to the theme default in browsers without CSS contrast-color() support. */\n`;
+    styleParts.push(
+      foregroundCss +
+        `${CONTRAST_COLOR_SUPPORTS} {\n  :host { --kai-color-primary-foreground: contrast-color(var(--kai-color-primary)); }\n}`,
+    );
+  }
+  if (darkTokenEntries.length) styleParts.push(emitDarkTokensCss(darkTokenEntries));
+  const styleText = styleParts.join('\n');
 
-  const facade = `(_props, ctx) => {
-  ctx.element.style.setProperty('--kai-color-primary', ${JSON.stringify(accent)});${unreadColorSetProperty}
+  const setPropertyBlock = setPropertyLines.length ? `\n${setPropertyLines.join('\n')}` : '';
+  const facade = styleText
+    ? `(${usesCtx ? '_props, ctx' : ''}) => {${setPropertyBlock}
   return (
     <>
       <style>{${JSON.stringify(styleText)}}</style>
       ${appJsx}
     </>
   );
+}`
+    : // No CSS text needed (no accent, no dark tokens): setProperty calls only —
+      // e.g. an unreadColor-only or light-tokens-only construct.
+      `(_props, ctx) => {${setPropertyBlock}
+  return ${appJsx};
 }`;
   return `import { defineWebComponent } from '@kitn.ai/ui/define';
 import { App } from './App';
@@ -715,7 +824,7 @@ ${emitHistorySetup(c)}
 //     widgetHasConversationsChrome/emitDockOnOpenChangeProp's docs. Wired only
 //     for \`widget\`, the one layout with something that closes/reopens at all.
 ${emitChromeComment(c)}export function App(${needsHost(c) ? 'props: { host: HTMLElement }' : ''}) {
-${emitToggleThemeVar(c, '  ')}${emitDockCloseVar(c, '  ')}${emitChatControllerVar(c, '  ')}${emitConversationsSignalsVar(c, '  ')}${emitShellPaletteVars(c, '  ')}  return (
+${emitToggleThemeVar(c, '  ')}${emitDockCloseVar(c, '  ')}${emitChatControllerVar(c, '  ')}${emitConversationsSignalsVar(c, '  ')}${emitShellPaletteVars(c, '  ')}${emitPaneProbeVar(c, '  ')}${emitWorkSurfaceVars(c, '  ')}${emitHeaderActionDispatchVar(c, '  ')}  return (
 ${hasShellPalette(c) ? '    <>\n' : ''}${emitLayoutOpen(c)}${emitSlots(c.slots, '      ')}      <ChatThread messages={chat.messages()} loading={chat.loading()} placeholder="Ask anything" onSubmit={submit} webSearch={false} voice={false}${emitHeaderProp(c)}${emitHeaderEndContentProp(c)}${emitAttachProps(c)}${emitStartersProp(c)}${emitReasoningProp(c)}${emitReasoningOpenProp(c)}${emitMessageActionsProps(c)}${emitHideSourcesProp(c)}${emitTriggersProp(c)}${emitEmptyContentProp(c)}${emitCardTypesProp(c)}${emitHomeProp(c)}${emitConversationsProps(c)}${emitChatControllerRefProp(c)}${emitChatThreadUnreadProps(c)} />
 ${emitLayoutClose(c)}${emitShellPaletteOverlay(c)}${hasShellPalette(c) ? '    </>\n' : ''}  );
 }
@@ -1096,10 +1205,44 @@ function emitDockHideClose(c: Construct): string {
  *  the header button and the shell palette's "Toggle theme" entry (B-10) —
  *  one closure, no drift between the two call sites. Flips the HOST's own
  *  `theme` attribute (the one `defineWebComponent` already owns), reached
- *  via the `host` prop `needsHost`/`emitElement` thread through the facade. */
+ *  via the `host` prop `needsHost`/`emitElement` thread through the facade.
+ *
+ *  Two shapes, because the two headers ask different questions of it. The
+ *  header-end row's button is a plain text "Theme" control that only needs to
+ *  FLIP the attribute. The app header's toggle (`hasAppHeader`) is icon-only
+ *  and shows the mode you would switch TO, so it needs the RESOLVED mode — and
+ *  an absent or `auto` attribute means "follow the system", a question only
+ *  matchMedia can answer. The resolved variant is emitted only where something
+ *  reads it: the emitted project runs `noUnusedLocals`, so an unconditional
+ *  signal would break every construct that does not have the strip. */
 function emitToggleThemeVar(c: Construct, indent: string): string {
   if (c.layout === 'custom' || !c.header?.themeToggle) return '';
-  return `${indent}const toggleTheme = () => props.host.setAttribute('theme', props.host.getAttribute('theme') === 'dark' ? 'light' : 'dark');\n`;
+  if (!hasAppHeader(c)) {
+    return `${indent}const toggleTheme = () => props.host.setAttribute('theme', props.host.getAttribute('theme') === 'dark' ? 'light' : 'dark');\n`;
+  }
+  return `${indent}// header.themeToggle -> the host's own 'theme' (the one defineWebComponent
+${indent}// owns). AppHeader's toggle is icon-only and shows the mode you would switch
+${indent}// TO, so it needs the RESOLVED mode, and resolving it takes both reads:
+${indent}//  - the PROPERTY, not just the attribute. This construct declares its mode
+${indent}//    through defineWebComponent's prop DEFAULT, so a themed element can carry
+${indent}//    no 'theme' attribute at all — reading only the attribute reported
+${indent}//    "light" on a dark app and drew the wrong icon (caught in the live
+${indent}//    builder, not in a test).
+${indent}//  - matchMedia for 'auto' (and for nothing set), which is the only thing
+${indent}//    that can answer "follow the system".
+${indent}const resolveDark = () => {
+${indent}  const mode = (props.host as HTMLElement & { theme?: string }).theme ?? props.host.getAttribute('theme');
+${indent}  if (mode === 'dark') return true;
+${indent}  if (mode === 'light') return false;
+${indent}  return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
+${indent}};
+${indent}const [themeDark, setThemeDark] = createSignal(resolveDark());
+${indent}const toggleTheme = () => {
+${indent}  const next = !themeDark();
+${indent}  props.host.setAttribute('theme', next ? 'dark' : 'light');
+${indent}  setThemeDark(next);
+${indent}};
+`;
 }
 
 /** ChatThread's `headerEndContent` prop (chat-thread.tsx): an ORDERED
@@ -1137,6 +1280,75 @@ function hasUserMenuChrome(c: Construct): boolean {
   return c.layout !== 'custom' && !!c.shell?.userMenu;
 }
 
+/**
+ * Whether this construct renders the kit's real `AppHeader` (components/
+ * app-header.tsx) as a strip ACROSS the frame, above the layout — the
+ * arrangement `builder-workspace.stories.tsx` has always shipped and the owner
+ * ruled on twice (2026-08-30 defect: the emitted app rendered a text "Theme"
+ * button, no search at all and a bare avatar, all crammed into ChatThread's own
+ * header row inside the chat rail).
+ *
+ * SCOPED TO `split` ON PURPOSE. `split` is the workspace shape — a chat rail
+ * beside a work surface — and an app-level top bar is a fact about THAT shape,
+ * which is the one the promoted design was drawn for. The other layouts keep
+ * their existing `headerEndContent` chrome, and it is right that they do:
+ * `widget` is a docked panel whose only header row is ChatThread's own (and
+ * whose close control lives in it), and `fullscreen`/`aside` are a single chat
+ * column where a second full-width bar above ChatThread's own title row would
+ * be two headers stacked. Widening this to another layout means drawing that
+ * layout's header first, not flipping this predicate.
+ *
+ * `header.title` alone is enough to raise the strip: the story renders the app
+ * bar and the rail's own title row together (the title appears in both), which
+ * is what the approved design shows.
+ */
+function hasAppHeader(c: Construct): boolean {
+  return (
+    c.layout === 'split' &&
+    (!!c.header?.title ||
+      hasThemeToggleChrome(c) ||
+      hasHeaderActionsChrome(c) ||
+      hasUserMenuChrome(c) ||
+      hasShellPalette(c))
+  );
+}
+
+/** Whether the header-chrome pieces land in ChatThread's own header-end row.
+ *  They move OUT of it wholesale when the app header strip takes them
+ *  (`hasAppHeader`) — never split across both, which would put Share in one
+ *  bar and the avatar in another. */
+function inHeaderEndRow(c: Construct): boolean {
+  return !hasAppHeader(c);
+}
+
+/** header.actions dispatch `kai-header-action` and nothing in the emitted app
+ *  listens — clicking Share/Deploy in a builder preview does nothing. That is
+ *  the dead-affordance class T-5 ruling 3 rejected `voice` for, so it is
+ *  STATED rather than left to be discovered.
+ *
+ *  It is a once-per-label REMINDER, not a detection: the DOM has no API that
+ *  reports whether a listener is attached (`dispatchEvent`'s return value only
+ *  reports preventDefault(), which no listener is obliged to call), so a
+ *  "nobody is listening" claim would be false on correct code. DEV only —
+ *  `import.meta.env.DEV`, and the emitted tsconfig already carries
+ *  `types: ['vite/client']`. */
+function emitHeaderActionDispatchVar(c: Construct, indent: string): string {
+  if (!hasHeaderActionsChrome(c)) return '';
+  return `${indent}// Each header action dispatches 'kai-header-action' on the host and nothing
+${indent}// here handles it — that is the consumer's seam, by design (vocabulary
+${indent}// never logic). The DEV line below is a one-time reminder per label, NOT a
+${indent}// listener check: the DOM cannot report whether a listener exists.
+${indent}const warnedHeaderActions = new Set<string>();
+${indent}const dispatchHeaderAction = (label: string) => {
+${indent}  if (import.meta.env.DEV && !warnedHeaderActions.has(label)) {
+${indent}    warnedHeaderActions.add(label);
+${indent}    console.warn(\`[${c.name}] header action "\${label}" dispatched 'kai-header-action' on the host. Nothing happens until your app listens: el.addEventListener('kai-header-action', (e) => …).\`);
+${indent}  }
+${indent}  props.host.dispatchEvent(new CustomEvent('kai-header-action', { detail: { label } }));
+${indent}};
+`;
+}
+
 function emitHeaderEndContentProp(c: Construct): string {
   const pieces: string[] = [];
 
@@ -1148,18 +1360,18 @@ function emitHeaderEndContentProp(c: Construct): string {
   //    directly; `label` is construct-authored/untrusted text,
   //    JSON.stringify'd at BOTH interpolation sites (the event detail and
   //    the button's own child text).
-  if (hasHeaderActionsChrome(c)) {
+  if (hasHeaderActionsChrome(c) && inHeaderEndRow(c)) {
     for (const a of c.header!.actions!) {
       const variant = a.variant ? ` variant="${a.variant}"` : '';
       pieces.push(
-        `<Button${variant} size="sm" onClick={() => props.host.dispatchEvent(new CustomEvent('kai-header-action', { detail: { label: ${JSON.stringify(a.label)} } }))}>{${JSON.stringify(a.label)}}</Button>`,
+        `<Button${variant} size="sm" onClick={() => dispatchHeaderAction(${JSON.stringify(a.label)})}>{${JSON.stringify(a.label)}}</Button>`,
       );
     }
   }
 
   // 2. header.themeToggle: flips the host's `theme` attribute via the
   //    shared `toggleTheme` closure (emitToggleThemeVar).
-  if (hasThemeToggleChrome(c)) {
+  if (hasThemeToggleChrome(c) && inHeaderEndRow(c)) {
     pieces.push(`<Button variant="ghost" size="sm" aria-label="Toggle theme" onClick={toggleTheme}>Theme</Button>`);
   }
 
@@ -1171,7 +1383,7 @@ function emitHeaderEndContentProp(c: Construct): string {
   //    vocabulary-never-logic seam as header.actions above, since a
   //    construct has no app code to run "Settings"/"Get help"/"Log out"
   //    itself.
-  if (hasUserMenuChrome(c)) {
+  if (hasUserMenuChrome(c) && inHeaderEndRow(c)) {
     const m = c.shell!.userMenu!;
     const menuLabel = JSON.stringify(`${m.name}${m.plan ? ` — ${m.plan}` : ''} account menu`);
     const initials = JSON.stringify(m.name.slice(0, 2).toUpperCase());
@@ -1206,13 +1418,66 @@ function emitHeaderEndContentProp(c: Construct): string {
  *  (reviewer-caught TS6133 under `tsc --strict --noUnusedLocals`). */
 function emitChromeImports(c: Construct): string {
   let names = '';
-  if (hasHeaderActionsChrome(c) || hasThemeToggleChrome(c) || widgetHasHeaderClose(c)) names += ', Button';
-  if (hasUserMenuChrome(c)) {
+  if ((inHeaderEndRow(c) && (hasHeaderActionsChrome(c) || hasThemeToggleChrome(c))) || widgetHasHeaderClose(c)) {
+    names += ', Button';
+  }
+  if (hasUserMenuChrome(c) && inHeaderEndRow(c)) {
     names += ', Dropdown, DropdownTrigger, DropdownContent, DropdownItem, DropdownSeparator, Avatar';
   }
+  // The app header strip composes ONE component instead of all of the above —
+  // that is the whole point of the promotion (components/app-header.tsx owns
+  // the arrangement, so the emitted app cannot drift off it).
+  if (hasAppHeader(c)) names += ', AppHeader';
   if (hasShellPalette(c)) names += ', CommandList, Input';
   if (widgetHasHeaderClose(c)) names += ', DockCloseGlyph';
   return names;
+}
+
+/**
+ * The `<AppHeader …>` strip itself (`hasAppHeader`) — the kit's own promoted
+ * component, the SAME one `builder-workspace.stories.tsx` renders, so the
+ * arrangement (title LEFT; search · theme | actions | user on the right) lives
+ * in one place and this file never restates it.
+ *
+ * VOCABULARY MAPPING — the T-5 rulings' own keys, no new ones. `header.search`
+ * and `header.user` were REJECTED as vocabulary precisely because they would
+ * duplicate the shell flags, so: the search affordance follows
+ * `shell.commandPalette`, the user cluster follows `shell.userMenu` (its
+ * `name`/`plan` feed it), the toggle is `header.themeToggle`, the buttons are
+ * `header.actions`, and the title is `header.title`.
+ *
+ * MENU-HONESTY: every piece is emitted with its MECHANISM attached, and the
+ * component itself renders nothing for a piece whose mechanism is missing —
+ * so search is emitted only alongside the palette this file actually writes
+ * (`hasShellPalette`), and there is no path here that produces a control with
+ * nothing behind it.
+ *
+ * `title`, the whole `actions` array and the whole `user` object are
+ * construct-authored untrusted text, JSON.stringify'd at this one emit site
+ * like every other free-text field in this file — never raw JSX attribute
+ * strings.
+ */
+function emitAppHeader(c: Construct, indent: string): string {
+  if (!hasAppHeader(c)) return '';
+  let out = `${indent}<AppHeader\n`;
+  if (c.header?.title) out += `${indent}  title={${JSON.stringify(c.header.title)}}\n`;
+  if (hasShellPalette(c)) {
+    out += `${indent}  showSearch={true}\n${indent}  onSearch={() => setPaletteOpen(true)}\n`;
+  }
+  if (hasThemeToggleChrome(c)) {
+    out += `${indent}  showThemeToggle={true}\n${indent}  dark={themeDark()}\n${indent}  onToggleDark={toggleTheme}\n`;
+  }
+  if (hasHeaderActionsChrome(c)) {
+    out +=
+      `${indent}  actions={${JSON.stringify(c.header!.actions!)}}\n` +
+      `${indent}  onActionSelect={(action) => dispatchHeaderAction(action.label)}\n`;
+  }
+  if (hasUserMenuChrome(c)) {
+    out +=
+      `${indent}  user={${JSON.stringify(c.shell!.userMenu!)}}\n` +
+      `${indent}  onUserMenuSelect={(item) => props.host.dispatchEvent(new CustomEvent('kai-user-menu', { detail: { item } }))}\n`;
+  }
+  return `${out}${indent}/>\n`;
 }
 
 /** `//` lines placed directly above `export function App`, documenting the
@@ -1438,8 +1703,21 @@ function needsCreateEffect(c: Construct): boolean {
 function emitSolidJsImports(c: Construct): string {
   const names: string[] = [];
   if (needsCreateEffect(c)) names.push('createEffect');
-  if (widgetHasConversationsChrome(c) || hasShellPalette(c)) names.push('createSignal');
-  if (hasShellPalette(c)) names.push('Show', 'onMount', 'onCleanup');
+  if (
+    widgetHasConversationsChrome(c) ||
+    hasShellPalette(c) ||
+    splitNeedsPaneProbe(c) ||
+    workSurfaceOf(c)?.chrome?.expand ||
+    // the app header's resolved-dark signal (emitToggleThemeVar)
+    (hasAppHeader(c) && hasThemeToggleChrome(c))
+  ) {
+    names.push('createSignal');
+  }
+  // `Show` splits out of the onMount/onCleanup group: the pane probe needs the
+  // lifecycle helpers but no `Show`, and the emitted project's own
+  // `noUnusedLocals` is what catches a mistake in either direction.
+  if (hasShellPalette(c)) names.push('Show');
+  if (hasShellPalette(c) || splitNeedsPaneProbe(c)) names.push('onMount', 'onCleanup');
   if (names.length === 0) return '';
   return `import { ${names.join(', ')} } from 'solid-js';\n`;
 }
@@ -1600,7 +1878,7 @@ createEffect(() => {
 
 function emitProviderImports(c: Construct): string {
   if (c.provider.mode === 'mock') {
-    return `import { createMockResponder } from '@kitn.ai/ui/state';
+    return `import { createMockResponder, type MockReply } from '@kitn.ai/ui/state';
 import { readOpenAIStream } from '@kitn.ai/ui/wire';`;
   }
   const read = c.provider.wire === 'openai' ? 'readOpenAIStream' : 'readAnthropicStream';
@@ -1614,16 +1892,33 @@ function emitProviderSetup(c: Construct): string {
   // the value directly, so there's no PromptInput-specific signal-reading
   // workaround to carry here any more.
   if (c.provider.mode === 'mock') {
+    const script = mockScriptFor(c);
+    const hasOutputs = Object.keys(script.toolOutputs).length > 0;
     const cardsNote = c.cards
       ? `
-// Cards demo keylessly: createMockResponder() can already SCRIPT a tool call
-// (\`replies: [{ toolCalls: [...] }]\`, F-35), so a scripted turn calling
-// \`kai_<card name>\` renders exactly like a live model's would, below.`
+// Cards demo keylessly: the script's \`kai_<card name>\` call renders exactly
+// like a live model's would, below.`
+      : '';
+    const outputsDecl = hasOutputs
+      ? `
+
+// Scripted outputs for the demo tool calls above. The wire only ever ANNOUNCES
+// a call — executing it and answering is the host's side of the seam — so the
+// mock's "host" is this map plus the settle step after the read. It disappears
+// with the mock: a real backend's tool loop replaces it.
+const MOCK_TOOL_OUTPUTS: Record<string, Record<string, unknown>> = ${JSON.stringify(script.toolOutputs, null, 2)};`
       : '';
     return `// Provider seam: mock — keyless, streams locally, announces itself once.
 // Swap for provider.mode "endpoint" in the construct and re-run kai dev; the
 // generated fetch keeps this exact shape (the seam is the point).${cardsNote}
-const respond = createMockResponder();
+//
+// The script below is this template's mock conversation: it exercises every
+// content type this construct enables (reasoning, citations, tool rows${c.cards ? ', cards' : ''})
+// through the kit's real parser, so the first run SHOWS the rendering paths a
+// live model would use. Edit it freely — it is data, not wiring.
+const MOCK_SCRIPT: MockReply[] = ${JSON.stringify(script.replies, null, 2)};${outputsDecl}
+
+const respond = createMockResponder({ replies: MOCK_SCRIPT });
 const chat = createKaiChat();
 
 async function submit(detail: { value: string; attachments: AttachmentData[] }) {
@@ -1638,7 +1933,7 @@ async function submit(detail: { value: string; attachments: AttachmentData[] }) 
   });
   const stream = chat.streamAssistant();
   try {
-    await readOpenAIStream(respond(detail.value), stream);${emitApplyCardTools(c)}
+    await readOpenAIStream(respond(detail.value), stream);${emitSettleMockTools(hasOutputs)}${emitApplyCardTools(c)}
     stream.done();
   } catch (err) {
     stream.abort(err instanceof Error ? err.message : String(err));
@@ -1704,7 +1999,10 @@ function emitLayoutImport(c: Construct): string {
     case 'widget':
       return `, Dock${hasLauncherIcon(c) ? ', DockLauncherImage' : ''}`;
     case 'split':
-      return ', WorkspaceShell';
+      // `WorkSurface` only when the construct declares one — the emitted
+      // project runs `noUnusedLocals`, so an unconditional import would break
+      // every bare split.
+      return workSurfaceOf(c) ? ', WorkspaceShell, WorkSurface' : ', WorkspaceShell';
     case 'fullscreen':
     case 'aside':
       return '';
@@ -1784,8 +2082,34 @@ function emitSlots(slots: readonly string[] | undefined, indent: string): string
  *  entries live entirely inside App's own Solid tree. Excludes `custom`
  *  (CU-1: none of header chrome/composer/shell is wired there — see
  *  emitCustomApp's own "not wired here" list). */
+/** `layout: 'split'` with no `workSurface`: the emitted App needs the host to
+ *  see whether anything is projected into the pane (see emitLayoutOpen's split
+ *  case for why the light DOM and not a slotchange listener). */
+function splitNeedsPaneProbe(c: Construct): boolean {
+  return c.layout === 'split' && !c.workSurface;
+}
+
+/** The `paneProjected` signal + its MutationObserver, declared inside App()
+ *  for the same instance-isolation reason as every other var-emitter here. */
+function emitPaneProbeVar(c: Construct, indent: string): string {
+  if (!splitNeedsPaneProbe(c)) return '';
+  return `${indent}// Does the consumer project anything into <slot name="pane">? Read the
+${indent}// HOST's own light-DOM children: that is observable whether or not the
+${indent}// column (and with it the <slot>) is currently mounted, so it cannot
+${indent}// deadlock the way a slotchange listener on an unmounted slot would.
+${indent}const [paneProjected, setPaneProjected] = createSignal(false);
+${indent}onMount(() => {
+${indent}  const sync = () => setPaneProjected(props.host.querySelector(':scope > [slot="pane"]') !== null);
+${indent}  const observer = new MutationObserver(sync);
+${indent}  observer.observe(props.host, { childList: true });
+${indent}  sync();
+${indent}  onCleanup(() => observer.disconnect());
+${indent}});
+`;
+}
+
 function needsHost(c: Construct): boolean {
-  return hasThemeToggleChrome(c) || hasHeaderActionsChrome(c) || hasUserMenuChrome(c);
+  return hasThemeToggleChrome(c) || hasHeaderActionsChrome(c) || hasUserMenuChrome(c) || splitNeedsPaneProbe(c);
 }
 
 /** widget.position -> Dock's own `position` prop. A closed DockPosition enum
@@ -1828,6 +2152,118 @@ function emitDockDefaultOpen(c: Construct): string {
   return w?.defaultOpen === true ? ' defaultOpen={true}' : '';
 }
 
+// ── workSurface: the split layout's rendering pane ───────────────────────────
+
+/** The construct's declared work surface, or undefined. Layout-narrowed once,
+ *  here, so every call site below reads plainly. */
+function workSurfaceOf(c: Construct): NonNullable<Construct['workSurface']> | undefined {
+  return c.layout === 'split' ? c.workSurface : undefined;
+}
+
+/** `kind` -> the two things it really decides: how `WorkSurface` frames its
+ *  content, and the framed document's accessible title. It decides NO chrome:
+ *  every chrome affordance is stated explicitly in the construct, so what the
+ *  builder panel shows and what the pane renders can never disagree (a
+ *  kind-dependent default cannot be expressed in the panel's own
+ *  ANCHORED_BOOLEAN_DEFAULTS, and a panel that misreports a switch is exactly
+ *  the menu-honesty failure this format's rules reject). */
+const WORK_SURFACE_IFRAME_TITLE: Record<'artifact' | 'preview', string> = {
+  artifact: 'Work surface',
+  preview: 'App preview',
+};
+
+/** Declares the signal `WorkSurface`'s expand toggle writes and
+ *  `WorkspaceShell`'s controlled `startCollapsed` reads. A SIGNAL, not a
+ *  closure variable: both are read reactively every render. Gated on
+ *  `chrome.expand` — no toggle, nothing to declare, and the emitted project
+ *  runs `noUnusedLocals`. */
+function emitWorkSurfaceVars(c: Construct, indent: string): string {
+  return workSurfaceOf(c)?.chrome?.expand
+    ? `${indent}// workSurface.chrome.expand -> WorkspaceShell's own CONTROLLED startCollapsed
+${indent}// (collapse the chat rail, click again to restore). NOT the kai-resizable
+${indent}// maximize protocol: WorkspaceShell does not forward maximizedIndex/
+${indent}// onMaximizeChange — see components/work-surface.tsx's doc comment.
+${indent}const [surfaceExpanded, setSurfaceExpanded] = createSignal(false);\n`
+    : '';
+}
+
+/** The `<WorkSurface …>` element itself. `url`/`codeUrl` are construct-authored
+ *  untrusted text (isSafeUrl'd at authoring time by schema.ts's superRefine),
+ *  so both are JSON.stringify'd into real JS string-literal expressions here,
+ *  never raw JSX attribute strings. Every chrome flag is emitted EXPLICITLY,
+ *  true or false, so the gating decision is visible in the eject artifact
+ *  rather than inferred from an absent prop — the same convention
+ *  `webSearch={false}`/`voice={false}` already follow above. */
+function emitWorkSurface(c: Construct, indent: string): string {
+  const ws = workSurfaceOf(c);
+  if (!ws) return '';
+  const chrome = ws.chrome ?? {};
+  const flag = (name: string, on: boolean | undefined): string => `${indent}  ${name}={${on === true}}\n`;
+  return (
+    `${indent}<WorkSurface\n` +
+    `${indent}  src={${JSON.stringify(ws.url)}}\n` +
+    `${indent}  variant="${ws.kind}"\n` +
+    `${indent}  iframeTitle={${JSON.stringify(WORK_SURFACE_IFRAME_TITLE[ws.kind])}}\n` +
+    (chrome.urlBar ? `${indent}  urlLabel={${JSON.stringify(ws.url)}}\n` : '') +
+    (ws.codeUrl ? `${indent}  codeSrc={${JSON.stringify(ws.codeUrl)}}\n` : '') +
+    flag('showDeviceToggle', chrome.deviceToggle) +
+    flag('showUrlBar', chrome.urlBar) +
+    flag('showOpenInNewTab', chrome.openInNewTab) +
+    flag('showExpand', chrome.expand) +
+    flag('showCodeView', chrome.codeView) +
+    (chrome.expand
+      ? `${indent}  expanded={surfaceExpanded()}\n${indent}  onExpandedChange={setSurfaceExpanded}\n`
+      : '') +
+    `${indent}/>\n`
+  );
+}
+
+/** Whether `workSurface.url` points at something this project should SHIP.
+ *  Relative only: an absolute url is somebody else's page and writing a
+ *  placeholder for it would be a lie. */
+function workSurfaceUrlIsRelative(url: string): boolean {
+  return !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url) && !url.startsWith('//');
+}
+
+/** The starting page a relative `workSurface.url` frames, so a builder preview
+ *  renders something real with no network at all.
+ *
+ *  THE FILENAME IS A CONSTANT, never derived from `url`: deriving a WRITE PATH
+ *  from construct-authored text would open a path-traversal sink that does not
+ *  exist today. `writeProject`'s manifest pruning deletes this file on its own
+ *  when `workSurface` is removed.
+ *
+ *  Styling is hard-coded and self-contained, not tokens: this document loads
+ *  inside a sandboxed iframe with no `allow-same-origin`, so it cannot see the
+ *  host's custom properties at all. */
+const WORK_SURFACE_PAGE = 'public/work-surface.html';
+
+function emitWorkSurfacePage(c: Construct): string {
+  const ws = workSurfaceOf(c)!;
+  const headline = ws.kind === 'artifact' ? 'Your work surface' : 'Your app preview';
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${headline}</title>
+  </head>
+  <body style="margin: 0; background: #f8fafc; color: #0f172a; font: 15px/1.6 system-ui, -apple-system, sans-serif;">
+    <main style="max-width: 34rem; margin: 0 auto; padding: 3.5rem 1.5rem;">
+      <h1 style="margin: 0 0 0.5rem; font-size: 1.125rem; font-weight: 600;">${headline}</h1>
+      <p style="margin: 0 0 1rem; color: #64748b;">
+        This placeholder ships with the construct so the pane renders offline, with no network and no backend.
+      </p>
+      <p style="margin: 0; color: #64748b;">
+        Replace it by pointing <code>workSurface.url</code> at your own page &mdash; or project your own markup as a
+        <code>&lt;slot name="pane"&gt;</code> child of the element, which wins over this pane entirely.
+      </p>
+    </main>
+  </body>
+</html>
+`;
+}
+
 function emitLayoutOpen(c: Construct): string {
   switch (c.layout) {
     case 'widget':
@@ -1854,13 +2290,50 @@ function emitLayoutOpen(c: Construct): string {
       <style>{\`@media (max-width: 480px) { [data-kai-layout="aside"] { inset: 0; width: auto; height: auto; ${borderSide}: 0; } }\`}</style>
 `;
     }
-    case 'split':
+    case 'split': {
+      const ws = workSurfaceOf(c);
+      // The app header strip (hasAppHeader) sits ABOVE the split entirely — a
+      // SIBLING of WorkspaceShell, never inside it — so it spans the frame and
+      // survives the work surface's Expand (which collapses the chat rail).
+      // That is the arrangement builder-workspace.stories.tsx ships; putting
+      // this chrome in ChatThread's own header row instead is exactly the
+      // defect this replaced (it rendered inside the chat rail's width).
+      // No wrapper div around the shell: the frame becomes a flex COLUMN and
+      // WorkspaceShell becomes its flexing item (`min-h-0 flex-1` in place of
+      // `h-full`), so the strip and the split share the viewport with no
+      // hand-rolled second container to close.
+      const header = emitAppHeader(c, '      ');
+      const frameOpen = header
+        ? `    <div style={{ height: '100dvh', display: 'flex', 'flex-direction': 'column' }}>\n${header}`
+        : `    <div style={{ height: '100dvh' }}>\n`;
+      const shellClass = header ? 'min-h-0 flex-1' : 'h-full';
       // drawerBelow: split's mobile takeover is the kit's OWN WorkspaceShell
       // capability (components/workspace-shell.tsx), not hand-rolled CSS — wiring
       // it here is composition-over-reauthoring, not a media-query duplicate. 480
       // matches Dock's own breakpoint (ui/dock.tsx:229) so every layout takes over
       // at the same viewport width.
-      return `    <div style={{ height: '100dvh' }}>\n      <WorkspaceShell class="h-full" drawerBelow={480} end={\n        <div style={{ height: '100%', overflow: 'auto' }}>\n          <slot name="pane" />\n        </div>\n      }>\n`;
+      if (!ws) {
+        // No work surface: the end pane is a PURE PROJECTION SEAM. It must not
+        // reserve a column around nothing — WorkspaceShell's own `showAside`
+        // is `!!props.end`, and a wrapper div is truthy even when nothing is
+        // projected, which is exactly the empty column this round removes.
+        // The check reads the LIGHT DOM (the host's own [slot="pane"]
+        // children), not the <slot>: a slot inside a collapsed column is
+        // unmounted, so a slotchange listener there could never fire itself
+        // back on. Only ELEMENTS can carry a slot attribute, so an element
+        // query is the whole test for a NAMED slot.
+        return `${frameOpen}      <WorkspaceShell class="${shellClass}" drawerBelow={480} end={paneProjected() ? (\n        <div style={{ height: '100%', overflow: 'auto' }}>\n          <slot name="pane" />\n        </div>\n      ) : undefined}>\n`;
+      }
+      // With a work surface the split INVERTS (owner ruling, and what
+      // builder-workspace.stories.tsx has always shipped): the chat is the
+      // resizable START rail at the story's own 360/280/520, and the surface
+      // fills WorkspaceShell's larger MAIN region. A bare split keeps the old
+      // arrangement above so consumer `<slot name="pane">` projection is
+      // untouched.
+      return `${frameOpen}      <WorkspaceShell class="${shellClass}" drawerBelow={480} startWidth={360} startMinWidth={280} startMaxWidth={520}${
+        ws.chrome?.expand ? ' startCollapsed={surfaceExpanded()}' : ''
+      } start={\n        <div style={{ height: '100%', 'min-height': '0', display: 'flex', 'flex-direction': 'column' }}>\n`;
+    }
     case 'custom':
       return ''; // unreachable — see the block comment above
   }
@@ -1874,15 +2347,25 @@ function emitLayoutClose(c: Construct): string {
       return `    </div>\n`;
     case 'aside':
       return `    </aside>\n`;
-    case 'split':
-      // The end pane (WorkspaceShell's `end`, opened above) is a fixed,
-      // always-present projection point for `split` specifically (Task 12) —
-      // orthogonal to Task 13's generic `slots` field, which still emits
-      // above the chat pane the same as every other non-custom layout (see
-      // emitApp). WorkspaceShell supplies its own real draggable splitter
-      // between the two, so there is no hand-rolled two-column math left to
-      // close here.
-      return `      </WorkspaceShell>\n    </div>\n`;
+    case 'split': {
+      const ws = workSurfaceOf(c);
+      if (!ws) {
+        // The end pane (WorkspaceShell's `end`, opened above) is the `split`
+        // layout's projection point (Task 12) — orthogonal to Task 13's
+        // generic `slots` field, which still emits above the chat pane the
+        // same as every other non-custom layout (see emitApp). WorkspaceShell
+        // supplies its own real draggable splitter between the two, so there
+        // is no hand-rolled two-column math left to close here.
+        return `      </WorkspaceShell>\n    </div>\n`;
+      }
+      // The chat is the resizable START rail and the work surface fills the
+      // MAIN region — WorkspaceShell makes `children` the larger of the two,
+      // which is the arrangement builder-workspace.stories.tsx ships and the
+      // owner approved. The surface is <slot name="pane"> FALLBACK content:
+      // native slot semantics mean an assigned node replaces it, so a
+      // consumer's own projection still WINS.
+      return `        </div>\n      }>\n        {/* Your own <slot name="pane"> projection WINS over this: assigned nodes\n            replace fallback content. The construct's work surface is the\n            DEFAULT, not an override. Declared \`slots\` still render inside the\n            chat rail above the thread — the same relative position they hold\n            in every other layout. */}\n        <slot name="pane">\n${emitWorkSurface(c, '          ')}        </slot>\n      </WorkspaceShell>\n    </div>\n`;
+    }
     case 'custom':
       return ''; // unreachable — see the block comment above
   }
@@ -1908,10 +2391,22 @@ const MANIFEST = '.kai-manifest.json';
 
 /**
  * Write files; prune anything the PREVIOUS generation wrote that this one
- * didn't. Returns the paths that already existed on disk before this write
- * (i.e. were overwritten) — callers that decide loudly (the CLI's `eject`)
- * use it to say so instead of silently clobbering a file the caller may have
- * hand-edited.
+ * didn't. Returns the paths that already existed on disk with DIFFERENT
+ * content (i.e. were really overwritten) — callers that decide loudly (the
+ * CLI's `eject`) use it to say so instead of silently clobbering a file the
+ * caller may have hand-edited. A byte-identical file is not rewritten and
+ * not reported: rewriting it would be a lie to every watcher downstream —
+ * Vite treats a fresh mtime on vite.config.ts as a restart signal, so `dev`'s
+ * regen-per-edit was restarting the preview server on EVERY construct edit,
+ * and at live-theming frequency a restart landing mid-iframe-reload strands
+ * the preview on a dead page.
+ *
+ * The skip lives HERE, inside writeProject, and the prune manifest is still
+ * built from the FULL emitted-file list — never from the subset that changed.
+ * An earlier attempt filtered the file list UPSTREAM (dev.ts handing
+ * writeProject only the changed files), and since writeProject prunes
+ * everything its manifest doesn't cover, the subset deleted the rest of the
+ * project. Reverted; do not reintroduce it.
  */
 export function writeProject(files: GeneratedFile[], dir: string): string[] {
   const manifestPath = join(dir, MANIFEST);
@@ -1925,10 +2420,21 @@ export function writeProject(files: GeneratedFile[], dir: string): string[] {
   const overwritten: string[] = [];
   for (const f of files) {
     const abs = join(dir, f.path);
-    if (existsSync(abs)) overwritten.push(f.path);
+    if (existsSync(abs)) {
+      // Skip a byte-identical file entirely: no write, no mtime bump, no
+      // watcher wake-up. readFileSync-then-compare is cheap next to the
+      // write it saves (these are small text files, once per regen).
+      if (readFileSync(abs, 'utf8') === f.code) continue;
+      overwritten.push(f.path);
+    }
     mkdirSync(dirname(abs), { recursive: true });
     writeFileSync(abs, f.code);
   }
-  writeFileSync(manifestPath, `${JSON.stringify([...current].sort(), null, 2)}\n`);
+  // Same skip for the manifest itself — on a no-op regen nothing in the
+  // project directory is touched at all.
+  const manifestText = `${JSON.stringify([...current].sort(), null, 2)}\n`;
+  if (!existsSync(manifestPath) || readFileSync(manifestPath, 'utf8') !== manifestText) {
+    writeFileSync(manifestPath, manifestText);
+  }
   return overwritten;
 }

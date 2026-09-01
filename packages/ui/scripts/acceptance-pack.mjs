@@ -311,6 +311,7 @@ const EXPORT_NOTES = {
   './solid': { agent: true, what: 'The SolidJS entry with the server build wired up.' },
   './state': { agent: true, what: 'I/O-free helpers over `ChatMessage[]`: `createAssistantStream`, `appendTextPart`, `upsertToolPart`.' },
   './wire': { agent: true, what: 'The model-stream adapter: `readOpenAIStream` / `readAnthropicStream` / `readModelStream` parse provider SSE; `toOpenAIMessages` / `toAnthropicMessages` encode the thread back.' },
+  './stores': { agent: true, what: 'The built-in `ConversationStore` implementations — `localStorageStore` / `fetchStore` — plus `byRecency` / `isConversationUnread`. Self-contained (no bare imports), so it also loads raw from a CDN URL, unlike the root export.' },
   './define': { agent: true, what: 'The compiled facade-definition seam: `defineWebComponent` + `WebComponentContext`. Used by construct-engine-generated projects (and any consumer wrapping a pure-Solid interior) to register one self-registering element without pulling in the full `./elements` bundle.' },
   './diagnostics': {
     agent: true,

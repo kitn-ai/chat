@@ -42,7 +42,12 @@ export { configureCodeHighlighting, isCodeHighlightingEnabled } from './primitiv
 export type { CodeHighlightingOptions } from './primitives/highlighter';
 export { configurePdfPreview, isPdfPreviewEnabled } from './primitives/pdf-preview';
 export type { PdfPreviewOptions } from './primitives/pdf-preview';
-export { localStorageStore, fetchStore, byRecency, LEGACY_THREAD_MIGRATED_TITLE } from './primitives/conversation-store';
+// Also surfaced as the self-contained `@kitn.ai/ui/stores` entry (src/stores/
+// index.ts has the decision record): this root bundle bare-imports solid-js,
+// so a no-bundler CDN page can't load it — the stores subpath is the raw-URL
+// route to the same module. Keep BOTH: removing these re-exports would break
+// every existing bundler consumer for no gain.
+export { localStorageStore, fetchStore, byRecency, isConversationUnread, LEGACY_THREAD_MIGRATED_TITLE } from './primitives/conversation-store';
 export type { ConversationStore } from './primitives/conversation-store';
 
 // Toasts: imperative `toast()` API + the reactive store behind <kai-toast-region>
@@ -214,6 +219,10 @@ export type {
 } from './components/file-tree';
 export { Artifact } from './components/artifact';
 export type { ArtifactProps, ArtifactFile, ArtifactTab } from './components/artifact';
+export { WorkSurface, WORK_SURFACE_DEVICE_WIDTHS } from './components/work-surface';
+export type { WorkSurfaceProps, WorkSurfaceDevice } from './components/work-surface';
+export { AppHeader } from './components/app-header';
+export type { AppHeaderProps, AppHeaderAction, AppHeaderUserMenuItem } from './components/app-header';
 export { ArtifactCard, DEFAULT_ARTIFACT_CARD_HEIGHT } from './components/artifact-card';
 // `ArtifactCardFile` is the SAME declaration `FileTreeFile` and `ArtifactFile`
 // alias, authored in primitives/card-data-types.ts because `ArtifactCardData.files`

@@ -330,7 +330,15 @@ describe("runWizard: template seeding states 'Template'/'Variant' and seeds init
     const { io, initials } = recordingIo();
     await runWizard('assistant', 'kai-app', io, false);
     expect(initials['Header title? (clear the field for none)']).toBe('Assistant');
-    expect(initials['Accent color? (clear the field for the kit default)']).toBe('#7c3aed');
+    // Read live off the registry, not a hardcoded literal (the same rule as
+    // the dark-by-default test below): per the accents-do-not-carry-over
+    // ruling (2026-08-30) no starter ships theme.accent, so today this seeds
+    // the '' fallback — but the contract under test is "initial = the
+    // starter's own value", not any particular color.
+    const assistant = buildableTemplates().find((t) => t.id === 'assistant')!;
+    expect(initials['Accent color? (clear the field for the kit default)']).toBe(
+      assistant.starter.theme?.accent ?? '',
+    );
     expect(initials['Allow file attachments?']).toBe(true);
     expect(initials['Persist conversation history in this browser?']).toBe(true);
   });
@@ -696,15 +704,21 @@ describe('composeConstruct: template seeding (B-17a)', () => {
     expect(ConstructSchema.safeParse(out).success).toBe(true);
   });
 
-  it("history on over a starter WITHOUT it gets the local+conversations pair; research's history-without-conversations shape is preserved", () => {
+  it("history on over a starter WITHOUT it gets the local+conversations pair; a starter that already persists keeps its EXACT shape (never re-created)", () => {
     const scratch = composeConstruct({ ...keep('scratch'), history: true }) as {
       capabilities?: Record<string, unknown>;
     };
     expect(scratch.capabilities?.history).toEqual({ persistence: 'local' });
     expect(scratch.capabilities?.conversations).toBe(true);
+    // Read live off the registry, not restated: research's history shape
+    // (today history local + conversations true, since the round that gave
+    // every persisting starter a conversation list) must pass through
+    // composeConstruct byte-identical, proving the keep-the-starter branch
+    // never rebuilds what already exists.
+    const researchStarter = buildableTemplates().find((t) => t.id === 'research')!.starter;
     const research = composeConstruct(keep('research')) as { capabilities?: Record<string, unknown> };
-    expect(research.capabilities?.history).toEqual({ persistence: 'local' });
-    expect(research.capabilities?.conversations).toBeUndefined();
+    expect(research.capabilities?.history).toEqual(researchStarter.capabilities?.history);
+    expect(research.capabilities?.conversations).toBe(researchStarter.capabilities?.conversations);
   });
 
   it('scratch is the bare fullscreen construct — everything off', () => {

@@ -1,11 +1,14 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { type JSX, createSignal, createMemo, createEffect, onCleanup, For, Show } from 'solid-js';
-import { Code2, Globe, Monitor, Tablet, Smartphone, Lock, ExternalLink, Maximize2, Minimize2, Plus, ChevronUp, ChevronDown, X, Search, Sun, Moon } from 'lucide-solid';
+import { Plus, ChevronUp, ChevronDown, X } from 'lucide-solid';
 import { BuilderPanel, type BuilderConstruct } from '../components/builder-panel';
 import { BuilderLayout, type BuilderViewport } from '../components/builder-layout';
 import { resolveAccentWrapperStyle } from '../components/builder-preview';
 import { ChatThread } from '../components/chat-thread';
 import { WorkspaceShell } from '../components/workspace-shell';
+import { WorkSurface } from '../components/work-surface';
+import { AppHeader, type AppHeaderAction } from '../components/app-header';
+import type { ArtifactTab } from '../components/artifact';
 import { mix, StubStatTile, StubCodeBlock } from '../components/builder-skeleton';
 import {
   type UserActionId,
@@ -28,8 +31,6 @@ import {
   type ShellControlsState,
   ShellSection,
   CommandPaletteOverlay,
-  CommandPaletteTrigger,
-  UserMenu,
 } from '../components/builder-shell-controls';
 import { RadioGroup, type RadioOption } from '../ui/radio';
 import { Switch } from '../ui/switch';
@@ -37,10 +38,7 @@ import { Select } from '../ui/select';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Dropdown, DropdownTrigger, DropdownContent, DropdownItem } from '../ui/dropdown';
-import { Separator } from '../ui/separator';
-import { Tooltip } from '../ui/tooltip';
 import { renderIcon } from '../ui/icon';
-import { cn } from '../utils/cn';
 import type { ChatMessage, ChatMessageAction, CustomAction } from './chat-types';
 
 // Labs/Builder/Workspace — T-1 build-out (docs/superpowers/specs/
@@ -65,9 +63,14 @@ import type { ChatMessage, ChatMessageAction, CustomAction } from './chat-types'
 // affordances on `Labs/Apps`'s Lovable and v0 stories, read closely before
 // building any of this rather than guessed at:
 //
-// 1. WORK-PANE HEADER (`WorkPane`'s toolbar) mirrors Lovable's browser
-//    chrome (`elements/lovable.stories.tsx`'s preview toolbar, read line by
-//    line): a device toggle (desktop/tablet/mobile, segmented, scoped to
+// 1. WORK-PANE CHROME. PROMOTED 2026-08-30 into the real component
+//    `components/work-surface.tsx` (`WorkSurface`) — this story now RENDERS
+//    that component instead of holding its own copy, so the approved design
+//    and the shipped product cannot drift. Everything below is the recorded
+//    reasoning for the design it carries; the component's own doc comment
+//    repeats it at the code. It mirrors Lovable's browser chrome
+//    (`elements/lovable.stories.tsx`'s preview toolbar, read line by line):
+//    a device toggle (desktop/tablet/mobile, segmented, scoped to
 //    the PANE's own canvas only — independent of `BuilderLayout`'s outer
 //    builder-chrome viewport chips, which scale the whole builder frame) ·
 //    a read-only URL bar (lock icon + fake domain text, Lovable's own
@@ -95,7 +98,18 @@ import type { ChatMessage, ChatMessageAction, CustomAction } from './chat-types'
 //    (`startCollapsed={expanded()}`), not a hand-rolled `display:none` or
 //    the v0/kai-artifact maximize protocol, which this shell does not carry.
 //
-// APP HEADER: a new top-level strip inside the preview frame, above the
+// APP HEADER: PROMOTED 2026-08-30 into the real component
+// `components/app-header.tsx` (`AppHeader`) — the same treatment the work
+// pane's chrome got above, and for the same reason: the emitted app had
+// drifted off this design (a text "Theme" button, no search at all, a bare
+// avatar with no menu, and the whole cluster stuffed into ChatThread's own
+// header row inside the chat rail instead of a strip across the frame). This
+// story now RENDERS that component and the emitted app COMPOSES it, so there
+// is one arrangement, not two. Everything below is the recorded reasoning for
+// the design it carries; the component's own doc comment repeats it at the
+// code, superseded history included.
+//
+// A new top-level strip inside the preview frame, above the
 // split entirely (persists through Expand, matching Lovable's own top bar
 // living outside/above its split body) — modeled on Lovable's real
 // `<header>` (brand/title one side, actions the other). JUDGMENT CALL,
@@ -167,14 +181,19 @@ import type { ChatMessage, ChatMessageAction, CustomAction } from './chat-types'
 //  - The SPLIT FRAME ITSELF fits today's schema cleanly: `layout: 'split'`
 //    already exists in `BuilderLayoutKind` and codegen has a real emission
 //    for it. The frame is construct-expressible NOW.
-//  - What CANNOT be expressed: the pane's CONTENT (unchanged from the
-//    first round), the pane's OWN CHROME (device toggle / URL bar / open-
-//    in-tab / expand / Preview-Code, all preview-only signals below), the
-//    app header's ACTIONS, and all four composer knobs (chips, menu,
-//    attachments-applying, mic). Every control this round added past
-//    Identity/Provider/Theme/Capabilities is preview-only, writing to
-//    local signals, never to `BuilderConstruct` — the Raw JSON section
-//    never reflects any of it, which is the honest tell.
+//  - CLOSED 2026-08-30 (`workSurface`, see schema.ts): the pane's OWN CHROME
+//    is construct vocabulary now — `workSurface.chrome.deviceToggle` /
+//    `urlBar` / `openInNewTab` / `expand` / `codeView`, plus `kind` and a
+//    required `url` — and the app header's ACTIONS have been
+//    `header.actions` since T-5 shipped, so that half of this note was
+//    already stale before this round.
+//  - STILL NOT EXPRESSIBLE: the pane's CONTENT beyond a url (a construct
+//    cannot author the framed document — model-produced artifacts need a
+//    `kind` on `cards`, a card->pane route, and a mock responder that
+//    scripts a tool call, none of which exist), and all four composer knobs
+//    (chips, menu, attachments-applying, mic). Those controls still write to
+//    local signals only, never to `BuilderConstruct` — the Raw JSON section
+//    not reflecting them is the honest tell.
 //
 // Panel: the Assistant template's set minus the persistent sidebar
 // (Workspace's own basis — v0/lovable/split-workspace — has no
@@ -183,8 +202,6 @@ import type { ChatMessage, ChatMessageAction, CustomAction } from './chat-types'
 // Composer (chips + menu + attach/mic), and the shared Message actions
 // picker.
 
-type PaneDevice = 'desktop' | 'tablet' | 'mobile';
-type PaneKind = 'preview' | 'code';
 type HeaderButtonVariant = 'primary' | 'secondary' | 'ghost';
 
 interface HeaderActionRow {
@@ -212,19 +229,10 @@ interface ComposerMenuEntry {
 let nextRowId = 1;
 const newRowId = (prefix: string): string => `${prefix}-${nextRowId++}`;
 
-const PANE_DEVICES: readonly { id: PaneDevice; label: string; Icon: typeof Monitor }[] = [
-  { id: 'desktop', label: 'Desktop', Icon: Monitor },
-  { id: 'tablet', label: 'Tablet', Icon: Tablet },
-  { id: 'mobile', label: 'Mobile', Icon: Smartphone },
-];
-
-/** Lovable's own `DEVICE_W` shape (`lovable.stories.tsx`) — the preview
- *  canvas gets a max-width and centers; the device toggle scales only the
- *  pane's PREVIEW content, never the Code view (mirroring Lovable, whose
- *  device toggle only ever wraps its `tab() === 'preview'` branch). */
-const PANE_DEVICE_W: Record<PaneDevice, string> = { desktop: '100%', tablet: '834px', mobile: '390px' };
-
-const PANE_KIND_OPTIONS: readonly RadioOption<PaneKind>[] = [
+/** The pane-kind radio in the panel. The pane's own device list and canvas
+ *  widths now live on the promoted component (`components/work-surface.tsx`'s
+ *  `DEVICES` / `WORK_SURFACE_DEVICE_WIDTHS`) — one definition, not a copy. */
+const PANE_KIND_OPTIONS: readonly RadioOption<ArtifactTab>[] = [
   { value: 'preview', label: 'Preview', description: 'Rendered-output skeleton' },
   { value: 'code', label: 'Code', description: 'Code view — StubCodeBlock' },
 ];
@@ -287,264 +295,6 @@ const DEFAULT_CONSTRUCT: BuilderConstruct = {
   },
 };
 
-/** Icon-only theme toggle — the kit's real icon-button idiom (`Tooltip` +
- *  ghost `icon-sm` `Button`, the same pairing every other round's icon
- *  button on this branch uses — `voice-output.tsx`, Voice's transcript
- *  download). Shows the icon for the mode you'd switch TO (the universal
- *  convention: Sun while dark — "tap for light" — Moon while light), never
- *  "dark mode"/"light mode" text. `NAMED_ICONS` (`ui/icon.tsx`) already
- *  carries both `sun`/`moon`; imported directly here (`lucide-solid`) the
- *  same way this file already imports `Lock`/`ExternalLink`/etc. rather
- *  than reused through the string-keyed `renderIcon` helper, since the
- *  icon is fixed, not data-driven. */
-function ThemeToggleButton(props: { dark: boolean; onToggle: () => void }): JSX.Element {
-  const label = () => (props.dark ? 'Switch to light mode' : 'Switch to dark mode');
-  return (
-    <Tooltip content={label()}>
-      <Button type="button" variant="ghost" size="icon-sm" aria-label={label()} onClick={props.onToggle}>
-        {props.dark ? <Sun size={14} aria-hidden="true" /> : <Moon size={14} aria-hidden="true" />}
-      </Button>
-    </Tooltip>
-  );
-}
-
-/** The workspace's own app-level top bar — see the module doc comment's
- *  "APP HEADER" note for the mirrored-placement reasoning. Sits ABOVE the
- *  split entirely (a sibling of `WorkspaceShell`, not inside it), so it
- *  persists through Expand.
- *
- *  OWNER FEEDBACK ROUND — rearranged + made individually optional. The
- *  title moved to the LEFT (was right); the right side is now a fixed,
- *  OPINIONATED arrangement, left to right: a utility cluster (search,
- *  theme toggle) · a divider · the header-actions row (Share/Deploy by
- *  default, a real configurable ordered-rows list — see `HeaderActionsSection`
- *  below, unchanged from the prior round) · a divider · the user avatar
- *  (compact: initials + chevron only, no name/plan text — the owner's own
- *  instruction). POSITIONS are not configurable, only presence is: every
- *  element (`showTitle`/`showThemeToggle`/`showActions`, plus the existing
- *  `shell.commandPalette`/`shell.userMenu` toggles this file already had)
- *  is its own on/off panel switch. Dividers render only between two GROUPS
- *  that both actually have visible content, so turning a group off never
- *  leaves an orphan divider next to nothing. */
-function AppHeader(props: {
-  title?: string;
-  showTitle: boolean;
-  actions: HeaderActionRow[];
-  showActions: boolean;
-  showThemeToggle: boolean;
-  dark: boolean;
-  onToggleDark: () => void;
-  shell: ShellControlsState;
-  onOpenPalette: () => void;
-}): JSX.Element {
-  const utilityVisible = () => props.shell.commandPalette || props.showThemeToggle;
-  const actionsVisible = () => props.showActions && props.actions.length > 0;
-  const userVisible = () => props.shell.userMenu;
-
-  return (
-    <header class="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-4" data-builder-app-header>
-      <div class="flex min-w-0 items-center gap-2">
-        {props.showTitle && <span class="truncate text-sm font-semibold text-foreground">{props.title}</span>}
-      </div>
-      <div class="flex items-center gap-2">
-        <Show when={utilityVisible()}>
-          <div class="flex items-center gap-1">
-            {props.shell.commandPalette && (
-              <Tooltip content="Search commands">
-                <CommandPaletteTrigger onOpen={props.onOpenPalette} />
-              </Tooltip>
-            )}
-            {props.showThemeToggle && <ThemeToggleButton dark={props.dark} onToggle={props.onToggleDark} />}
-          </div>
-        </Show>
-
-        <Show when={utilityVisible() && (actionsVisible() || userVisible())}>
-          <Separator orientation="vertical" class="h-5" />
-        </Show>
-
-        <Show when={actionsVisible()}>
-          <div class="flex items-center gap-2">
-            <For each={props.actions}>
-              {(action) => (
-                <Button type="button" variant={HEADER_VARIANT_TO_BUTTON[action.variant]} size="sm">
-                  {action.label}
-                </Button>
-              )}
-            </For>
-          </div>
-        </Show>
-
-        <Show when={actionsVisible() && userVisible()}>
-          <Separator orientation="vertical" class="h-5" />
-        </Show>
-
-        <Show when={userVisible()}>
-          <UserMenu name="Ada" plan="Pro" class="w-auto" compact />
-        </Show>
-      </div>
-    </header>
-  );
-}
-
-/** The work pane's browser-chrome toolbar, mirroring Lovable's preview
- *  toolbar order (device toggle · URL bar · open-in-new-tab · Preview|Code,
- *  Preview first) plus the owner-amended Expand control near the tab
- *  toggle (v0/kai-artifact's own ordering) — every item individually
- *  optional via the `show*` flags. */
-function WorkPaneToolbar(props: {
-  showDeviceToggle: boolean;
-  device: PaneDevice;
-  onDeviceChange: (d: PaneDevice) => void;
-  showUrlBar: boolean;
-  showOpenInNewTab: boolean;
-  showExpand: boolean;
-  expanded: boolean;
-  onExpandedChange: (v: boolean) => void;
-  showCodeView: boolean;
-  kind: PaneKind;
-  onKindChange: (k: PaneKind) => void;
-}): JSX.Element {
-  return (
-    <div class="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3" style={{ 'background-color': mix('--color-muted', 20) }} data-builder-work-pane-toolbar>
-      <Show when={props.showDeviceToggle}>
-        <div class="flex items-center gap-0.5 rounded-lg bg-muted p-0.5" role="group" aria-label="Pane device">
-          <For each={PANE_DEVICES}>
-            {(d) => (
-              <button
-                type="button"
-                aria-label={d.label}
-                aria-pressed={props.device === d.id}
-                class={cn('grid size-7 place-items-center rounded-md transition-colors', props.device === d.id ? 'bg-surface text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
-                onClick={() => props.onDeviceChange(d.id)}
-              >
-                <d.Icon size={14} aria-hidden="true" />
-              </button>
-            )}
-          </For>
-        </div>
-      </Show>
-
-      <Show when={props.showUrlBar}>
-        <div class="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5">
-          <Lock size={13} class="shrink-0 text-muted-foreground" aria-hidden="true" />
-          <span class="truncate font-mono text-xs text-muted-foreground">preview--build-workspace.kitn.app</span>
-        </div>
-      </Show>
-      <Show when={!props.showUrlBar}>
-        <div class="min-w-0 flex-1" />
-      </Show>
-
-      <Show when={props.showOpenInNewTab}>
-        <Button type="button" variant="ghost" size="icon-sm" aria-label="Open in new tab">
-          <ExternalLink size={14} aria-hidden="true" />
-        </Button>
-      </Show>
-
-      <Show when={props.showExpand}>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={props.expanded ? 'Restore split' : 'Expand work pane'}
-          aria-pressed={props.expanded}
-          onClick={() => props.onExpandedChange(!props.expanded)}
-        >
-          {props.expanded ? <Minimize2 size={14} aria-hidden="true" /> : <Maximize2 size={14} aria-hidden="true" />}
-        </Button>
-      </Show>
-
-      <Show when={props.showCodeView}>
-        <div class="flex items-center gap-0.5 rounded-lg bg-muted p-0.5" role="group" aria-label="Pane kind">
-          <button
-            type="button"
-            class={cn('flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors', props.kind === 'preview' ? 'bg-surface text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
-            aria-pressed={props.kind === 'preview'}
-            onClick={() => props.onKindChange('preview')}
-          >
-            <Globe size={13} aria-hidden="true" />
-            Preview
-          </button>
-          <button
-            type="button"
-            class={cn('flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors', props.kind === 'code' ? 'bg-surface text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
-            aria-pressed={props.kind === 'code'}
-            onClick={() => props.onKindChange('code')}
-          >
-            <Code2 size={13} aria-hidden="true" />
-            Code
-          </button>
-        </div>
-      </Show>
-    </div>
-  );
-}
-
-function WorkPane(props: {
-  showDeviceToggle: boolean;
-  showUrlBar: boolean;
-  showOpenInNewTab: boolean;
-  showExpand: boolean;
-  showCodeView: boolean;
-  kind: PaneKind;
-  onKindChange: (k: PaneKind) => void;
-  expanded: boolean;
-  onExpandedChange: (v: boolean) => void;
-}): JSX.Element {
-  const [device, setDevice] = createSignal<PaneDevice>('desktop');
-  const effectiveKind = createMemo<PaneKind>(() => (props.showCodeView ? props.kind : 'preview'));
-
-  // Owner feedback round: the artifact viewport (the area surrounding/
-  // behind the previewed content — both the preview AND code panes, per
-  // `WorkPane`'s single shared root below) sits on a MUTED background,
-  // matching `elements/lovable.stories.tsx`'s own real preview surface
-  // (its RIGHT `<section>`, read line by line: `bg-muted/30` around the
-  // toolbar+canvas, with the toolbar bar itself staying `bg-background`
-  // and the actual preview content card `bg-background`-bordered ON TOP
-  // of the muted backdrop — read again below). A plain `bg-muted/30`
-  // Tailwind opacity-modifier class is NOT used here even though it's
-  // the literal token Lovable uses: `builder-skeleton.tsx`'s own module
-  // doc comment (read before touching this) already flagged this exact
-  // class of arbitrary/opacity Tailwind string as non-deterministic in
-  // THIS story's live Storybook dev server, and prescribes `mix()`
-  // (real `color-mix()`, no compile step to race) as the fix every
-  // other skeleton token in this file already uses — so the SAME
-  // real color, expressed the way this file's own precedent already
-  // established, not a fresh literal class string.
-  return (
-    <div class="flex h-full min-w-0 flex-1 flex-col" style={{ 'background-color': mix('--color-muted', 30) }} data-builder-work-pane data-builder-pane-kind={effectiveKind()}>
-      <WorkPaneToolbar
-        showDeviceToggle={props.showDeviceToggle}
-        device={device()}
-        onDeviceChange={setDevice}
-        showUrlBar={props.showUrlBar}
-        showOpenInNewTab={props.showOpenInNewTab}
-        showExpand={props.showExpand}
-        expanded={props.expanded}
-        onExpandedChange={props.onExpandedChange}
-        showCodeView={props.showCodeView}
-        kind={effectiveKind()}
-        onKindChange={props.onKindChange}
-      />
-      <div class="min-h-0 flex-1 overflow-auto p-5">
-        {effectiveKind() === 'code' ? (
-          <StubCodeBlock lines={12} class="max-w-2xl" />
-        ) : (
-          <div class="mx-auto h-full transition-all duration-300" style={{ 'max-width': PANE_DEVICE_W[device()] }}>
-            <div class="flex h-full flex-col gap-4">
-              <div class="grid grid-cols-3 gap-3">
-                <StubStatTile class="h-28" />
-                <StubStatTile class="h-28" />
-                <StubStatTile class="h-28" />
-              </div>
-              <div class="flex-1 rounded-xl border border-border" style={{ 'background-color': mix('--color-surface', 30) }} />
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /** The v0-style composer `+` menu — see the module doc comment's COMPOSER
  *  note for why this composes `Dropdown`/`DropdownTrigger`/`DropdownContent`/
  *  `DropdownItem` directly (the real primitives `model-switcher.tsx` also
@@ -587,8 +337,13 @@ function ComposerExtras(props: {
   onFill: (value: string) => void;
   lastAction: string;
 }): JSX.Element {
-  if (!props.chips.length && !props.menuEnabled) return null;
+  // A `Show`, not an early `return null`: this used to be evaluated ONCE at
+  // component-creation time, so toggling the composer menu (or clearing every
+  // chip) never actually added or removed the strip. It also now carries the
+  // last-action readout for the promoted `AppHeader`'s buttons, which have to
+  // be able to bring the strip back on their own.
   return (
+    <Show when={props.chips.length > 0 || props.menuEnabled || props.lastAction}>
     <div class="flex flex-wrap items-center gap-1.5 border-b border-border px-3 py-2" data-builder-composer-extras>
       <Show when={props.menuEnabled}>
         <ComposerMenu entries={props.menuEntries} onEntrySelect={(entry) => props.onFill(`(${entry.label})`)} />
@@ -608,13 +363,14 @@ function ComposerExtras(props: {
         <span class="ml-auto shrink-0 truncate text-[11px] text-muted-foreground">{props.lastAction}</span>
       </Show>
     </div>
+    </Show>
   );
 }
 
 function WorkspacePreview(props: {
   construct: BuilderConstruct;
-  paneKind: PaneKind;
-  onPaneKindChange: (k: PaneKind) => void;
+  paneKind: ArtifactTab;
+  onPaneKindChange: (k: ArtifactTab) => void;
   chrome: { showDeviceToggle: boolean; showUrlBar: boolean; showOpenInNewTab: boolean; showExpand: boolean; showCodeView: boolean };
   expanded: boolean;
   onExpandedChange: (v: boolean) => void;
@@ -642,6 +398,14 @@ function WorkspacePreview(props: {
     setComposerValue(value);
     setLastAction(`Filled: ${value}`);
   };
+  /** The panel's own three-name variant vocabulary -> the kit Button variants
+   *  `AppHeader` (and the construct schema's `header.actions[].variant`, built
+   *  from the same `BUTTON_VARIANT_NAMES`) actually speak. See
+   *  `HEADER_VARIANT_TO_BUTTON` for why the mapping is honest rather than a
+   *  `primary`/`secondary` variant invented on `Button` itself. */
+  const headerActions = createMemo<AppHeaderAction[]>(() =>
+    props.headerActions.map((action) => ({ label: action.label, variant: HEADER_VARIANT_TO_BUTTON[action.variant] })),
+  );
 
   const frameStyle = createMemo(() => ({
     ...resolveAccentWrapperStyle(props.construct.theme),
@@ -684,16 +448,23 @@ function WorkspacePreview(props: {
       data-builder-pane-expanded={props.expanded}
     >
       <CommandPaletteOverlay open={props.shell.commandPalette && paletteOpen()} onClose={() => setPaletteOpen(false)} />
+      {/* The REAL promoted component (`components/app-header.tsx`), not a local
+          copy of it — same treatment `WorkSurface` got below. The ARRANGEMENT
+          lives in the component (owner ruling: not configurable); this call
+          site only decides PRESENCE, and supplies the mechanism behind each
+          piece. Passing a handler is not optional decoration: the component
+          renders nothing for a piece whose mechanism is missing. */}
       <AppHeader
-        title={props.construct.header?.title}
-        showTitle={props.headerShowTitle}
-        actions={props.headerActions}
-        showActions={props.headerShowActions}
+        title={props.headerShowTitle ? props.construct.header?.title : undefined}
+        showSearch={props.shell.commandPalette}
+        onSearch={() => setPaletteOpen(true)}
         showThemeToggle={props.headerShowThemeToggle}
         dark={props.dark}
         onToggleDark={props.onToggleDark}
-        shell={props.shell}
-        onOpenPalette={() => setPaletteOpen(true)}
+        actions={props.headerShowActions ? headerActions() : undefined}
+        onActionSelect={(action) => setLastAction(`Header action: ${action.label}`)}
+        user={props.shell.userMenu ? { name: 'Ada', plan: 'Pro' } : undefined}
+        onUserMenuSelect={(item) => setLastAction(`User menu: ${item}`)}
       />
       <div class="min-h-0 flex-1">
         <WorkspaceShell
@@ -727,16 +498,32 @@ function WorkspacePreview(props: {
             </div>
           }
         >
-          <WorkPane
+          {/* The REAL promoted component (`components/work-surface.tsx`), not a
+              local copy of it. The story keeps its STUB CONTENT — the chrome is
+              what got promoted; what the pane frames still comes from whoever
+              mounts it (here: skeleton tiles; an emitted construct: a url). */}
+          <WorkSurface
             showDeviceToggle={props.chrome.showDeviceToggle}
             showUrlBar={props.chrome.showUrlBar}
+            urlLabel="preview--build-workspace.kitn.app"
             showOpenInNewTab={props.chrome.showOpenInNewTab}
             showExpand={props.chrome.showExpand}
             showCodeView={props.chrome.showCodeView}
-            kind={props.paneKind}
-            onKindChange={props.onPaneKindChange}
+            tab={props.paneKind}
+            onTabChange={props.onPaneKindChange}
             expanded={props.expanded}
             onExpandedChange={props.onExpandedChange}
+            preview={
+              <div class="flex h-full flex-col gap-4">
+                <div class="grid grid-cols-3 gap-3">
+                  <StubStatTile class="h-28" />
+                  <StubStatTile class="h-28" />
+                  <StubStatTile class="h-28" />
+                </div>
+                <div class="flex-1 rounded-xl border border-border" style={{ 'background-color': mix('--color-surface', 30) }} />
+              </div>
+            }
+            code={<StubCodeBlock lines={12} class="max-w-2xl" />}
           />
         </WorkspaceShell>
       </div>
@@ -745,8 +532,8 @@ function WorkspacePreview(props: {
 }
 
 function WorkSurfaceSection(props: {
-  kind: PaneKind;
-  onKindChange: (v: PaneKind) => void;
+  kind: ArtifactTab;
+  onKindChange: (v: ArtifactTab) => void;
   showDeviceToggle: boolean;
   onShowDeviceToggleChange: (v: boolean) => void;
   showUrlBar: boolean;
@@ -761,7 +548,7 @@ function WorkSurfaceSection(props: {
   return (
     <section class="flex flex-col gap-3 border-b border-border p-4">
       <h3 class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Work surface</h3>
-      <RadioGroup<PaneKind> options={PANE_KIND_OPTIONS} value={props.kind} label="Pane kind" onChange={props.onKindChange} />
+      <RadioGroup<ArtifactTab> options={PANE_KIND_OPTIONS} value={props.kind} label="Pane kind" onChange={props.onKindChange} />
       <div class="flex flex-col gap-2 pt-1">
         <span class="text-xs font-medium text-foreground">Toolbar chrome</span>
         <div class="flex items-center justify-between gap-3">
@@ -786,9 +573,10 @@ function WorkSurfaceSection(props: {
         </div>
       </div>
       <p class="text-xs text-muted-foreground">
-        Preview-only — construct.v1 has no work-surface/pane key at all (T-5, see this file's module doc comment). The split frame is
-        construct-expressible today (`layout: 'split'`); its content and every toolbar affordance above are not. Turning off Code view
-        removes the Preview|Code toggle entirely — a preview-only workspace, not just a disabled control.
+        These map onto real construct vocabulary as of 2026-08-30 — <code>workSurface.kind</code>, <code>url</code> and{' '}
+        <code>chrome.*</code> (see <code>schema.ts</code>). This story drives the same <code>WorkSurface</code> component the
+        emitted app does, with stub content in place of a framed url. Turning off Code view removes the Preview|Code toggle
+        entirely — a preview-only workspace, not just a disabled control.
       </p>
     </section>
   );
@@ -1030,7 +818,7 @@ function MessageActionsSection(props: {
 
 function WorkspaceBuilderDemo(): JSX.Element {
   const [construct, setConstruct] = createSignal<BuilderConstruct>(DEFAULT_CONSTRUCT);
-  const [paneKind, setPaneKind] = createSignal<PaneKind>('preview');
+  const [paneKind, setPaneKind] = createSignal<ArtifactTab>('preview');
   const [showDeviceToggle, setShowDeviceToggle] = createSignal(true);
   const [showUrlBar, setShowUrlBar] = createSignal(true);
   const [showOpenInNewTab, setShowOpenInNewTab] = createSignal(true);

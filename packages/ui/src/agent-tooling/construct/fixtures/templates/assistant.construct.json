@@ -6,11 +6,18 @@
     "mode": "mock"
   },
   "header": {
-    "title": "Assistant"
+    "title": "Assistant",
+    "themeToggle": true
   },
   "theme": {
-    "accent": "#7c3aed",
     "mode": "dark"
+  },
+  "shell": {
+    "commandPalette": true,
+    "userMenu": {
+      "name": "Ada",
+      "plan": "Pro"
+    }
   },
   "empty": {
     "title": "What can I help with?",
@@ -31,6 +38,17 @@
     "history": {
       "persistence": "local"
     },
-    "conversations": true
+    "conversations": true,
+    "reasoning": "full",
+    "messageActions": {
+      "user": [
+        "edit"
+      ],
+      "assistant": [
+        "copy",
+        "like",
+        "dislike"
+      ]
+    }
   }
 }
