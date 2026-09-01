@@ -1,7 +1,7 @@
 import { createSignal, onCleanup, onMount } from 'solid-js';
 import { defineWebComponent } from './define';
 import { readSlots, CONVERSATION_ITEM_SLOTS } from './slots';
-import { SlottedConversationItem } from '../components/conversation-item';
+import { SlottedConversationItem, type ConversationRowDensity } from '../components/conversation-item';
 import { isStandaloneConversationItem, readConversationItemId } from '../components/conversation-list';
 
 interface Props extends Record<string, unknown> {
@@ -16,6 +16,19 @@ interface Props extends Record<string, unknown> {
   active?: boolean;
   /** Dense single-line row padding. */
   compact?: boolean;
+  /** Row density: `default`, `compact` (same as the `compact` flag), or
+   *  `panel`, the widget-panel presentation matching the facade panel's
+   *  measured row box (12px/10px padding, a 40px single-line row). Previously
+   *  that box was a private interior class a composition could only
+   *  approximate by smuggling padding through slotted spans (2026-08-31
+   *  composition spike, phase 3 round 3). An explicit density wins over
+   *  `compact`. */
+  density?: ConversationRowDensity;
+  /** Show the unread indicator dot at the row's trailing edge, inside the
+   *  activation surface and before the `menu` region, with a screen-reader
+   *  "Unread" label. Drive it from `isConversationUnread` (exported from the
+   *  package root and from `dist/stores.js`). */
+  unread?: boolean;
 }
 
 interface Events {
@@ -64,6 +77,8 @@ defineWebComponent<Props, Events>('kai-conversation-item', {
   conversationId: undefined,
   active: undefined,
   compact: undefined,
+  density: undefined,
+  unread: undefined,
 }, (props, { element, flag, reflectFlag, dispatch }) => {
   // Which named regions the consumer has filled; drives the conditional
   // wrappers so an empty region leaves no stray box behind.
@@ -108,6 +123,8 @@ defineWebComponent<Props, Events>('kai-conversation-item', {
       conversationId={props.conversationId as string | undefined}
       active={flag('active')}
       compact={flag('compact')}
+      density={props.density as ConversationRowDensity | undefined}
+      unread={flag('unread')}
       hostSemantics
       onActivate={standalone() ? activate : undefined}
       leading={slots().leading ? <slot name="leading" /> : undefined}

@@ -1,7 +1,54 @@
 import { Show, splitProps, createMemo, type JSX } from 'solid-js';
 import { MessageSquare } from 'lucide-solid';
 import { cn } from '../utils/cn';
+import { isConversationUnread } from '../primitives/conversation-store';
 import type { ConversationSummary } from '../types';
+
+/**
+ * Row density, the P-7 public axis (blocks-and-parts design 2026-08-31).
+ * `default` and `compact` are the two boxes this row always had; `panel` is
+ * the widget-panel presentation: the exact row box of the facade's
+ * `ConversationPanel` (conversation-panel.tsx), whose `px-3 py-2.5` interior
+ * class was PRIVATE until now. The composition spike (phase 3, round 3) could
+ * only match it by smuggling padding through slotted spans around host
+ * padding; this axis deletes that contortion.
+ */
+export type ConversationRowDensity = 'default' | 'compact' | 'panel';
+
+/**
+ * The row box (padding) per density. `panel` restates conversation-panel.tsx's
+ * row class `px-3 py-2.5` (12px/10px; with the single 20px text-sm line that
+ * is the measured 40px row of the spike's round 3). It is a copy by necessity:
+ * Tailwind utilities are compiled from literal class strings, so this cannot
+ * be imported from the panel at runtime. `conversation-item-density.test.tsx`
+ * derives the expected utilities from conversation-panel.tsx's SOURCE and
+ * fails if the two drift.
+ */
+export const DENSITY_ROW_BOX: Record<ConversationRowDensity, string> = {
+  default: 'px-2.5 py-2',
+  compact: 'px-2.5 py-1.5',
+  panel: 'px-3 py-2.5',
+};
+
+/** Resolve the density axis against the legacy `compact` boolean: an explicit
+ *  `density` wins; `compact` alone keeps meaning what it always did. */
+export function resolveRowDensity(
+  density?: ConversationRowDensity,
+  compact?: boolean,
+): ConversationRowDensity {
+  return density ?? (compact ? 'compact' : 'default');
+}
+
+/** The unread indicator dot: visible dot plus a screen-reader label, the same
+ *  pair `ConversationPanel` and `HomePanel` render. */
+function UnreadDot() {
+  return (
+    <>
+      <span part="unread" aria-hidden="true" class="size-1.5 shrink-0 rounded-full bg-unread" />
+      <span class="sr-only">Unread</span>
+    </>
+  );
+}
 
 export interface ConversationItemProps {
   conversation: ConversationSummary;
@@ -9,6 +56,11 @@ export interface ConversationItemProps {
   onSelect: (id: string) => void;
   /** Dense single-line row: a leading dot + title, no message count. */
   compact?: boolean;
+  /** Row density: `default`, `compact` (same as the `compact` flag), or
+   *  `panel`, the widget-panel presentation matching `ConversationPanel`'s
+   *  measured row box (single semibold title line, right-aligned time,
+   *  optional preview line). An explicit density wins over `compact`. */
+  density?: ConversationRowDensity;
   class?: string;
 }
 
@@ -77,6 +129,13 @@ export interface SlottedConversationItemProps {
   active?: boolean;
   /** Dense single-line row padding. */
   compact?: boolean;
+  /** Row density: `default`, `compact` (same as the `compact` flag), or
+   *  `panel`, the widget-panel row box measured off `ConversationPanel`.
+   *  An explicit density wins over `compact`. */
+  density?: ConversationRowDensity;
+  /** Show the unread indicator dot at the row's trailing edge (before the
+   *  menu region), with a screen-reader "Unread" label. */
+  unread?: boolean;
   /** Leading region before the title (an icon or avatar). */
   leading?: JSX.Element;
   /** Meta region under the title (a timestamp or status line). */
@@ -104,7 +163,8 @@ export interface SlottedConversationItemProps {
 }
 
 export function SlottedConversationItem(props: SlottedConversationItemProps) {
-  const [local] = splitProps(props, ['conversationId', 'active', 'compact', 'leading', 'meta', 'menu', 'children', 'hostSemantics', 'onActivate', 'class']);
+  const [local] = splitProps(props, ['conversationId', 'active', 'compact', 'density', 'unread', 'leading', 'meta', 'menu', 'children', 'hostSemantics', 'onActivate', 'class']);
+  const density = () => resolveRowDensity(local.density, local.compact);
   return (
     // The sibling restructure: axe nested-interactive
     // bans focusable descendants of an activation control, so the control role
@@ -122,7 +182,7 @@ export function SlottedConversationItem(props: SlottedConversationItemProps) {
       data-conversation-id={local.conversationId}
       class={cn(
         'flex w-full items-center gap-2.5 rounded-lg text-left transition-colors',
-        local.compact ? 'px-2.5 py-1.5' : 'px-2.5 py-2',
+        DENSITY_ROW_BOX[density()],
         local.active ? 'bg-muted' : 'hover:bg-muted/50',
         local.class,
       )}
@@ -157,6 +217,11 @@ export function SlottedConversationItem(props: SlottedConversationItemProps) {
             <div part="meta" class="mt-0.5 truncate text-xs text-muted-foreground">{local.meta}</div>
           </Show>
         </div>
+        {/* Unread dot (P-7b): trailing edge of the BODY, so it stays inside the
+            activation surface and before the menu sibling. */}
+        <Show when={local.unread}>
+          <UnreadDot />
+        </Show>
       </div>
       <Show when={local.menu}>
         <span part="menu" data-kai-item-menu class="ml-auto flex shrink-0 items-center">{local.menu}</span>
@@ -166,7 +231,11 @@ export function SlottedConversationItem(props: SlottedConversationItemProps) {
 }
 
 export function ConversationItem(props: ConversationItemProps) {
-  const [local] = splitProps(props, ['conversation', 'isActive', 'onSelect', 'compact', 'class']);
+  const [local] = splitProps(props, ['conversation', 'isActive', 'onSelect', 'compact', 'density', 'class']);
+  const density = () => resolveRowDensity(local.density, local.compact);
+  // Unread dot (P-7b): derived from the same public read primitive the
+  // facade's panel and home surfaces use, never a second policy.
+  const unread = createMemo(() => isConversationUnread(local.conversation));
   // The trailing text: the consumer's own `trailing` field, else an auto relative
   // time from updatedAt (fallback lastMessageAt). Never an internal clock — it is a
   // render-time snapshot.
@@ -182,9 +251,14 @@ export function ConversationItem(props: ConversationItemProps) {
   const trailing = createMemo(
     () => local.conversation.trailing ?? relativeTimeShort(local.conversation.updatedAt ?? local.conversation.lastMessageAt),
   );
+  // The panel anatomy renders the time directly (never the consumer's
+  // `trailing` field, which is the PREVIEW line there), same as
+  // ConversationPanel.
+  const panelTime = () => relativeTimeShort(local.conversation.updatedAt ?? local.conversation.lastMessageAt);
   return (
     <button
       data-conversation-id={local.conversation.id}
+      data-unread={unread() ? '' : undefined}
       // `isActive` drives the selected LOOK below; it has to reach assistive tech
       // too, or the active conversation is visible only to sighted users. `true`
       // rather than `page` because this selects a conversation within the app, it
@@ -194,32 +268,68 @@ export function ConversationItem(props: ConversationItemProps) {
       onClick={() => local.onSelect(local.conversation.id)}
       class={cn(
         'w-full rounded-lg text-left transition-colors',
-        local.compact ? 'px-2.5 py-1.5' : 'px-2.5 py-2',
+        density() === 'panel' && 'block',
+        DENSITY_ROW_BOX[density()],
         local.isActive ? 'bg-muted' : 'hover:bg-muted/50',
         local.class,
       )}
     >
       <Show
-        when={local.compact}
+        when={density() !== 'panel'}
         fallback={
+          // The widget-panel presentation (P-7a): ConversationPanel's row
+          // anatomy, made public. Baseline row of semibold title + relative
+          // time; the consumer's `trailing` field is the one-line preview
+          // under it, with the unread dot at the preview line's end
+          // (Intercom's own placement, per conversation-panel.tsx).
           <>
-            <div class="flex items-center gap-2">
-              <div class={cn('min-w-0 flex-1 truncate text-sm', local.isActive ? 'font-medium text-foreground' : 'text-foreground/80')}>{local.conversation.title}</div>
-              <Show when={trailing()}>
-                <span part="trailing" class="ml-auto shrink-0 text-xs text-muted-foreground">{trailing()}</span>
+            <div class="flex items-baseline gap-2">
+              <span class={cn('min-w-0 flex-1 truncate text-sm font-semibold', local.isActive ? 'text-foreground' : 'text-foreground/90')}>
+                {local.conversation.title}
+              </span>
+              <Show when={panelTime()}>
+                <span part="trailing" class="shrink-0 text-xs text-muted-foreground">{panelTime()}</span>
               </Show>
             </div>
-            <div class={cn('mt-0.5 truncate text-xs', local.isActive ? 'text-foreground/70' : 'text-muted-foreground')}>{local.conversation.messageCount} messages</div>
+            <Show when={local.conversation.trailing || unread()}>
+              <div class="mt-0.5 flex items-center gap-1.5">
+                <span class="min-w-0 flex-1 truncate text-xs text-muted-foreground">{local.conversation.trailing}</span>
+                <Show when={unread()}>
+                  <UnreadDot />
+                </Show>
+              </div>
+            </Show>
           </>
         }
       >
-        <div class="flex items-center gap-2.5">
-          <MessageSquare class={cn('size-3.5 shrink-0', local.isActive ? 'text-foreground' : 'text-muted-foreground')} />
-          <span class={cn('min-w-0 flex-1 truncate text-sm', local.isActive ? 'font-medium text-foreground' : 'text-foreground/80')}>{local.conversation.title}</span>
-          <Show when={trailing()}>
-            <span part="trailing" class="ml-auto shrink-0 text-xs text-muted-foreground">{trailing()}</span>
-          </Show>
-        </div>
+        <Show
+          when={density() === 'compact'}
+          fallback={
+            <>
+              <div class="flex items-center gap-2">
+                <div class={cn('min-w-0 flex-1 truncate text-sm', local.isActive ? 'font-medium text-foreground' : 'text-foreground/80')}>{local.conversation.title}</div>
+                <Show when={unread()}>
+                  <UnreadDot />
+                </Show>
+                <Show when={trailing()}>
+                  <span part="trailing" class="ml-auto shrink-0 text-xs text-muted-foreground">{trailing()}</span>
+                </Show>
+              </div>
+              <div class={cn('mt-0.5 truncate text-xs', local.isActive ? 'text-foreground/70' : 'text-muted-foreground')}>{local.conversation.messageCount} messages</div>
+            </>
+          }
+        >
+          <div class="flex items-center gap-2.5">
+            <MessageSquare class={cn('size-3.5 shrink-0', local.isActive ? 'text-foreground' : 'text-muted-foreground')} />
+            <span class={cn('min-w-0 flex-1 truncate text-sm', local.isActive ? 'font-medium text-foreground' : 'text-foreground/80')}>{local.conversation.title}</span>
+            <Show when={unread()}>
+              <UnreadDot />
+            </Show>
+            <Show when={trailing()}>
+              <span part="trailing" class="ml-auto shrink-0 text-xs text-muted-foreground">{trailing()}</span>
+            </Show>
+          </div>
+        </Show>
       </Show>
     </button>
   );

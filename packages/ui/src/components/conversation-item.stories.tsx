@@ -332,6 +332,91 @@ export const SlottedRowsInteractions: StoryObj = {
   },
 };
 
+// ── P-7: density as public API + the unread dot ─────────────────────────────
+// The `panel` density is the widget-panel presentation: ConversationPanel's
+// measured row box (px-3 py-2.5, a 40px single-line row), previously a PRIVATE
+// interior class the composition spike (2026-08-31, phase 3 round 3) could
+// only match by smuggling padding through slotted spans. The dot is F-8's
+// recorded remaining polish gap.
+
+const densityConversations = [
+  {
+    ...baseConversation,
+    id: 'd1',
+    title: 'Where is my order?',
+    trailing: 'Order KAI-1042 shipped with DHL',
+    lastReadAt: '2026-04-10T11:00:00Z', // read BEFORE updatedAt: unread dot ON
+  },
+  {
+    ...baseConversation,
+    id: 'd2',
+    title: 'Refund for duplicate charge',
+    trailing: 'We have issued the refund',
+    lastReadAt: '2026-04-10T13:00:00Z', // read AFTER updatedAt: no dot
+  },
+  { ...baseConversation, id: 'd3', title: 'Update shipping address' },
+];
+
+function DensityDemo() {
+  return (
+    <div class="flex w-72 flex-col gap-3">
+      <div>
+        <div class="mb-1 text-xs font-medium text-muted-foreground">density="panel" (widget-box rows, unread dot on the first)</div>
+        <div class="space-y-0.5">
+          <For each={densityConversations}>
+            {(conv, i) => (
+              <ConversationItem conversation={conv} isActive={i() === 0} onSelect={() => {}} density="panel" />
+            )}
+          </For>
+        </div>
+      </div>
+      {/* In default/compact anatomies the `trailing` field IS the trailing
+          text, so the unread stub omits it and lets the relative time render. */}
+      <div>
+        <div class="mb-1 text-xs font-medium text-muted-foreground">density="default" (unread)</div>
+        <ConversationItem
+          conversation={{ ...densityConversations[0], trailing: undefined }}
+          isActive={false}
+          onSelect={() => {}}
+        />
+      </div>
+      <div>
+        <div class="mb-1 text-xs font-medium text-muted-foreground">density="compact" (unread)</div>
+        <ConversationItem
+          conversation={{ ...densityConversations[0], trailing: undefined }}
+          isActive={false}
+          onSelect={() => {}}
+          density="compact"
+        />
+      </div>
+    </div>
+  );
+}
+
+/** The density axis (`default` / `compact` / `panel`) plus the unread dot,
+ *  light and dark. `panel` reproduces the facade widget panel's exact row box;
+ *  the dot derives from `isConversationUnread` (`lastReadAt` older than
+ *  `updatedAt`), so the stub data flips it per row. */
+export const DensityAndUnread: StoryObj = {
+  render: () => (
+    <div class="flex flex-wrap gap-6">
+      <div class="rounded-lg border border-border bg-background p-4">
+        <div class="mb-2 text-xs font-medium text-muted-foreground">Light</div>
+        <DensityDemo />
+      </div>
+      <div class="dark rounded-lg border border-border bg-background p-4">
+        <div class="mb-2 text-xs font-medium text-muted-foreground">Dark</div>
+        <DensityDemo />
+      </div>
+    </div>
+  ),
+  ...src(`{/* the widget-box presentation, one prop */}
+<ConversationItem conversation={conv} isActive={false} onSelect={select} density="panel" />
+
+{/* or across the whole list */}
+<ConversationList conversations={conversations} density="panel" ... />`),
+};
+
 /** Leading region plus the compact density. The `role="list"` wrapper keeps
  *  the rows' listitem semantics (and the container's aria-label legal). */
 export const SlottedWithLeading: StoryObj = {

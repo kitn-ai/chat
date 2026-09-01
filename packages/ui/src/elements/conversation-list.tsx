@@ -6,6 +6,7 @@ import {
   ConversationList, CollapsedRail, createConversationItemsController,
   type ConversationListController,
 } from '../components/conversation-list';
+import type { ConversationRowDensity } from '../components/conversation-item';
 import type { ConversationGroup, ConversationSummary } from '../types';
 
 interface Props extends Record<string, unknown> {
@@ -37,6 +38,14 @@ interface Props extends Record<string, unknown> {
   defaultCollapsed?: boolean;
   /** Dense single-line rows (a leading dot + title, no message count). */
   compact?: boolean;
+  /** Row density for the data rows: `default`, `compact` (same as the
+   *  `compact` flag), or `panel`, the widget-panel presentation matching the
+   *  facade panel's measured row box (12px/10px padding, a 40px single-line
+   *  row with a right-aligned relative time and an optional preview line
+   *  carrying the unread dot). An explicit density wins over `compact`. Item
+   *  mode is unaffected: slotted `<kai-conversation-item>` rows carry their
+   *  own `density` attribute. */
+  density?: ConversationRowDensity;
   /** Show the built-in search box above the list. Default `true`. Set
    *  `searchable="false"` (or `el.searchable = false`) to hide it: the
    *  widget-box case, where the facade's own list view renders no search and
@@ -93,6 +102,7 @@ defineWebComponent<Props, Events>('kai-conversations', {
   collapsed: undefined,
   defaultCollapsed: undefined,
   compact: undefined,
+  density: undefined,
   searchable: true,
 }, (props, { dispatch, element, expose, flag }) => {
   // Read declarative <kai-conversation> children from light DOM.
@@ -199,6 +209,7 @@ defineWebComponent<Props, Events>('kai-conversations', {
         onNewChat={() => dispatch('kai-new-chat')}
         onToggleSidebar={() => { dispatch('kai-toggle-sidebar'); setCollapsedTo(true); }}
         compact={flag('compact')}
+        density={props.density as ConversationRowDensity | undefined}
         searchable={flag('searchable')}
         onSearchChange={(query) => dispatch('kai-search', { query })}
         controllerRef={(c) => (controller = c)}
