@@ -124,12 +124,25 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const IMPORT = `import { ChatThread } from '@kitn.ai/ui/solid';`;
+const src = (code: string) => ({
+  parameters: { docs: { source: { code: `${IMPORT}\n\n${code}`, language: 'tsx' } } },
+});
+
 /** Chat view, the default state — the header toggle renders the chat-bubble glyph. */
 export const ChatView: Story = {
   args: {
     conversations: true,
     store: stubStore(fixtureConversations),
   },
+  ...src(`<ChatThread
+  conversations
+  store={conversationStore}
+  chatTitle="Support"
+  placeholder="Message support…"
+  onSubmit={(text) => sendMessage(text)}
+  onConversationLoad={(id) => loadConversation(id)}
+/>`),
 };
 
 /** List view, populated: rows show a bold title, right-aligned relative time,
@@ -152,6 +165,8 @@ export const ListViewPopulated: Story = {
       expect(toggle).toHaveAttribute('aria-label', 'Back to chat');
     });
   },
+  ...src(`// The header's conversations toggle opens the list view.
+<ChatThread conversations store={conversationStore} chatTitle="Support" />`),
 };
 
 /** List view, no conversations yet: the empty state plus the same floating pill. */
@@ -169,6 +184,8 @@ export const ListViewEmpty: Story = {
     await userEvent.click(toggle);
     await waitFor(() => expect(canvasElement.querySelector('[data-kai-new-conversation]')).toBeTruthy());
   },
+  ...src(`// An empty store shows the empty state and the floating "New conversation" pill.
+<ChatThread conversations store={emptyConversationStore} chatTitle="Support" />`),
 };
 
 /** Unread indicators (owner round, 2026-08-26): a header-toggle badge (any
@@ -195,6 +212,9 @@ export const ListViewWithUnread: Story = {
       expect(canvasElement.querySelector('[data-conversation-id="conv-1"]')).not.toHaveAttribute('data-unread');
     });
   },
+  ...src(`// Unread status comes from the store's summaries: lastReadAt older than
+// updatedAt renders a badge on the toggle and a dot on the row.
+<ChatThread conversations store={conversationStore} chatTitle="Support" />`),
 };
 
 /** Role-scoped default action bars (B-7b): the user turn gets `userActions`,
@@ -217,6 +237,11 @@ export const PerRoleActions: Story = {
     userActions: ['edit', 'copy'],
     assistantActions: ['copy', 'like', 'dislike', 'speak'],
   },
+  ...src(`<ChatThread
+  messages={messages}
+  userActions={['edit', 'copy']}
+  assistantActions={['copy', 'like', 'dislike', 'speak']}
+/>`),
 };
 
 /** `hideSources` (B-8): the same assistant turn as `PerRoleActions`, with the
@@ -237,6 +262,7 @@ export const HideSources: Story = {
     ],
     hideSources: true,
   },
+  ...src(`<ChatThread messages={messages} hideSources />`),
 };
 
 /** Interactive playground: click the header toggle to swap between the chat
@@ -254,4 +280,5 @@ export const Playground: Story = {
       </div>
     );
   },
+  ...src(`<ChatThread conversations store={conversationStore} chatTitle="Support" />`),
 };

@@ -117,16 +117,16 @@ describe('argTypesFor', () => {
   });
 
   describe('kai-voice-input (function prop → no control)', () => {
-    it('transcribe → control: false (function callback)', () => {
+    it('transcribe → control: false (function callback), tabled under Events', () => {
       const result = argTypesFor('kai-voice-input');
-      expect(result['transcribe']).toEqual({ control: false });
+      expect(result['transcribe']).toEqual({ control: false, table: { category: 'Events' } });
     });
   });
 
   describe('kai-cards (function-bearing object → no control; object[] → object control)', () => {
-    it('policy → control: false (object containing function callbacks)', () => {
+    it('policy → control: false (object containing function callbacks), tabled under Events', () => {
       const result = argTypesFor('kai-cards');
-      expect(result['policy']).toEqual({ control: false });
+      expect(result['policy']).toEqual({ control: false, table: { category: 'Events' } });
     });
 
     it('cards → object control (array of card objects)', () => {

@@ -150,6 +150,22 @@ const preview: Preview = {
     // false`.
     docs: {
       codePanel: true,
+      // A `render:` story with no hand-authored `docs.source.code` (see
+      // `scripts/lint-story-conventions.mjs`) leaves Storybook's default
+      // source doc-block to fall back to a raw serialized dump of the story
+      // OBJECT -- `{ render: [Function], parameters: {...}, ... }` -- which is
+      // noise, not a usage snippet, and reads as though something rendered
+      // correctly when nothing was authored at all. Swap that one shape for
+      // an honest placeholder instead of trying to synthesize real usage code
+      // (there is no way to reconstruct a hand-drawn `render:` body from its
+      // compiled function). The guard is what actually closes the gap; this
+      // is only about not lying in the meantime.
+      source: {
+        transform: (sourceCode: string) =>
+          sourceCode.startsWith('{') && sourceCode.includes('render:')
+            ? '// no usage snippet authored for this story yet — see lint:story-conventions'
+            : sourceCode,
+      },
     },
     options: {
       storySort: {

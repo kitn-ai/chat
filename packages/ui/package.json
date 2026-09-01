@@ -222,6 +222,7 @@
     "lint:catalog-drift": "node scripts/lint-catalog-drift.mjs --self-test && node scripts/lint-catalog-drift.mjs",
     "lint:gate-parity": "node scripts/lint-gate-parity.mjs --self-test && node scripts/lint-gate-parity.mjs",
     "lint:thresholds": "node scripts/lint-threshold-derivation.mjs --self-test && node scripts/lint-threshold-derivation.mjs",
+    "lint:story-conventions": "node scripts/lint-story-conventions.mjs --self-test && node scripts/lint-story-conventions.mjs",
     "test": "vitest run",
     "test:react": "vitest run --config vitest.react.config.ts",
     "test:storybook": "vitest run --project=storybook",

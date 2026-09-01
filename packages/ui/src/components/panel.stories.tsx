@@ -32,6 +32,13 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+// Not yet part of the public export surface (blocks-and-parts phase 1) --
+// this mirrors the file's own relative import rather than a package path.
+const IMPORT = `import { Panel, PanelHeader, PanelBody, PanelFooter } from './panel';`;
+const src = (code: string) => ({
+  parameters: { docs: { source: { code: `${IMPORT}\n\n${code}`, language: 'tsx' } } },
+});
+
 /** Shared stub body: token-painted placeholder content standing in for a
  *  home screen / thread view. */
 function StubBody() {
@@ -80,6 +87,11 @@ export const WidgetBox: Story = {
       </Panel>
     </div>
   ),
+  ...src(`<Panel frame>
+  <PanelHeader end={<CloseButton />}>Aurora Support</PanelHeader>
+  <PanelBody>...</PanelBody>
+  <PanelFooter>Powered by Aurora</PanelFooter>
+</Panel>`),
 };
 
 /**
@@ -110,6 +122,10 @@ export const DrilledHeader: Story = {
       </Panel>
     </div>
   ),
+  ...src(`<Panel frame>
+  <PanelHeader start={<BackButton />} end={<CloseButton />}>Aurora Support</PanelHeader>
+  <PanelBody>Thread view goes here</PanelBody>
+</Panel>`),
 };
 
 /**
@@ -132,6 +148,13 @@ export const FramelessInDock: Story = {
       </Panel>
     </div>
   ),
+  ...src(`{/* the wrapper owns border, radius, and shadow -- Panel just clips to it */}
+<div class="rounded-2xl border border-border shadow-xl">
+  <Panel>
+    <PanelHeader end={<CloseButton />}>Aurora Support</PanelHeader>
+    <PanelBody>...</PanelBody>
+  </Panel>
+</div>`),
 };
 
 /**
@@ -156,4 +179,10 @@ export const AccentOverride: Story = {
       </Panel>
     </div>
   ),
+  ...src(`<div style={{ '--color-primary': 'oklch(0.62 0.25 330)', '--color-primary-foreground': 'oklch(0.985 0 0)' }}>
+  <Panel frame>
+    <PanelHeader end={<CloseButton />}>Aurora Support</PanelHeader>
+    <PanelBody>...</PanelBody>
+  </Panel>
+</div>`),
 };

@@ -121,6 +121,15 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const IMPORT = `import { AudioVisualizer } from '@kitn.ai/ui/solid';`;
+// Every story below sets its own `parameters.docs.description.story`, so each
+// site writes `source: { code: sourceCode(...), language: 'tsx' }` inline
+// (merging into that existing `docs` object rather than a whole `parameters`
+// spread, which would overwrite it) -- the literal `docs -> source -> code`
+// property chain is what the lint:story-conventions guard walks for; a
+// helper returning the whole `{ code, language }` object is invisible to it.
+const sourceCode = (code: string) => `${IMPORT}\n\n${code}`;
+
 /**
  * Smooth deterministic pseudo-noise: a short sum of sine octaves at
  * irrational-ish frequency ratios (never small-integer multiples of one
@@ -564,6 +573,7 @@ export const Bar: Story = {
   parameters: {
     controls: { include: ['size', 'color', 'barCount'] },
     docs: {
+      source: { code: sourceCode(`<AudioVisualizer variant="bar" state="speaking" size="md" bands={bands} />`), language: 'tsx' },
       description: {
         story:
           'Driven by a real recorded voice while `speaking` (see audio-visualizer.voice-fixture.ts). Every ' +
@@ -601,6 +611,7 @@ export const Grid: Story = {
   parameters: {
     controls: { include: ['size', 'color', 'count', 'spread', 'interval'] },
     docs: {
+      source: { code: sourceCode(`<AudioVisualizer variant="grid" state="speaking" size="md" bands={bands} />`), language: 'tsx' },
       description: {
         story:
           'A grid of dots that pulses with the audio. The square `count` defaults to the size preset; ' +
@@ -637,6 +648,7 @@ export const Radial: Story = {
   parameters: {
     controls: { include: ['size', 'color', 'barCount', 'radius'] },
     docs: {
+      source: { code: sourceCode(`<AudioVisualizer variant="radial" state="speaking" size="md" bands={bands} radius={40} />`), language: 'tsx' },
       description: {
         story:
           'Bars around a ring, growing outward with the audio. `thinking` spins the whole ring in CSS instead ' +
@@ -704,6 +716,7 @@ export const Wave: Story = {
   parameters: {
     controls: { include: ['size', 'color', 'animateWhenNotVisible'] },
     docs: {
+      source: { code: sourceCode(`<AudioVisualizer variant="wave" state="speaking" size="md" bands={bands} />`), language: 'tsx' },
       description: {
         story:
           '`idle`: flat line, amplitude and frequency both zero -- by design, not a bug. `listening`: the ' +
@@ -742,6 +755,7 @@ export const Aurora: Story = {
   parameters: {
     controls: { include: ['size', 'color', 'theme', 'animateWhenNotVisible'] },
     docs: {
+      source: { code: sourceCode(`<AudioVisualizer variant="aurora" state="speaking" size="md" bands={bands} theme="auto" />`), language: 'tsx' },
       description: {
         story:
           '`speaking` shows its steady base radius: this canvas has no live microphone to drive the ' +
@@ -776,6 +790,14 @@ export const Custom: Story = {
   parameters: {
     controls: { include: ['size', 'color', 'complexity', 'animateWhenNotVisible'] },
     docs: {
+      source: { code: sourceCode(`<AudioVisualizer
+  variant="custom"
+  state="speaking"
+  size="md"
+  barCount={5}
+  bands={bands}
+  shader={{ fragment: MY_SPECTRUM_SHADER }}
+/>`), language: 'tsx' },
       description: {
         story:
           'Set `variant="custom"` and a `shader` to render your own GLSL. It receives the ShaderToy built-ins ' +
@@ -868,6 +890,9 @@ export const Microphone: Story = {
   args: { variant: 'bar' },
   parameters: {
     docs: {
+      source: { code: sourceCode(`const [stream, setStream] = createSignal<MediaStream>();
+
+<AudioVisualizer variant="bar" state={stream() ? 'speaking' : 'idle'} size="lg" stream={stream()} />`), language: 'tsx' },
       description: {
         story:
           'Click to grant the microphone, click again to release it. Switch `variant` in Controls to hear the same stream drive any of the six looks -- `wave` and `aurora` read `volume`, which the dispatcher derives from the live stream, so they react too. Denied or unavailable permission shows the reason instead of failing silently.',
@@ -953,6 +978,12 @@ export const MicrophoneAll: Story = {
   tags: ['!autodocs'],
   parameters: {
     docs: {
+      source: { code: sourceCode(`const [stream, setStream] = createSignal<MediaStream>();
+const variants = ['bar', 'grid', 'radial', 'wave', 'aurora', 'custom'] as const;
+
+<For each={variants}>
+  {(v) => <AudioVisualizer variant={v} state={stream() ? 'speaking' : 'idle'} size="lg" stream={stream()} />}
+</For>`), language: 'tsx' },
       description: {
         story:
           'One microphone, all six looks at once, so they can be compared on the same live voice instead of one at a time through a control. `custom` reuses the spectrum shader from the Custom story above so it visibly responds to `uBands` too.',

@@ -27,7 +27,12 @@ const meta = {
   },
   argTypes: {
     view: { control: 'text', description: 'Deep link / initial view name.' },
-    onViewChange: { control: false, description: 'Fires with `{ view, root, drilled, stack }` after each navigation.' },
+    onViewChange: {
+      action: 'view-change',
+      control: false,
+      description: 'Fires with `{ view, root, drilled, stack }` after each navigation.',
+      table: { category: 'Events' },
+    },
     controller: { control: false, description: 'Ref callback receiving the imperative controller (`push`, `back`, `replace`, `selectTab`, `navigate`).' },
     children: { control: false, description: '`View` children; one `tabRoot` per tab, plain views drill.' },
   },
@@ -35,6 +40,13 @@ const meta = {
 
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+// Not yet part of the public export surface (blocks-and-parts phase 1) --
+// this mirrors the file's own relative import rather than a package path.
+const IMPORT = `import { ViewStack, View, type ViewStackController } from './view-stack';`;
+const src = (code: string) => ({
+  parameters: { docs: { source: { code: `${IMPORT}\n\n${code}`, language: 'tsx' } } },
+});
 
 function Widget(props: { initialView?: string }) {
   let controller!: ViewStackController;
@@ -153,15 +165,35 @@ function Widget(props: { initialView?: string }) {
 /** The default landing: the Home tab root — tab bar showing, no back arrow. */
 export const TabRoots: Story = {
   render: () => <Widget />,
+  ...src(`let controller!: ViewStackController;
+
+// The chrome follows the reported state; it never owns the rule itself.
+<ViewStack controller={(c) => (controller = c)} onViewChange={(s) => setState(s)}>
+  <View name="home" tabRoot>
+    <button onClick={() => controller.push('chat')}>Start a conversation</button>
+  </View>
+  <View name="messages" tabRoot>...</View>
+  <View name="chat">...</View>
+</ViewStack>`),
 };
 
 /** Deep-linked straight into the drill view: back arrow present, tab bar
  *  hidden, from the first frame. */
 export const Drilled: Story = {
   render: () => <Widget initialView="chat" />,
+  ...src(`<ViewStack view="chat" controller={(c) => (controller = c)} onViewChange={(s) => setState(s)}>
+  <View name="home" tabRoot>...</View>
+  <View name="messages" tabRoot>...</View>
+  <View name="chat">...</View>
+</ViewStack>`),
 };
 
 /** Deep-linked to the second tab root: Messages active, still un-drilled. */
 export const MessagesRoot: Story = {
   render: () => <Widget initialView="messages" />,
+  ...src(`<ViewStack view="messages" controller={(c) => (controller = c)} onViewChange={(s) => setState(s)}>
+  <View name="home" tabRoot>...</View>
+  <View name="messages" tabRoot>...</View>
+  <View name="chat">...</View>
+</ViewStack>`),
 };

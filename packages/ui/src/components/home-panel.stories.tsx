@@ -28,6 +28,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const IMPORT = `import { HomePanel, WidgetTabBar } from '@kitn.ai/ui/solid';`;
+const src = (code: string) => ({
+  parameters: { docs: { source: { code: `${IMPORT}\n\n${code}`, language: 'tsx' } } },
+});
+
 /** Full home: greeting, recent conversation, new-conversation CTA, links, and
  *  the tab bar chrome with an unread badge on Messages. */
 export const FullHome: Story = {
@@ -50,6 +55,18 @@ export const FullHome: Story = {
       </>,
     );
   },
+  ...src(`<HomePanel
+  greeting={{ title: 'Hi there', subtitle: 'How can we help today?' }}
+  recent={recentConversation}
+  links={[
+    { label: 'Docs', href: 'https://ui.kitn.ai', description: 'Read the guides', icon: 'book-open' },
+    { label: 'Talk to sales', description: 'Emits onLink, no href', icon: 'message-circle' },
+  ]}
+  onNewChat={() => startNewChat()}
+  onSelectRecent={(id) => openConversation(id)}
+  onLink={(entry) => handleLink(entry)}
+/>
+<WidgetTabBar active={tab()} onChange={setTab} unread />`),
 };
 
 /** `home: {}` — defaults only, no config. */
@@ -60,6 +77,8 @@ export const MinimalDefaults: Story = {
       <WidgetTabBar active="home" onChange={() => {}} />
     </>,
   ),
+  ...src(`<HomePanel onNewChat={() => startNewChat()} />
+<WidgetTabBar active="home" onChange={setTab} />`),
 };
 
 /** First visit — no recent conversation to show. */
@@ -74,4 +93,10 @@ export const NoRecent: Story = {
       <WidgetTabBar active="home" onChange={() => {}} />
     </>,
   ),
+  ...src(`<HomePanel
+  greeting={{ title: 'Welcome to Acme' }}
+  links={[{ label: 'Docs', href: 'https://ui.kitn.ai', icon: 'book-open' }]}
+  onNewChat={() => startNewChat()}
+/>
+<WidgetTabBar active="home" onChange={setTab} />`),
 };

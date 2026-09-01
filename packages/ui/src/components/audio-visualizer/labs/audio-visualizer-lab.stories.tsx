@@ -101,6 +101,14 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+// Every story below renders through `meta`'s shared `render`, driven entirely
+// by `args` -- there is no honest "Show code" snippet to write, because
+// `LabVisualizer` is an internal Labs prototype (this folder, not exported
+// from `src/index.ts` or `src/solid.ts`) with no consumer-facing API yet. A
+// loud comment beats a silent exemption from the lint:story-conventions
+// guard, which otherwise reads a missing snippet as an oversight.
+const NO_CONSUMER_API = '// Internal Labs experiment -- no consumer-facing API yet. See this folder\'s LabVisualizer.';
+
 export const SmokeOrb: Story = {
   args: { look: 'orb', state: 'thinking', color: '#1fd5f9', size: 320 },
   parameters: {
@@ -110,6 +118,7 @@ export const SmokeOrb: Story = {
         'boltJag', 'boltWidth', 'boltRate'],
     },
     docs: {
+      source: { code: NO_CONSUMER_API, language: 'tsx' },
       description: {
         story:
           'Luminous smoke sealed in a stationary glass vessel. The smoke is the presence: ' +
@@ -129,6 +138,7 @@ export const StormyPlanet: Story = {
         'vSpeed', 'lens', 'presence', 'neural', 'boltJag', 'boltWidth', 'boltRate'],
     },
     docs: {
+      source: { code: NO_CONSUMER_API, language: 'tsx' },
       description: {
         story:
           'Dense churning cloud cover on the same stationary vessel. Same choreography as ' +
@@ -146,6 +156,7 @@ export const Braid: Story = {
         'delta', 'off', 'f1', 'f2', 's1', 's2', 'vSpeed'],
     },
     docs: {
+      source: { code: NO_CONSUMER_API, language: 'tsx' },
       description: {
         story:
           'Three woven strands sharing one wave family. Crossings brighten but are ' +
@@ -164,6 +175,7 @@ export const Ribbon: Story = {
         'fillGain', 'edgeGain', 'twistSpd', 'vSpeed'],
     },
     docs: {
+      source: { code: NO_CONSUMER_API, language: 'tsx' },
       description: {
         story:
           'A single ribbon whose width pinches to zero at traveling twist points: wide ' +

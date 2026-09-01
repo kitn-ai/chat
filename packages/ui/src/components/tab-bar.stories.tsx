@@ -27,9 +27,23 @@ const meta = {
   component: TabBar,
   tags: ['autodocs'],
   parameters: { layout: 'centered' },
+  argTypes: {
+    items: { control: false, description: 'The tabs (array of { id, icon?, label?, dot?, badge?, disabled? }).' },
+    value: { control: 'text', description: 'Selected item id. Falls back to the first enabled tab.' },
+    iconOnly: { control: 'boolean', description: 'Hide labels visually; each still names its tab for assistive tech.' },
+    label: { control: 'text', description: 'Accessible name for the tablist. Defaults to "Navigation".' },
+    onChange: { action: 'change', description: 'Fires with the newly-selected item id.', table: { category: 'Events' } },
+  },
 } satisfies Meta<typeof TabBar>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+// Not yet part of the public export surface (blocks-and-parts phase 1) --
+// this mirrors the file's own relative import rather than a package path.
+const IMPORT = `import { TabBar, type TabBarItem } from './tab-bar';`;
+const src = (code: string) => ({
+  parameters: { docs: { source: { code: `${IMPORT}\n\n${code}`, language: 'tsx' } } },
+});
 
 /** Icon-over-label columns with the unread dot on Messages: the facade's
  *  `WidgetTabBar` shape. Click or arrow between tabs; the active tab retints
@@ -39,6 +53,14 @@ export const IconOverLabel: Story = {
     const [tab, setTab] = createSignal('home');
     return frame(<TabBar items={widgetPair} value={tab()} onChange={setTab} label="Widget navigation" />);
   },
+  ...src(`const [tab, setTab] = createSignal('home');
+
+const items: TabBarItem[] = [
+  { id: 'home', icon: 'home', label: 'Home' },
+  { id: 'messages', icon: 'message-square', label: 'Messages', dot: true },
+];
+
+<TabBar items={items} value={tab()} onChange={setTab} label="Widget navigation" />`),
 };
 
 /** Icon-only mode: labels feed each tab's accessible name but never render. */
@@ -47,6 +69,7 @@ export const IconOnly: Story = {
     const [tab, setTab] = createSignal('home');
     return frame(<TabBar items={threeTabs} value={tab()} onChange={setTab} iconOnly />);
   },
+  ...src(`<TabBar items={items} value={tab()} onChange={setTab} iconOnly />`),
 };
 
 /** A count badge on Messages (wins over the dot), plus a third tab. */
@@ -55,6 +78,13 @@ export const CountBadge: Story = {
     const [tab, setTab] = createSignal('messages');
     return frame(<TabBar items={threeTabs} value={tab()} onChange={setTab} />);
   },
+  ...src(`const items: TabBarItem[] = [
+  { id: 'home', icon: 'home', label: 'Home' },
+  { id: 'messages', icon: 'message-square', label: 'Messages', badge: 3 },
+  { id: 'help', icon: 'book-open', label: 'Help' },
+];
+
+<TabBar items={items} value={tab()} onChange={setTab} />`),
 };
 
 /** A disabled tab is skipped by arrow keys and cannot be clicked. */
@@ -73,6 +103,13 @@ export const DisabledTab: Story = {
       />,
     );
   },
+  ...src(`const items: TabBarItem[] = [
+  { id: 'home', icon: 'home', label: 'Home' },
+  { id: 'search', icon: 'search', label: 'Search', disabled: true },
+  { id: 'messages', icon: 'message-square', label: 'Messages', dot: true },
+];
+
+<TabBar items={items} value={tab()} onChange={setTab} />`),
 };
 
 /** The same states on the dark tokens (an explicit `.dark` wrapper, so this
@@ -92,4 +129,7 @@ export const DarkPreview: Story = {
       </div>
     );
   },
+  ...src(`<div class="dark">
+  <TabBar items={items} value={tab()} onChange={setTab} label="Widget navigation" />
+</div>`),
 };

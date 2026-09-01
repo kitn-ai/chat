@@ -44,11 +44,14 @@ const meta = {
   tags: ['autodocs'],
   parameters: {
     layout: 'padded',
-    // Panel scope. `parameters.docs.controls` below filters the autodocs table
-    // only, so the panel needs its own list or it shows every inferred row.
-    controls: { include: ['active', 'focused', 'class'] },
+    // This list gates BOTH the interactive Controls panel and the autodocs
+    // ArgsTable (verified live: a row missing here does not render on the
+    // Docs page even when `docs.controls.exclude` below does not name it) --
+    // so the three events live here too, alongside the props the Playground
+    // actually wires up.
+    controls: { include: ['active', 'focused', 'class', 'onTabChange', 'onTabClose', 'onTabMenu'] },
     docs: {
-      controls: { exclude: ['children', 'tabs', 'onTabChange', 'onTabClose', 'onTabMenu'] },
+      controls: { exclude: ['children', 'tabs'] },
       description: componentDescription([
         'An editor group: a tab strip (numbered-status-badge tabs) over a single content area showing the active tab\'s pane body. The reusable "one column = a group of agents shown as tabs" primitive from the Multi-Agent Workspace, extracted from the hand-rolled group in the Split Workspace demo.',
         'Each tab leads with a tone-colored numbered badge — the color encodes status (`working` blue, `idle` muted, `done` green, `error` red, `blocked` amber), the digit is the keyboard ⌥-jump number. The status word shows on the active tab, on hover, and always for a needs-attention / error tab; a needs-attention tab carries an amber ring even when inactive. Each tab has a close "×" and an optional "…" overflow.',
@@ -60,9 +63,9 @@ const meta = {
     tabs: { control: false, description: 'The tabs (array of { id, name, status?, needsAttention?, number? }).' },
     active: { control: 'text', description: 'The active tab id. Defaults to the first tab.' },
     focused: { control: 'boolean', description: 'Ring the frame as the active group in a multi-group layout.' },
-    onTabChange: { control: false, description: 'A tab was selected. (id) => void.' },
-    onTabClose: { control: false, description: 'A tab\'s × was clicked. (id) => void.' },
-    onTabMenu: { control: false, description: 'A tab\'s "…" was clicked. (id) => void. Omit to hide the button.' },
+    onTabChange: { action: 'tab-change', description: 'A tab was selected. (id) => void.', table: { category: 'Events' } },
+    onTabClose: { action: 'tab-close', description: 'A tab\'s × was clicked. (id) => void.', table: { category: 'Events' } },
+    onTabMenu: { action: 'tab-menu', description: 'A tab\'s "…" was clicked. (id) => void. Omit to hide the button.', table: { category: 'Events' } },
     children: { control: false, description: 'The active pane body (you swap it on onTabChange).' },
     class: { control: 'text', description: 'Extra classes for the outer frame.' },
   },
