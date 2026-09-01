@@ -154,6 +154,15 @@ async function main() {
   await rm(dist, { recursive: true, force: true });
   await mkdir(templatesOut, { recursive: true });
 
+  // The block gallery rides the CLI the way the templates do: a plain copy of
+  // the kit's authored blocks into dist/, which `add` walks at runtime. The
+  // rules over its contents live where a test can drive them - the registry
+  // module validates every manifest and `test/add.test.ts` drives every block
+  // through the real add path against this very copy.
+  await cp(path.join(repoRoot, 'packages/ui/blocks'), path.join(dist, 'blocks'), { recursive: true });
+  const blockCount = (await readdir(path.join(dist, 'blocks'), { withFileTypes: true })).filter((d) => d.isDirectory()).length;
+  console.log(`  blocks    ${blockCount} copied from packages/ui/blocks`);
+
   const { FRAMEWORKS } = await loadTs('src/frameworks.ts');
   const { patchesFor, gatewayPatchesFor } = await loadTs('src/patches.ts');
   const { emitRoute, emittedPreambleSymbols } = await loadTs('src/routes.ts');

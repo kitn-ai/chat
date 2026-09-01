@@ -63,7 +63,7 @@
  * to run from the emitted project's own package.json.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -179,6 +179,44 @@ async function main() {
       );
     }
     console.log(`\n✓ construct leg: wrote and validated ${path.relative(work, constructFile)} (name: ${parsed.name})`);
+
+    // ── the add leg — cheap like the construct leg: no install, no pty. What
+    // it proves is the flow through the BUILT CLI: the registry lists blocks,
+    // a listed block writes into a detected react project and a plain one,
+    // and a second add refuses instead of overwriting. Whether the emitted
+    // forms compile and render is the block gate's job (verify:blocks), not a
+    // smoke's; whether the flow works cold out of dist/ is exactly a smoke's.
+    step('adding a block (create-kai add) into react and plain projects');
+    const addList = JSON.parse(
+      execFileSync('node', [path.join(pkgRoot, 'dist/index.js'), 'add', '--list', '--json'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'inherit'],
+      }),
+    );
+    if (!Array.isArray(addList.blocks) || addList.blocks.length === 0) {
+      throw new Error('add --list --json reports no blocks; the bundled registry is empty');
+    }
+    const blockName = addList.blocks[0].name;
+    const addCases = [
+      { id: 'add-react', pkg: { name: 'add-react', dependencies: { react: '^19.0.0' } }, expect: `src/blocks/${blockName}` },
+      { id: 'add-plain', pkg: { name: 'add-plain' }, expect: `blocks/${blockName}` },
+    ];
+    for (const c of addCases) {
+      const dir = path.join(work, c.id);
+      await mkdir(dir, { recursive: true });
+      await writeFile(path.join(dir, 'package.json'), JSON.stringify(c.pkg, null, 2));
+      sh('node', [path.join(pkgRoot, 'dist/index.js'), 'add', blockName, '--dir', dir, '--yes'], work);
+      const wrote = await readdir(path.join(dir, c.expect));
+      if (wrote.length === 0) throw new Error(`${c.id}: nothing written under ${c.expect}`);
+      let refused = false;
+      try {
+        sh('node', [path.join(pkgRoot, 'dist/index.js'), 'add', blockName, '--dir', dir, '--yes'], work);
+      } catch {
+        refused = true;
+      }
+      if (!refused) throw new Error(`${c.id}: a second add overwrote instead of refusing`);
+    }
+    console.log(`\n✓ add leg: '${blockName}' wrote both forms and refused the re-add (${addList.blocks.length} block(s) listed)`);
 
     const { scriptsToRun } = await loadTs('src/starter-scripts.ts');
 
