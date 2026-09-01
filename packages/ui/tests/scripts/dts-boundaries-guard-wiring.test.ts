@@ -36,6 +36,7 @@ import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { requiredGateBlock } from './lib/required-gate-block';
 
 const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const repoRoot = resolve(pkgRoot, '../..');
@@ -46,21 +47,6 @@ const NPM_SCRIPT = 'verify:dts';
 const pkg = JSON.parse(readFileSync(resolve(pkgRoot, 'package.json'), 'utf-8')) as {
   scripts: Record<string, string>;
 };
-
-/** Same crude job extraction as tests/scripts/silent-drop-guard-wiring.test.ts. */
-function jobBlock(yaml: string, job: string): string {
-  const lines = yaml.split('\n');
-  const start = lines.findIndex((line) => line === `  ${job}:`);
-  if (start === -1) return '';
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i += 1) {
-    if (/^ {2}[A-Za-z0-9_-]+:/.test(lines[i])) {
-      end = i;
-      break;
-    }
-  }
-  return lines.slice(start, end).join('\n');
-}
 
 /** A throwaway package root the guard can be pointed at with `--package-root`. */
 function fixtureRoot(files: Record<string, string | null>): string {
@@ -171,11 +157,15 @@ describe('the dts-boundaries guard detects, and postbuild + CI run it', () => {
   });
 
   it('is invoked by the REQUIRED `test` job in CI', () => {
-    const block = jobBlock(readFileSync(WORKFLOW, 'utf-8'), 'test');
+    const block = requiredGateBlock(readFileSync(WORKFLOW, 'utf-8'));
+    // Two vacuity guards, and they answer different questions now that the gate
+    // is a GRAPH. The empty check catches a renamed root job; the `--project=unit`
+    // canary catches a graph that stopped reaching the leg that runs the suite,
+    // which is what a dropped `needs:` edge looks like from in here.
     expect(block, `no \`test:\` job found in ${WORKFLOW}`).not.toBe('');
     expect(
       block,
-      'the `test` job no longer runs the unit project either — read this guard',
+      'the required gate graph no longer runs the unit project either -- read this guard',
     ).toContain('--project=unit');
     expect(
       block,

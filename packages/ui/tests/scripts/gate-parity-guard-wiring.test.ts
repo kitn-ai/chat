@@ -33,6 +33,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { requiredGateBlock } from './lib/required-gate-block';
 
 const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const repoRoot = resolve(pkgRoot, '../..');
@@ -43,25 +44,6 @@ const NPM_SCRIPT = 'lint:gate-parity';
 const pkg = JSON.parse(readFileSync(resolve(pkgRoot, 'package.json'), 'utf-8')) as {
   scripts: Record<string, string>;
 };
-
-/**
- * The body of one top-level job in a GitHub workflow. Same crude extraction as
- * tests/scripts/cdn-pins-guard-wiring.test.ts, for the same reason -- the repo
- * carries no YAML parser and the question is answerable from the job's lines.
- */
-function jobBlock(yaml: string, job: string): string {
-  const lines = yaml.split('\n');
-  const start = lines.findIndex((line) => line === `  ${job}:`);
-  if (start === -1) return '';
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i += 1) {
-    if (/^ {2}[A-Za-z0-9_-]+:/.test(lines[i])) {
-      end = i;
-      break;
-    }
-  }
-  return lines.slice(start, end).join('\n');
-}
 
 /**
  * A throwaway repo root the linter can be pointed at with `--repo-root`.
@@ -165,14 +147,16 @@ describe('the documented-gate parity guard detects, and CI runs it', () => {
   });
 
   it('is invoked by the REQUIRED `test` job in CI', () => {
-    const block = jobBlock(readFileSync(WORKFLOW, 'utf-8'), 'test');
+    const block = requiredGateBlock(readFileSync(WORKFLOW, 'utf-8'));
 
-    // If the extraction ever returns nothing (the job was renamed, the indentation
-    // changed), everything below would pass vacuously. Fail here instead.
+    // Two vacuity guards, and they answer different questions now that the gate
+    // is a GRAPH. The empty check catches a renamed root job; the `--project=unit`
+    // canary catches a graph that stopped reaching the leg that runs the suite,
+    // which is what a dropped `needs:` edge looks like from in here.
     expect(block, `no \`test:\` job found in ${WORKFLOW}`).not.toBe('');
     expect(
       block,
-      'the `test` job no longer runs the unit project either — read this guard',
+      'the required gate graph no longer runs the unit project either -- read this guard',
     ).toContain('--project=unit');
     expect(
       block,
@@ -182,12 +166,15 @@ describe('the documented-gate parity guard detects, and CI runs it', () => {
     ).toContain(NPM_SCRIPT);
   });
 
-  it('the extractor sees every `run:` step the `test` job declares', () => {
+  it('the extractor sees every `run:` step the required gate graph declares', () => {
     // The failure this guard cannot survive is its own parse degrading: a smaller
     // gate set is a set more documented lists match, silently. So the step count
     // the linter REPORTS is compared against an independent count taken here, by
-    // different means -- `run:` keys at the step-key column of the job block.
-    const block = jobBlock(readFileSync(WORKFLOW, 'utf-8'), 'test');
+    // different means -- `run:` keys at the step-key column of every job in the
+    // graph. Both sides are the GRAPH now, not the `test` job alone: the linter
+    // scopes itself to `test` union its transitive `needs:`, and so does the
+    // extraction here, so a leg the linter stops reading turns this red.
+    const block = requiredGateBlock(readFileSync(WORKFLOW, 'utf-8'));
     const independent = block.split('\n').filter((line) => /^ {8}run:/.test(line)).length;
     expect(independent, 'the independent count found no run steps; this test is broken').toBeGreaterThan(30);
 
@@ -197,10 +184,30 @@ describe('the documented-gate parity guard detects, and CI runs it', () => {
     expect(reported, `the linter no longer reports its step count:\n${output}`).not.toBeNull();
     expect(
       Number(reported?.[1]),
-      `the linter parsed ${reported?.[1]} run steps where an independent count of the same ` +
-        `job found ${independent}. The extractor is dropping steps, which shrinks the gate ` +
-        `set and makes every documented list easier to match.`,
+      `the linter parsed ${reported?.[1]} run steps where an independent count over the same ` +
+        `required gate graph found ${independent}. The extractor is dropping steps, which ` +
+        `shrinks the gate set and makes every documented list easier to match.`,
     ).toBe(independent);
+  });
+
+  it('the shared gate-block helper refuses a graph it can barely parse', () => {
+    // One helper feeds thirteen guard-wiring tests, so its own failure would be
+    // thirteen silent greens. Point it at a workflow whose `test` names no legs
+    // and runs almost nothing: it must throw rather than hand back a thin block
+    // that a future `not.toContain` would sail through.
+    expect(() =>
+      requiredGateBlock(
+        'jobs:\n  test:\n    steps:\n      - name: Only one\n        run: pnpm --filter @kitn.ai/ui run lint:gate-parity\n',
+      ),
+    ).toThrow(/under this helper's floor/);
+  });
+
+  it('the shared helper reports a `needs:` that names nothing', () => {
+    // A `needs:` edge pointing at a job that does not exist means the gate does
+    // not include what it thinks it does. Silently skipping it would shrink the
+    // union back towards the root job without anybody noticing.
+    const yaml = readFileSync(WORKFLOW, 'utf-8').replace('  test:\n', '  test:\n    needs: [ghost]\n');
+    expect(() => requiredGateBlock(yaml)).toThrow(/not in the workflow/);
   });
 
   it('the real tree has no gate list contradicting the job', () => {
