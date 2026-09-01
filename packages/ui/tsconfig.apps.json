@@ -1,0 +1,23 @@
+{
+  "comment": "Typechecks the three shipped dev-tool apps (apps/builder, apps/theme-studio, apps/gallery). They live outside src/ so the library tsconfig (src/** only) and the dts emit never see them; this project is what keeps them typechecked. Same compiler options as tsconfig.json, noEmit.",
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "baseUrl": ".",
+    "paths": {
+      "@kitn.ai/ui/elements": ["./src/elements/register.ts"]
+    }
+  },
+  "include": ["apps/**/*.ts", "apps/**/*.tsx"],
+  "exclude": ["node_modules", "dist"]
+}

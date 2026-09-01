@@ -19,7 +19,7 @@ import { For, Show } from 'solid-js';
 import { Plus, FileWarning } from 'lucide-solid';
 // From templates.ts, not dev.ts: dev.ts is Node-only and emits no dist
 // declaration, so a type imported from it breaks the d.ts-boundary build gate.
-import type { ConstructListing } from '../agent-tooling/construct/templates';
+import type { ConstructListing } from '../../src/agent-tooling/construct/templates';
 
 export type { ConstructListing };
 

@@ -19,7 +19,7 @@
  *  typed here at all: theme.css is imported raw and parsed, so the editor's
  *  "Default" theme is the kit's, byte for byte, and cannot drift from it.
  *
- *  This file is a standalone APP (src/theme-studio-app/, built by
+ *  This file is a standalone APP (apps/theme-studio/, built by
  *  vite.config.theme-studio.ts into dist/theme-studio and served by the
  *  construct dev server at /theme-studio/), and is ALSO what the docs site's
  *  /theme/editor page renders (apps/docs re-exports it). It must never be
@@ -49,7 +49,7 @@ import {
 import { THEME_PRESETS, SHADCN_TO_KAI } from './theme-presets';
 import { sampleFor } from './sample-data';
 import kitCss from '../../theme.css?raw';
-import { GROUPS, ALL_TOKENS, TEXT_RUNGS, parseKitDefaults, remValue, type TextRung } from './theme-tokens';
+import { GROUPS, ALL_TOKENS, TEXT_RUNGS, parseKitDefaults, remValue, type TextRung } from '../../src/themes/theme-tokens';
 
 // The showroom writes ONE kai-* tag directly in Solid JSX (<kai-chat> below);
 // every other element mounts via document.createElement in mountSample. Solid's
@@ -373,7 +373,7 @@ const nextId = () => `s${++uid}`;
 // construct file's nested `theme.tokens` flat before posting init).
 // applyHostTheme below additionally tolerates the nested construct shape and
 // a bare `accent`, defensively, so a stale host can't silently seed nothing.
-import { type ThemePayload } from './theme-payload';
+import { type ThemePayload } from '../../src/themes/theme-payload';
 export type { ThemePayload };
 /** What a host may put in kai-theme-init's `theme`: canonically a flat
  *  ThemePayload; tolerated, the construct file's own nested shape. */

@@ -34,7 +34,7 @@
    own compile() (what the contract test above and the CLI's `tailwindcss`
    binary use to build compiled.css) tolerates an out-of-order @import; a
    plain Vite + @tailwindcss/postcss pipeline (e.g. a light-DOM Solid app's
-   own build, or this kit's src/builder-app) does not, and drops it — this
+   own build, or this kit's apps/builder) does not, and drops it — this
    file used to put @plugin between two @imports, which silently dropped
    theme.css AND kit-base.css from any consumer on that stricter pipeline:
    every --color-* token gone, so anything reading one (a component's own

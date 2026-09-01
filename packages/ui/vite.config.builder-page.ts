@@ -8,7 +8,7 @@ import { resolve } from 'node:path';
 // compiles nothing at consumer runtime. base './' because dev.ts serves it
 // from an arbitrary port's root.
 export default defineConfig({
-  root: resolve(__dirname, 'src/builder-app'),
+  root: resolve(__dirname, 'apps/builder'),
   base: './',
   plugins: [solid()],
   css: { postcss: { plugins: [tailwindcss()] } },

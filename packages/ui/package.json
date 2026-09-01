@@ -230,7 +230,7 @@
     "test:storybook": "vitest run --project=storybook",
     "test:storybook:ci": "node scripts/run-storybook-tests.mjs",
     "test:watch": "vitest",
-    "typecheck": "npm run verify:quarantine && tsc --noEmit && tsc --noEmit -p tsconfig.react.json && tsc --noEmit -p tsconfig.react.test.json && tsc --noEmit -p tsconfig.mcp.json && tsc --noEmit -p tsconfig.tests.json",
+    "typecheck": "npm run verify:quarantine && tsc --noEmit && tsc --noEmit -p tsconfig.react.json && tsc --noEmit -p tsconfig.react.test.json && tsc --noEmit -p tsconfig.apps.json && tsc --noEmit -p tsconfig.mcp.json && tsc --noEmit -p tsconfig.tests.json",
     "examples": "echo 'Serving repo root on http://localhost:8000 — open http://localhost:8000/examples/demos/composable/index.html' && python3 -m http.server 8000 --directory ../..",
     "dev": "npm run build:css && storybook dev -p 6006",
     "storybook": "npm run build:css && storybook dev -p 6006",

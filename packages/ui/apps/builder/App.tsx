@@ -10,19 +10,19 @@
  */
 import { createSignal, onMount, onCleanup, Show, For } from 'solid-js';
 import { SlidersHorizontal } from 'lucide-solid';
-import { BuilderStart, BUILDABLE_BUILDER_TEMPLATES, type BuilderTemplateId } from '../components/builder-start';
-import { WorkspaceVariantPicker, type WorkspaceVariantId } from '../components/builder-workspace-variants';
-import { DerivedBuilderPanel } from '../components/builder-panel-derived';
-import { BuilderHeader } from '../components/builder-header';
-import { buildableTemplates, templateById, inferTemplateId, type BuildableTemplate } from '../agent-tooling/construct/templates';
-import type { Construct, ConstructProblem } from '../agent-tooling/construct/schema';
+import { BuilderStart, BUILDABLE_BUILDER_TEMPLATES, type BuilderTemplateId } from '../../src/components/builder-start';
+import { WorkspaceVariantPicker, type WorkspaceVariantId } from '../../src/components/builder-workspace-variants';
+import { DerivedBuilderPanel } from '../../src/components/builder-panel-derived';
+import { BuilderHeader } from '../../src/components/builder-header';
+import { buildableTemplates, templateById, inferTemplateId, type BuildableTemplate } from '../../src/agent-tooling/construct/templates';
+import type { Construct, ConstructProblem } from '../../src/agent-tooling/construct/schema';
 import { HomeScreen, type ConstructListing } from './HomeScreen';
 import { createEditGuard, type EditOutcome } from './edit-guard';
-import type { ThemePayload } from '../theme-studio-app/theme-payload';
-import { ToastRegion, type ToastItem, type ToastVariant } from '../components/toast';
-import { Input } from '../ui/input';
-import { Button } from '../ui/button';
-import { Dialog } from '../ui/dialog';
+import type { ThemePayload } from '../../src/themes/theme-payload';
+import { ToastRegion, type ToastItem, type ToastVariant } from '../../src/components/toast';
+import { Input } from '../../src/ui/input';
+import { Button } from '../../src/ui/button';
+import { Dialog } from '../../src/ui/dialog';
 
 // The AI/UI brand magenta — matches builder-start.stories.tsx's own
 // BRAND_STYLE exactly (design-parity fix wave, 2026-08-29 audit item 3a).

@@ -38,12 +38,12 @@
  */
 import { type JSX, For, Show, createMemo, createSignal } from 'solid-js';
 import { Check, Copy, Download } from 'lucide-solid';
-import { cn } from '../utils/cn';
-import { Button } from '../ui/button';
-import { WorkSurface } from '../components/work-surface';
-import { FileTree, type FileTreeFile } from '../components/file-tree';
-import { CodeBlock, CodeBlockCode, CodeBlockGroup } from '../components/code-block';
-import { BLOCK_FORMS, type BlockFormId, type FormFile } from '../agent-tooling/blocks/forms';
+import { cn } from '../../src/utils/cn';
+import { Button } from '../../src/ui/button';
+import { WorkSurface } from '../../src/components/work-surface';
+import { FileTree, type FileTreeFile } from '../../src/components/file-tree';
+import { CodeBlock, CodeBlockCode, CodeBlockGroup } from '../../src/components/code-block';
+import { BLOCK_FORMS, type BlockFormId, type FormFile } from '../../src/agent-tooling/blocks/forms';
 
 /** One gallery entry: the registry item's browse fields plus the rendered
  *  DELIVERY FORMS (from the server's /gallery/api/form/ route — the shared

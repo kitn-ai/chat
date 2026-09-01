@@ -73,4 +73,4 @@ Two cheap guards cover the same ground in the required CI job, and both are wort
 
 ## Map
 
-pnpm + NX workspace. `packages/ui/` (the kit: `src/` — `primitives` · `ui` · `components` · `state` · `wire` · `elements` · `agent-tooling` — plus `frameworks/react/` wrappers, Storybook, `theme.css` / `theme.tokens.css`, the `kai` MCP) · `apps/docs/` (public Astro Starlight docs → ui.kitn.ai) · `examples/*` (at repo root, deferred) · `packages/ui/dist/` (built, gitignored).
+pnpm + NX workspace. `packages/ui/` (the kit: `src/` — `primitives` · `ui` · `components` · `state` · `wire` · `elements` · `agent-tooling` — plus `frameworks/react/` wrappers, Storybook, `theme.css` / `theme.tokens.css`, the `kai` MCP) · `apps/docs/` (public Astro Starlight docs → ui.kitn.ai) · `examples/*` (at repo root, deferred) · `packages/ui/dist/` (built, gitignored). `packages/ui/apps/{builder,theme-studio,gallery}` are the three dev-tool pages `kai dev` serves, prebuilt into `dist/` and outside `src/` because they are apps over the kit, not the kit.

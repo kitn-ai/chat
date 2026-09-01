@@ -56,7 +56,7 @@ const TriggerEntrySchema = z
 const TokenRecordSchema = z.record(z.string(), z.string());
 
 /** Full theme-palette persistence (the builder's embedded ThemeStudio posts
- *  exactly this shape — its `ThemePayload`, src/theme-studio-app/
+ *  exactly this shape — its `ThemePayload`, apps/theme-studio/
  *  ThemeStudio.tsx, minus the message `type`). Every part of that payload is
  *  persisted here: `light` carries the light colors PLUS the root-scope knobs
  *  the studio rides along in it (`--kai-text-*` rungs, `--kai-tracking`,

@@ -18,6 +18,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { storyRoots } from '../../scripts/story-roots.mjs';
 
 const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -62,7 +63,9 @@ const IMPORT_RE = /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*'(@kitn\.ai\/ui(?:\
 interface SnippetImport { file: string; spec: string; names: string[] }
 
 const found: SnippetImport[] = [];
-for (const file of storyFiles(resolve(pkgRoot, 'src')).sort()) {
+// Both src/ and apps/ hold `.stories.tsx` files -- see story-roots.mjs's
+// header (`.storybook/main.ts:54` is the authority the two roots mirror).
+for (const file of storyRoots(pkgRoot).flatMap((dir) => storyFiles(dir)).sort()) {
   for (const m of readFileSync(file, 'utf8').matchAll(IMPORT_RE)) {
     const names = m[1]
       .split(',')

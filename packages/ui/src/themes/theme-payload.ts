@@ -10,7 +10,7 @@
  * the top level, in every direction (kai-theme-init, kai-theme-change,
  * kai-theme-apply). The construct FILE nests the same four fields under
  * `theme.tokens` (beside `theme.accent` / `theme.mode`); the builder owns the
- * fold in both directions — `initThemePayload` (builder-app/App.tsx)
+ * fold in both directions — `initThemePayload` (apps/builder/App.tsx)
  * construct → payload before posting init, `themeFromPayload` payload →
  * construct on every change — and the studio's `applyHostTheme` additionally
  * tolerates a nested init defensively.
