@@ -27,6 +27,13 @@ const meta = { title: 'Labs/Builder/Build wait', parameters: { layout: 'centered
 export default meta;
 type Story = StoryObj;
 
+// BuildWait is internal to the builder app (src/components/build-wait.tsx) -- it ships in no
+// public @kitn.ai/ui entry point, so the snippet below shows real usage of the component itself
+// rather than a package import.
+const src = (code: string) => ({
+  parameters: { docs: { source: { code, language: 'tsx' } } },
+});
+
 // The AI/UI brand magenta, set the same way every other builder story on this
 // branch sets it, and for the same reason recorded in `builder-start.stories`:
 // `--color-primary` DIRECTLY, because the `--kai-color-primary` indirection
@@ -84,6 +91,7 @@ function WaitScreen(props: { templateId: BuilderCardTemplateId; error?: string; 
 
 const templateStory = (templateId: BuilderCardTemplateId): Story => ({
   render: () => <WaitScreen templateId={templateId} />,
+  ...src(`<BuildWait templateId="${templateId}" current={currentPhase} />`),
 });
 
 /** Support widget — the floating panel is the accented surface, so it is the
@@ -117,8 +125,11 @@ export const Voice: Story = templateStory('voice');
  *  in the checked-in compiled sheet this live Storybook serves, and only whole
  *  utilities already present in it render without a rebuild — the same
  *  constraint `builder-start.tsx` records at every class it picks. */
+const ALL_TEMPLATES_SRC = src(`{BUILDER_TEMPLATES.map((template) => (
+  <BuildWait templateId={template.id} current="generate" />
+))}`);
+
 export const AllTemplates: Story = {
-  parameters: { layout: 'padded' },
   render: () => (
     <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3" style={BRAND_STYLE}>
       <For each={BUILDER_TEMPLATES}>
@@ -131,6 +142,7 @@ export const AllTemplates: Story = {
       </For>
     </div>
   ),
+  parameters: { layout: 'padded', docs: ALL_TEMPLATES_SRC.parameters.docs },
 };
 
 /**
@@ -145,6 +157,7 @@ export const AllTemplates: Story = {
  */
 export const ReducedMotion: Story = {
   render: () => <WaitScreen templateId="workspace" reduceMotion />,
+  ...src(`<BuildWait templateId="workspace" current={currentPhase} reduceMotion />`),
 };
 
 /**
@@ -160,4 +173,9 @@ export const Failed: Story = {
       error="The preview server exited before it came up: EADDRINUSE, port 5173 is already in use."
     />
   ),
+  ...src(`<BuildWait
+  templateId="assistant"
+  current="generate"
+  error="The preview server exited before it came up: EADDRINUSE, port 5173 is already in use."
+/>`),
 };

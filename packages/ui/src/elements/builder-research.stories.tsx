@@ -440,6 +440,14 @@ const meta = { title: 'Labs/Builder/Research', parameters: { layout: 'fullscreen
 export default meta;
 type Story = StoryObj;
 
+// BuilderPanel/BuilderLayout are internal to the builder app (src/components/builder-panel.tsx,
+// builder-layout.tsx) -- neither ships in a public @kitn.ai/ui entry point. The snippet below
+// names the real composition and wiring rather than a package import; ChatThread IS public
+// (@kitn.ai/ui) and is shown as this preview actually uses its `emptyContent` prop.
+const src = (code: string) => ({
+  parameters: { docs: { source: { code, language: 'tsx' } } },
+});
+
 /**
  * The Research template's builder, reshaped in an owner design round to
  * mirror the REAL Perplexity Labs story's anatomy (see the module doc
@@ -456,4 +464,30 @@ type Story = StoryObj;
  */
 export const Research: Story = {
   render: () => <ResearchBuilderDemo />,
+  ...src(`<BuilderLayout
+  name={construct.name}
+  panel={
+    <BuilderPanel
+      value={construct}
+      onChange={setConstruct}
+      sections={{ layout: false, widget: 'never', provider: true, home: false }}
+    />
+    // ...plus this screen's own Answer-layout section (one toggle per region)
+  }
+  preview={
+    <ChatThread
+      messages={messages}
+      chatTitle={construct.header?.title}
+      suggestions={construct.capabilities?.starters}
+      // Same composer serves the initial search and every follow-up; the
+      // Perplexity-shaped answer (sources strip, tabs, citations, related
+      // questions) renders through the empty-state slot once a query lands.
+      empty={!answered}
+      emptyContent={answered && <AnswerView query={query} onRelatedClick={submit} />}
+      onSubmit={submit}
+    />
+  }
+  viewport={viewport}
+  onViewportChange={setViewport}
+/>`),
 };

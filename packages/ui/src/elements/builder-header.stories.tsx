@@ -22,6 +22,13 @@ const meta = { title: 'Labs/Builder/Header', parameters: { layout: 'fullscreen' 
 export default meta;
 type Story = StoryObj;
 
+// BuilderHeader is internal to the builder app (src/components/builder-header.tsx) -- it ships
+// in no public @kitn.ai/ui entry point, so the snippet below shows real usage of the component
+// itself rather than a package import.
+const src = (code: string) => ({
+  parameters: { docs: { source: { code, language: 'tsx' } } },
+});
+
 // The AI/UI brand magenta — the same one-off "and here, brand it" every
 // builder story applies (see builder-start.stories.tsx for why it sets
 // `--color-primary` directly rather than the `--kai-color-primary`
@@ -119,6 +126,13 @@ function HeaderDemo(props: { canvasDark?: boolean; saving?: boolean; saved?: boo
  *  "Advanced" (in the stub panel column) is where the theme builder opens. */
 export const Header: Story = {
   render: () => <HeaderDemo />,
+  ...src(`<BuilderHeader
+  title="Support workspace"
+  onSwitchTemplate={() => openTemplateOverlay()}
+  canvasDark={canvasDark}
+  onToggleCanvasDark={() => setCanvasDark((d) => !d)}
+  onSave={() => save()}
+/>`),
 };
 
 /** The canvas pre-flipped to dark — the state the toggle exists for, shown
@@ -126,11 +140,13 @@ export const Header: Story = {
  *  light"). */
 export const DarkCanvas: Story = {
   render: () => <HeaderDemo canvasDark />,
+  ...src(`<BuilderHeader title="Support workspace" canvasDark onToggleCanvasDark={() => setCanvasDark((d) => !d)} onSave={save} />`),
 };
 
 /** Save mid-write: disabled, label swapped. */
 export const Saving: Story = {
   render: () => <HeaderDemo saving />,
+  ...src(`<BuilderHeader title="Support workspace" saving onSave={save} />`),
 };
 
 /** Everything persisted: Save disabled and labeled "Saved" — the honest
@@ -139,4 +155,5 @@ export const Saving: Story = {
  *  debounce early). */
 export const Saved: Story = {
   render: () => <HeaderDemo saved />,
+  ...src(`<BuilderHeader title="Support workspace" saved onSave={save} />`),
 };

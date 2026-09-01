@@ -592,6 +592,14 @@ const meta = { title: 'Labs/Builder/In-app assistant', parameters: { layout: 'fu
 export default meta;
 type Story = StoryObj;
 
+// BuilderPanel/BuilderLayout are internal to the builder app (src/components/builder-panel.tsx,
+// builder-layout.tsx) -- neither ships in a public @kitn.ai/ui entry point. The snippet below
+// names the real composition and wiring rather than a package import; ChatThread IS public
+// (@kitn.ai/ui) and is shown as this preview actually uses it, docked beside the host app.
+const src = (code: string) => ({
+  parameters: { docs: { source: { code, language: 'tsx' } } },
+});
+
 /**
  * The In-app assistant template's builder: panel on the left scoped to
  * exactly this template's controls (Identity, Provider, Theme, Capabilities
@@ -618,4 +626,31 @@ type Story = StoryObj;
  */
 export const InAppAssistant: Story = {
   render: () => <InAppAssistantBuilderDemo />,
+  ...src(`<BuilderLayout
+  name={construct.name}
+  panel={
+    <BuilderPanel
+      value={construct}
+      onChange={setConstruct}
+      sections={{ layout: false, widget: 'never', provider: true, home: false, cards: true }}
+    />
+    // ...plus preview-only knobs: Microphone, Messages actions, Rail placement
+  }
+  preview={
+    // Docked aside beside a stand-in skeleton of the host app
+    <div class="flex h-full">
+      <div class="flex-1">{/* the rest of your app */}</div>
+      <ChatThread
+        class="w-96 shrink-0 border-l border-border"
+        messages={messages}
+        chatTitle={construct.header?.title}
+        suggestions={construct.capabilities?.starters}
+        voice={mic}
+        onSubmit={sendMessage}
+      />
+    </div>
+  }
+  viewport={viewport}
+  onViewportChange={setViewport}
+/>`),
 };

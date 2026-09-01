@@ -20,6 +20,14 @@ const meta = { title: 'Labs/Builder/Start', parameters: { layout: 'padded' } } s
 export default meta;
 type Story = StoryObj;
 
+// BuilderStart/WorkspaceVariantPicker are internal to the builder app (src/components/
+// builder-start.tsx, builder-workspace-variants.tsx) -- neither ships in a public @kitn.ai/ui
+// entry point, so the snippets below show real usage of the components themselves rather than
+// a package import.
+const src = (code: string) => ({
+  parameters: { docs: { source: { code, language: 'tsx' } } },
+});
+
 // The AI/UI brand magenta — the exact value `.storybook/preview.ts`'s own
 // manager brandmark uses, and the one T-7 means by "the magenta accent".
 // `builder-start.tsx` itself stays token-only (`var(--color-primary)`
@@ -72,6 +80,7 @@ function StartDemo() {
 /** The picker at a realistic viewport. */
 export const Start: Story = {
   render: () => <StartDemo />,
+  ...src(`<BuilderStart templates={BUILDER_TEMPLATES} value={selected} onSelect={setSelected} />`),
 };
 
 /** The selected-ring state, shown without needing to click first — useful
@@ -85,6 +94,7 @@ export const Preselected: Story = {
       </div>
     );
   },
+  ...src(`<BuilderStart templates={BUILDER_TEMPLATES} value="research" onSelect={setSelected} />`),
 };
 
 /**
@@ -152,4 +162,9 @@ export const TwoStepFlow: Story = {
       </div>
     );
   },
+  ...src(`{/* step 1: pick a template */}
+<BuilderStart templates={BUILDER_TEMPLATES} value={template} onSelect={selectTemplate} />
+
+{/* step 2, only for "workspace": which of its 2 starting points */}
+<WorkspaceVariantPicker value={variant} onSelect={setVariant} onBack={() => setStep('start')} />`),
 };
