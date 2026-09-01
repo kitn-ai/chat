@@ -1,6 +1,6 @@
 {
   "scenario": "support-widget",
-  "base": "http://localhost:8957",
+  "base": "http://localhost:8973",
   "runs": [
     {
       "page": "block",
@@ -22,7 +22,11 @@
           "name": "2-home",
           "probes": {
             "greeting": true,
-            "helpLink": true
+            "helpLink": true,
+            "homeCtaClearOfSubtitle": true,
+            "homeSubtitleToCtaGap": 16,
+            "homeTitleToSubtitleGap": 4,
+            "homeSubtitleLineBox": 20
           },
           "styles": {
             "homeCta": {
@@ -120,7 +124,11 @@
           "name": "2-home",
           "probes": {
             "greeting": true,
-            "helpLink": true
+            "helpLink": true,
+            "homeCtaClearOfSubtitle": true,
+            "homeSubtitleToCtaGap": 16,
+            "homeTitleToSubtitleGap": 4,
+            "homeSubtitleLineBox": 20
           },
           "styles": {
             "homeCta": {

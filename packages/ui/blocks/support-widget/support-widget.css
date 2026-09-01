@@ -31,14 +31,24 @@ kai-view[hidden] { display: none !important; }
 /* Home tab: spacing only; colors inherit from the panel's token-painted
  * surface. currentColor mixes keep the hairlines theme-correct in both
  * schemes without restating a token default. */
+/* Layout lives on .home, NOT the kai-view host: kai-view's shadow is a
+ * <style> + <slot> pair, so a flex `gap` on the host counts the shadow
+ * <style> node as an item and opens a phantom 16px gap ABOVE the slotted
+ * content — measured against the facade, the whole home column sat 16px low
+ * and the intra-column gaps were 0 (the CTA touched the subtitle's
+ * descenders). Host keeps only padding/scroll/type; .home owns the column. */
 kai-view[name='home']:not([hidden]) {
-  display: flex; flex-direction: column; gap: 1rem;
+  display: block;
   padding: 1.25rem; overflow-y: auto;
   font: 14px system-ui, sans-serif;
 }
+.home { display: flex; flex-direction: column; gap: 1rem; }
 .greeting { display: flex; flex-direction: column; gap: 0.25rem; }
-.greeting h2 { margin: 0; font-size: 1.25rem; font-weight: 600; }
-.greeting .subtitle { margin: 0; font-size: 0.875rem; color: color-mix(in srgb, currentColor 60%, transparent); }
+/* line-heights pinned to the facade's measured boxes (28px title, 20px
+ * subtitle) — `normal` computed 29/17px and left the subtitle's descenders
+ * on the box edge. */
+.greeting h2 { margin: 0; font-size: 1.25rem; font-weight: 600; line-height: 1.75rem; }
+.greeting .subtitle { margin: 0; font-size: 0.875rem; line-height: 1.25rem; color: color-mix(in srgb, currentColor 60%, transparent); }
 kai-row.recent-card { border: 1px solid color-mix(in srgb, currentColor 15%, transparent); border-radius: 0.75rem; }
 .home-links { border: 1px solid color-mix(in srgb, currentColor 15%, transparent); border-radius: 0.75rem; overflow: hidden; }
 /* COPY of the kit's unread default (theme.tokens.css --color-unread), with
