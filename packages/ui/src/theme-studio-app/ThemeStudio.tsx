@@ -32,16 +32,20 @@
 import { createSignal, createEffect, onMount, onCleanup, For, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { loadKit } from './kit';
+// NOT lucide-solid: its published dist builds icon DOM templates at module
+// scope with client-only solid-js/web APIs, which crashes astro dev's
+// server-side module evaluation of this file (docs /theme/editor) even under
+// client:only. See the WHY NOT note in ./icons.
 import {
-  Check as IconCheck,
-  Copy as IconCopy,
-  ClipboardPaste as IconImport,
-  RotateCcw as IconReset,
-  ChevronRight as IconChevron,
-  Code as IconCode,
-  Bookmark as IconSave,
-  X as IconClose,
-} from 'lucide-solid';
+  IconCheck,
+  IconCopy,
+  IconImport,
+  IconReset,
+  IconChevron,
+  IconCode,
+  IconSave,
+  IconClose,
+} from './icons';
 import { THEME_PRESETS, SHADCN_TO_KAI } from './theme-presets';
 import { sampleFor } from './sample-data';
 import kitCss from '../../theme.css?raw';
