@@ -64,6 +64,30 @@ import { fileURLToPath } from 'node:url';
 
 export const KIT_PACKAGE_NAME = '@kitn.ai/ui';
 
+/**
+ * How to invoke npm on this platform. On Windows npm is `npm.cmd`, and since
+ * Node's CVE-2024-27980 hardening a spawn of a .cmd/.bat WITHOUT `shell: true`
+ * throws EINVAL — surfaced on the child's 'error' event, not 'exit', so a
+ * call site listening only for 'exit' hangs forever instead of failing. Every
+ * npm spawn in the construct CLI goes through this one answer (and handles
+ * 'error' beside 'exit'). The arguments passed at those sites are fixed
+ * literals plus schema-constrained names and numeric ports, so `shell: true`
+ * introduces no quoting surface. Takes the platform as a parameter so both
+ * branches are unit-testable from any OS; no Windows box in CI — this is a
+ * structural fix, exercised for real only on win32.
+ */
+export function npmInvocation(platform: NodeJS.Platform = process.platform): { command: string; shell: boolean } {
+  return platform === 'win32' ? { command: 'npm.cmd', shell: true } : { command: 'npm', shell: false };
+}
+
+/** With `shell: true` Node joins the argv with spaces and hands it to cmd.exe
+ *  unquoted, so a path-bearing argument (e.g. `--pack-destination <dir>` under
+ *  a Windows user directory with a space in it) splits. Quote exactly when the
+ *  shell is in play; a no-op otherwise. */
+export function npmArgs(args: string[], shell: boolean): string[] {
+  return shell ? args.map((a) => (/\s/.test(a) ? `"${a}"` : a)) : args;
+}
+
 /** The gitignored cache the packed local build lands in, inside the checkout
  *  (never a consumer's tree — nothing below reaches here off a checkout). */
 export const LOCAL_KIT_CACHE_DIRNAME = '.kai-local-kit';
@@ -291,9 +315,11 @@ export function packLocalKit(pkgRoot: string): { tarball: string; packed: boolea
   const stage = join(cacheDir, `.pack-${process.pid}`);
   mkdirSync(stage, { recursive: true });
   try {
-    execFileSync('npm', ['pack', '--silent', '--pack-destination', stage], {
+    const npm = npmInvocation();
+    execFileSync(npm.command, npmArgs(['pack', '--silent', '--pack-destination', stage], npm.shell), {
       cwd: pkgRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
+      shell: npm.shell,
     });
     const produced = readdirSync(stage).filter((f) => f.endsWith('.tgz'));
     if (produced.length !== 1) {

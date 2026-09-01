@@ -995,6 +995,42 @@ describe('accent contrast (paired --kai-color-primary-foreground)', () => {
     expect(notice).toMatch(/^accent 'var\(--brand\)' not parseable for contrast/);
     expect(notice).toMatch(/without CSS contrast-color\(\) support/);
   });
+
+  // Review finding (pre-merge, 2026-08-31): the pairing used to be gated on
+  // `accent` alone, so a construct that sets its primary ONLY through
+  // theme.tokens got the kit's near-white default foreground on any custom
+  // primary — white-on-yellow. The gate is the EFFECTIVE primary now.
+  it('a token-only --kai-color-primary (no accent) still gets the paired foreground floor and the @supports override', () => {
+    const element = file(
+      generateProject(
+        construct({ theme: { mode: 'system', tokens: { light: { '--kai-color-primary': '#ffff00' } } } }),
+      ),
+      'src/element.tsx',
+    );
+    expect(element).toContain(':host { --kai-color-primary-foreground: #000000; }'); // yellow → black text
+    expect(element).toContain('@supports (color: contrast-color(red))');
+    expect(element).toContain('contrast-color(var(--kai-color-primary))');
+  });
+
+  it('a token light primary overriding an accent pairs the foreground with the TOKEN (the value that wins), not the accent', () => {
+    const element = file(
+      generateProject(
+        construct({
+          theme: { mode: 'system', accent: '#e91e63', tokens: { light: { '--kai-color-primary': '#ffff00' } } },
+        }),
+      ),
+      'src/element.tsx',
+    );
+    expect(element).toContain('--kai-color-primary-foreground: #000000'); // yellow wins → black
+    expect(element).not.toContain('--kai-color-primary-foreground: #ffffff');
+  });
+
+  it('accentContrastNotice fires for an unparseable token-only primary the same way it does for an accent', () => {
+    const notice = accentContrastNotice(
+      construct({ theme: { mode: 'system', tokens: { light: { '--kai-color-primary': 'var(--brand)' } } } }),
+    );
+    expect(notice).toMatch(/not parseable for contrast/);
+  });
 });
 
 describe('endpoint provider', () => {

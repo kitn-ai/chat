@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync as readF, writeFileSync as writeF, readdirSyn
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import { mkdirSync } from 'node:fs';
-import { workDirFor, installKey, regenerate, regenTurn, handleConstructPut, shapeConstructGetResponse, createEventHub, serveBuilderAsset, listenLoopbackOnly, resolveBuilderPageDir, listenWithPortFallback, portInUseNotice, probePort, handleCreate, starterFor, previewFields, waitUntilListening, announceBoot, listConstructs, resolveConstructArg, handleOpen } from './dev';
+import { workDirFor, installKey, regenerate, regenTurn, handleConstructPut, shapeConstructGetResponse, createEventHub, serveBuilderAsset, listenLoopbackOnly, resolveBuilderPageDir, listenWithPortFallback, portInUseNotice, probePort, handleCreate, starterFor, previewFields, waitUntilListening, announceBoot, listConstructs, resolveConstructArg, handleOpen, crossOriginProblem } from './dev';
 import { generateProject, type GeneratedFile } from './codegen';
 import { validateConstruct } from './schema';
 
@@ -224,6 +224,37 @@ describe('kai dev --builder internals (B-22)', () => {
     // pinned so adding the payload arg cannot quietly change that frame.
     expect(frames).toContain('event: construct\ndata: {}\n\n');
     expect(frames).toContain('event: preview\ndata: {"previewUrl":"http://localhost:4401/"}\n\n');
+  });
+
+  // Security (pre-merge review, 2026-08-31): loopback binding does not stop a
+  // hostile WEB PAGE — POST /api/create is a no-preflight simple request any
+  // origin can fire, and each call writes a file and spawns npm + Vite. The
+  // browser's unforgeable Origin header is the discriminator.
+  describe('crossOriginProblem — the drive-by-POST guard on every state-changing route', () => {
+    it('rejects a cross-origin request (Origin present and foreign)', () => {
+      const out = crossOriginProblem({ origin: 'https://evil.example', host: 'localhost:4400' });
+      expect(out).toContain('cross-origin request rejected');
+      expect(out).toContain('https://evil.example');
+    });
+
+    it('rejects `Origin: null` (sandboxed iframes) — present-and-foreign, not absent', () => {
+      expect(crossOriginProblem({ origin: 'null', host: 'localhost:4400' })).toContain('rejected');
+    });
+
+    it('allows the builder page\'s own same-origin fetches (Origin matches the request Host)', () => {
+      expect(crossOriginProblem({ origin: 'http://localhost:4400', host: 'localhost:4400' })).toBeUndefined();
+      expect(crossOriginProblem({ origin: 'http://127.0.0.1:4401', host: '127.0.0.1:4401' })).toBeUndefined();
+    });
+
+    it('allows an ABSENT Origin — curl and same-origin non-CORS requests send none', () => {
+      expect(crossOriginProblem({ host: 'localhost:4400' })).toBeUndefined();
+      expect(crossOriginProblem({})).toBeUndefined();
+    });
+
+    it('a foreign origin on the same PORT is still foreign (scheme/host must match, not just the port)', () => {
+      expect(crossOriginProblem({ origin: 'http://evil.example:4400', host: 'localhost:4400' })).toContain('rejected');
+      expect(crossOriginProblem({ origin: 'https://localhost:4400', host: 'localhost:4400' })).toContain('rejected');
+    });
   });
 
   it('listenLoopbackOnly binds 127.0.0.1, never the unspecified address', async () => {

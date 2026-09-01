@@ -321,3 +321,30 @@ describe('work-surface notices (decide loudly)', () => {
     expect(splitWithoutWorkSurfaceNotice(c.construct)).toBeNull();
   });
 });
+
+// Pre-merge review, 2026-08-31: packLocalKit's cache keeps ONE tarball per
+// checkout and evicts the rest on every dist/ rebuild, so an ejected project
+// pinning the cache's absolute path hits ENOENT on its first install after a
+// rebuild. Eject vendors a copy and depends on it relatively instead.
+describe('vendorLocalKit — ejected projects own their kit tarball', () => {
+  it('copies the tarball into <outDir>/vendor and returns a RELATIVE file: spec, so evicting the shared cache cannot orphan the project', async () => {
+    const { vendorLocalKit } = await import('./cli');
+    const { rmSync } = await import('node:fs');
+    const cache = mkdtempSync(join(tmpdir(), 'kai-cache-'));
+    const out = mkdtempSync(join(tmpdir(), 'kai-vendor-'));
+    const tarball = join(cache, 'kitn.ai-ui-0.0.0-cafebabe.tgz');
+    writeFileSync(tarball, 'tarball-bytes');
+
+    const { io, lines } = collect();
+    const spec = vendorLocalKit(tarball, out, io);
+
+    expect(spec).toBe('file:vendor/kitn.ai-ui-0.0.0-cafebabe.tgz'); // relative — never the cache's absolute path
+    expect(readFileSync(join(out, 'vendor', 'kitn.ai-ui-0.0.0-cafebabe.tgz'), 'utf8')).toBe('tarball-bytes');
+    expect(lines.join('\n')).toContain('vendored');
+
+    // The eviction that used to orphan the project: the shared cache copy is
+    // gone, the vendored copy still resolves from inside the project.
+    rmSync(tarball, { force: true });
+    expect(existsSync(join(out, 'vendor', 'kitn.ai-ui-0.0.0-cafebabe.tgz'))).toBe(true);
+  });
+});

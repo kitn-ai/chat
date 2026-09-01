@@ -16,6 +16,7 @@ import { existsSync, readFileSync, readdirSync, renameSync, statSync, watch, wri
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generateProject, writeProject, type GeneratedFile, type GenerateOptions } from './codegen';
+import { npmArgs, npmInvocation } from './local-kit';
 import { validateConstruct, type Construct, type ConstructProblem } from './schema';
 import { buildableTemplates, inferTemplateId, templateById, type ConstructListing } from './templates';
 
@@ -100,9 +101,13 @@ export async function ensureInstalled(dir: string, files: GeneratedFile[], io: C
   const installed = existsSync(keyPath) && readFileSync(keyPath, 'utf8') === key;
   if (installed) return;
   io.log(`installing dependencies in ${dir} (first run or deps changed)…`);
+  const npm = npmInvocation();
   await new Promise<void>((done, fail) => {
-    const child = spawn('npm', ['install'], { cwd: dir, stdio: 'inherit' });
+    const child = spawn(npm.command, npmArgs(['install'], npm.shell), { cwd: dir, stdio: 'inherit', shell: npm.shell });
     child.on('exit', (code) => (code === 0 ? done() : fail(new Error(`npm install exited ${code}`))));
+    // A spawn failure (npm missing; EINVAL on a pre-fix Windows) surfaces on
+    // 'error', never 'exit' — without this the install hangs silently forever.
+    child.on('error', (err) => fail(new Error(`npm install failed to start: ${err.message}`)));
   });
   writeFileSync(keyPath, key);
 }
@@ -140,7 +145,8 @@ export async function dev(
   });
 
   io.log(`previewing <${first.construct.name}> — edit ${abs} and watch the tab.`);
-  const vite = spawn('npm', ['run', 'dev'], { cwd: dir, stdio: 'inherit' });
+  const npm = npmInvocation();
+  const vite = spawn(npm.command, npmArgs(['run', 'dev'], npm.shell), { cwd: dir, stdio: 'inherit', shell: npm.shell });
   // Explicit cleanup rather than relying on process-group/SIGINT defaults:
   // whatever ends this process (a fatal error above, Ctrl-C, a signal from
   // the shell) takes the Vite child down with it instead of orphaning it.
@@ -152,6 +158,13 @@ export async function dev(
     vite.on('exit', (code) => {
       rejectP(new Error(`vite dev exited ${code}`));
       process.exit(code ?? 0);
+    });
+    // A spawn failure surfaces on 'error', never 'exit' — report it loudly
+    // instead of leaving the watcher running against a preview that never was.
+    vite.on('error', (err) => {
+      io.error(`vite dev failed to start: ${err.message}`);
+      rejectP(new Error(`vite dev failed to start: ${err.message}`));
+      process.exit(1);
     });
   });
 }
@@ -695,6 +708,28 @@ export function handleOpen(
   return { ok: true, abs, construct: raw };
 }
 
+/**
+ * Drive-by-POST guard for every state-changing route. The builder server is
+ * loopback-bound, but loopback does not stop a hostile WEB PAGE the user
+ * happens to have open: `fetch('http://localhost:4400/api/create', {method:
+ * 'POST'})` is a no-preflight simple request any origin can fire, and each
+ * such call writes `<cwd>/<name>.construct.json`, supersedes the live
+ * preview, and spawns `npm install` + Vite. The browser stamps every
+ * cross-origin fetch with an unforgeable `Origin` header, so the rule is:
+ * an Origin that is present and NOT this server's own origin (derived from
+ * the request's Host — `http://localhost:4400` and `http://127.0.0.1:4400`
+ * both match themselves) is rejected. An ABSENT Origin stays allowed — curl
+ * and same-origin non-CORS requests send none — and `Origin: null`
+ * (sandboxed iframes, some redirects) is present-and-foreign, so it rejects.
+ * Returns the rejection message, or undefined when the request may proceed.
+ */
+export function crossOriginProblem(headers: { origin?: string; host?: string }): string | undefined {
+  const origin = headers.origin;
+  if (origin === undefined) return undefined;
+  if (headers.host !== undefined && origin === `http://${headers.host}`) return undefined;
+  return `cross-origin request rejected (origin: ${origin}) — the builder API only accepts requests from its own page`;
+}
+
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -751,6 +786,17 @@ export async function devBuilder(
   // (--strictPort), so the old process must actually release it first.
   let activeVite: ReturnType<typeof spawn> | undefined;
   let activeWatcher: ReturnType<typeof watch> | undefined;
+  // ONE set of teardown handlers for the whole server, closing over whichever
+  // Vite child is current — NOT one set per boot. Per-boot `process.once`
+  // registrations never came off, so ~11 opens in one session tripped
+  // MaxListenersExceededWarning and pinned every dead child's closure for the
+  // life of the process.
+  const killActiveVite = (): void => {
+    activeVite?.kill();
+  };
+  process.once('exit', killActiveVite);
+  process.once('SIGINT', killActiveVite);
+  process.once('SIGTERM', killActiveVite);
   // Monotonic boot generation: a second open racing a boot still in its slow
   // half (npm install) must supersede it — the stale boot checks after every
   // await and aborts instead of spawning a second Vite onto the same port.
@@ -798,19 +844,25 @@ export async function devBuilder(
     if (readFileSync(absPath, 'utf8') !== initialText) {
       regenTurn(readRaw, { write: writeProject }, dir, { uiSpec: opts.uiSpec }, io);
     }
-    const vite = spawn('npm', ['run', 'dev', '--', '--port', String(previewPort), '--strictPort'], {
+    const npm = npmInvocation();
+    const vite = spawn(npm.command, npmArgs(['run', 'dev', '--', '--port', String(previewPort), '--strictPort'], npm.shell), {
       cwd: dir,
       stdio: 'inherit',
+      shell: npm.shell,
     });
     activeVite = vite;
     let viteDied: string | undefined;
     vite.on('exit', (code) => {
       viteDied ??= `the preview server exited with code ${code} before it started listening`;
     });
-    const killVite = () => vite.kill();
-    process.once('exit', killVite);
-    process.once('SIGINT', killVite);
-    process.once('SIGTERM', killVite);
+    // A spawn failure (npm missing; EINVAL from Windows' .cmd hardening before
+    // this helper existed) fires 'error', never 'exit' — without this line the
+    // abort below never triggers and the boot waits out its whole timeout.
+    vite.on('error', (err) => {
+      viteDied ??= `the preview server failed to start: ${err.message}`;
+    });
+    // Teardown on process exit/SIGINT/SIGTERM is registered ONCE at server
+    // start (killActiveVite above) — never per boot.
     // Announce the url only once something is actually accepting connections
     // on that port: the page iframes it the moment it hears about it, and an
     // iframe pointed at a refused connection stays broken — it does not retry.
@@ -862,6 +914,15 @@ export async function devBuilder(
     };
     try {
       const url = req.url ?? '/';
+      // Before ANY route dispatch: every non-GET is state-changing here
+      // (create/open/construct all write files or spawn processes), so the
+      // guard sits on the method, not on a hand-kept route list a new POST
+      // could silently miss. GETs stay unguarded — cross-origin reads are
+      // already blocked by CORS (no Access-Control-Allow-Origin is sent).
+      if (req.method !== 'GET') {
+        const rejected = crossOriginProblem({ origin: req.headers.origin, host: req.headers.host });
+        if (rejected) return send(403, { problems: [{ path: '', message: rejected }] });
+      }
       if (req.method === 'GET' && url === '/api/state') {
         if (abs) {
           return send(200, {

@@ -226,3 +226,24 @@ describe('distExportTargets — derived from the manifest, never a typed list', 
     expect(distExportTargets(null)).toEqual([]);
   });
 });
+
+// Windows structural fix (verifier-found, 2026-08-31): since Node's
+// CVE-2024-27980 hardening, spawning a .cmd/.bat without `shell: true` throws
+// EINVAL — on the child's 'error' event, not 'exit' — so every npm spawn in
+// the construct CLI resolves its invocation here. No Windows box runs this
+// suite; both branches are graded structurally via the platform parameter.
+describe('npmInvocation — how npm is spawned per platform', () => {
+  it('win32 gets npm.cmd with shell: true; everything else plain npm without a shell', async () => {
+    const { npmInvocation } = await import('./local-kit');
+    expect(npmInvocation('win32')).toEqual({ command: 'npm.cmd', shell: true });
+    expect(npmInvocation('darwin')).toEqual({ command: 'npm', shell: false });
+    expect(npmInvocation('linux')).toEqual({ command: 'npm', shell: false });
+  });
+
+  it('npmArgs quotes whitespace-bearing arguments only when a shell is in play', async () => {
+    const { npmArgs } = await import('./local-kit');
+    const args = ['pack', '--pack-destination', 'C:\\Users\\Some Name\\stage'];
+    expect(npmArgs(args, true)).toEqual(['pack', '--pack-destination', '"C:\\Users\\Some Name\\stage"']);
+    expect(npmArgs(args, false)).toBe(args); // untouched, same reference — no accidental rewriting off-shell
+  });
+});

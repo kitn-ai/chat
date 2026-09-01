@@ -183,9 +183,12 @@ const CONTRAST_COLOR_SUPPORTS = '@supports (color: contrast-color(red))';
  * there's nothing to say — no accent, or the accent parsed fine.
  */
 export function accentContrastNotice(construct: Construct): string | null {
-  const accent = construct.theme?.accent;
-  if (!accent || resolveContrastForeground(accent) !== null) return null;
-  return `accent '${commentSafe(accent)}' not parseable for contrast; foreground left at theme default in browsers without CSS contrast-color() support`;
+  // Same effective-primary rule as emitElement's foreground pairing: a
+  // theme.tokens light --kai-color-primary overrides the accent, and a
+  // token-only primary is paired (and noticed) exactly like an accent.
+  const effective = construct.theme?.tokens?.light?.['--kai-color-primary'] ?? construct.theme?.accent;
+  if (!effective || resolveContrastForeground(effective) !== null) return null;
+  return `accent '${commentSafe(effective)}' not parseable for contrast; foreground left at theme default in browsers without CSS contrast-color() support`;
 }
 
 export function generateProject(construct: Construct, opts: GenerateOptions = {}): GeneratedFile[] {
@@ -669,13 +672,17 @@ defineWebComponent('${c.name}', { theme: '${themeMode(c)}' as 'light' | 'dark' |
   // rule first, @supports override after — ordinary cascade order, no
   // `!important` required.
   const styleParts: string[] = [];
-  if (accent) {
-    // Pair the contrast foreground with the primary that actually WINS: a
-    // theme.tokens light entry for --kai-color-primary overrides the accent
-    // (see the precedence note above), so computing the black/white floor from
-    // the overridden accent would pin the wrong foreground in browsers
-    // without contrast-color().
-    const effectivePrimary = tokens?.light?.['--kai-color-primary'] ?? accent;
+  // Pair the contrast foreground with the primary that actually WINS: a
+  // theme.tokens light entry for --kai-color-primary overrides the accent
+  // (see the precedence note above), so computing the black/white floor from
+  // the overridden accent would pin the wrong foreground in browsers
+  // without contrast-color(). Computed BEFORE the gate, and the gate is on
+  // the effective primary rather than `accent` alone: a construct that sets
+  // its primary only through theme.tokens (no accent) needs the exact same
+  // pairing — gating on `accent` left a token-only custom primary next to
+  // the kit's default near-white foreground (white-on-yellow).
+  const effectivePrimary = tokens?.light?.['--kai-color-primary'] ?? accent;
+  if (effectivePrimary) {
     const foreground = resolveContrastForeground(effectivePrimary);
     const foregroundCss =
       foreground !== null

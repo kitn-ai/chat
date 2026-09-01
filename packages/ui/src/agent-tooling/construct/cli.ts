@@ -9,7 +9,8 @@ import { spawn } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { validateConstruct, type Construct } from './schema';
 import { accentContrastNotice, emitTypes, generateProject, writeProject } from './codegen';
-import { classifyKit, localKitNotice, localKitStartDir, packLocalKit, unbuiltMessage } from './local-kit';
+import { basename, sep } from 'node:path';
+import { classifyKit, localKitNotice, localKitStartDir, npmArgs, npmInvocation, packLocalKit, unbuiltMessage } from './local-kit';
 
 export interface CliIo {
   log: (s: string) => void;
@@ -93,6 +94,27 @@ export function loadConstruct(path: string, io: CliIo): Construct | null {
   return out.construct;
 }
 
+/**
+ * Eject must survive the shared tarball cache moving on (pre-merge review,
+ * 2026-08-31): `packLocalKit` keeps ONE tarball per checkout and evicts the
+ * older ones on every dist/ rebuild, so an ejected package.json pinning the
+ * cache's ABSOLUTE path breaks with ENOENT on the first `npm install` after
+ * any rebuild. Copy the tarball INTO the ejected project and depend on it by
+ * a RELATIVE `file:` spec instead. Dev workdirs (`.kai/`) keep the absolute
+ * cache path — they are regenerated on every open, so eviction is harmless
+ * there. Exported for its unit test (the checkout classification that feeds
+ * it needs a real built tree, which a unit run must not depend on).
+ */
+export function vendorLocalKit(tarball: string, outDirAbs: string, io: CliIo): string {
+  const vendorRel = join('vendor', basename(tarball));
+  mkdirSync(join(outDirAbs, 'vendor'), { recursive: true });
+  copyFileSync(tarball, join(outDirAbs, vendorRel));
+  io.log(`vendored this checkout's kit into ${join(outDirAbs, vendorRel)} — the ejected project installs that copy.`);
+  // Always forward slashes: this lands in package.json, where npm reads
+  // `file:` specs with posix separators on every platform.
+  return `file:${vendorRel.split(sep).join('/')}`;
+}
+
 /** `--ui <spec>` extraction shared by `dev` and `compile`. NB: guard the -1
  *  case — `i !== uiFlag + 1` with uiFlag === -1 would drop index 0. */
 function parseUiFlag(rest: string[]): { uiSpec: string | undefined; positional: string[] } {
@@ -124,7 +146,10 @@ export function parseDevArgs(rest: string[]): { uiSpec: string | undefined; buil
  * silence on the `published` and `explicit` paths, which is what makes an
  * installed package byte-identical rather than merely equivalent.
  */
-function resolveUiSpec(explicit: string | undefined, io: CliIo): { ok: true; uiSpec: string | undefined } | { ok: false } {
+function resolveUiSpec(
+  explicit: string | undefined,
+  io: CliIo,
+): { ok: true; uiSpec: string | undefined; localTarball?: string } | { ok: false } {
   const origin = classifyKit(explicit, localKitStartDir());
   switch (origin.kind) {
     case 'explicit':
@@ -146,7 +171,13 @@ function resolveUiSpec(explicit: string | undefined, io: CliIo): { ok: true; uiS
         return { ok: false };
       }
       io.log(localKitNotice(origin.pkgRoot, packed.tarball, packed.packed));
-      return { ok: true, uiSpec: packed.tarball };
+      // `localTarball` rides along so EJECT can vendor a copy into the
+      // project it writes: the cache path below is eviction-happy (one
+      // tarball per checkout — packLocalKit deletes the older ones on every
+      // dist/ rebuild), fine for `.kai/` dev workdirs that regenerate per
+      // open, fatal for an ejected project whose package.json would pin an
+      // absolute path that stops existing (npm install → ENOENT).
+      return { ok: true, uiSpec: packed.tarball, localTarball: packed.tarball };
     }
   }
 }
@@ -174,7 +205,9 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       if (!construct) return 1;
       const kit = resolveUiSpec(uiSpec, io);
       if (!kit.ok) return 1;
-      const overwritten = writeProject(generateProject(construct, { uiSpec: kit.uiSpec }), resolve(outDir));
+      const ejectUiSpec =
+        kit.localTarball !== undefined ? vendorLocalKit(kit.localTarball, resolve(outDir), io) : kit.uiSpec;
+      const overwritten = writeProject(generateProject(construct, { uiSpec: ejectUiSpec }), resolve(outDir));
       if (overwritten.length > 0) {
         io.log(`overwriting ${overwritten.length} existing file(s)`);
       }
@@ -224,9 +257,12 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       const files = generateProject(construct, { uiSpec: kit.uiSpec });
       writeProject(files, dir);
       await ensureInstalled(dir, files, io);
+      const npm = npmInvocation();
       await new Promise<void>((done, fail) => {
-        const child = spawn('npm', ['run', 'build'], { cwd: dir, stdio: 'inherit' });
+        const child = spawn(npm.command, npmArgs(['run', 'build'], npm.shell), { cwd: dir, stdio: 'inherit', shell: npm.shell });
         child.on('exit', (code) => (code === 0 ? done() : fail(new Error(`vite build exited ${code}`))));
+        // Spawn failures land on 'error', not 'exit' — fail loudly, don't hang.
+        child.on('error', (err) => fail(new Error(`npm run build failed to start: ${err.message}`)));
       });
       mkdirSync(outDir, { recursive: true });
       copyFileSync(join(dir, 'dist', `${construct.name}.js`), join(outDir, `${construct.name}.js`));
