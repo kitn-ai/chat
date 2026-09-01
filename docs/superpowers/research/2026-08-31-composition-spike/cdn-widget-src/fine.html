@@ -80,15 +80,31 @@
       .chat-view kai-thread { flex: 1; min-height: 0; display: block; }
       .chat-view kai-prompt-input { display: block; padding: 0 1rem 1rem; }
       .list-view { position: relative; }
-      .list-view kai-conversations { flex: 1; min-height: 0; display: block; }
-      .list-view .row-time { font-size: 0.75rem; color: var(--color-muted-foreground); }
-      /* The facade's floating pill: rounded-full, shadow-md, background fill. */
+      /* Round 3 spacing, matched to the facade's MEASURED list (fine-drive
+         computed styles): rows start 8px below the header (facade pt-2; the
+         item region's own py-1 gives 4, the host pads the other 4) and each
+         row reads px-3 py-2.5 x 40px tall — the item element's default
+         density is 10/8, so the slotted title/time carry the last 2px. */
+      .list-view kai-conversations { flex: 1; min-height: 0; display: block; padding-top: 4px; }
+      .list-view .row-title { display: inline-block; padding: 2px 0 2px 2px; font-weight: 600; }
+      .list-view .row-time { font-size: 0.75rem; color: var(--color-muted-foreground); padding-right: 2px; }
+      /* The facade's floating pill, matched to its MEASURED computed styles
+         (round 3): 38px tall, 8px/16px padding, 14px/500 text, rounded-full,
+         1px border-border, background fill, shadow-md. */
       .list-view .new-pill { position: absolute; bottom: 0.75rem; left: 50%; transform: translateX(-50%); }
       .list-view .new-pill::part(button) {
         border-radius: 999px;
+        height: auto;
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+        line-height: 1.25rem; /* measured: facade pill is 38px tall (20px line) */
+        font-weight: 500;
+        color: var(--color-foreground);
+        border: 1px solid var(--color-border);
         background: var(--color-background);
         box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
       }
+      .list-view .new-pill::part(button):hover { background: var(--color-muted); }
 
       /* Widget tab bar (hand-built — mirrors the facade's WidgetTabBar:
          icon-over-label columns, not kai-tabs' segmented pills; see the

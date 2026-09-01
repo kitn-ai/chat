@@ -108,8 +108,15 @@ async function refreshSummaries() {
   for (const s of summaries) {
     const item = document.createElement('kai-conversation-item');
     item.setAttribute('conversation-id', s.id);
-    item.setAttribute('compact', ''); // round 2: the facade's list rows are the dense presentation
-    item.append(document.createTextNode(s.title));
+    // Round 3, measured (fine-drive computed styles): the facade panel row is
+    // px-3 py-2.5 (12/10px, 40px tall). This element offers compact (10/6,
+    // 32px) or default (10/8, ~36px) — neither exactly; default is nearest,
+    // and the slotted title carries the last 2px vertically (.row-title in
+    // fine.html). The exact density is a private interior class — finding.
+    const title = document.createElement('span');
+    title.className = 'row-title';
+    title.textContent = s.title;
+    item.append(title);
     // Right-aligned relative time, like the facade's rows: the `menu` slot is
     // the right-aligned region (`meta` renders UNDER the title).
     const time = document.createElement('span');
