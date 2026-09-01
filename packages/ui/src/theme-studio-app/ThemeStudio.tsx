@@ -47,6 +47,24 @@ import { sampleFor } from './sample-data';
 import kitCss from '../../theme.css?raw';
 import { GROUPS, ALL_TOKENS, TEXT_RUNGS, parseKitDefaults, remValue, type TextRung } from './theme-tokens';
 
+// The showroom writes ONE kai-* tag directly in Solid JSX (<kai-chat> below);
+// every other element mounts via document.createElement in mountSample. Solid's
+// JSX namespace knows no custom elements and element-types.d.ts augments
+// REACT's JSX, not Solid's, so declare the tag here the way the stories do
+// (chat-slots.stories.tsx uses the identical type, which keeps the interface
+// merge legal when both files share a program). It must live IN this module,
+// not a sibling .d.ts: a build that compiles the studio without the stories —
+// the dts pass behind verify:dts:consumer — only sees augmentations in files
+// its program actually imports.
+declare module 'solid-js' {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace JSX {
+    interface IntrinsicElements {
+      'kai-chat': JSX.HTMLAttributes<HTMLElement>;
+    }
+  }
+}
+
 /** Mount a kai-* element into `container`, seeded from the docs sample-data registry
  *  (the same verified data the component pages use) so the showroom shows real,
  *  correct components reskinned by the active theme. */
