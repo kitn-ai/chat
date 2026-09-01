@@ -720,7 +720,7 @@ describe('theme.tokens (full palette persistence)', () => {
   });
 
   it('accepts the full shape the embedded ThemeStudio posts (light + dark + radius + fonts)', () => {
-    // Mirrors ThemePayload (src/theme-studio-app/ThemeStudio.tsx): colors in
+    // Mirrors ThemePayload (apps/theme-studio/ThemeStudio.tsx): colors in
     // both modes, the root-scope knobs riding in `light` (text rungs,
     // tracking, shadow), radius, and the two font knobs.
     const out = validateConstruct(

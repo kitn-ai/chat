@@ -13,7 +13,7 @@ import {
 } from '../../src/themes/theme-tokens';
 
 /**
- * The theme editor (src/theme-studio-app/ThemeStudio.tsx — a standalone app in
+ * The theme editor (apps/theme-studio/ThemeStudio.tsx — a standalone app in
  * this package, also rendered by the docs site's /theme/editor page) exposes
  * a hand-curated list of `--kai-*` knobs. theme.css is where the kit declares
  * them. The two drifted: sixteen color tokens (surfaces, the status family,
