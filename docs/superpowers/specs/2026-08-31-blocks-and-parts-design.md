@@ -702,14 +702,22 @@ them in prompt text.
    nothing here consumes it, and its owner gate ("after the content is
    validated") is unchanged.
 
-## Open questions for the owner
+## Open questions — RULED (owner, 2026-08-31)
 
 1. **Gallery placement:** dev-server route first with a docs-site
    listing after (recommended — the studio embed and live theming
    already live in the dev server), or docs-site first?
+   RULED: dev-server route first, docs-site listing after
+   (recommendation adopted).
 2. **Does the reference block's compiled-element embed ship in v1's
    gallery** as a third delivery form, or wait? Recommend wait: two
    derived forms is the drift surface we can gate now; Amendment 4
    keeps the door open.
+   RULED: wait; v1 ships the two derived forms (recommendation
+   adopted).
 3. **The tier-1 construct call** (Non-goal 3): scheduled for the end of
    the plan — confirm that timing.
+   RULED: confirmed for plan end, decided against the working gallery.
+
+The owner signed off the spec and authorized execution per the
+companion plan on 2026-08-31.
