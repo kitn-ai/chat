@@ -47,3 +47,24 @@ Profile the suites on a quiet box (per the CLAUDE.md timing rules), enumerate ac
 ## Out of scope, queued
 
 Consumer onboarding / "legos + AI-agent assemblability" (docs surface, framework-native feel, widget-in-app story) — owner's deeper concern, deserves its own brainstorm session; repo structure neither fixes nor blocks it.
+
+## Owner eval of Step 1 (2026-09-01) and the ruled target map
+
+Step 1 shipped (#358). The owner looked at `packages/ui/apps/` and ruled it a waypoint, not the destination: this is a monorepo, and apps belong in the root `apps/` beside `docs`. Ruled map, with one rule: **imported as code by another project → `packages/`; only served or deployed as a page → `apps/`** (the owner chose to put the theme studio in `apps/` as well, accepting that the docs site and the builder import it from there):
+
+| Location | What |
+|---|---|
+| `apps/docs` | the docs site (deployed) |
+| `apps/builder` | the `kai dev --builder` page (served by the CLI) |
+| `apps/gallery` | the blocks gallery page (served by the CLI) |
+| `apps/theme-studio` | the theme builder (served by the CLI; imported by docs and builder) |
+| `packages/ui` | the kit |
+| `packages/mcp` | `agent-tooling`: the `kai` MCP + construct engine |
+| `packages/blocks` | block sources + registry/forms (today split across `packages/ui/blocks` and `src/agent-tooling/blocks`) |
+| `packages/create-kai` | unchanged |
+
+**Mechanics that keep the boundary honest:** apps and packages import `@kitn.ai/ui` through its PUBLIC exports via `workspace:*` (most of what the pages need is already public: `./solid` for the atoms, `./construct` + `./construct/templates`; the builder-only components move into `apps/builder`; the blocks registry/forms move to `packages/blocks`; the theme tokens get one public subpath). The pages keep shipping inside `@kitn.ai/ui`: each builds to its own `dist/`, and a ui assembly target that depends on their builds copies the output into `packages/ui/dist/{builder-page,theme-studio,gallery}`, guarded by `verify:pack`. `kai dev` does not change.
+
+**Sequencing, one PR each with an owner eval between:** `packages/mcp` (largest; unblocks blocks) → `packages/blocks` → the three pages to `apps/`. Step 1's relative-import cleanup and `tsconfig.apps.json` carry over.
+
+**Also ruled the same day:** make `storybook-gate` a required check (it aggregates the four shards' axe + interaction runs; advisory is how three a11y defects shipped, fixed in #359) · split the serial 26-minute `test` job into parallel jobs sharing the kit build (the test-health round; e2e is under 10% of the time and no tests are removed) · the builder's `resolveContrastForeground` white-preference heuristic is PARKED for a deeper look later.
