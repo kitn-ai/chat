@@ -31,7 +31,7 @@ const meta = { title: 'Labs/Builder/Derived panel', parameters: { layout: 'fulls
 export default meta;
 
 // DerivedBuilderPanel is internal to the builder app (src/components/builder-panel-derived.tsx,
-// consumed by src/builder-app/App.tsx) -- it ships in no public @kitn.ai/ui entry point, so the
+// consumed by apps/builder/App.tsx) -- it ships in no public @kitn.ai/ui entry point, so the
 // snippet below shows real call-site usage rather than a package import.
 const src = (code: string) => ({
   parameters: { docs: { source: { code, language: 'tsx' } } },

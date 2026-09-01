@@ -1,5 +1,5 @@
 @import "tailwindcss" source(none);
 @import "../../solid.css";
-@source "../components";
-@source "../ui";
+@source "../../src/components";
+@source "../../src/ui";
 @source ".";

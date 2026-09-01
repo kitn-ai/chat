@@ -54,7 +54,7 @@
 @source "../elements";
 @source "../primitives";
 @source "../utils";
-@source "../builder-app";
+/* builder page is light-DOM with its own Tailwind build (apps/builder/styles.css); the shadow sheet never styled it */
 @source not "../**/*.stories.tsx";
 @source not "../**/*.test.tsx";
 @source not "../**/*.test.ts";

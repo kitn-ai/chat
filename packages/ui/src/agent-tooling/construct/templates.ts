@@ -27,7 +27,7 @@
  * brand, so `theme.accent` and `theme.unreadColor` are omitted everywhere
  * and the kit's own `--color-primary` neutral applies in both modes. The
  * stories keep their accents — they are the design surface that
- * demonstrates accenting works — and `builder-app/App.tsx`'s BRAND_STYLE
+ * demonstrates accenting works — and `apps/builder/App.tsx`'s BRAND_STYLE
  * is the kitn product identity on the builder's own canvases and is
  * explicitly out of scope. Stub message threads, pane CONTENT and other
  * non-vocabulary story state do NOT carry over. All providers are

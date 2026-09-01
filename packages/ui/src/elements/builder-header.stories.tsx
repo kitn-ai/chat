@@ -8,7 +8,7 @@ import { Button } from '../ui/button';
 // get a stub-data story before any wiring). The full-width top bar for the
 // `kai dev --builder` page: title · an obvious outline Switch-template
 // button on the left, then the canvas light/dark toggle · primary Save on
-// the right. The real wiring lives in `builder-app/App.tsx`; HERE the
+// the right. The real wiring lives in `apps/builder/App.tsx`; HERE the
 // canvas toggle flips a stubbed preview region and Save just reports.
 //
 // The theme-builder entry point moved OUT of this header into the panel's

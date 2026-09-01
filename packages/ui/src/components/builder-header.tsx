@@ -1,6 +1,6 @@
 /**
  * `BuilderHeader` — the full-width top bar for the `kai dev --builder` page
- * (story-first, stub round 2026-08-31; wired into `builder-app/App.tsx` the
+ * (story-first, stub round 2026-08-31; wired into `apps/builder/App.tsx` the
  * same day — the page is the one real caller, the story keeps the stub).
  *
  * WHY NOT `AppHeader`: that component's arrangement is a fixed owner ruling
