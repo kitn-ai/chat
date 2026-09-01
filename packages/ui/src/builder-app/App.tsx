@@ -18,7 +18,7 @@ import { buildableTemplates, templateById, inferTemplateId, type BuildableTempla
 import type { Construct, ConstructProblem } from '../agent-tooling/construct/schema';
 import { HomeScreen, type ConstructListing } from './HomeScreen';
 import { createEditGuard, type EditOutcome } from './edit-guard';
-import type { ThemePayload } from '../theme-studio-app/theme-payload';
+import type { ThemePayload } from '../themes/theme-payload';
 import { ToastRegion, type ToastItem, type ToastVariant } from '../components/toast';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';

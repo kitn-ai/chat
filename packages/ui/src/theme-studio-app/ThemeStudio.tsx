@@ -49,7 +49,7 @@ import {
 import { THEME_PRESETS, SHADCN_TO_KAI } from './theme-presets';
 import { sampleFor } from './sample-data';
 import kitCss from '../../theme.css?raw';
-import { GROUPS, ALL_TOKENS, TEXT_RUNGS, parseKitDefaults, remValue, type TextRung } from './theme-tokens';
+import { GROUPS, ALL_TOKENS, TEXT_RUNGS, parseKitDefaults, remValue, type TextRung } from '../themes/theme-tokens';
 
 // The showroom writes ONE kai-* tag directly in Solid JSX (<kai-chat> below);
 // every other element mounts via document.createElement in mountSample. Solid's
@@ -373,7 +373,7 @@ const nextId = () => `s${++uid}`;
 // construct file's nested `theme.tokens` flat before posting init).
 // applyHostTheme below additionally tolerates the nested construct shape and
 // a bare `accent`, defensively, so a stale host can't silently seed nothing.
-import { type ThemePayload } from './theme-payload';
+import { type ThemePayload } from '../themes/theme-payload';
 export type { ThemePayload };
 /** What a host may put in kai-theme-init's `theme`: canonically a flat
  *  ThemePayload; tolerated, the construct file's own nested shape. */

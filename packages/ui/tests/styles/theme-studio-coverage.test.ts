@@ -10,7 +10,7 @@ import {
   parseKitDefaults,
   remValue,
   studioTokens,
-} from '../../src/theme-studio-app/theme-tokens';
+} from '../../src/themes/theme-tokens';
 
 /**
  * The theme editor (src/theme-studio-app/ThemeStudio.tsx — a standalone app in
@@ -46,7 +46,7 @@ describe('theme editor covers every --kai-* token theme.css declares', () => {
 
   it('every token theme.css declares has a knob in the editor', () => {
     const missing = [...declared].filter((t) => !exposed.has(t)).sort();
-    expect(missing, `declared in packages/ui/theme.css but absent from the theme editor's catalog (packages/ui/src/theme-studio-app/theme-tokens.ts): ${missing.join(', ')}`).toEqual([]);
+    expect(missing, `declared in packages/ui/theme.css but absent from the theme editor's catalog (packages/ui/src/themes/theme-tokens.ts): ${missing.join(', ')}`).toEqual([]);
   });
 
   it('every color / type-scale knob in the editor is a token theme.css declares', () => {
