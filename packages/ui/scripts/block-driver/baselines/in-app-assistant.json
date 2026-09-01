@@ -1,0 +1,162 @@
+{
+  "scenario": "in-app-assistant",
+  "base": "http://localhost:8961",
+  "runs": [
+    {
+      "page": "block",
+      "colorScheme": "light",
+      "states": [
+        {
+          "name": "1-empty",
+          "probes": {
+            "hostHeading": true,
+            "emptyTitle": true,
+            "starter": true,
+            "historyButton": true
+          },
+          "styles": {
+            "panelHeader": {
+              "fontSize": "14px",
+              "fontWeight": "400",
+              "color": "rgb(9, 9, 11)"
+            }
+          }
+        },
+        {
+          "name": "2-reply-tool",
+          "probes": {
+            "checking": true,
+            "tool": true,
+            "suggestionsGone": false
+          },
+          "styles": {
+            "assistantReplyText": {
+              "color": "rgb(9, 9, 11)",
+              "fontSize": "14px"
+            }
+          }
+        },
+        {
+          "name": "3-followup-no-sources",
+          "probes": {
+            "greenCanary": true,
+            "noSourceLinks": true
+          },
+          "styles": {}
+        },
+        {
+          "name": "4-history-drill",
+          "probes": {
+            "backArrow": true,
+            "historyHidden": false,
+            "rowTitleAsPolicied": true
+          },
+          "styles": {}
+        },
+        {
+          "name": "5-row-back-to-chat",
+          "probes": {
+            "threadLoaded": true,
+            "backGone": false
+          },
+          "styles": {}
+        },
+        {
+          "name": "6-new-conversation-empty",
+          "probes": {
+            "emptyAfterNew": true
+          },
+          "styles": {}
+        },
+        {
+          "name": "7-reloaded",
+          "probes": {
+            "restored": true
+          },
+          "styles": {}
+        }
+      ],
+      "consoleErrors": [],
+      "failures": []
+    },
+    {
+      "page": "block",
+      "colorScheme": "dark",
+      "states": [
+        {
+          "name": "1-empty",
+          "probes": {
+            "hostHeading": true,
+            "emptyTitle": true,
+            "starter": true,
+            "historyButton": true
+          },
+          "styles": {
+            "panelHeader": {
+              "fontSize": "14px",
+              "fontWeight": "400",
+              "color": "rgb(250, 250, 250)"
+            }
+          }
+        },
+        {
+          "name": "2-reply-tool",
+          "probes": {
+            "checking": true,
+            "tool": true,
+            "suggestionsGone": false
+          },
+          "styles": {
+            "assistantReplyText": {
+              "color": "rgb(250, 250, 250)",
+              "fontSize": "14px"
+            }
+          }
+        },
+        {
+          "name": "3-followup-no-sources",
+          "probes": {
+            "greenCanary": true,
+            "noSourceLinks": true
+          },
+          "styles": {}
+        },
+        {
+          "name": "4-history-drill",
+          "probes": {
+            "backArrow": true,
+            "historyHidden": false,
+            "rowTitleAsPolicied": true
+          },
+          "styles": {}
+        },
+        {
+          "name": "5-row-back-to-chat",
+          "probes": {
+            "threadLoaded": true,
+            "backGone": false
+          },
+          "styles": {}
+        },
+        {
+          "name": "6-new-conversation-empty",
+          "probes": {
+            "emptyAfterNew": true
+          },
+          "styles": {}
+        },
+        {
+          "name": "7-reloaded",
+          "probes": {
+            "restored": true
+          },
+          "styles": {}
+        }
+      ],
+      "consoleErrors": [],
+      "failures": []
+    }
+  ],
+  "failures": [],
+  "pass": true
+}

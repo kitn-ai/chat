@@ -1,0 +1,52 @@
+/* assistant: layout-only CSS. The chrome (rail, rows, thread, composer,
+ * model switcher) is painted by the kai elements from kit tokens, so a
+ * --kai-color-* override on :root retints everything at once; nothing here
+ * restates a palette. What remains is the page grid and the top bar's
+ * spacing - the genuinely minimal css a block carries. */
+
+html, body { height: 100%; }
+/* The page IS the app here, so the body matches the kit's own background
+ * token - a COPY of the theme.tokens.css defaults, with the same --kai- knob
+ * first so a theme override retints the page with the elements. */
+body { margin: 0; background: var(--kai-color-background, hsl(0 0% 100%)); font: 14px system-ui, sans-serif; }
+@media (prefers-color-scheme: dark) {
+  body { background: var(--kai-color-background, hsl(50 2% 9%)); color: #e2e8f0; }
+}
+
+.app { display: grid; grid-template-columns: 280px 1fr; height: 100vh; }
+
+/* The rail fills its column; a hairline separates it from the main column.
+ * currentColor mixes keep the line theme-correct in both schemes without
+ * restating a token default. */
+kai-conversations.rail {
+  display: block; min-height: 0;
+  border-inline-end: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+/* Item-mode search filtering toggles `hidden` on consumer-owned rows; the
+ * elements' shared base sheet sets :host{display:block}, which outranks the
+ * UA's [hidden] rule, so the author-level rule is needed (the same fix the
+ * support-widget block carries for its chrome). */
+kai-conversation-item[hidden] { display: none; }
+/* The right-aligned relative time slotted into each row's menu region:
+ * type scale only; the muted tint comes from currentColor. */
+kai-conversation-item .row-time { font-size: 0.75rem; color: color-mix(in srgb, currentColor 60%, transparent); }
+
+/* Main column: top bar, thread flexes, composer sits below. */
+.main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; padding: 0.625rem 1rem;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+.topbar h1 { margin: 0; font-size: 1rem; font-weight: 600; }
+
+kai-thread { flex: 1; min-height: 0; display: block; }
+kai-prompt-input { display: block; padding: 0 1rem 1rem; max-width: 48rem; width: 100%; margin: 0 auto; box-sizing: border-box; }
+
+/* Small screens: the rail leaves; the thread takes the page. Reopening it is
+ * a layout decision the consumer makes (a drawer, a route), not chrome this
+ * block invents. */
+@media (max-width: 720px) {
+  .app { grid-template-columns: 1fr; }
+  kai-conversations.rail { display: none; }
+}

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>In-app assistant</title>
+    <link rel="stylesheet" href="./in-app-assistant.css" />
+  </head>
+  <body>
+    <!-- The host app this assistant docks into. Replace with your own page;
+         the aside on the right edge is the block. -->
+    <main class="host">
+      <h1>Acme Deploys</h1>
+      <p class="host-note">This content stands in for your app. The assistant is docked on the right edge.</p>
+      <section class="host-cards">
+        <div class="host-card"><h2>payments</h2><p>Canary green for 42 minutes.</p></div>
+        <div class="host-card"><h2>checkout</h2><p>Awaiting review.</p></div>
+        <div class="host-card"><h2>search</h2><p>Deployed 2h ago.</p></div>
+      </section>
+    </main>
+
+    <!-- The docked aside: kai-panel chrome, kai-panel-header (back/history are
+         slotted content), kai-view-stack routing between the chat root and
+         the drilled conversation history (drilled shows the back arrow, the
+         stack's one rule, consumed not restated). -->
+    <aside class="assistant" aria-label="Assistant">
+      <kai-panel>
+        <kai-panel-header slot="header">
+          <kai-button id="back" slot="start" variant="ghost" size="icon-sm" icon="arrow-left" label="Back" hidden></kai-button>
+          Assistant
+          <span id="history-dot" slot="end" class="unread-dot" hidden></span>
+          <kai-button id="history" slot="end" variant="ghost" size="icon-sm" icon="message-square" label="Conversation history"></kai-button>
+        </kai-panel-header>
+
+        <kai-view-stack id="stack" view="chat">
+          <!-- Chat root -->
+          <kai-view name="chat" tab-root>
+            <kai-thread id="thread">
+              <kai-empty
+                slot="empty"
+                empty-title="What can I help with?"
+                description="Ask about this page, or anything else."
+              ></kai-empty>
+            </kai-thread>
+            <kai-prompt-input id="prompt" placeholder="Ask about this page"></kai-prompt-input>
+          </kai-view>
+
+          <!-- Drilled history: the conversation list in its panel
+               presentation - item mode, rows built by in-app-assistant.js
+               with the public density="panel", no group sections, the
+               built-in rail header replaced by an empty slot. -->
+          <kai-view name="history">
+            <kai-conversations id="conversations" searchable="false">
+              <span slot="header"></span>
+            </kai-conversations>
+            <kai-button id="new-conversation" class="new-pill" variant="outline" size="sm">New conversation</kai-button>
+          </kai-view>
+        </kai-view-stack>
+      </kai-panel>
+    </aside>
+
+    <script type="module" src="./in-app-assistant.js"></script>
+  </body>
+</html>
