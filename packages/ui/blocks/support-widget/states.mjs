@@ -41,7 +41,9 @@ export default {
     // The GENERATED /kit/ rendering of the CDN form (gen-blocks.mjs output) —
     // the driver runs the real generated artifact, never a copy.
     block: {
-      path: '/support-widget/index.html',
+      // pages/generated/ is where gen-blocks.mjs writes it (gitignored; a
+      // build artifact per the 2026-08-31 owner ruling) — build first.
+      path: '/generated/support-widget/index.html',
       indexKey: 'kai:support-widget:threads',
       rowScope: 'kai-conversations',
       messagesElementId: 'thread',

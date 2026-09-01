@@ -5,6 +5,10 @@ storybook-static/
 # One-off coverage diagnostic output (`--coverage`); never produced in CI.
 coverage/
 packages/ui/src/elements/compiled.css
+# Generated block driver pages (gen-blocks.mjs writes the /kit/ rendering of
+# each block's CDN form here so the V-1 driver runs the real generated form;
+# the compiled.css precedent: generated into the source tree, never committed)
+packages/ui/scripts/block-driver/pages/generated/
 *.log
 .DS_Store
 

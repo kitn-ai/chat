@@ -2,32 +2,46 @@
 // filesystem half of src/agent-tooling/blocks/registry.ts. Scans
 // packages/ui/blocks/<id>/ (a block IS a directory with a registry-item.json
 // - adding one moves every output with no list to edit), validates manifests
-// and the kai- contract checks, then emits the derived artifacts:
+// and the kai- contract checks, then emits the derived artifacts.
 //
-//   blocks/registry.json                      the index (browse surface)
-//   blocks/r/<name>.json                      the per-block item JSON with
+// OWNER RULING 2026-08-31: generated block forms are BUILD ARTIFACTS, never
+// committed - blocks/<id>/ holds only authored source + registry-item.json
+// (the shadcn-shaped file tree is the product), and everything derived lands
+// under dist/ (gitignored; runs in postbuild after build:api, which produces
+// the element-nonscalar.json input):
+//
+//   dist/blocks/registry.json                 the index (browse surface)
+//   dist/blocks/r/<name>.json                 the per-block item JSON with
 //                                             file contents - THE public
 //                                             integration surface (CLI,
 //                                             gallery, MCP all resolve it)
-//   blocks/r/<name>.cdn.html                  the self-contained CDN-paste
-//                                             form, pins generated from
-//                                             package.json (lint:cdn-pins
-//                                             scope; release-please rewrites
-//                                             them via the inline
-//                                             x-release-please-version
-//                                             annotations + extra-files)
-//   scripts/block-driver/pages/<name>/index.html
+//   dist/blocks/r/<name>.cdn.html             the self-contained CDN-paste
+//                                             form, pins stamped from
+//                                             package.json at build - always
+//                                             current by construction, so no
+//                                             release-please extra-files
+//                                             entry and no lint:cdn-pins
+//                                             scope (dist is out of its scan)
+//   scripts/block-driver/pages/generated/<name>/index.html
 //                                             the SAME form rendered against
 //                                             the driver's /kit/ mount, so
 //                                             the V-1 driver runs the real
 //                                             generated form, not a copy
+//                                             (gitignored - compiled.css
+//                                             precedent: generated into the
+//                                             source tree so serve.mjs's one
+//                                             pages root also reaches the
+//                                             authored parity pages)
 //
 //   node scripts/gen-blocks.mjs           # write
-//   node scripts/gen-blocks.mjs --check   # drift mode: regenerate in memory
-//                                         # and diff against the tree (the
-//                                         # verify-generated-sync pattern:
-//                                         # the committed artifact must match
-//                                         # what the generator produces NOW)
+//   node scripts/gen-blocks.mjs --check   # freshness mode: regenerate in
+//                                         # memory and diff against dist -
+//                                         # no longer a committed-file sync
+//                                         # gate (nothing generated is
+//                                         # committed); it answers "is the
+//                                         # built output stale against the
+//                                         # block sources RIGHT NOW", the
+//                                         # verify:fresh pattern
 import { readFileSync, writeFileSync, readdirSync, mkdirSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { join, resolve, dirname, relative } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -36,6 +50,8 @@ import * as esbuild from 'esbuild';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const BLOCKS_DIR = join(ROOT, 'blocks');
+const OUT_DIR = join(ROOT, 'dist', 'blocks');
+const DRIVER_PAGES_DIR = join(ROOT, 'scripts', 'block-driver', 'pages', 'generated');
 const CHECK = process.argv.includes('--check');
 
 // esbuild-import a TS module (the gen-catalog.mjs pattern).
@@ -86,19 +102,19 @@ if (errors.length) {
 const outputs = new Map();
 const put = (path, content) => outputs.set(path, content);
 
-put(join(BLOCKS_DIR, 'registry.json'), JSON.stringify(blocksMod.buildRegistryIndex(blocks), null, 2) + '\n');
+put(join(OUT_DIR, 'registry.json'), JSON.stringify(blocksMod.buildRegistryIndex(blocks), null, 2) + '\n');
 for (const block of blocks) {
-  put(join(BLOCKS_DIR, 'r', `${block.name}.json`), JSON.stringify(blocksMod.buildRegistryItem(block), null, 2) + '\n');
+  put(join(OUT_DIR, 'r', `${block.name}.json`), JSON.stringify(blocksMod.buildRegistryItem(block), null, 2) + '\n');
 
   const cdn = blocksMod.generateCdnForm(block, { version: VERSION });
   if (cdn.errors.length) { console.error(`gen-blocks: ${block.name} CDN form:\n  RED ${cdn.errors.join('\n  RED ')}`); process.exit(1); }
-  put(join(BLOCKS_DIR, 'r', `${block.name}.cdn.html`), cdn.html);
+  put(join(OUT_DIR, 'r', `${block.name}.cdn.html`), cdn.html);
 
   // The driver page: the same generated form against the local /kit/ mount
   // (no pins - kit-relative URLs the way serve.mjs mounts dist).
   const local = blocksMod.generateCdnForm(block, { version: VERSION, base: '/kit/' });
   if (local.errors.length) { console.error(`gen-blocks: ${block.name} driver form:\n  RED ${local.errors.join('\n  RED ')}`); process.exit(1); }
-  put(join(ROOT, 'scripts/block-driver/pages', block.name, 'index.html'), local.html);
+  put(join(DRIVER_PAGES_DIR, block.name, 'index.html'), local.html);
 }
 
 // --------------------------------------------------------- write, or diff
@@ -112,13 +128,13 @@ if (!CHECK) {
 } else {
   const drift = [];
   for (const [path, content] of outputs) {
-    if (!existsSync(path)) { drift.push(`${relative(ROOT, path)}: missing (never generated, or deleted)`); continue; }
+    if (!existsSync(path)) { drift.push(`${relative(ROOT, path)}: missing (not built yet, or deleted)`); continue; }
     if (readFileSync(path, 'utf8') !== content) drift.push(`${relative(ROOT, path)}: stale (differs from what the generator produces now)`);
   }
   if (drift.length) {
-    console.error(`gen-blocks --check: ${drift.length} drifted file(s) - run \`node scripts/gen-blocks.mjs\` and commit:`);
+    console.error(`gen-blocks --check: ${drift.length} stale built file(s) - the build output is behind the block sources; run \`node scripts/gen-blocks.mjs\` (or a full build):`);
     for (const d of drift) console.error(`  RED ${d}`);
     process.exit(1);
   }
-  console.log(`gen-blocks --check: in sync (${blocks.length} block(s), ${outputs.size} file(s)).`);
+  console.log(`gen-blocks --check: fresh (${blocks.length} block(s), ${outputs.size} file(s)).`);
 }

@@ -387,6 +387,19 @@ docs section render from the same derived registry and the same
 generated forms; the docs section is the public shop window, the dev
 server route is where live theming (Part 4) happens.
 
+> **Owner ruling (2026-08-31, amendment):** the gallery LEADS with the
+> block's file tree — per-file copy plus the one-line
+> `npx create-kai add <block>` — because the shadcn-shaped file tree IS
+> the product. The standalone CDN-paste form is a secondary
+> try-it/download affordance, never presented as the block itself. And
+> the generated forms (registry index, per-block item JSON, cdn.html,
+> driver page) are **build artifacts**: `gen-blocks.mjs` emits them
+> under `dist/blocks/` (driver pages under the driver's gitignored
+> `pages/generated/`), stamped from `package.json` at build — they are
+> never committed, so `blocks/<id>/` shows only authored source plus
+> `registry-item.json`, and the release-please extra-files wiring for a
+> committed cdn.html is gone with the committed file.
+
 ### Registry mechanics (adopted from the shadcn registry research, 2026-08-31)
 
 The research report on shadcn's registry landed; these mechanics are

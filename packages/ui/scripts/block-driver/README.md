@@ -18,6 +18,12 @@ red.
   reload-restore state), restated from `fine-drive.mjs` as data.
 - `pages/kai-chat-facade/` — the harness page: the spike's facade widget page
   (index.html + app.js), unchanged in behavior.
+- `pages/generated/<block>/` — GENERATED, gitignored (owner ruling
+  2026-08-31: generated block forms are build artifacts, never committed).
+  `gen-blocks.mjs` writes each block's CDN form rendered against the `/kit/`
+  mount here during the build (`build:blocks`, in postbuild), so the driver
+  runs the real generated form next to the authored parity pages under the
+  same serve root. Build first, or the page 404s.
 - `baselines/kai-chat-facade.json` — the recorded pre-refactor verdict
   (probe + computed-style values, per scheme per state).
 - `baselines/screenshots/` — the pre-refactor screenshot set (committed, per

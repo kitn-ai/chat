@@ -12,8 +12,7 @@
         "/apps/docs/src/content/docs/guides/getting-started.mdx",
         "/apps/docs/src/content/docs/guides/installation.mdx",
         "/apps/docs/src/content/docs/guides/loading.mdx",
-        "/packages/ui/README.md",
-        "/packages/ui/blocks/r/support-widget.cdn.html"
+        "/packages/ui/README.md"
       ]
     },
     "packages/create-kai": {

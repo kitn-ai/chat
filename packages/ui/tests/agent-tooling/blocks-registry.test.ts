@@ -14,9 +14,11 @@
  *   resolve; the root export is refused loudly.
  * - CONTRACT CHECKS: rich-prop-as-attribute, the kitn- prefix, document-level
  *   kai-* listeners and hand-rolled SSE are each caught on a plant.
- * - The COMMITTED artifacts match what the builders produce from the current
- *   sources (the gen-blocks --check verdict, reproduced here without a spawn
- *   so the unit suite catches staleness too).
+ * - The BUILT artifacts (dist/blocks + the generated driver page - owner
+ *   ruling 2026-08-31: generated forms are build artifacts, never committed)
+ *   match what the builders produce from the current sources (the gen-blocks
+ *   --check verdict, reproduced here without a spawn so the unit suite
+ *   catches a stale build too).
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
@@ -38,6 +40,20 @@ import { listIntegrations } from '../../src/agent-tooling/registry';
 
 const ROOT = resolve(__dirname, '../..');
 const BLOCKS_DIR = join(ROOT, 'blocks');
+const DIST_BLOCKS = join(ROOT, 'dist', 'blocks');
+
+/** Generated block artifacts live under dist/ (never committed), so a fresh
+ *  checkout has none — fail naming the exact path and how to produce it (the
+ *  custom-elements.json pattern), never by walking somewhere else. */
+function readBuiltArtifact(path: string): string {
+  if (!existsSync(path)) {
+    throw new Error(
+      `${path} is missing — generated block artifacts are build outputs, not committed. ` +
+        'Run `nx build ui` (or, after build:api, `node scripts/gen-blocks.mjs` from packages/ui) first.',
+    );
+  }
+  return readFileSync(path, 'utf8');
+}
 const VERSION = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version as string;
 const ROUTES = listIntegrations().map((i) => i.id);
 const NONSCALAR = JSON.parse(
@@ -101,12 +117,12 @@ describe('registry derivation (the directory scan is the list)', () => {
     for (const block of blocks) expect(checkBlockContracts(block, NONSCALAR)).toEqual([]);
   });
 
-  it('the committed registry.json and r/<name>.json match what the current sources produce', () => {
-    const committedIndex = JSON.parse(readFileSync(join(BLOCKS_DIR, 'registry.json'), 'utf8'));
-    expect(committedIndex).toEqual(buildRegistryIndex(blocks));
+  it('the built dist/blocks/registry.json and r/<name>.json match what the current sources produce', () => {
+    const builtIndex = JSON.parse(readBuiltArtifact(join(DIST_BLOCKS, 'registry.json')));
+    expect(builtIndex).toEqual(buildRegistryIndex(blocks));
     for (const block of blocks) {
-      const committed = JSON.parse(readFileSync(join(BLOCKS_DIR, 'r', `${block.name}.json`), 'utf8'));
-      expect(committed).toEqual(buildRegistryItem(block));
+      const built = JSON.parse(readBuiltArtifact(join(DIST_BLOCKS, 'r', `${block.name}.json`)));
+      expect(built).toEqual(buildRegistryItem(block));
     }
   });
 });
@@ -186,11 +202,11 @@ describe('the CDN-form generator', () => {
     expect(html).not.toMatch(/x-release-please/);
   });
 
-  it('the committed cdn.html and driver page match what the current sources produce', () => {
+  it('the built cdn.html and generated driver page match what the current sources produce', () => {
     const cdn = generateCdnForm(widget, { version: VERSION });
-    expect(readFileSync(join(BLOCKS_DIR, 'r', 'support-widget.cdn.html'), 'utf8')).toBe(cdn.html);
+    expect(readBuiltArtifact(join(DIST_BLOCKS, 'r', 'support-widget.cdn.html'))).toBe(cdn.html);
     const local = generateCdnForm(widget, { version: VERSION, base: '/kit/' });
-    expect(readFileSync(join(ROOT, 'scripts/block-driver/pages/support-widget/index.html'), 'utf8')).toBe(local.html);
+    expect(readBuiltArtifact(join(ROOT, 'scripts/block-driver/pages/generated/support-widget/index.html'))).toBe(local.html);
   });
 
   it('maps ONLY the phase-2-proven entries, refusing the root export loudly', () => {
