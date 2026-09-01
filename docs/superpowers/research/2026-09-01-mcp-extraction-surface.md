@@ -204,3 +204,12 @@ Cost at publish: **zero** — `release-please-config.json` and the publish loop 
 8. Consumer contract: `bin/mcp.js` → `decideEntry()` in `bin/route.js` → `../dist/{mcp,construct-cli}.es.js`; `kai dev` also serves `dist/{builder-page,gallery,theme-studio}` off `import.meta.url`.
 9. **Recommended: option (c)** — build-time bundle of `packages/mcp` into `packages/ui/dist`. Zero consumer breakage, zero release-please/publish-loop churn (`release-please-config.json` + the `for pkg in packages/ui packages/create-kai` loop stay untouched), zero `verify:pack` ceiling movement.
 10. Watch: `manifest.ts`'s 3-hop + `@kitn.ai/ui` name check, `tsconfig.mcp.json`'s dist-first `paths` (its unbuilt-tree green is lost across packages), and the `builder-*` components/apps → `construct/*` reverse edge that can make the graph cyclic.
+
+---
+
+## Corrections (same day, second pass by the same investigation)
+
+- **Outbound count:** 119 reference lines across 59 files, not ~104/55 (the first regex skipped prose and path-literal lines). By files: `ui/tests` 15, `ui/scripts` 13, `ui/src` 9, `ui/apps` 7, `create-kai` 7, vite configs 5, 2 strays.
+- **37th plumbing site:** `packages/ui/tests/scripts/construct-export-smoke.test.ts:44` pins `pkg.exports['./construct'].types === './dist/agent-tooling/construct/public.d.ts'`. `vite.config.construct.ts` sets `entryRoot: 'src'`, so the emitted `.d.ts` path, the `exports` map and `typesVersions` all carry the `agent-tooling` segment. Moving the source moves the emitted path. Either keep `entryRoot` aimed so the emit still lands under `dist/agent-tooling/`, or change all three together. This applies to the `packages/ui/mcp/` move too.
+- **12 self-referencing path literals in 5 agent-tooling files** that no outbound search finds: `mcp/manifest.test.ts:83,112,123,137` (fixture trees for the three-hop resolution), `construct/local-kit.ts:162` + `local-kit.test.ts:39,66,179` (the `isSourceCheckout` marker), `mcp/server.test.ts:58`, `catalog/surfaces.ts:215,316,317` (corpus paths that `lint:catalog-drift` resolves against the tree).
+- **Precedent for the NEEDS-NEW-SUBPATH fix:** `src/primitives/card-tags.ts:8-13` records `BUILTIN_CARD_TAGS` being split into a DOM-free leaf precisely so the Node-only MCP tsconfig could import it as source. Same template for `isSafeUrl`, `CHAT_MESSAGE_ACTIONS`, `BUTTON_VARIANT_NAMES`, `studioTokens`.
