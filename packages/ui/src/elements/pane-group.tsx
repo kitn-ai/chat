@@ -1,4 +1,4 @@
-import { createSignal, createEffect, Show } from 'solid-js';
+import { createSignal, createEffect, Show, untrack } from 'solid-js';
 import { defineWebComponent } from './define';
 import { PaneGroup, type PaneTab } from '../ui/pane-group';
 
@@ -72,22 +72,43 @@ defineWebComponent<Props, Events>('kai-pane-group', {
   focused: false,
 }, (props, { element, dispatch, flag, expose }) => {
   const tabs = () => (props.tabs as PaneTab[] | undefined) ?? [];
-  // Controlled/uncontrolled: the `active` prop/attribute wins; otherwise the
-  // element manages its own, falling back to the first tab. `change` always writes
-  // the internal value AND emits `kai-tab-change` so a controlling app can react.
-  const [internal, setInternal] = createSignal<string | undefined>(props.active as string | undefined);
-  const active = () => (props.active as string | undefined) ?? internal() ?? tabs()[0]?.id;
+  // Lift the selection into the facade and drive PaneGroup CONTROLLED so the host
+  // can read it (`el.active` / `[active="…"]`) and set it after mount, falling back
+  // to the first tab when nothing is selected (the kai-segmented `value` pattern).
+  // Seed from the `active` property/attribute present on mount.
+  //
+  // NOT `props.active ?? internal()`: this facade reflects the resolved id to the
+  // `active` ATTRIBUTE below, and that write echoes back through solid-element's
+  // attributeChangedCallback into `props.active` — so consulting the prop after
+  // boot left the element permanently controlled by its own reflection (the boot
+  // echo materialized `props.active`, and every later select() lost to it). The
+  // shadowing property accessor routes ALL writes — a consumer's and the echo's —
+  // into one signal, where the equality guard absorbs the echo.
+  const [selected, setSelected] = createSignal<string | undefined>(
+    (props.active as string | undefined) ?? element.getAttribute('active') ?? undefined,
+  );
+  const active = () => selected() ?? tabs()[0]?.id;
+  const coerce = (v: unknown): string | undefined => (v == null ? undefined : String(v));
+  Object.defineProperty(element, 'active', {
+    get: () => active(),
+    set: (v: unknown) => {
+      const next = coerce(v);
+      if (untrack(selected) !== next) setSelected(next);
+    },
+    configurable: true,
+  });
   const change = (id: string) => {
-    setInternal(id);
+    setSelected(id);
     dispatch('kai-tab-change', { id });
   };
 
   // Reflect the resolved active id to the `active` attribute so `[active="…"]` /
   // `::part` selectors and the consumer's per-tab named slot follow selection.
-  // Writing the same value is idempotent, so no feedback loop with the prop.
+  // The write-back it triggers lands in the property setter above, where the
+  // equality guard absorbs it.
   createEffect(() => {
     const a = active();
-    if (a != null) element.setAttribute('active', a);
+    if (a != null && element.getAttribute('active') !== a) element.setAttribute('active', a);
   });
 
   expose({

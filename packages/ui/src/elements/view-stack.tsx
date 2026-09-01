@@ -144,8 +144,12 @@ defineWebComponent<Props, Events>('kai-view-stack', {
     }
   });
 
-  // Reflect the resolved view name to the `view` attribute (the pane-group
-  // `active` pattern — idempotent, so no feedback loop with the prop).
+  // Reflect the resolved view name to the `view` attribute. The write echoes
+  // back through attributeChangedCallback into `props.view`; the navigate
+  // effect below absorbs it with its `v !== controller.view()` guard — the
+  // echo always carries the value the controller already holds. ("Idempotent"
+  // alone is NOT the safety argument: kai-pane-group reflected idempotently
+  // and still self-controlled, because it consulted the echoed prop.)
   createEffect(() => {
     const v = controller.view();
     if (v !== undefined) element.setAttribute('view', v);
