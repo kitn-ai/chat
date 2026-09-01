@@ -50,12 +50,14 @@ export default defineConfig({
         // The blocks pure-module layer (registry + the shared form renderer).
         // Browser-safe by their own discipline headers (no node:*, no zod-free
         // violation — registry/forms are plain functions over injected data).
-        // Needed here because both apps/gallery/GalleryPage.tsx and
-        // apps/builder/HomeScreen.tsx import BLOCK_FORMS types from
-        // '../../src/agent-tooling/blocks/forms' — neither app lives under
-        // src/ or the dts include anymore, but the entries stay for
-        // public.d.ts's own consumers (removing them is a separate decision).
-        // forms.d.ts imports './registry', so both are listed.
+        // Needed here because apps/gallery/GalleryPage.tsx imports BLOCK_FORMS
+        // types from '../../src/agent-tooling/blocks/forms', and (the parallel
+        // case) apps/builder/HomeScreen.tsx imports ConstructListing from
+        // '../../src/agent-tooling/construct/templates' — neither app lives
+        // under src/ or the dts include anymore, and public.ts re-exports only
+        // from './schema', so these two include entries currently have no
+        // in-repo consumer and are kept only pending a separate removal
+        // decision. forms.d.ts imports './registry', so both are listed.
         'src/agent-tooling/blocks/registry.ts',
         'src/agent-tooling/blocks/forms.ts',
       ],
