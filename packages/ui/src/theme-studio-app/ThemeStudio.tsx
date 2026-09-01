@@ -745,9 +745,14 @@ export default function ThemeStudio() {
       else if (themeOpen()) setThemeOpen(false);
     };
     // Captured at setup: a teardown path must never resolve a DOM global bare
-    // (see tests/components/teardown-without-dom-globals.test.tsx).
+    // (see tests/components/teardown-without-dom-globals.test.tsx). For the
+    // window, capture the FUNCTION, not just the view: `window === globalThis`,
+    // and teardown deletes the `removeEventListener` key off that very object,
+    // so `win.removeEventListener` at cleanup is undefined. The document is a
+    // real object with its own prototype chain, so `doc` needs no such pin.
     const doc = document;
     const win = window;
+    const unlisten = win.removeEventListener.bind(win);
     doc.addEventListener('pointerdown', onDocDown);
     doc.addEventListener('keydown', onKey);
     // Embed: accept a late-arriving kai-theme-init from the host. Origin-checked
@@ -763,7 +768,7 @@ export default function ThemeStudio() {
     onCleanup(() => {
       doc.removeEventListener('pointerdown', onDocDown);
       doc.removeEventListener('keydown', onKey);
-      if (embed) win.removeEventListener('message', onHostMessage);
+      if (embed) unlisten('message', onHostMessage);
     });
     // Rail mode renders no showroom: nothing to mount, no element bundle to
     // load — the rail is tokens/tabs/presets only.

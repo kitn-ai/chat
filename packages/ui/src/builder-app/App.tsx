@@ -592,9 +592,13 @@ export function App() {
     // Captured at setup: teardown can run after the test harness tore the DOM
     // globals down, so the cleanup must not reach for bare `window` (same
     // class the teardown-without-dom-globals test pins across components).
+    // The FUNCTION, not just the view: `window === globalThis`, and teardown
+    // deletes the `removeEventListener` key off that very object, so a view
+    // capture alone still dies at cleanup with a TypeError.
     const win = window;
+    const unlisten = win.removeEventListener.bind(win);
     win.addEventListener('message', onMessage);
-    onCleanup(() => win.removeEventListener('message', onMessage));
+    onCleanup(() => unlisten('message', onMessage));
   });
 
   /** The REAL preview pane — the generated app's own Vite server, or the

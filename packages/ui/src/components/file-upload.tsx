@@ -66,22 +66,29 @@ function FileUpload(props: FileUploadProps) {
       }
     };
 
-    // Captured at SETUP and closed over, never re-resolved as a global inside
-    // `onCleanup`: cleanup can run after the host removed the DOM globals (a
-    // `kai-*` release is deferred one microtask past detachment, so an
-    // environment teardown gets in between), and a bare `window` there throws.
+    // Captured at SETUP and closed over, never re-resolved inside `onCleanup`:
+    // cleanup can run after the host removed the DOM globals (a `kai-*` release
+    // is deferred one microtask past detachment, so an environment teardown
+    // gets in between). The FUNCTION, not the view: `window === globalThis`, so
+    // `const win = window` captures the global object itself — which survives —
+    // while teardown deletes the `removeEventListener` key off that very
+    // object, leaving `win.removeEventListener` undefined at cleanup (a
+    // TypeError instead of the ReferenceError the view capture fixes; watched
+    // failing in CI as an unhandled rejection from the emitted project). Same
+    // rule the raf primitives follow for `cancelAnimationFrame`.
     // See tests/components/teardown-without-dom-globals.test.tsx.
     const win = window;
+    const unlisten = win.removeEventListener.bind(win);
     win.addEventListener('dragenter', handleDragIn);
     win.addEventListener('dragleave', handleDragOut);
     win.addEventListener('dragover', handleDrag);
     win.addEventListener('drop', handleDrop);
 
     onCleanup(() => {
-      win.removeEventListener('dragenter', handleDragIn);
-      win.removeEventListener('dragleave', handleDragOut);
-      win.removeEventListener('dragover', handleDrag);
-      win.removeEventListener('drop', handleDrop);
+      unlisten('dragenter', handleDragIn);
+      unlisten('dragleave', handleDragOut);
+      unlisten('dragover', handleDrag);
+      unlisten('drop', handleDrop);
     });
   });
 
