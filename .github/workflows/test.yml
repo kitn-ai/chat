@@ -7,12 +7,29 @@ on:
     branches: [main]
 
 jobs:
-  # The REQUIRED check -- and, today, the ONLY one. Everything here is
-  # deterministic: build, typecheck, the jsdom unit project, the React adapter
-  # tests, and the cross-origin e2e security matrix. The flaky storybook BROWSER
-  # project lives in its own `storybook` job below, aggregated by
-  # `storybook-gate`, which is ADVISORY and does NOT block a merge -- so
-  # environmental chromium crashes are retried away rather than blocking merges.
+  # THE REQUIRED CHECK IS A GRAPH, NOT A JOB.
+  #
+  # `test` is an aggregator. It runs no gate itself: five legs do, in parallel,
+  # and `test` fails unless every one of them succeeded. The check-run name stays
+  # `test` because that is the context the ruleset requires and the literal
+  # `require-green-checks.mjs` gates the publish on, and moving it would buy
+  # nothing while touching two lists that nothing derives.
+  #
+  # `if: always()` on the aggregator is not optional. Without it a failed leg
+  # SKIPS the aggregator, and a skipped required check is not a red one -- that is
+  # a green gate over a workflow that ran nothing.
+  #
+  # The verdict is derived from `toJSON(needs)` rather than a hand-written `if`
+  # chain, so a leg added to `needs:` and forgotten in the verdict cannot go
+  # ungated. `toJSON(needs)` IS the `needs:` list; the two cannot drift.
+  #
+  # `pnpm --filter @kitn.ai/ui run lint:gate-parity` reads the same graph: the
+  # gate set is `test` union its transitive `needs:`, and a job in this workflow
+  # that carries a gate and is NOT reachable from `test` is a hard failure there.
+  # So a step moved out of the graph is as loud as a step deleted.
+  #
+  # The storybook browser project runs in its own `storybook` matrix, aggregated
+  # by `storybook-gate`, which is ALSO a required context as of 2026-09-01.
   #
   # WHICH CONTEXTS BLOCK A MERGE IS RULESET CONFIG, NOT WORKFLOW CONFIG, so this
   # comment cannot be authoritative and you should not act on it without asking
@@ -22,11 +39,12 @@ jobs:
   #     --jq '.rules[] | select(.type == "required_status_checks")
   #           | .parameters.required_status_checks[].context'
   #
-  # That prints the live list. If it prints anything other than `test` alone,
-  # this comment and the `storybook-gate` one below are the stale things.
-  test:
+  # That prints the live list. If it prints anything other than `test` and
+  # `storybook-gate`, this comment and the `storybook-gate` one below are the
+  # stale things.
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -331,214 +349,6 @@ jobs:
       - name: Threshold derivation guard (no number without a producer)
         run: pnpm --filter @kitn.ai/ui run lint:thresholds
 
-      - name: Build (element bundle + provider subpath)
-        run: pnpm exec nx build ui
-
-      # Re-runs the generators and fails if any checked-in derived artifact
-      # differs -- element-meta.json, element-types.d.ts, icon-names.json, the
-      # React wrappers, llms.txt / llms-full.txt and docs/web-components.md.
-      # fc40a10 registered a new ::part(citations) and regenerated none of them;
-      # nothing went red, and because the `kai` MCP's component_reference and the
-      # docs site's PartTable.astro read those files, a part that existed in the
-      # SHIPPED element was invisible to every tool a developer would use to find
-      # it. A human noticing does not scale.
-      #
-      # This deliberately does NOT lean on the build step above. `nx build ui`
-      # runs the generators via postbuild, but their side effects land in the
-      # SOURCE tree and the NX cache does not restore those, so on a cache HIT
-      # the target prints "Successfully ran target build" and leaves the tree
-      # stale -- a cached build is indistinguishable from a successful one. This
-      # step invokes build:api directly and never goes through NX, so no cache
-      # state can affect its result.
-      #
-      # It also cannot pass vacuously: each artifact is seeded with a single-use
-      # random sentinel before the run and must come back without it, so a
-      # generator that was deleted, renamed, dropped an output or no-op'd fails
-      # here instead of reading as "in sync". The guard restores every file it
-      # touches, pass or fail. No build needed, no network. ~20s.
-      - name: Generated artifacts in sync with their source
-        run: pnpm --filter @kitn.ai/ui run verify:generated
-
-      - name: Typecheck
-        run: pnpm exec nx typecheck ui
-
-      # Packs the built package, installs it into a throwaway app OUTSIDE the
-      # repo, and bundles it with Vite 8 (Rolldown -- what `npm create vite`
-      # gives consumers today, and the strictest `sideEffects` consumer we know
-      # of). Asserts every kai-* registration survives. The in-build guard only
-      # proves OUR bundle keeps the reference; this proves a CONSUMER's bundler
-      # keeps the side effects, which is how 0.19.0 shipped a blank page.
-      - name: Consumer packaging guard (registrations survive a real bundler)
-        run: pnpm --filter @kitn.ai/ui run verify:consumer
-
-      # Packs the tarball and weighs what a consumer actually downloads. `files`
-      # ships the whole of `src/` on purpose -- consumers read source, and source
-      # maps point into it -- and that blanket include is how 300 KB of generated
-      # JSON (src/components/component-meta.json) rode along to every consumer for
-      # months: nothing imported it, the `exports` map could not even reach it, and
-      # no check looked at what gets PACKED rather than at what gets built.
-      #
-      # Two rules, deliberately different in kind. PRECISE: every packed file
-      # outside dist/ over 64 KiB must be allowlisted with a written reason, so a
-      # new large artifact under src/ becomes a reviewable act instead of an
-      # accident, and the failure names the offender. CRUDE: total unpacked size
-      # under a ceiling -- it names nothing, but it is the only backstop for the
-      # growth rule 1 cannot see, namely many small files or bloat INSIDE dist/,
-      # whose content-hashed chunk names would make an exact allowlist go red on
-      # every rebuild and get bumped reflexively.
-      #
-      # Must come after the build, and hard-fails without dist/ rather than
-      # skipping: absent dist/ the tarball is a fraction of its real size and BOTH
-      # rules would pass vacuously. Currently 818 files / 10.84 MiB against a
-      # 12.5 MiB ceiling. ~1.4s, no network.
-      - name: Pack weight guard (no dead weight ships to consumers)
-        run: pnpm --filter @kitn.ai/ui run verify:pack
-
-      # Walks every emitted .d.ts under dist/ and asserts each relative specifier
-      # resolves to actual DECLARATIONS under BOTH `bundler` and `nodenext`,
-      # delegated to tsc's own resolver -- a guard that re-implements module
-      # resolution is a guard that disagrees with tsc.
-      #
-      # It already ran via `postbuild`, so why a step of its own -- and the honest
-      # answer is narrower than "the cache would skip it". The build target is
-      # cached (`cache: true`, outputs dist/ + storybook-static), and on a cache
-      # HIT nx restores dist/ without running the npm lifecycle, so postbuild does
-      # not run and this would not run with it. But this guard reads ONLY dist/,
-      # so a restored dist/ is byte-identical to one this already passed against
-      # when the entry was written: skipping it there is redundant, not unsound.
-      # And on CI the question is moot today -- no nx cache is persisted between
-      # runs at all (`cache: pnpm` caches the pnpm store, not .nx/cache), so the
-      # build always runs cold and the lifecycle always fires.
-      #
-      # What a standalone step buys is therefore legibility and independence, not
-      # a caught bug. Legibility: a failure lands on a step named for the guard
-      # instead of ~430 lines into build output, where the build's own exit code
-      # is the only signal. Independence: it stops being contingent on the
-      # caching MODEL staying sound -- an `outputs` list that goes stale (a new
-      # emitted directory not declared there) restores a PARTIAL dist/ that
-      # nothing re-checks, and the lifecycle never runs to notice.
-      #
-      # Watched failing rather than assumed to fail: pointing a specifier in
-      # dist/wire/index.d.ts at a file that does not exist turns this red naming
-      # the file and the specifier (TS2307). Needs the build above. ~0.5s, no
-      # network.
-      - name: Declaration boundary guard (every emitted .d.ts specifier resolves)
-        run: pnpm --filter @kitn.ai/ui run verify:dts
-
-      # Packs the build, installs it into a throwaway app, and type-checks our
-      # SHIPPED .d.ts with a real tsc under BOTH `bundler` and `nodenext`, in both
-      # directions: a wrong assignment per public entry MUST error, and correct
-      # usage MUST compile. Both halves are required -- "wrong code errors" alone
-      # is satisfied by types that error at everything, and "right code compiles"
-      # alone is satisfied by types that are entirely `any`, which is the actual
-      # bug this catches. 0.19.0 shipped declarations re-exporting './read',
-      # './encode' with no file extension: `bundler` tolerates it, node16/nodenext
-      # rejects it, and `skipLibCheck: true` -- on in every Vite template --
-      # SUPPRESSES the rejection and silently types the whole public API as `any`.
-      # No error, no warning, no type-checking at all for the consumer. The kit's
-      # own typecheck compiles src/ under its own tsconfig and cannot see it; the
-      # in-build verify:dts reasons about dist/ with our model of resolution. This
-      # asks the only authority that counts. Needs the build above + network. ~8s
-      # locally; the npm install dominates on CI.
-      - name: Consumer types guard (shipped .d.ts type-check under bundler + nodenext)
-        run: pnpm --filter @kitn.ai/ui run verify:dts:consumer
-
-      # TWO guards, chained; `verify:ssr` runs both and fails on either.
-      #
-      # verify-ssr-imports.mjs imports EVERY public entry in the exports map
-      # under Node's `node` condition, one child process each. Nothing in the
-      # repo ever imported the BUILT package on a server, so `import
-      # '@kitn.ai/ui'` threw "Client-only API called on the server side" in every
-      # published version through 0.20.0 -- a hard SSR/prerender/RSC failure for
-      # any consumer touching a value export.
-      #
-      # verify-ssr-render.mjs then RENDERS every component the server entries
-      # export, through Solid's renderToString in a DOM-free child process,
-      # because importable is not the same as renderable. Watched failing, not
-      # assumed: planting `document.documentElement.dataset.theme` at
-      # component-BODY scope in `Skeleton` left the import guard at 9/9 green and
-      # exit 0 while a real server render of the same build threw "document is
-      # not defined". The render guard turns that red naming the global, the
-      # component and the entry. It also self-tests on every run -- it renders a
-      # canary that MUST be caught and one that MUST produce markup -- so a
-      # harness that quietly stopped measuring goes red instead of green.
-      # Needs the build above. ~5s, no network.
-      - name: Server guard (every entry imports AND every component renders under `node`)
-        run: pnpm --filter @kitn.ai/ui run verify:ssr
-
-      # Does the diagnostic stream actually REACH a subscriber in the built
-      # package? `./diagnostics` shipped completely inert and every gate stayed
-      # green over it: verify:ssr proved the subpath imports, verify:dts:consumer
-      # proved its types resolve, and the unit suite proved the SOURCE module
-      # works. None of them executes a subscription against dist/, which is where
-      # the defect lived -- two bundles each inlining their own copy of the
-      # emitter, one of them dead-code-eliminated down to a no-op because nothing
-      # in it ever called emit. This runs a real read through `./wire` and asserts
-      # the events arrive at a `./diagnostics` subscriber, then does the same
-      # across two instances of one module (the duplication a consumer causes by
-      # bundling the kit AND loading the CDN bundle) and checks the stream-id
-      # counter did not restart. Needs the build above. ~1s, no network.
-      - name: Diagnostics wiring guard (events cross the ./wire ↔ ./diagnostics boundary)
-        run: pnpm --filter @kitn.ai/ui run verify:diagnostics-wiring
-
-      # Resolves the card JSON Schemas the way a consumer would, from a temp
-      # package OUTSIDE the repo with the built package symlinked in. 11 schemas
-      # had been copied into dist/schemas/ on every build and shipped in every
-      # tarball since the card contract landed, reachable by NOBODY: "exports" is
-      # a closed map and had no ./schemas key, so every specifier resolved to
-      # ERR_PACKAGE_PATH_NOT_EXPORTED / TS2307. This repo's own reference harness
-      # gave up and hand-derived the confirm schema in the openrouter spike,
-      # saying so in a comment.
-      #
-      # Existence was never the question, so this never stats dist/schemas/ -- the
-      # files were already there and already unreachable. It RESOLVES both public
-      # surfaces (the JS entry @kitn.ai/ui/schemas, and the raw
-      # @kitn.ai/ui/schemas/*.schema.json) through tsc under `bundler` AND
-      # `nodenext` with the containing file's implied format, and independently
-      # through Node's own exports-map implementation. It then compares BYTES:
-      # every schema the entry exports, and every raw file a specifier lands on,
-      # must equal the authored file in src/primitives/card-schemas/, so a stale
-      # copy fails instead of reading as reachable.
-      #
-      # The expected set is readdirSync of that source directory, never a literal
-      # count, so a 12th schema is covered the day it is added rather than the day
-      # someone remembers. Needs the build above. <1s, no network.
-      - name: Card-schema export guard (both surfaces reachable from outside)
-        run: pnpm --filter @kitn.ai/ui run verify:schemas
-
-      # Projects every card schema into a provider tool definition, out of the
-      # BUILT dist/schemas.js, and asks whether the result is something the
-      # provider would actually accept. `cardTools()` is what hands a model its
-      # tool list, so a projection emitting a keyword the provider's strict mode
-      # cannot compile surfaces as a 400 from a live API call in production, with
-      # nothing local to look at. Unit tests check the projection's BEHAVIOUR;
-      # this checks the shipped artifact.
-      #
-      # The blind spot it is built not to have is this repo's recurring one: a
-      # single table with a provider flag, passing forever while covering one wire.
-      # So the two documented strict subsets are two separate documents, asserted
-      # to DIFFER, and `minItems` is checked by VALUE rather than by presence --
-      # legal at any value on OpenAI, legal only at 0 or 1 on Anthropic. That is
-      # the rule that silently becomes wrong the day the tables collapse into one,
-      # and it 400s at request time rather than here. Every keyword occurring in
-      # any authored schema must also be CLASSIFIED by BOTH tables, so a keyword
-      # neither provider documents fails instead of passing unnoticed.
-      #
-      # It cannot pass vacuously either. Every built-in card is rejected under
-      # strict on both providers today, so the emit path would never run at all;
-      # two schemas of the guard's own cover it -- one inside both subsets that
-      # MUST emit and be marked `strict: true` on the wire, one with a single
-      # out-of-subset keyword added that MUST throw naming that keyword. That pair
-      # is what separates a refusal from a projection that quietly DROPS the
-      # constraint, which loosens the contract with no local signal: a `maxItems`
-      # deleted on the way out means the model fills a card with more than it was
-      # designed to render and nothing anywhere says so. The schema walker is
-      # written independently of the one in src/, because a guard that reuses the
-      # code it checks proves only that the code agrees with itself. Needs the
-      # build above. <1s, no network.
-      - name: Tool-definition guard (card schemas project to definitions a provider accepts)
-        run: pnpm --filter @kitn.ai/ui run verify:tool-schemas
-
       # Coverage guard over the CLIENT-side card validator. Every keyword, at every
       # keyword position, in every card schema must land in exactly one of three
       # tables: ENFORCED, STRIPPED (annotation/meta, so dropping it is lossless), or
@@ -565,61 +375,103 @@ jobs:
       - name: Card-validation coverage guard (no keyword validates nothing)
         run: pnpm --filter @kitn.ai/ui run verify:card-validation
 
-      # Diffs the registered-element catalog (src/elements/element-meta.json)
-      # against the public SolidJS surface, derived from the TS checker and
-      # cross-checked against the BUILT entry's runtime keys. The catalog size is
-      # not restated here -- the script prints `elements <n>` and the n/n verdict
-      # on every run, and that line is the source of the number.
-      #
-      # Solid is the authored layer, and the framework docs promise the same
-      # catalog everywhere -- but src/index.ts was grown by hand and nobody ever
-      # diffed it against the registry, so when this guard was introduced 33 of
-      # the then-79 elements had no writable Solid equivalent (kai-chat,
-      # kai-thread and kai-workspace among them). Those gaps are closed: it
-      # reports GAP 0 today. Also asserts every public component ships a
-      # <Name>Props type. Needs the build above; a missing build fails the check
-      # rather than skipping it.
-      - name: Solid coverage guard (every element writable in SolidJS)
-        run: pnpm --filter @kitn.ai/ui run verify:solid-coverage
+      # The pre-build half of the artifact-coverage check below. Everything
+      # gitignored that exists NOW is the install and whatever caches the runner
+      # carries; anything gitignored that appears after `nx build ui` is build
+      # output, and the artifact has to carry it or the downstream legs simply do
+      # not have it. Asserts nothing on its own -- the step that reads it does.
+      - name: Ignored-path snapshot (what is on disk before the build writes)
+        run: git status --porcelain --ignored=matching packages/ui > "$RUNNER_TEMP/ignored-before.txt"
 
-      # Compiles the `kai` MCP scaffolder's EMITTED code with real `tsc --strict
-      # --noUnusedLocals`, resolving @kitn.ai/ui through the shipped exports map
-      # and .d.ts. Emitted code lives in string literals, so scaffold.test.ts can
-      # assert its wording but never its types; this caught an unused import that
-      # failed `npm run build` in a stock create-vite app.
+      - name: Build (element bundle + provider subpath)
+        run: pnpm exec nx build ui
+
+      # THE ARTIFACT GLOB IS THE NEW `outputs:` LIST, and it has the nx list's
+      # failure mode with none of its mitigations: a downstream leg never runs
+      # `postbuild`, so a build-written path the glob omits is silently ABSENT
+      # there rather than stale, and it surfaces as an unrelated-looking failure
+      # three jobs later. coupling-map's `nx.json build.outputs` row called that
+      # hazard local-only; this split makes it live, and this closes it.
       #
-      # Two matrices. The FRONT END axis is SURFACE x integration x framework --
-      # a surface is a components LIST from `listSurfaceProbes()` (none, each
-      # capability alone, and all of them), NOT an archetype id. That swap is the
-      # substance, not the cell count. The presets are still there as data, and
-      # they are the wrong axis for two structural reasons that do not depend on
-      # any count: they collide (two carry identical components and differ only
-      # in `defaultPlacement`, which this matrix pins, so one cell re-compiled
-      # the previous cell's types), and each one is exactly ONE capability -- so
-      # the maximal chat+sources+tool+reasoning+artifact+voice+attachments cell,
-      # which NO preset can express and which the feature multi-select makes
-      # reachable, had nothing compiling it at all. Read the `WHY NOT THE POWER
-      # SET` comment in archetypes.ts before touching the axis.
+      # It diffs the gitignored paths under packages/ui across the build and
+      # fails on anything uncovered that is not a named runtime cache, reading
+      # the glob out of the upload step below rather than restating it. ~1s.
+      - name: Artifact glob covers everything the build wrote
+        run: ARTIFACT_GLOB_BEFORE="$RUNNER_TEMP/ignored-before.txt" pnpm --filter @kitn.ai/ui run verify:artifact-glob
+
+      # ONE artifact, four consumers. The three paths are the complete
+      # gitignored-and-build-written set under packages/ui: dist/, the
+      # `build:css` prebuild output, and the block driver pages `build:blocks`
+      # generates for `verify:blocks`. Everything else the build writes --
+      # element-meta.json, derived.json, llms-full.txt, the React wrappers,
+      # docs/web-components.md, the construct template fixtures -- is COMMITTED,
+      # so a downstream `checkout` already has it, and `verify:generated` in
+      # `dist-guards` proves it is the right version.
       #
-      # The second matrix is the BACKEND ROUTE (integration x host framework),
-      # added when the routes stopped being sliced off and discarded, under three
-      # more tsc projects that model the real host -- node/no-DOM for express +
-      # Vite middleware, DOM for Next/SvelteKit/TanStack, workers-types for
-      # Cloudflare. That split is the point: the first run found TS2339 on
-      # `await request.json()` in all seven TS integrations, green on a Next
-      # tsconfig and a hard `npm run build` failure on a Vite app's.
+      # actions/upload-artifact roots the artifact at the least common ancestor
+      # of these paths, which is `packages/ui`. That is why every download below
+      # says `path: packages/ui`, and why the guard above refuses a glob outside
+      # that directory: one would move the root and land every download's files
+      # somewhere else.
+      - name: Upload the kit build for the downstream legs
+        uses: actions/upload-artifact@v4
+        with:
+          name: kit-dist
+          retention-days: 1
+          include-hidden-files: true
+          path: |
+            packages/ui/dist/**
+            packages/ui/src/elements/compiled.css
+            packages/ui/scripts/block-driver/pages/generated/**
+
+  # 30% of the whole gate, sharing nothing with anything else, so it gets its own
+  # leg. `verify-construct.mjs` ejects against THIS CHECKOUT'S OWN packed tarball
+  # and then runs a real `npm install` per cell, which is where the time goes.
+  #
+  # NO PATH FILTER, deliberately. A PR touching only src/elements/ changes what
+  # every cell installs while matching nothing a construct-scoped filter would
+  # look at -- "the tree is not the tarball, and the tarball is not what npx
+  # runs", in its most literal form. A filter safe enough to use would have to
+  # fire on packages/ui/** plus scripts/** plus the lockfile plus this file,
+  # which is nearly every PR: it would buy almost nothing and add a way to be
+  # wrong.
+  construct:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download the kit build
+        uses: actions/download-artifact@v4
+        with:
+          name: kit-dist
+          path: packages/ui
+
+      # BEFORE the emit chain, not after it. This cache used to sit nine steps
+      # downstream of the chain that does the npm install, so the shared install
+      # ran fully cold on every single run and the cache warmed nothing.
       #
-      # NO CELL COUNT IS PINNED HERE ON PURPOSE. Every axis is derived from the
-      # registry at run time, so registering an integration moves the counts by
-      # itself -- writing a number here would restore the coupling the derivation
-      # removed (`openai` and `anthropic` both landed in the catalog and compiled
-      # ZERO times while this script printed success at a hardcoded count). The
-      # script PRINTS what it actually ran; read that. Today it prints 616 front
-      # ends (7 surfaces x 11 integrations x 8 TS frameworks) and 121 routes of
-      # which 99 reach tsc -- 11 are python, and `mock`'s 11 stream in the
-      # browser and emit no route at all. ~16s, still no network.
-      - name: Scaffolder output compiles (tsc --strict over emitted code)
-        run: pnpm --filter @kitn.ai/ui run verify:scaffold
+      # Its own key, over what actually determines the emitted projects'
+      # dependency set: the construct schema, the template registry, and
+      # packages/ui/package.json (whose version goes into every emitted pin). A
+      # separate key from the starters cache in `dist-guards` is what keeps two
+      # legs sharing ~/.npm from racing on one entry.
+      - name: Cache npm (construct emit chain)
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: construct-npm-${{ hashFiles('packages/ui/src/agent-tooling/construct/construct.v1.schema.json', 'packages/ui/src/agent-tooling/construct/templates.ts', 'packages/ui/package.json') }}
+          restore-keys: construct-npm-
 
       # The construct engine's real emit chain: node bin/mcp.js eject (the CLI,
       # not the library) -> a real npm install -> tsc --noEmit under the cell's
@@ -632,78 +484,31 @@ jobs:
       - name: Construct engine emit chain (real eject + install + tsc + build + consumer bundle)
         run: pnpm --filter @kitn.ai/ui run verify:construct
 
-      # Cache the npm side of the starters. Six of the eight are pnpm workspace
-      # members already installed by the step above; the other two (nextjs,
-      # tanstack-start) are deliberately STANDALONE `file:` consumers, so they
-      # carry package-lock.json and get their own `npm ci`. setup-node above is
-      # already spending its one cache slot on pnpm, hence a separate cache here
-      # rather than a second setup-node.
-      - name: Cache npm (standalone starters)
-        uses: actions/cache@v4
+  # The jsdom suite and everything that hangs off create-kai's build. `unit` and
+  # `emitted` stay adjacent because they are one argument split across two vitest
+  # projects, and `create-kai build` sits next to the two verify:pack steps that
+  # read what it produced.
+  unit:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
-          path: ~/.npm
-          key: starters-npm-${{ hashFiles('examples/starters/*/package-lock.json') }}
-          restore-keys: starters-npm-
+          node-version: 22
+          cache: pnpm
 
-      # Builds TWO corpora with the command a user actually runs, and typechecks
-      # the ones whose build does not reach tsc on its own (tanstack-start:
-      # `vite build` alone never does):
-      #   examples/starters/  one minimal starter per framework -- the templates
-      #                       `create-kai` scaffolds from.
-      #   examples/apps/      the iteration ladder's whole applications, built
-      #                       with the kit rather than templating it.
-      #
-      # Until this step nothing in CI touched the starters at all -- they were
-      # covered by code review only, which is how a five-starter refactor landed
-      # with nothing behind it. A starter that stops compiling ships into every
-      # new scaffolded project, and the person who finds out is a new user; a
-      # ladder app that stops compiling is a rung that no longer runs.
-      #
-      # The roster is DERIVED from those directories and each package's own
-      # dependency on the kit -- `workspace:*` (linked, no install needed) vs
-      # `file:` (needs npm ci) -- cross-checked against pnpm-workspace.yaml.
-      # There is no hand-written list and no count typed anywhere; the run PRINTS
-      # what it covered, per corpus, so read that rather than a figure here. An
-      # unclassifiable package is a hard failure rather than a silent skip, and so
-      # is a corpus that is missing or empty, so nothing can fall outside the
-      # guard while the summary keeps claiming full coverage. The script also
-      # REFUSES its own --only/--linked-only scoping flags when $CI is set, so
-      # nobody can trim coverage here to save a minute.
-      #
-      # Budget ~1.5 min, and treat that as a CEILING rather than a baseline: one
-      # full cold run measured 1m28s wall (~33s for the linked builds, ~56s for
-      # the two standalone including npm ci), on a box at load average 17.6 with a
-      # warm ~/.npm cache and before the apps corpus existed -- each linked app
-      # adds a build apiece. Needs the build above -- everything here resolves
-      # @kitn.ai/ui to the compiled dist/. This is the COMPILE floor: it cannot
-      # see runtime contract failures (wrong tag, array set as an attribute),
-      # which is what verify:consumer and /consumer-regression are for.
-      - name: Starters + ladder apps build (roster derived by verify-starters)
-        run: pnpm --filter @kitn.ai/ui run verify:starters
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-      # Compiles every fenced code block in apps/docs against the SHIPPED API --
-      # the built dist/*.d.ts and element-meta.json, read at run time, nothing
-      # baked in -- and checks kai-* markup, events, ::part() names and prose
-      # symbols against the same source. Docs are the one consumer surface with
-      # no compiler behind it, so a renamed prop or a symbol that moved entries
-      # stays wrong on the site indefinitely.
-      #
-      # BLOCKING, and it earned that: an adversarial pass planted 12 defects --
-      # camelCased attributes, a real kit prop on the wrong element, a typo'd
-      # component prop, a wrong property on a kit type inside an UNTYPED js
-      # fence, four real symbols imported from the wrong entry point, a
-      # misspelled event, a bad ::part(), an array set as an attribute -- and it
-      # caught 12/12, on the right lines, while reporting nothing at all on a
-      # page of legitimate reader-owned code (undeclared helpers, omitted
-      # imports, uninstalled third-party packages, a marked counter-example) or
-      # on a control page of correct usage.
-      #
-      # It gates on `high` only; medium/advisory are reported and do not fail.
-      # Its own anti-theatre self-test runs first and hard-fails the whole run if
-      # a probe that must be RED goes green, so "0 findings" cannot mean "the kit
-      # types resolved to `any`". Needs the build above. ~8s, no network.
-      - name: Docs alignment (every doc snippet compiles against the shipped API)
-        run: pnpm --filter @kitn.ai/docs run verify:docs
+      - name: Download the kit build
+        uses: actions/download-artifact@v4
+        with:
+          name: kit-dist
+          path: packages/ui
 
       # Run ONLY the jsdom unit project. pnpm test (= vitest run) would also
       # spin up the storybook BROWSER project; that runs in its own job now.
@@ -732,6 +537,9 @@ jobs:
       # no check. Needs the build above (src/elements/compiled.css). ~10s, which
       # restates the same invalidated local "idle" reading and is not a figure from
       # this runner; treat it as an order of magnitude, not a budget.
+      # (The required context is now the `test` GRAPH rather than one job, and
+      # this leg is inside it -- the argument was always about which context
+      # gates the merge, not about which runner executes the step.)
       #
       # `tests/agent-tooling/emitted-project-wiring.test.ts`, which runs in the `unit`
       # project above, fails if this step stops naming --project=emitted, if the
@@ -739,6 +547,9 @@ jobs:
       # written outside the directory the project owns.
       - name: Emitted-code guards (the scaffolder's output actually RUNS)
         run: pnpm --filter @kitn.ai/ui exec vitest run --project=emitted
+
+      - name: React adapter tests
+        run: pnpm --filter @kitn.ai/ui test:react
 
       # The openrouter spike's own suite, in the REQUIRED job.
       #
@@ -829,11 +640,393 @@ jobs:
           VERIFY_PACK_NPM="$RUNNER_TEMP/npm-release-pin/node_modules/.bin/npm" pnpm --filter create-kai run verify:pack
           VERIFY_PACK_NPM="$RUNNER_TEMP/npm-release-pin/node_modules/.bin/npm" pnpm --filter @kitn.ai/ui run verify:pack
 
-      - name: React adapter tests
-        run: pnpm --filter @kitn.ai/ui test:react
+  # Everything that reads dist/ and is not slow enough to deserve its own leg.
+  #
+  # `verify:generated` goes HERE specifically because this leg uploads nothing.
+  # It seeds each artifact with a single-use random sentinel and restores it
+  # afterwards; a leg that both seeds sentinels and produces an artifact is one
+  # crashed process away from shipping a poisoned one.
+  dist-guards:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download the kit build
+        uses: actions/download-artifact@v4
+        with:
+          name: kit-dist
+          path: packages/ui
+
+      # Re-runs the generators and fails if any checked-in derived artifact
+      # differs -- element-meta.json, element-types.d.ts, icon-names.json, the
+      # React wrappers, llms.txt / llms-full.txt and docs/web-components.md.
+      # fc40a10 registered a new ::part(citations) and regenerated none of them;
+      # nothing went red, and because the `kai` MCP's component_reference and the
+      # docs site's PartTable.astro read those files, a part that existed in the
+      # SHIPPED element was invisible to every tool a developer would use to find
+      # it. A human noticing does not scale.
+      #
+      # This deliberately does NOT lean on the build step above. `nx build ui`
+      # runs the generators via postbuild, but their side effects land in the
+      # SOURCE tree and the NX cache does not restore those, so on a cache HIT
+      # the target prints "Successfully ran target build" and leaves the tree
+      # stale -- a cached build is indistinguishable from a successful one. This
+      # step invokes build:api directly and never goes through NX, so no cache
+      # state can affect its result.
+      #
+      # It also cannot pass vacuously: each artifact is seeded with a single-use
+      # random sentinel before the run and must come back without it, so a
+      # generator that was deleted, renamed, dropped an output or no-op'd fails
+      # here instead of reading as "in sync". The guard restores every file it
+      # touches, pass or fail. No build needed, no network. ~20s.
+      - name: Generated artifacts in sync with their source
+        run: pnpm --filter @kitn.ai/ui run verify:generated
+
+      - name: Typecheck
+        run: pnpm exec nx typecheck ui
+
+      # Compiles the `kai` MCP scaffolder's EMITTED code with real `tsc --strict
+      # --noUnusedLocals`, resolving @kitn.ai/ui through the shipped exports map
+      # and .d.ts. Emitted code lives in string literals, so scaffold.test.ts can
+      # assert its wording but never its types; this caught an unused import that
+      # failed `npm run build` in a stock create-vite app.
+      #
+      # Two matrices. The FRONT END axis is SURFACE x integration x framework --
+      # a surface is a components LIST from `listSurfaceProbes()` (none, each
+      # capability alone, and all of them), NOT an archetype id. That swap is the
+      # substance, not the cell count. The presets are still there as data, and
+      # they are the wrong axis for two structural reasons that do not depend on
+      # any count: they collide (two carry identical components and differ only
+      # in `defaultPlacement`, which this matrix pins, so one cell re-compiled
+      # the previous cell's types), and each one is exactly ONE capability -- so
+      # the maximal chat+sources+tool+reasoning+artifact+voice+attachments cell,
+      # which NO preset can express and which the feature multi-select makes
+      # reachable, had nothing compiling it at all. Read the `WHY NOT THE POWER
+      # SET` comment in archetypes.ts before touching the axis.
+      #
+      # The second matrix is the BACKEND ROUTE (integration x host framework),
+      # added when the routes stopped being sliced off and discarded, under three
+      # more tsc projects that model the real host -- node/no-DOM for express +
+      # Vite middleware, DOM for Next/SvelteKit/TanStack, workers-types for
+      # Cloudflare. That split is the point: the first run found TS2339 on
+      # `await request.json()` in all seven TS integrations, green on a Next
+      # tsconfig and a hard `npm run build` failure on a Vite app's.
+      #
+      # NO CELL COUNT IS PINNED HERE ON PURPOSE. Every axis is derived from the
+      # registry at run time, so registering an integration moves the counts by
+      # itself -- writing a number here would restore the coupling the derivation
+      # removed (`openai` and `anthropic` both landed in the catalog and compiled
+      # ZERO times while this script printed success at a hardcoded count). The
+      # script PRINTS what it actually ran; read that. Today it prints 616 front
+      # ends (7 surfaces x 11 integrations x 8 TS frameworks) and 121 routes of
+      # which 99 reach tsc -- 11 are python, and `mock`'s 11 stream in the
+      # browser and emit no route at all. ~16s, still no network.
+      - name: Scaffolder output compiles (tsc --strict over emitted code)
+        run: pnpm --filter @kitn.ai/ui run verify:scaffold
+
+      # Packs the built package, installs it into a throwaway app OUTSIDE the
+      # repo, and bundles it with Vite 8 (Rolldown -- what `npm create vite`
+      # gives consumers today, and the strictest `sideEffects` consumer we know
+      # of). Asserts every kai-* registration survives. The in-build guard only
+      # proves OUR bundle keeps the reference; this proves a CONSUMER's bundler
+      # keeps the side effects, which is how 0.19.0 shipped a blank page.
+      - name: Consumer packaging guard (registrations survive a real bundler)
+        run: pnpm --filter @kitn.ai/ui run verify:consumer
+
+      # Packs the build, installs it into a throwaway app, and type-checks our
+      # SHIPPED .d.ts with a real tsc under BOTH `bundler` and `nodenext`, in both
+      # directions: a wrong assignment per public entry MUST error, and correct
+      # usage MUST compile. Both halves are required -- "wrong code errors" alone
+      # is satisfied by types that error at everything, and "right code compiles"
+      # alone is satisfied by types that are entirely `any`, which is the actual
+      # bug this catches. 0.19.0 shipped declarations re-exporting './read',
+      # './encode' with no file extension: `bundler` tolerates it, node16/nodenext
+      # rejects it, and `skipLibCheck: true` -- on in every Vite template --
+      # SUPPRESSES the rejection and silently types the whole public API as `any`.
+      # No error, no warning, no type-checking at all for the consumer. The kit's
+      # own typecheck compiles src/ under its own tsconfig and cannot see it; the
+      # in-build verify:dts reasons about dist/ with our model of resolution. This
+      # asks the only authority that counts. Needs the build above + network. ~8s
+      # locally; the npm install dominates on CI.
+      - name: Consumer types guard (shipped .d.ts type-check under bundler + nodenext)
+        run: pnpm --filter @kitn.ai/ui run verify:dts:consumer
+
+      # TWO guards, chained; `verify:ssr` runs both and fails on either.
+      #
+      # verify-ssr-imports.mjs imports EVERY public entry in the exports map
+      # under Node's `node` condition, one child process each. Nothing in the
+      # repo ever imported the BUILT package on a server, so `import
+      # '@kitn.ai/ui'` threw "Client-only API called on the server side" in every
+      # published version through 0.20.0 -- a hard SSR/prerender/RSC failure for
+      # any consumer touching a value export.
+      #
+      # verify-ssr-render.mjs then RENDERS every component the server entries
+      # export, through Solid's renderToString in a DOM-free child process,
+      # because importable is not the same as renderable. Watched failing, not
+      # assumed: planting `document.documentElement.dataset.theme` at
+      # component-BODY scope in `Skeleton` left the import guard at 9/9 green and
+      # exit 0 while a real server render of the same build threw "document is
+      # not defined". The render guard turns that red naming the global, the
+      # component and the entry. It also self-tests on every run -- it renders a
+      # canary that MUST be caught and one that MUST produce markup -- so a
+      # harness that quietly stopped measuring goes red instead of green.
+      # Needs the build above. ~5s, no network.
+      - name: Server guard (every entry imports AND every component renders under `node`)
+        run: pnpm --filter @kitn.ai/ui run verify:ssr
+
+      # Diffs the registered-element catalog (src/elements/element-meta.json)
+      # against the public SolidJS surface, derived from the TS checker and
+      # cross-checked against the BUILT entry's runtime keys. The catalog size is
+      # not restated here -- the script prints `elements <n>` and the n/n verdict
+      # on every run, and that line is the source of the number.
+      #
+      # Solid is the authored layer, and the framework docs promise the same
+      # catalog everywhere -- but src/index.ts was grown by hand and nobody ever
+      # diffed it against the registry, so when this guard was introduced 33 of
+      # the then-79 elements had no writable Solid equivalent (kai-chat,
+      # kai-thread and kai-workspace among them). Those gaps are closed: it
+      # reports GAP 0 today. Also asserts every public component ships a
+      # <Name>Props type. Needs the build above; a missing build fails the check
+      # rather than skipping it.
+      - name: Solid coverage guard (every element writable in SolidJS)
+        run: pnpm --filter @kitn.ai/ui run verify:solid-coverage
+
+      # Packs the tarball and weighs what a consumer actually downloads. `files`
+      # ships the whole of `src/` on purpose -- consumers read source, and source
+      # maps point into it -- and that blanket include is how 300 KB of generated
+      # JSON (src/components/component-meta.json) rode along to every consumer for
+      # months: nothing imported it, the `exports` map could not even reach it, and
+      # no check looked at what gets PACKED rather than at what gets built.
+      #
+      # Two rules, deliberately different in kind. PRECISE: every packed file
+      # outside dist/ over 64 KiB must be allowlisted with a written reason, so a
+      # new large artifact under src/ becomes a reviewable act instead of an
+      # accident, and the failure names the offender. CRUDE: total unpacked size
+      # under a ceiling -- it names nothing, but it is the only backstop for the
+      # growth rule 1 cannot see, namely many small files or bloat INSIDE dist/,
+      # whose content-hashed chunk names would make an exact allowlist go red on
+      # every rebuild and get bumped reflexively.
+      #
+      # Must come after the build, and hard-fails without dist/ rather than
+      # skipping: absent dist/ the tarball is a fraction of its real size and BOTH
+      # rules would pass vacuously. Currently 818 files / 10.84 MiB against a
+      # 12.5 MiB ceiling. ~1.4s, no network.
+      - name: Pack weight guard (no dead weight ships to consumers)
+        run: pnpm --filter @kitn.ai/ui run verify:pack
+
+      # Walks every emitted .d.ts under dist/ and asserts each relative specifier
+      # resolves to actual DECLARATIONS under BOTH `bundler` and `nodenext`,
+      # delegated to tsc's own resolver -- a guard that re-implements module
+      # resolution is a guard that disagrees with tsc.
+      #
+      # It already ran via `postbuild`, so why a step of its own -- and the honest
+      # answer is narrower than "the cache would skip it". The build target is
+      # cached (`cache: true`, outputs dist/ + storybook-static), and on a cache
+      # HIT nx restores dist/ without running the npm lifecycle, so postbuild does
+      # not run and this would not run with it. But this guard reads ONLY dist/,
+      # so a restored dist/ is byte-identical to one this already passed against
+      # when the entry was written: skipping it there is redundant, not unsound.
+      # And on CI the question is moot today -- no nx cache is persisted between
+      # runs at all (`cache: pnpm` caches the pnpm store, not .nx/cache), so the
+      # build always runs cold and the lifecycle always fires.
+      #
+      # What a standalone step buys is therefore legibility and independence, not
+      # a caught bug. Legibility: a failure lands on a step named for the guard
+      # instead of ~430 lines into build output, where the build's own exit code
+      # is the only signal. Independence: it stops being contingent on the
+      # caching MODEL staying sound -- an `outputs` list that goes stale (a new
+      # emitted directory not declared there) restores a PARTIAL dist/ that
+      # nothing re-checks, and the lifecycle never runs to notice.
+      #
+      # Watched failing rather than assumed to fail: pointing a specifier in
+      # dist/wire/index.d.ts at a file that does not exist turns this red naming
+      # the file and the specifier (TS2307). Needs the build above. ~0.5s, no
+      # network.
+      - name: Declaration boundary guard (every emitted .d.ts specifier resolves)
+        run: pnpm --filter @kitn.ai/ui run verify:dts
+
+      # Does the diagnostic stream actually REACH a subscriber in the built
+      # package? `./diagnostics` shipped completely inert and every gate stayed
+      # green over it: verify:ssr proved the subpath imports, verify:dts:consumer
+      # proved its types resolve, and the unit suite proved the SOURCE module
+      # works. None of them executes a subscription against dist/, which is where
+      # the defect lived -- two bundles each inlining their own copy of the
+      # emitter, one of them dead-code-eliminated down to a no-op because nothing
+      # in it ever called emit. This runs a real read through `./wire` and asserts
+      # the events arrive at a `./diagnostics` subscriber, then does the same
+      # across two instances of one module (the duplication a consumer causes by
+      # bundling the kit AND loading the CDN bundle) and checks the stream-id
+      # counter did not restart. Needs the build above. ~1s, no network.
+      - name: Diagnostics wiring guard (events cross the ./wire ↔ ./diagnostics boundary)
+        run: pnpm --filter @kitn.ai/ui run verify:diagnostics-wiring
+
+      # Resolves the card JSON Schemas the way a consumer would, from a temp
+      # package OUTSIDE the repo with the built package symlinked in. 11 schemas
+      # had been copied into dist/schemas/ on every build and shipped in every
+      # tarball since the card contract landed, reachable by NOBODY: "exports" is
+      # a closed map and had no ./schemas key, so every specifier resolved to
+      # ERR_PACKAGE_PATH_NOT_EXPORTED / TS2307. This repo's own reference harness
+      # gave up and hand-derived the confirm schema in the openrouter spike,
+      # saying so in a comment.
+      #
+      # Existence was never the question, so this never stats dist/schemas/ -- the
+      # files were already there and already unreachable. It RESOLVES both public
+      # surfaces (the JS entry @kitn.ai/ui/schemas, and the raw
+      # @kitn.ai/ui/schemas/*.schema.json) through tsc under `bundler` AND
+      # `nodenext` with the containing file's implied format, and independently
+      # through Node's own exports-map implementation. It then compares BYTES:
+      # every schema the entry exports, and every raw file a specifier lands on,
+      # must equal the authored file in src/primitives/card-schemas/, so a stale
+      # copy fails instead of reading as reachable.
+      #
+      # The expected set is readdirSync of that source directory, never a literal
+      # count, so a 12th schema is covered the day it is added rather than the day
+      # someone remembers. Needs the build above. <1s, no network.
+      - name: Card-schema export guard (both surfaces reachable from outside)
+        run: pnpm --filter @kitn.ai/ui run verify:schemas
+
+      # Projects every card schema into a provider tool definition, out of the
+      # BUILT dist/schemas.js, and asks whether the result is something the
+      # provider would actually accept. `cardTools()` is what hands a model its
+      # tool list, so a projection emitting a keyword the provider's strict mode
+      # cannot compile surfaces as a 400 from a live API call in production, with
+      # nothing local to look at. Unit tests check the projection's BEHAVIOUR;
+      # this checks the shipped artifact.
+      #
+      # The blind spot it is built not to have is this repo's recurring one: a
+      # single table with a provider flag, passing forever while covering one wire.
+      # So the two documented strict subsets are two separate documents, asserted
+      # to DIFFER, and `minItems` is checked by VALUE rather than by presence --
+      # legal at any value on OpenAI, legal only at 0 or 1 on Anthropic. That is
+      # the rule that silently becomes wrong the day the tables collapse into one,
+      # and it 400s at request time rather than here. Every keyword occurring in
+      # any authored schema must also be CLASSIFIED by BOTH tables, so a keyword
+      # neither provider documents fails instead of passing unnoticed.
+      #
+      # It cannot pass vacuously either. Every built-in card is rejected under
+      # strict on both providers today, so the emit path would never run at all;
+      # two schemas of the guard's own cover it -- one inside both subsets that
+      # MUST emit and be marked `strict: true` on the wire, one with a single
+      # out-of-subset keyword added that MUST throw naming that keyword. That pair
+      # is what separates a refusal from a projection that quietly DROPS the
+      # constraint, which loosens the contract with no local signal: a `maxItems`
+      # deleted on the way out means the model fills a card with more than it was
+      # designed to render and nothing anywhere says so. The schema walker is
+      # written independently of the one in src/, because a guard that reuses the
+      # code it checks proves only that the code agrees with itself. Needs the
+      # build above. <1s, no network.
+      - name: Tool-definition guard (card schemas project to definitions a provider accepts)
+        run: pnpm --filter @kitn.ai/ui run verify:tool-schemas
+
+      # Compiles every fenced code block in apps/docs against the SHIPPED API --
+      # the built dist/*.d.ts and element-meta.json, read at run time, nothing
+      # baked in -- and checks kai-* markup, events, ::part() names and prose
+      # symbols against the same source. Docs are the one consumer surface with
+      # no compiler behind it, so a renamed prop or a symbol that moved entries
+      # stays wrong on the site indefinitely.
+      #
+      # BLOCKING, and it earned that: an adversarial pass planted 12 defects --
+      # camelCased attributes, a real kit prop on the wrong element, a typo'd
+      # component prop, a wrong property on a kit type inside an UNTYPED js
+      # fence, four real symbols imported from the wrong entry point, a
+      # misspelled event, a bad ::part(), an array set as an attribute -- and it
+      # caught 12/12, on the right lines, while reporting nothing at all on a
+      # page of legitimate reader-owned code (undeclared helpers, omitted
+      # imports, uninstalled third-party packages, a marked counter-example) or
+      # on a control page of correct usage.
+      #
+      # It gates on `high` only; medium/advisory are reported and do not fail.
+      # Its own anti-theatre self-test runs first and hard-fails the whole run if
+      # a probe that must be RED goes green, so "0 findings" cannot mean "the kit
+      # types resolved to `any`". Needs the build above. ~8s, no network.
+      - name: Docs alignment (every doc snippet compiles against the shipped API)
+        run: pnpm --filter @kitn.ai/docs run verify:docs
+
+      # Cache the npm side of the starters. Six of the eight are pnpm workspace
+      # members already installed by the step above; the other two (nextjs,
+      # tanstack-start) are deliberately STANDALONE `file:` consumers, so they
+      # carry package-lock.json and get their own `npm ci`. setup-node above is
+      # already spending its one cache slot on pnpm, hence a separate cache here
+      # rather than a second setup-node.
+      - name: Cache npm (standalone starters)
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: starters-npm-${{ hashFiles('examples/starters/*/package-lock.json') }}
+          restore-keys: starters-npm-
+
+      # Builds TWO corpora with the command a user actually runs, and typechecks
+      # the ones whose build does not reach tsc on its own (tanstack-start:
+      # `vite build` alone never does):
+      #   examples/starters/  one minimal starter per framework -- the templates
+      #                       `create-kai` scaffolds from.
+      #   examples/apps/      the iteration ladder's whole applications, built
+      #                       with the kit rather than templating it.
+      #
+      # Until this step nothing in CI touched the starters at all -- they were
+      # covered by code review only, which is how a five-starter refactor landed
+      # with nothing behind it. A starter that stops compiling ships into every
+      # new scaffolded project, and the person who finds out is a new user; a
+      # ladder app that stops compiling is a rung that no longer runs.
+      #
+      # The roster is DERIVED from those directories and each package's own
+      # dependency on the kit -- `workspace:*` (linked, no install needed) vs
+      # `file:` (needs npm ci) -- cross-checked against pnpm-workspace.yaml.
+      # There is no hand-written list and no count typed anywhere; the run PRINTS
+      # what it covered, per corpus, so read that rather than a figure here. An
+      # unclassifiable package is a hard failure rather than a silent skip, and so
+      # is a corpus that is missing or empty, so nothing can fall outside the
+      # guard while the summary keeps claiming full coverage. The script also
+      # REFUSES its own --only/--linked-only scoping flags when $CI is set, so
+      # nobody can trim coverage here to save a minute.
+      #
+      # Budget ~1.5 min, and treat that as a CEILING rather than a baseline: one
+      # full cold run measured 1m28s wall (~33s for the linked builds, ~56s for
+      # the two standalone including npm ci), on a box at load average 17.6 with a
+      # warm ~/.npm cache and before the apps corpus existed -- each linked app
+      # adds a build apiece. Needs the build above -- everything here resolves
+      # @kitn.ai/ui to the compiled dist/. This is the COMPILE floor: it cannot
+      # see runtime contract failures (wrong tag, array set as an attribute),
+      # which is what verify:consumer and /consumer-regression are for.
+      - name: Starters + ladder apps build (roster derived by verify-starters)
+        run: pnpm --filter @kitn.ai/ui run verify:starters
+
+  # One Playwright install, then everything that needs a browser.
+  browser:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download the kit build
+        uses: actions/download-artifact@v4
+        with:
+          name: kit-dist
+          path: packages/ui
 
       # Capped because this step has been observed stalling until the job's own
-      # 30-minute timeout — three times — with nothing after it ever running. A
+      # timeout — three times — with nothing after it ever running. A
       # download+apt step that has not finished in five minutes is hung, not slow,
       # so fail here rather than burning the whole job budget on it.
       - name: Install Playwright browser
@@ -921,6 +1114,22 @@ jobs:
       - name: Hover-card tab-stop guard (built bundle)
         run: pnpm --filter @kitn.ai/ui exec playwright test --config playwright.hovercard.config.ts
 
+      # ONE Storybook for BOTH IVPs below. Their configs already set
+      # `reuseExistingServer: true` (not `!CI`), so each will attach to a server
+      # that is already up and boot its own only if none is -- which is what made
+      # this free. Without it the command IVP boots Storybook, Playwright tears it
+      # down at the end of that step, and the menu IVP boots it again.
+      #
+      # Both are deliberately Storybook-dependent: what they test is filtering and
+      # keyboard selection, which the stories exercise directly. The paint guards
+      # above run bare for the opposite reason -- Storybook's document-level
+      # Tailwind registers `@property` globally and would mask the very defect
+      # they exist for.
+      - name: Start Storybook once for both IVPs (each config reuses it)
+        run: |
+          nohup pnpm --filter @kitn.ai/ui run storybook -- --ci --quiet > "$RUNNER_TEMP/storybook.log" 2>&1 &
+          timeout 180 bash -c 'until curl -sf http://localhost:6006/iframe.html > /dev/null; do sleep 2; done'
+
       # The <kai-command> palette: filtering, roving activeId, and which row
       # Enter actually selects. It had a full Playwright suite and an npm script
       # (`test:command-ivp`) that NOTHING invoked -- the same "a guard nobody
@@ -962,6 +1171,33 @@ jobs:
       - name: Menu IVP (kai-menu + cascading primitives, storybook)
         run: pnpm --filter @kitn.ai/ui run test:menu-ivp
 
+  # THE REQUIRED CHECK. It runs no gate: the five legs above do, and this fails
+  # unless every one of them succeeded.
+  #
+  # `if: always()` is what makes a red leg RED here rather than skipped. Without
+  # it a failed leg skips this job, and a skipped required check is not a failed
+  # one -- the ruleset would see a green gate over a workflow that ran nothing.
+  #
+  # The verdict is DERIVED. `storybook-gate` below compares one named result
+  # because it has exactly one leg; a five-leg copy of that shape has a real
+  # failure mode, which is a leg added to `needs:` and forgotten in the `if`
+  # chain, silently ungated forever. `toJSON(needs)` IS the `needs:` list, so the
+  # two cannot drift, and the failure names the red legs.
+  #
+  # ONE LINE, not a pretty-printed jq filter: `lint-gate-parity.mjs` classifies a
+  # `run:` block line by line, so a wrapped filter's continuation lines reach it
+  # as commands it has never seen and the linter hard-fails on them. The whole
+  # pipeline has to be one logical line for the gate-set extractor to place it.
+  test:
+    needs: [build, construct, unit, dist-guards, browser]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every leg of the required gate must have succeeded
+        run: |
+          echo '${{ toJSON(needs) }}' | jq -e 'to_entries | map(select(.value.result != "success")) | if length == 0 then "every leg succeeded" else (map("\(.key): \(.value.result)") | join(", ") | "red or skipped legs -- \(.)" | halt_error(1)) end'
+
   # The storybook browser project runs ~112 *.stories.tsx as chromium browser
   # tests (smoke render + play functions + axe a11y), split across 4 matrix jobs.
   # vitest runs each invocation through ONE long-lived chromium process, which
@@ -993,7 +1229,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Same cap, same reason as the `test` job's copy of this step above.
+      # Same cap, same reason as the `browser` job's copy of this step above.
       - name: Install Playwright browser
         timeout-minutes: 5
         run: npx playwright install --with-deps chromium
@@ -1012,15 +1248,19 @@ jobs:
   # 'success' only when EVERY matrix shard succeeded; `if: always()` ensures this
   # job still runs (and can fail) when a shard fails, instead of being skipped.
   #
-  # This context is ADVISORY. It is not in the branch ruleset, so a red gate here
-  # does NOT block a merge -- the browser suite was tried as a required check,
-  # flaked on CI, and was deliberately left advisory. The aggregation is still
-  # worth having: it means that IF it is ever promoted to required, the ruleset
-  # names this one stable context rather than the per-shard `storybook (N)` ones,
-  # and changing the shard count never breaks the required-checks config.
+  # This context is REQUIRED as of 2026-09-01 (owner-ruled). It was advisory for
+  # a long time because the browser suite flaked, and leaving it advisory is how
+  # three a11y defects shipped; #359 fixed them and the ruleset was raised to two
+  # contexts. The aggregation is what makes that possible: the ruleset names this
+  # one stable context rather than the per-shard `storybook (N)` ones, so
+  # changing the shard count never breaks the required-checks config.
+  #
+  # It is a SIBLING of `test`, not a leg of it. `lint:gate-parity` exempts this
+  # job and the `storybook` matrix by name for exactly that reason -- see
+  # EXEMPT_JOBS in packages/ui/scripts/lint-gate-parity.mjs.
   #
   # Do not infer required status from this comment -- run the `gh api` query in
-  # the `test` job's header comment above, which reads the ruleset itself.
+  # this file's header comment above, which reads the ruleset itself.
   storybook-gate:
     needs: [storybook]
     if: always()
