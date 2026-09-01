@@ -76,8 +76,14 @@ export function TabBarItemContent(props: {
           when={showBadge()}
           fallback={
             <Show when={props.dot}>
+              {/* Both marker names on the one dot: `data-kai-tab-dot` is this
+                  part's own hook; `data-kai-tab-unread` is the facade's
+                  established name for the same mark (the kai-chat widget tab
+                  bar renders through this component, P-9), kept so existing
+                  consumers and tests keep resolving it. */}
               <span
                 data-kai-tab-dot
+                data-kai-tab-unread
                 aria-hidden="true"
                 class="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-unread"
               />

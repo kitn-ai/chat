@@ -1521,6 +1521,14 @@
         "displayType": "undefined | false | true"
       },
       {
+        "name": "homeFull",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "REPLACE: custom home-tab content in place of the built-in home screen (greeting, recent-conversation card, links). Rendered only while the home view is showing, so it is meaningful only when `home` is set; the tab bar and navigation stay the kit's own. Set by the facade when light-DOM `slot=\"home\"` content is projected (region slots, P-6).",
+        "displayType": "undefined | false | true"
+      },
+      {
         "name": "sidebar",
         "type": "undefined | false | true",
         "optional": true,
@@ -1865,6 +1873,11 @@
         "mode": "inject",
         "part": true,
         "doc": "Left column (your nav / conversation list). Fixed width; use compose-your-own for resizable."
+      },
+      {
+        "name": "home",
+        "mode": "replace",
+        "doc": "Custom home-tab content in place of the built-in home screen (greeting, recent-conversation card, links). Rendered only while the home view is showing, so it needs the `home` property set; the tab bar and navigation stay built in."
       },
       {
         "name": "empty",

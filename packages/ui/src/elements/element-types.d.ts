@@ -404,6 +404,8 @@ export interface KaiChatElement extends HTMLElement {
   headerEnd?: boolean;
   /** REPLACE: full custom header in place of the built-in title/model/context bar. */
   headerFull?: boolean;
+  /** REPLACE: custom home-tab content in place of the built-in home screen (greeting, recent-conversation card, links). Rendered only while the home view is showing, so it is meaningful only when `home` is set; the tab bar and navigation stay the kit's own. Set by the facade when light-DOM `slot="home"` content is projected (region slots, P-6). */
+  homeFull?: boolean;
   /** INJECT: left sidebar column (e.g. a conversation list / your own nav). */
   sidebar?: boolean;
   /** REPLACE: custom zero-state rendered in the message area while the thread is empty (replaces the empty message list only; the composer and its suggestions still render). */
@@ -2470,6 +2472,8 @@ export interface KaiChatElementProps {
   headerEnd?: boolean;
   /** REPLACE: full custom header in place of the built-in title/model/context bar. */
   headerFull?: boolean;
+  /** REPLACE: custom home-tab content in place of the built-in home screen (greeting, recent-conversation card, links). Rendered only while the home view is showing, so it is meaningful only when `home` is set; the tab bar and navigation stay the kit's own. Set by the facade when light-DOM `slot="home"` content is projected (region slots, P-6). */
+  homeFull?: boolean;
   /** INJECT: left sidebar column (e.g. a conversation list / your own nav). */
   sidebar?: boolean;
   /** REPLACE: custom zero-state rendered in the message area while the thread is empty (replaces the empty message list only; the composer and its suggestions still render). */

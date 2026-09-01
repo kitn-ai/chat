@@ -27,6 +27,7 @@ export const CHAT_SLOTS: SlotDef[] = [
   { name: 'header-end',       mode: 'inject',  doc: 'Trailing header controls.' },
   { name: 'header',           mode: 'replace', part: true, doc: 'Full custom header; replaces the built-in title/model/context bar.' },
   { name: 'sidebar',          mode: 'inject',  part: true, doc: 'Left column (your nav / conversation list). Fixed width; use compose-your-own for resizable.' },
+  { name: 'home',             mode: 'replace', doc: 'Custom home-tab content in place of the built-in home screen (greeting, recent-conversation card, links). Rendered only while the home view is showing, so it needs the `home` property set; the tab bar and navigation stay built in.' },
   { name: 'empty',            mode: 'replace', doc: 'Custom zero-state rendered in the message area while the thread is empty. Replaces the empty message list only; the composer and any suggestions still render.' },
   { name: 'composer',         mode: 'replace', doc: 'Full custom composer; you own submit + loading, drive the thread via messages.' },
   { name: 'composer-actions', mode: 'inject',  doc: 'Accessory row above the composer.' },

@@ -339,6 +339,8 @@ export interface ChatProps extends WebComponentProps {
   headerEnd?: boolean;
   /** REPLACE: full custom header in place of the built-in title/model/context bar. */
   headerFull?: boolean;
+  /** REPLACE: custom home-tab content in place of the built-in home screen (greeting, recent-conversation card, links). Rendered only while the home view is showing, so it is meaningful only when `home` is set; the tab bar and navigation stay the kit's own. Set by the facade when light-DOM `slot="home"` content is projected (region slots, P-6). */
+  homeFull?: boolean;
   /** INJECT: left sidebar column (e.g. a conversation list / your own nav). */
   sidebar?: boolean;
   /** REPLACE: custom zero-state rendered in the message area while the thread is empty (replaces the empty message list only; the composer and its suggestions still render). */
@@ -411,7 +413,7 @@ export interface ChatProps extends WebComponentProps {
 
 export const Chat = /*#__PURE__*/ createWebComponent<ChatProps>(
   'kai-chat',
-  ["theme","value","placeholder","loading","suggestions","suggestionMode","persistSuggestions","proseSize","codeTheme","codeHighlight","reasoning","reasoningOpen","chatTitle","models","currentModel","context","scrollButton","headerStart","headerEnd","headerFull","sidebar","empty","composer","composerActions","footer","attach","webSearch","voice","triggers","kindIcons","actionsReveal","userActions","assistantActions","hideSources","accept","messages","cardTypes","cardSchemas","conversations","store","home","hostOpen"],
+  ["theme","value","placeholder","loading","suggestions","suggestionMode","persistSuggestions","proseSize","codeTheme","codeHighlight","reasoning","reasoningOpen","chatTitle","models","currentModel","context","scrollButton","headerStart","headerEnd","headerFull","homeFull","sidebar","empty","composer","composerActions","footer","attach","webSearch","voice","triggers","kindIcons","actionsReveal","userActions","assistantActions","hideSources","accept","messages","cardTypes","cardSchemas","conversations","store","home","hostOpen"],
   { onAttachmentsChange: 'kai-attachments-change', onAttachmentsRejected: 'kai-attachments-rejected', onConversationLoad: 'kai-conversation-load', onHomeLink: 'kai-home-link', onMessageAction: 'kai-message-action', onModelChange: 'kai-model-change', onSubmit: 'kai-submit', onSuggestionClick: 'kai-suggestion-click', onUnreadChange: 'kai-unread-change', onValueChange: 'kai-value-change', onVoice: 'kai-voice', onWebSearch: 'kai-web-search' },
   () => import('@kitn.ai/ui/elements/chat'),
 );

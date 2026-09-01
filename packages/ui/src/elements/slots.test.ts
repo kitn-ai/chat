@@ -19,18 +19,21 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 describe('CHAT_SLOTS registry', () => {
-  it('lists the eight kai-chat slots, in order, with unique names', () => {
+  it('lists the nine kai-chat slots, in order, with unique names', () => {
+    // 'home' joined in the P-6 region-slots round (blocks-and-parts,
+    // 2026-08-31) — the one sanctioned way the facade's slot set grows (P-9:
+    // "slots grow only by P-6").
     expect(CHAT_SLOTS.map((s) => s.name)).toEqual([
-      'header-start', 'header-end', 'header', 'sidebar',
+      'header-start', 'header-end', 'header', 'sidebar', 'home',
       'empty', 'composer', 'composer-actions', 'footer',
     ]);
     const names = CHAT_SLOTS.map((s) => s.name);
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it('marks header, empty, and composer as replace slots', () => {
+  it('marks header, home, empty, and composer as replace slots', () => {
     expect(CHAT_SLOTS.filter((s) => s.mode === 'replace').map((s) => s.name))
-      .toEqual(['header', 'empty', 'composer']);
+      .toEqual(['header', 'home', 'empty', 'composer']);
   });
 
   it('every slot has a non-empty doc contract', () => {

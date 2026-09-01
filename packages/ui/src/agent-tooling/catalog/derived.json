@@ -839,6 +839,12 @@
           "fn": false
         },
         {
+          "name": "homeFull",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
           "name": "sidebar",
           "scalar": true,
           "optional": true,

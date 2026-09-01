@@ -25,7 +25,9 @@ import { isSafeUrl } from '../primitives/url-scheme-policy';
  * non-interactive `<div>`: label visible, no anchor, no handler. Escaping into
  * visibility, never silent promotion.
  */
-export interface RowProps {
+// `ref` is omitted because which element renders (div, button, or anchor) is
+// decided by the interaction model, so no single element type is honest.
+export interface RowProps extends Omit<JSX.HTMLAttributes<HTMLElement>, 'ref'> {
   /** The title (the element's default slot). */
   children?: JSX.Element;
   /** Secondary line under the title. */
@@ -46,7 +48,10 @@ export interface RowProps {
 }
 
 export function Row(props: RowProps) {
-  const [local] = splitProps(props, [
+  // `rest` (data-* hooks, aria-*, id) forwards onto whichever element the
+  // interaction model renders, so a consumer's marker attribute lands on the
+  // real row node (the facade's home rows depend on this, P-4/P-9).
+  const [local, rest] = splitProps(props, [
     'children', 'subtitle', 'leading', 'trailing', 'chevron', 'onActivate', 'href', 'class',
   ]);
 
@@ -102,12 +107,12 @@ export function Row(props: RowProps) {
           fallback={
             // Non-interactive: a plain row (including the unsafe-href case,
             // where the label stays visible but nothing is clickable).
-            <div part="row" class={rowClass()}>
+            <div part="row" {...rest} class={rowClass()}>
               {inner}
             </div>
           }
         >
-          <button type="button" part="row" onClick={() => local.onActivate?.()} class={rowClass()}>
+          <button type="button" part="row" {...rest} onClick={() => local.onActivate?.()} class={rowClass()}>
             {inner}
           </button>
         </Show>
@@ -115,6 +120,7 @@ export function Row(props: RowProps) {
     >
       <a
         part="row"
+        {...rest}
         href={safeHref()}
         target="_blank"
         rel="noreferrer noopener"

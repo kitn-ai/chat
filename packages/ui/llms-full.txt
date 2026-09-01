@@ -1632,6 +1632,7 @@ _No events._
 | `headerStart` | `header-start` | `undefined \| false \| true` | Whether the host has `slot="header-start"` content (left of the title). Set by the `<kai-chat>` facade so a custom control forces the header open. |
 | `headerEnd` | `header-end` | `undefined \| false \| true` | Whether the host has `slot="header-end"` content (right of the controls). |
 | `headerFull` | `header-full` | `undefined \| false \| true` | REPLACE: full custom header in place of the built-in title/model/context bar. |
+| `homeFull` | `home-full` | `undefined \| false \| true` | REPLACE: custom home-tab content in place of the built-in home screen (greeting, recent-conversation card, links). Rendered only while the home view is showing, so it is meaningful only when `home` is set; the tab bar and navigation stay the kit's own. Set by the facade when light-DOM `slot="home"` content is projected (region slots, P-6). |
 | `sidebar` | `sidebar` | `undefined \| false \| true` | INJECT: left sidebar column (e.g. a conversation list / your own nav). |
 | `empty` | `empty` | `undefined \| false \| true` | REPLACE: custom zero-state rendered in the message area while the thread is empty (replaces the empty message list only; the composer and its suggestions still render). |
 | `composer` | `composer` | `undefined \| false \| true` | REPLACE: full custom composer in place of the built-in prompt input. The projected content wires its own submit (the data-flow boundary). |
@@ -1692,6 +1693,7 @@ _No events._
 | `header-end` | inject | Trailing header controls. |
 | `header` | replace | Full custom header; replaces the built-in title/model/context bar. |
 | `sidebar` | inject | Left column (your nav / conversation list). Fixed width; use compose-your-own for resizable. |
+| `home` | replace | Custom home-tab content in place of the built-in home screen (greeting, recent-conversation card, links). Rendered only while the home view is showing, so it needs the `home` property set; the tab bar and navigation stay built in. |
 | `empty` | replace | Custom zero-state rendered in the message area while the thread is empty. Replaces the empty message list only; the composer and any suggestions still render. |
 | `composer` | replace | Full custom composer; you own submit + loading, drive the thread via messages. |
 | `composer-actions` | inject | Accessory row above the composer. |

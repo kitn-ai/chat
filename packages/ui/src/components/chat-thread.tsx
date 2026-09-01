@@ -21,14 +21,15 @@ import type { CardComponentMap } from '../primitives/card-registry';
 import type { CardSchemaMap } from './card-renderer';
 import type { JSX } from 'solid-js';
 import type { ConversationStore } from '../primitives/conversation-store';
-import { byRecency } from '../primitives/conversation-store';
 import { ConversationPanel } from './conversation-panel';
-import { isConversationUnread } from './conversation-item';
 import type { ConversationSummary } from '../types';
 import { MessagesSquare, ArrowLeft } from 'lucide-solid';
 import { Button } from '../ui/button';
 import { HomePanel } from './home-panel';
 import { WidgetTabBar } from './widget-tab-bar';
+import { Panel, PanelHeader, PanelBody, PanelFooter } from './panel';
+import { createViewStack, type ViewEntry } from './view-stack';
+import { createConversationController, type ConversationController } from '../stores/conversation-controller';
 import type { HomeConfig, HomeLinkEntry } from '../types';
 
 export interface ChatThreadContextUsage {
@@ -215,6 +216,12 @@ export interface ChatThreadProps {
   //               the whole reason `messages` stays a data prop, not a slot.
   /** REPLACE: full custom header in place of the built-in title/model/context bar. */
   headerFull?: boolean;
+  /** REPLACE: custom home-tab content in place of the built-in home screen
+   *  (greeting, recent-conversation card, links). Rendered only while the home
+   *  view is showing, so it is meaningful only when `home` is set; the tab bar
+   *  and navigation stay the kit's own. Set by the facade when light-DOM
+   *  `slot="home"` content is projected (region slots, P-6). */
+  homeFull?: boolean;
   /** INJECT: left sidebar column (e.g. a conversation list / your own nav). */
   sidebar?: boolean;
   /** REPLACE: custom zero-state rendered in the message area while the thread is empty (replaces the empty message list only; the composer and its suggestions still render). */
@@ -401,37 +408,64 @@ export function ChatThread(props: ChatThreadProps) {
   });
   const [internal, setInternal] = createSignal<string | ComposerDoc>(props.value ?? '');
   const [attachments, setAttachments] = createSignal<AttachmentData[]>([]);
-  // ── Conversations (C-1..C-9) ────────────────────────────────────────────
-  // ── Home screen (H-1..H-6, Task 3) ──────────────────────────────────────
-  // `home` set adds a THIRD view (the list moves from the header toggle onto
-  // the Messages tab — H-2) and boots into it instead of 'chat'. `chatEntry`
-  // tracks whether the current 'chat' view is a DRILLED chat (entered from
-  // home/list — hides the tab bar, shows a back arrow) or a ROOT chat (the
-  // Messages tab with conversations off — tab bar stays, no back arrow).
+  // ── The widget view machine (H-1..H-6), on the shipped navigator (P-3/P-9)
+  // The routing STATE lives in `createViewStack`, so the facade and every
+  // block share ONE navigation model: tab roots sit behind the tab bar, a
+  // drilled view hides the tab bar and shows a back affordance, and a tab
+  // switch clears the drill. Rendering stays a `<Switch>` (one view in the
+  // DOM at a time) because that is this component's long-standing contract:
+  // the list view REPLACES the composer in the DOM, it does not just hide it.
+  //
+  // View names, per grammar:
+  //   home mode:  'home' (tab root) | 'messages' (tab root: the Messages tab,
+  //               showing the conversations list when the store is wired and
+  //               the root chat otherwise) | 'chat' (drill view: entered from
+  //               home, the recent card, or a list row; hides the tab bar and
+  //               shows the back arrow, H-5)
+  //   plain mode: 'chat' (root) | 'list' (drilled off the header toggle)
   const homeEnabled = () => props.home != null;
-  type WidgetView = 'home' | 'chat' | 'list';
-  const [view, setView] = createSignal<WidgetView>(props.home != null ? 'home' : 'chat');
-  const [chatEntry, setChatEntry] = createSignal<'home' | 'list' | null>(null);
-  const tabBarVisible = () => homeEnabled() && (view() !== 'chat' || chatEntry() === null);
+  const conversationsReady = () => props.conversations === true && props.store != null && props.onConversationLoad != null;
+  const viewEntries = createMemo<ViewEntry[]>(() =>
+    homeEnabled()
+      ? [
+          { name: 'home', tabRoot: true },
+          { name: 'messages', tabRoot: true },
+          { name: 'chat', tabRoot: false },
+        ]
+      : [
+          { name: 'chat', tabRoot: true },
+          { name: 'list', tabRoot: false },
+        ],
+  );
+  const nav = createViewStack({ entries: viewEntries });
+  const view = nav.view;
+  /** The chat surface is showing: the 'chat' view itself, or the Messages tab
+   *  with no store wired (the root chat: tab bar stays, no back arrow). */
+  const chatShowing = () => view() === 'chat' || (view() === 'messages' && !conversationsReady());
+  /** The conversations list is showing (either grammar's spelling of it). */
+  const listShowing = () => conversationsReady() && (view() === 'list' || view() === 'messages');
+  const tabBarVisible = () => homeEnabled() && !nav.drilled();
   const activeTab = (): 'home' | 'messages' => (view() === 'home' ? 'home' : 'messages');
-  // The initial `view` signal value freezes the home-landing decision at
-  // MOUNT — but the `kai-` contract has consumers set object props (like
-  // `home`) as JS properties AFTER the element is appended/upgraded (the
-  // React wrapper's `useLayoutEffect` runs post-mount by construction), so
-  // `props.home` is routinely still `undefined` on this component's first
-  // render. Without this, `<kai-chat>` then `el.home = {...}` renders a
-  // tab bar (props.home is set by the time JSX reads it reactively) but
-  // stays on `view() === 'chat'` forever — H-5 violated on a primary
-  // consumer path. React to the RISING edge instead of relying on the
-  // initial value: `home` turning on from off lands on 'home', but only
-  // from the untouched default ('chat' with no drilled entry) — a late
-  // toggle must never yank a visitor OUT of a chat they're already in
-  // (root or drilled). `{ defer: true }` skips the run this effect's own
-  // creation would otherwise trigger.
-  // Falling edge (symmetric): `home` turning OFF while sitting on the
-  // 'home' view leaves a default-configured HomePanel with no tab bar to
-  // navigate away from — reset to 'chat', the only view a home-less widget
-  // has.
+  /** Land on the chat surface: a drill when 'chat' is a drill view (home
+   *  grammar), a root switch when it is the root (plain grammar). `navigate`
+   *  resolves that from the registered entries, so this stays one call. */
+  const goToChat = () => nav.navigate('chat');
+  // The home-landing decision cannot be frozen at MOUNT: the `kai-` contract
+  // has consumers set object props (like `home`) as JS properties AFTER the
+  // element is appended/upgraded (the React wrapper's `useLayoutEffect` runs
+  // post-mount by construction), so `props.home` is routinely still
+  // `undefined` on this component's first render. The navigator's untouched
+  // default root already follows `viewEntries` reactively ('home' appears
+  // as the first tab root the moment `home` is set), which covers the
+  // common late-set path on its own; this computed handles the EDGES where
+  // the visitor has already navigated:
+  //
+  // Rising edge: from the untouched default (root chat, no drill) land on
+  // 'home'; a list opened under the plain grammar becomes the Messages tab
+  // root. A visitor already IN a chat (root or drilled) is never yanked out.
+  // Falling edge: `home` turning OFF while on 'home'/'messages' leaves a
+  // view name the plain grammar does not have — reset to its equivalent
+  // ('chat', re-drilling 'list' when the list was showing).
   //
   // NOT `on(homeEnabled, fn, { defer: true })`: Solid's `on()` skips calling
   // `fn` on its first real invocation but does NOT capture the deferred
@@ -448,21 +482,82 @@ export function ChatThread(props: ChatThreadProps) {
     const isOn = homeEnabled();
     const wasOn = wasHomeEnabled;
     if (isOn !== wasOn) {
-      if (isOn && view() === 'chat' && chatEntry() === null) setView('home');
-      else if (!isOn && view() === 'home') setView('chat');
+      if (isOn) {
+        if (nav.view() === 'chat' && !nav.drilled()) nav.selectTab('home');
+        else if (nav.view() === 'list') nav.selectTab('messages');
+      } else {
+        if (nav.view() === 'home') nav.selectTab('chat');
+        else if (nav.view() === 'messages') {
+          nav.selectTab('chat');
+          if (untrack(conversationsReady)) nav.push('list');
+        }
+      }
     }
     wasHomeEnabled = isOn;
   });
+  // ── Conversations (C-1..C-9) — policy in the shipped controller (P-5) ───
+  // The lifecycle policy itself (the C-6 lazy-id mint, save-per-turn, mount
+  // auto-restore, the three-leg seen rule for markRead, the unread
+  // derivation, loud degradation) lives in `createConversationController`
+  // (`@kitn.ai/ui/stores`), the same controller every composed block runs,
+  // so facade and blocks cannot drift on policy. This component only adapts
+  // its prop-driven surface onto the controller's explicit calls and mirrors
+  // the controller's caches into signals for rendering.
   const [conversationSummaries, setConversationSummaries] = createSignal<ConversationSummary[]>([]);
   const [activeConversationId, setActiveConversationId] = createSignal<string | undefined>(undefined);
-  const conversationsReady = () => props.conversations === true && props.store != null && props.onConversationLoad != null;
-  // Set right before a load/restore hands its messages to the caller via
+  const [anyUnread, setAnyUnread] = createSignal(false);
+  // Armed right before a load/restore hands its messages to the caller via
   // `onConversationLoad`, and consumed (read-then-cleared) by the very next
-  // run of the save effect below. Plain closure variable, not a signal: it
-  // gates a single effect run rather than driving any render, so it needs no
-  // reactivity of its own. See the save effect's own comment for why this
-  // exists (IMPORTANT-1, 2026-08-26 final review).
-  let suppressNextSave = false;
+  // run of the save effect below: the caller bounces those same messages
+  // straight back in as a new `props.messages` reference (the reactivity
+  // contract requires a fresh array on every change, load included), and
+  // that bounce is a load ECHO, not a turn to persist — without this flag
+  // the save effect would re-save on every load (IMPORTANT-1, 2026-08-26
+  // final review: phantom-unreading a fully-read conversation on reload, a
+  // needless full-thread PUT for fetchStore). This is the one piece of
+  // save-gating that stays in the adapter: it exists only because this
+  // surface is prop-driven; a block calling `saveTurn` explicitly per turn
+  // has no echo to suppress. Plain closure variable, not a signal: it gates
+  // a single effect run rather than driving any render.
+  let loadEcho = false;
+
+  const controller = createMemo<ConversationController | undefined>(() => {
+    if (!conversationsReady()) return undefined;
+    return createConversationController(props.store!, {
+      initialView: untrack(() => view() ?? 'chat'),
+      initialOpen: untrack(() => props.hostOpen !== false),
+      onMessagesLoad: (messages, id) => {
+        // Same order the pre-controller code kept: stamp the active id, land
+        // on the chat surface, arm the echo skip, THEN hand the caller the
+        // messages — so the flag is set no matter how synchronously the
+        // caller re-renders.
+        setActiveConversationId(id);
+        goToChat();
+        if (id !== undefined) loadEcho = true;
+        props.onConversationLoad?.(messages, id);
+      },
+      onSummariesChange: (s) => setConversationSummaries(s),
+      onUnreadChange: (unread) => setAnyUnread(unread),
+      onError: (op, error) => {
+        if (op === 'list') {
+          // Note this can fire in the BACKGROUND (the controller refreshes
+          // after every save to keep the badge cache fresh), not just from a
+          // list open. Only bail OUT of the list view: a transient list()
+          // blip mid-drilled-chat (or on the root/home views) must stay a
+          // harmless no-op, not teleport the visitor; the list view itself
+          // is the one view with nothing to show without a summaries array.
+          console.warn('ChatThread: conversations list() failed; staying in chat-only mode.', error);
+          if (listShowing()) nav.selectTab(homeEnabled() ? 'home' : 'chat');
+        } else if (op === 'load') {
+          console.warn('ChatThread: conversations load() failed.', error);
+        } else {
+          // Decide loudly (save/markRead): the thread stays usable, the
+          // failure is surfaced, never a silent no-op.
+          console.error(`ChatThread: conversations ${op}() failed.`, error);
+        }
+      },
+    });
+  });
 
   onMount(() => {
     if (props.conversations && !props.store) {
@@ -472,215 +567,86 @@ export function ChatThread(props: ChatThreadProps) {
     }
   });
 
-  const refreshConversations = async () => {
-    if (!conversationsReady()) return;
-    try {
-      // Fresh array reference every refresh (reactivity contract) — the
-      // adapter already returns a new array per call, so no extra clone is
-      // needed here; the signal write is what notifies <ConversationPanel>.
-      setConversationSummaries(await props.store!.list());
-    } catch (err) {
-      // Note this can run in the BACKGROUND, not just from `openList()`: the
-      // save effect below calls this after every save() to keep the badge
-      // cache fresh. Only bail OUT of the list view here — a transient
-      // list() blip mid-drilled-chat (or on the root/home views) must stay a
-      // harmless no-op, not teleport the visitor off whatever they're doing;
-      // the list view itself has nothing to show without a summaries array,
-      // so THAT is the one view this failure has to evacuate.
-      console.warn('ChatThread: conversations list() failed; staying in chat-only mode.', err);
-      if (view() === 'list') {
-        setChatEntry(null);
-        setView(homeEnabled() ? 'home' : 'chat');
-      }
-    }
-  };
-
-  const openList = () => { setView('list'); void refreshConversations(); };
+  const openList = () => { nav.push('list'); void controller()?.refresh(); };
   // Messages-tab entry point (H-2): the list moved off the header toggle onto
-  // this tab, so it routes through 'list' when the store is wired and 'chat'
-  // (the root chat, ambiguity 1 — no back arrow, `chatEntry` stays null)
-  // otherwise.
+  // this tab. The 'messages' tab root renders the list when the store is
+  // wired and the root chat (ambiguity 1: no back arrow, tab bar stays)
+  // otherwise; either way it is a tab switch, so any drill clears.
   const openMessagesTab = () => {
-    setChatEntry(null);
-    if (conversationsReady()) { setView('list'); void refreshConversations(); }
-    else setView('chat');
-  };
-
-  const selectConversation = async (id: string) => {
-    if (!conversationsReady()) return;
-    try {
-      const messages = await props.store!.load(id);
-      setActiveConversationId(id);
-      setView('chat');
-      // IMPORTANT-1 (2026-08-26 final review): the caller is about to hand
-      // this same content straight back in as a new `props.messages`
-      // reference (the reactivity contract requires a fresh array on every
-      // change, load included). Without this flag the save effect below
-      // reads that as "the thread changed," stamps a fresh `updatedAt`, and
-      // calls `store.save()` — phantom-unreading a fully-read conversation
-      // on every reload and, for `fetchStore`, firing a full-thread PUT on
-      // every load for no actual change. Set BEFORE the callback so it's
-      // armed no matter how synchronously the caller re-renders.
-      suppressNextSave = true;
-      // A genuinely new array (never a mutated one) — the reactivity
-      // contract's array-reference rule, satisfied at the caller boundary.
-      props.onConversationLoad?.([...messages], id);
-    } catch (err) {
-      console.warn(`ChatThread: conversations load(${id}) failed.`, err);
-      // Defensive: a failed load must not leave a stale drilled-chat
-      // back-target around from whatever set it before calling this.
-      setChatEntry(null);
-    }
+    nav.selectTab('messages');
+    if (conversationsReady()) void controller()?.refresh();
   };
 
   const startNewConversation = () => {
-    // C-6: lazy id — no id, no save, until the first message. Clearing the
-    // active id and the message list (via onConversationLoad) is enough; the
-    // id itself is minted the first time the save-on-change effect below
-    // sees a non-empty thread with no active id. No `suppressNextSave` here:
-    // an empty thread already short-circuits the save effect on its own
-    // (`messages.length === 0`), so there is nothing to suppress.
+    // C-6 lives in the controller: clearing the active id and delivering []
+    // through `onMessagesLoad` is enough; the id itself is minted by the
+    // first non-empty `saveTurn`.
+    const ctrl = untrack(controller);
+    if (ctrl) { ctrl.startNew(); return; }
+    // No store wired (a home-only widget, or a caller without the
+    // conversations feature): still land on the chat surface and hand the
+    // caller a fresh empty thread, the pre-controller behavior of this seam.
     setActiveConversationId(undefined);
-    setView('chat');
+    goToChat();
     props.onConversationLoad?.([], undefined);
   };
 
+  // Seen legs into the controller: the host-open leg and which view is
+  // showing. The controller derives `seen` (active + chat view + open) and
+  // gates `markRead` on it; entering the seen state marks the active
+  // conversation read (the reopen-marks-read path).
+  createEffect(() => { void controller()?.setOpen(props.hostOpen !== false); });
+  createEffect(() => { void controller()?.setView(view() ?? 'chat'); });
+
+  // Save per turn: every non-empty `props.messages` change that is not the
+  // echo of a load (see `loadEcho`). The controller mints the lazy id (C-6)
+  // on the first non-empty save, saves, marks the conversation read while
+  // seen, and refreshes the summary cache so the badge moves even for a
+  // message landing while the host is closed.
   createEffect(() => {
-    if (!conversationsReady()) return;
+    const ctrl = controller();
+    if (!ctrl) return;
     const messages = props.messages;
     if (messages.length === 0) return; // C-6: nothing persists until the first message
-    // IMPORTANT-1: skip exactly the one save that is this same effect firing
-    // on the `props.messages` bounce a load/restore itself caused — see
-    // `suppressNextSave`'s own comment at `selectConversation`. Consumed
-    // (cleared) unconditionally so only that one run is skipped; a genuine
-    // edit right after a load still saves normally.
-    if (suppressNextSave) { suppressNextSave = false; return; }
-    // `untrack` the read: this effect also WRITES activeConversationId (minting
-    // the lazy id below), so a tracked read makes the effect depend on a signal
-    // it sets itself — the write re-triggers the same run and store.save() fires
-    // twice with identical args for a conversation's first message. Reading it
-    // untracked keeps the dependency set to `conversationsReady`/`props.messages`
-    // only; the mint-then-set below still updates the signal (for the toggle
-    // button/list UI) without feeding back into this effect's own re-run.
-    let id = untrack(activeConversationId);
-    if (!id) {
-      id = crypto.randomUUID();
-      setActiveConversationId(id);
-    }
-    props.store!.save(id, messages)
-      // Re-fetch the summary list after every save (not just on mount/list-open):
-      // `anyUnread`/the badge read `conversationSummaries()`, a CACHE that
-      // otherwise only refreshes on those two paths, so a message arriving on
-      // the active conversation while the host is closed (hostOpen === false —
-      // `seenNow` below is false, so `markRead` correctly does NOT fire) would
-      // update the persisted record's `updatedAt` but leave the cached summary
-      // stale, and the badge would never appear until the visitor happened to
-      // open the list. `refreshConversations` already no-ops safely if this
-      // component unmounts mid-flight (`conversationsReady` guard) and handles
-      // its own list() failure (console.warn, degrades to chat-only) — no new
-      // error path here.
-      .then(() => refreshConversations())
-      .catch((err) => {
-        // Decide loudly (spec's degradation section): the thread stays usable,
-        // the failure is surfaced, never a silent no-op.
-        console.error(`ChatThread: conversations save(${id}) failed; the conversation is not persisted for this change.`, err);
-      });
-  });
-
-  // "Seen" (owner round, 2026-08-26, revised in the follow-up review): the
-  // active conversation, AND the chat view (not the list) is showing, AND
-  // the host is open (`hostOpen`, defaulting true — see that prop's doc).
-  // ONE memo, shared by both consumers below, so they cannot drift: the
-  // markRead effect gates on it directly, and `anyUnread` uses it to decide
-  // whether the active conversation is still exempt from the "unread"
-  // badge. Before this fix the two were separately-written conditions that
-  // happened to look alike; `anyUnread` excluded the active id
-  // UNCONDITIONALLY, so a message arriving on the active conversation while
-  // the host was CLOSED (hostOpen === false) — the canonical "agent replied
-  // while your box was shut" case — was dropped from the badge too, even
-  // though it was never marked read (markRead's own gate correctly skips it
-  // while closed). The active id is only a legitimate exclusion when it is
-  // ALSO currently being marked seen.
-  const seenNow = createMemo(
-    () => activeConversationId() !== undefined && view() === 'chat' && props.hostOpen !== false,
-  );
-
-  // Every dependency read here is TRACKED — unlike the save effect above,
-  // nothing in this effect writes any of them, so there's no feedback loop
-  // to guard against with `untrack`. Re-running on every `props.messages`
-  // change is exactly "on new messages arriving while seen holds";
-  // re-running on `activeConversationId`/`view`/`hostOpen` changes is "on
-  // select/restore/host-visibility-change" (the first two resolve through
-  // `selectConversation`, which sets both).
-  createEffect(() => {
-    if (!conversationsReady()) return;
-    const id = activeConversationId();
-    const seen = seenNow();
-    void props.messages; // tracked on purpose: see the comment above
-    if (!seen || id === undefined) return;
-    props.store!.markRead?.(id).catch((err) => {
-      // Decide loudly, matching the save effect above — this degrades to
-      // "unread never clears for this conversation," not a crash.
-      console.error(`ChatThread: conversations markRead(${id}) failed.`, err);
+    if (loadEcho) { loadEcho = false; return; }
+    void ctrl.saveTurn(messages).then((id) => {
+      // Mirror the minted id into the signal the toggle/list UI reads.
+      if (id !== undefined) setActiveConversationId(id);
     });
   });
 
-  // The header toggle's own dot (rendered below) AND the value reported
-  // outward via onUnreadChange are the SAME computation — a Dock (or any
-  // other sibling control with no view into this thread's internal
-  // conversation-summary state) mirrors it through the callback rather than
-  // reaching in. Excludes the active conversation by id — but ONLY while
-  // `seenNow()` holds. When it doesn't (list view open, or the host is
-  // closed), the active conversation is exactly as unread-eligible as any
-  // other row: nothing has marked it seen, so a message landing on it must
-  // still surface here. `undefined` never matches a real conversation id, so
-  // the exclusion is simply inert (matches nothing) while not seen, rather
-  // than needing a second branch. Also excludes the active id (not by its
-  // possibly-stale lastReadAt) so switching `activeConversationId` — e.g.
-  // selecting a previously-unread row — clears that row's contribution to
-  // this badge immediately, without waiting on a fresh list() round-trip.
-  const anyUnread = createMemo(() =>
-    conversationSummaries().some(
-      (c) => c.id !== (seenNow() ? activeConversationId() : undefined) && isConversationUnread(c),
-    ),
-  );
+  // The header toggle's dot (rendered below) AND the value reported outward
+  // via onUnreadChange are the SAME computation, the controller's — a Dock
+  // (or any sibling control with no view into the summary cache) mirrors it
+  // through the callback rather than reaching in. Fires the initial `false`
+  // like every other render-derived callback here.
   createEffect(() => props.onUnreadChange?.(anyUnread()));
 
   // Visitor continuity (C-7's whole point): a plain-history construct
   // auto-restored the visitor's thread on mount, so upgrading to
   // `conversations` must not regress that — their most recent conversation
   // (migrated legacy thread included) has to reappear without an extra tap
-  // into the list. Guarded three ways: only when `list()` actually returned
-  // something (a failed list() already degrades to chat-only inside
-  // `refreshConversations`, and an empty store is a brand-new visitor who
-  // gets the empty-chat welcome screen); only when nothing is active yet
-  // (never fights `startNewConversation`/a prior `selectConversation`); and
-  // only when `props.messages` is still empty (a parent that seeded its own
-  // thread owns that choice — never clobber it). Reuses `selectConversation`
-  // so the fresh-array/`onConversationLoad` contract is the same single path
-  // as an explicit row click, and stays in `view() === 'chat'` throughout
-  // (this never opens the list). One more guard: `view()` is re-checked
-  // right before selecting, still 'chat' — mount's own list() and an
-  // impatient caller's own `openList()`/manual navigation racing it (both
-  // just microtask chains over the same synchronous localStorage) can
-  // interleave, and `selectConversation` unconditionally snaps `view` back
-  // to 'chat'; without this a visitor who opened the list before this
-  // resolved would get yanked back out of it.
+  // into the list. The pick + load ride the controller (`refresh` sorts the
+  // cache byRecency; `select` is the same single path as an explicit row
+  // click, fresh-array contract included). The guards stay at this boundary
+  // because they are about the CALLER's state, which the controller cannot
+  // see: only when nothing is active yet (never fights startNew/a prior
+  // select); only when `props.messages` is still empty (a parent that
+  // seeded its own thread owns that choice); and only while the chat view
+  // is (still) showing — re-checked AFTER the refresh await, so a visitor
+  // who opened the list while mount's list() was in flight is not yanked
+  // back out of it (select unconditionally lands on the chat surface).
   onMount(() => {
-    if (!conversationsReady()) return;
+    const ctrl = untrack(controller);
+    if (!ctrl) return;
     void (async () => {
-      await refreshConversations();
+      await ctrl.refresh();
       if (untrack(activeConversationId) !== undefined) return;
       if (props.messages.length !== 0) return;
-      if (view() !== 'chat') return;
-      const summaries = conversationSummaries();
+      if (untrack(view) !== 'chat') return;
+      const summaries = untrack(conversationSummaries);
       if (summaries.length === 0) return;
-      // Most-recently-updated first. `list()`'s own ordering isn't a
-      // contract (`localStorageStore` returns insertion order, not recency),
-      // so sort defensively by `updatedAt` rather than trusting index [0];
-      // an unparsable/missing date sorts last rather than throwing.
-      const newest = [...summaries].sort(byRecency)[0];
-      await selectConversation(newest.id);
+      await ctrl.select(summaries[0].id); // the controller cache is byRecency-sorted
     })();
   });
   // A string `value` is controlled; a ComposerDoc `value` is a one-time seed that
@@ -709,7 +675,7 @@ export function ChatThread(props: ChatThreadProps) {
     // title/models/context/store — a home-only construct (no `conversations`)
     // whose "new conversation" card drills into chat still needs somewhere
     // to put it.
-    || (homeEnabled() && view() === 'chat' && chatEntry() !== null)
+    || (homeEnabled() && nav.drilled())
   );
   // Recent-conversation card (H-1): only when explicitly opted into
   // (`home.recentConversation === true`), summaries are actually hydrated,
@@ -717,7 +683,7 @@ export function ChatThread(props: ChatThreadProps) {
   const recentSummary = createMemo(() => {
     if (!homeEnabled() || props.home?.recentConversation !== true || !conversationsReady()) return undefined;
     const summaries = conversationSummaries();
-    return summaries.length ? [...summaries].sort(byRecency)[0] : undefined;
+    return summaries.length ? summaries[0] : undefined; // controller-sorted, newest first
   });
   // Suggestions are conversation starters: show only on an empty thread unless
   // the host opts into persisting them.
@@ -738,7 +704,7 @@ export function ChatThread(props: ChatThreadProps) {
         const vp = rootEl?.querySelector<HTMLElement>('.overflow-y-auto');
         vp?.scrollTo({ top: vp.scrollHeight, behavior: behavior ?? 'smooth' });
       },
-      closeConversationsList: () => { setChatEntry(null); setView(homeEnabled() ? 'home' : 'chat'); },
+      closeConversationsList: () => nav.selectTab(homeEnabled() ? 'home' : 'chat'),
       startNewConversation: () => startNewConversation(),
     });
   });
@@ -753,25 +719,29 @@ export function ChatThread(props: ChatThreadProps) {
             <slot name="sidebar" />
           </aside>
         </Show>
-        <div class="flex h-full min-w-0 flex-1 flex-col">
+        {/* The main column renders THROUGH the public Panel family (P-1/P-9):
+            frameless, so inside an already-framed host (kai-dock's floating
+            panel) it inherits that container's radius; the header row, view
+            container and footer strip below are the same parts every composed
+            block renders, so facade/block parity is structural. */}
+        <Panel class="min-w-0 flex-1">
           {/* Header: a full `header` slot REPLACES the built-in bar; otherwise the
-              built-in header renders, itself carrying the header-start/header-end
-              INJECT slots. */}
+              built-in PanelHeader renders, itself carrying the header-start/
+              header-end INJECT slots in its start/end regions. */}
           <Show
             when={props.headerFull}
             fallback={
               <Show when={showHeader()}>
-                <header part="header-bar" class="flex h-14 shrink-0 items-center justify-between border-b border-border px-5">
-                  <div class="flex items-center gap-2">
-                    {/* Consumer-injected leading controls (sidebar-toggle, compose, a
+                <PanelHeader
+                  part="header-bar"
+                  start={
+                    /* Consumer-injected leading controls (sidebar-toggle, compose, a
                         popover title-button). Projects light-DOM `slot="header-start"`
-                        children of <kai-chat>; inert outside a shadow root. */}
+                        children of <kai-chat>; inert outside a shadow root. */
                     <slot name="header-start" />
-                    <Show when={props.chatTitle}>
-                      <div class="text-sm font-semibold text-foreground">{props.chatTitle}</div>
-                    </Show>
-                  </div>
-                  <div class="flex items-center gap-2">
+                  }
+                  end={
+                  <>
                     <Show when={props.models}>
                       <ModelSwitcher
                         models={props.models!}
@@ -804,13 +774,13 @@ export function ChatThread(props: ChatThreadProps) {
                     {/* Back arrow for a DRILLED chat (H-5): entered from home, the
                         recent card, or a list row/new-conversation pill while `home`
                         is set. Returns to whichever surface it was entered from. */}
-                    <Show when={homeEnabled() && view() === 'chat' && chatEntry() !== null}>
+                    <Show when={homeEnabled() && nav.drilled()}>
                       <Button
                         variant="ghost"
                         size="icon-sm"
                         data-kai-home-back
                         aria-label="Back"
-                        onClick={() => { const target = chatEntry()!; setChatEntry(null); setView(target); }}
+                        onClick={() => nav.back()}
                       >
                         <ArrowLeft size={24} aria-hidden="true" />
                       </Button>
@@ -834,7 +804,7 @@ export function ChatThread(props: ChatThreadProps) {
                               ? 'Conversations (unread)'
                               : 'Conversations'
                         }
-                        onClick={() => (view() === 'list' ? setView('chat') : openList())}
+                        onClick={() => (view() === 'list' ? nav.selectTab('chat') : openList())}
                       >
                         <Show when={view() === 'list'} fallback={<MessagesSquare size={24} aria-hidden="true" />}>
                           <ArrowLeft size={24} aria-hidden="true" />
@@ -858,14 +828,19 @@ export function ChatThread(props: ChatThreadProps) {
                         close affordance is the motivating case, sharing this row with
                         the title instead of floating as an unrelated second control. */}
                     {props.headerEndContent}
-                  </div>
-                </header>
+                  </>
+                  }
+                >
+                  {props.chatTitle || undefined}
+                </PanelHeader>
               </Show>
             }
           >
             <header part="header" class="shrink-0"><slot name="header" /></header>
           </Show>
-          <div class="relative flex-1 overflow-hidden">
+          {/* The view container: ChatThread's old `relative flex-1
+              overflow-hidden` body, now the public PanelBody part. */}
+          <PanelBody>
             <Switch
               fallback={
                 <ChatContainer class="h-full px-4 py-3">
@@ -961,33 +936,43 @@ export function ChatThread(props: ChatThreadProps) {
               }
             >
               <Match when={view() === 'home'}>
-                <HomePanel
-                  greeting={props.home?.greeting}
-                  recent={recentSummary()}
-                  newChatLabel={props.home?.newConversation?.label}
-                  links={props.home?.links}
-                  onSelectRecent={(id) => { setChatEntry('home'); void selectConversation(id); }}
-                  onNewChat={() => { setChatEntry('home'); startNewConversation(); }}
-                  onLink={(entry) => props.onHomeLink?.(entry)}
-                />
+                {/* REPLACE — custom home-tab content (region slots, P-6). The
+                    navigation (tab bar, drills, back) stays the kit's own; only
+                    the home view's CONTENT is stood in for. */}
+                <Show
+                  when={props.homeFull}
+                  fallback={
+                    <HomePanel
+                      greeting={props.home?.greeting}
+                      recent={recentSummary()}
+                      newChatLabel={props.home?.newConversation?.label}
+                      links={props.home?.links}
+                      onSelectRecent={(id) => void controller()?.select(id)}
+                      onNewChat={() => startNewConversation()}
+                      onLink={(entry) => props.onHomeLink?.(entry)}
+                    />
+                  }
+                >
+                  <slot name="home" />
+                </Show>
               </Match>
-              <Match when={view() === 'list' && conversationsReady()}>
+              <Match when={listShowing()}>
                 <ConversationPanel
                   conversations={conversationSummaries()}
                   activeId={activeConversationId()}
-                  onSelect={(id) => { setChatEntry(homeEnabled() ? 'list' : null); void selectConversation(id); }}
-                  onNewChat={() => { setChatEntry(homeEnabled() ? 'list' : null); startNewConversation(); }}
+                  onSelect={(id) => void controller()?.select(id)}
+                  onNewChat={() => startNewConversation()}
                 />
               </Match>
             </Switch>
-          </div>
+          </PanelBody>
           {/* The list view TAKES OVER the full content area (owner: "if we are
               looking at the conversations, i don't think i would see the
               suggestions nor the prompt input... the convo list would be taking
               over the full content area"). The retrofit only swapped the thread;
               this hides the composer-actions row, the composer itself and the
               footer too — nothing below the header renders except the panel. */}
-          <Show when={view() === 'chat'}>
+          <Show when={chatShowing()}>
             {/* INJECT — accessory row above the composer (extra actions/toolbar). */}
             <Show when={props.composerActions}>
               <div class="shrink-0 px-4">
@@ -1022,25 +1007,28 @@ export function ChatThread(props: ChatThreadProps) {
                 <Show when={props.composerEnd}>{props.composerEnd}</Show>
               </div>
             </div>
-            {/* INJECT: footer row below the composer. */}
+            {/* INJECT: footer row below the composer, on the public
+                PanelFooter part. */}
             <Show when={props.footer}>
-              <div part="footer" class="shrink-0 px-4 pb-3">
+              <PanelFooter part="footer" class="px-4 pb-3">
                 <div class="mx-auto max-w-3xl text-center text-xs text-muted-foreground"><slot name="footer" /></div>
-              </div>
+              </PanelFooter>
             </Show>
           </Show>
-          {/* Home/Messages tab bar (H-2/H-6): shown on the 'home' and 'list'
-              views and on the ROOT chat (Messages tab, conversations off —
-              ambiguity 1), hidden on a DRILLED chat so the back arrow above
-              is the only way back. */}
+          {/* Home/Messages tab bar (H-2/H-6): shown on the tab roots (home,
+              the Messages tab's list or root chat), hidden on a DRILLED chat
+              so the back arrow above is the only way back — the navigator's
+              own drilled flag IS that rule (P-3). */}
           <Show when={tabBarVisible()}>
-            <WidgetTabBar
-              active={activeTab()}
-              onChange={(tab) => (tab === 'home' ? setView('home') : openMessagesTab())}
-              unread={anyUnread()}
-            />
+            <PanelFooter>
+              <WidgetTabBar
+                active={activeTab()}
+                onChange={(tab) => (tab === 'home' ? nav.selectTab('home') : openMessagesTab())}
+                unread={anyUnread()}
+              />
+            </PanelFooter>
           </Show>
-        </div>
+        </Panel>
       </div>
     </ChatConfig>
   );
