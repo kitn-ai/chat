@@ -52,7 +52,7 @@ du -sk dist/builder-page dist/theme-studio dist/gallery > "$SCRATCH/baseline/dis
 grep -cE "^dist/(builder-app|gallery-app|theme-studio-app)/" "$SCRATCH/baseline/pack-files.txt"
 ```
 where `SCRATCH` is the scratchpad path above (`mkdir -p "$SCRATCH/baseline"` first).
-Expected: the last grep prints a number greater than 0 (the leakage exists today; Task 7 expects it to be 0).
+Expected: the last grep prints a number greater than 0 (the leakage exists today; Task 7 expects it to be 0). lint-thresholds: waive -- a presence check on today's tarball, not a measured budget
 
 - [ ] **Step 3: Confirm the gates are green BEFORE the move**
 
@@ -401,6 +401,7 @@ git commit -m "docs: point the map and pack-weight narrative at packages/ui/apps
 
 - [ ] **Step 1: Build cold, then every gate**
 
+<!-- gate-list: partial -- a task checklist for this plan: the CI gates plus builds and the docs site, not a restatement of the test job -->
 ```bash
 nx build ui --skip-nx-cache
 nx typecheck ui --skip-nx-cache
