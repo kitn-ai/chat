@@ -81,7 +81,14 @@
       .chat-view kai-prompt-input { display: block; padding: 0 1rem 1rem; }
       .list-view { position: relative; }
       .list-view kai-conversations { flex: 1; min-height: 0; display: block; }
-      .list-view .new-pill { position: absolute; bottom: 1rem; left: 50%; transform: translateX(-50%); }
+      .list-view .row-time { font-size: 0.75rem; color: var(--color-muted-foreground); }
+      /* The facade's floating pill: rounded-full, shadow-md, background fill. */
+      .list-view .new-pill { position: absolute; bottom: 0.75rem; left: 50%; transform: translateX(-50%); }
+      .list-view .new-pill::part(button) {
+        border-radius: 999px;
+        background: var(--color-background);
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+      }
 
       /* Widget tab bar (hand-built — mirrors the facade's WidgetTabBar:
          icon-over-label columns, not kai-tabs' segmented pills; see the
@@ -159,7 +166,10 @@
                slot, and the facade's floating "New conversation" pill is
                rebuilt in light DOM. -->
           <div class="view list-view" id="view-list" hidden>
-            <kai-conversations id="conversations">
+            <!-- searchable="false": the round-2 KIT fix (the facade's widget
+                 list renders no search; this element previously had no way
+                 to drop it — F-8, now closed). -->
+            <kai-conversations id="conversations" searchable="false">
               <span slot="header"></span>
             </kai-conversations>
             <kai-button id="new-conversation" class="new-pill" variant="outline" size="sm">New conversation</kai-button>
@@ -182,13 +192,16 @@
         <!-- Hand-built widget tab bar (icon-over-label, facade-style).
              kai-tabs could not reproduce this look — see the report. -->
         <nav class="tabbar" id="tabbar" role="tablist" aria-label="Widget navigation">
+          <!-- size="lg" = 20px, the facade WidgetTabBar's size-5, and the
+               same explicit size on BOTH icons (round 2: they rendered
+               visibly unequal at the default). -->
           <button type="button" role="tab" id="tab-home" aria-selected="true" aria-label="Home">
-            <kai-icon name="home"></kai-icon>
+            <kai-icon name="home" size="lg"></kai-icon>
             <span>Home</span>
           </button>
           <button type="button" role="tab" id="tab-messages" aria-selected="false" aria-label="Messages">
             <span class="glyph">
-              <kai-icon name="message-square"></kai-icon>
+              <kai-icon name="message-square" size="lg"></kai-icon>
               <span class="dot" id="tab-unread-dot" hidden></span>
             </span>
             <span>Messages</span>

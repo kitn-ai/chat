@@ -108,9 +108,13 @@ async function refreshSummaries() {
   for (const s of summaries) {
     const item = document.createElement('kai-conversation-item');
     item.setAttribute('conversation-id', s.id);
+    item.setAttribute('compact', ''); // round 2: the facade's list rows are the dense presentation
     item.append(document.createTextNode(s.title));
+    // Right-aligned relative time, like the facade's rows: the `menu` slot is
+    // the right-aligned region (`meta` renders UNDER the title).
     const time = document.createElement('span');
-    time.slot = 'meta';
+    time.slot = 'menu';
+    time.className = 'row-time';
     time.textContent = relativeTimeShort(s.updatedAt ?? s.lastMessageAt);
     item.append(time);
     conversations.append(item);
