@@ -786,9 +786,12 @@ describe('the gallery route table', () => {
     );
     expect(react.map((f) => f.path)).not.toContain('demo-block.html');
     // cdn — one self-contained file with imports pinned to the served version.
+    // The expected URL is DERIVED from the fixture's version, never a literal
+    // pin: lint:cdn-pins scans every @kitn.ai/ui@<semver> literal in the tree
+    // and would (rightly) flag a hand-typed one here as a live unwired pin.
     const cdn = filesOf('cdn');
     expect(cdn.map((f) => f.path)).toEqual(['demo-block.html']);
-    expect(cdn[0].content).toContain('https://cdn.jsdelivr.net/npm/@kitn.ai/ui@9.9.9/dist/');
+    expect(cdn[0].content).toContain(`https://cdn.jsdelivr.net/npm/@kitn.ai/ui@${dirs.version}/dist/`);
   });
 
   it('unknown forms and blocks on the form/zip routes answer missing — the form list derived, never restated', () => {
