@@ -166,11 +166,20 @@ export const FramelessInDock: Story = {
  * scoped to a subtree"); the `--kai-color-*` spelling re-resolves inside
  * the shadow roots of the `kai-*` element facades, which is the phase-2
  * block driver's probe.
+ *
+ * The accent's LIGHTNESS is measured, not decorative. This story ships a
+ * copy-pasteable accent recipe (it IS the Code tab's snippet), so the pair it
+ * demonstrates has to be one a consumer can actually adopt. At the original
+ * `oklch(0.62 0.25 330)` = #d231cb the near-white foreground declared beside
+ * it is 3.99:1 — under WCAG AA's 4.5:1 for normal text, and axe failed the
+ * CTA on exactly that. Same hue and chroma, four hundredths darker:
+ * `oklch(0.58 0.25 330)` = #c41cbe measures 4.73:1. L=0.59 (4.52:1) is the
+ * lightest that clears at all, so do not nudge this back up.
  */
 export const AccentOverride: Story = {
   args: { frame: true },
   render: (args: { frame?: boolean }) => (
-    <div style={{ width: '380px', height: '560px', '--color-primary': 'oklch(0.62 0.25 330)', '--color-primary-foreground': 'oklch(0.985 0 0)' }}>
+    <div style={{ width: '380px', height: '560px', '--color-primary': 'oklch(0.58 0.25 330)', '--color-primary-foreground': 'oklch(0.985 0 0)' }}>
       <Panel frame={args.frame}>
         <PanelHeader end={<CloseButton />}>Aurora Support</PanelHeader>
         <PanelBody>
@@ -179,7 +188,7 @@ export const AccentOverride: Story = {
       </Panel>
     </div>
   ),
-  ...src(`<div style={{ '--color-primary': 'oklch(0.62 0.25 330)', '--color-primary-foreground': 'oklch(0.985 0 0)' }}>
+  ...src(`<div style={{ '--color-primary': 'oklch(0.58 0.25 330)', '--color-primary-foreground': 'oklch(0.985 0 0)' }}>
   <Panel frame>
     <PanelHeader end={<CloseButton />}>Aurora Support</PanelHeader>
     <PanelBody>...</PanelBody>
