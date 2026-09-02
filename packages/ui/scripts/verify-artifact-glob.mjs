@@ -118,6 +118,28 @@ export function ignoredPaths(porcelain) {
 
 const excused = (p) => RUNTIME_CACHES.some(([dir]) => p === dir || p.startsWith(`${dir}/`));
 
+/**
+ * `written` is the diff between the pre-build and post-build snapshots. If the
+ * pre-build snapshot was taken AFTER a build already happened -- a dirty or
+ * reused tree -- `packages/ui/dist` is already ignored in BOTH snapshots, so it
+ * never shows up as "written" and every check below it passes on an empty set.
+ * That is the guard's own vacuous-pass hole: it would report success having
+ * compared nothing. `dist/` is always build output, so its absence from
+ * `written` is proof the snapshot is stale, not proof the build wrote nothing.
+ */
+export function assertBuildWroteDist(written) {
+  const distPath = `${SCOPE}/dist`;
+  if (!written.some((p) => p === distPath || p.startsWith(`${distPath}/`))) {
+    throw new GuardError(
+      `no build output under ${distPath} appears in the written set (${written.length} path(s): ` +
+        `${written.length > 0 ? written.join(', ') : '(none)'}).\n` +
+        `  Either the pre-build snapshot was taken AFTER a build (a dirty or reused tree already has\n` +
+        `  ${distPath} ignored, so the diff shows nothing new), or the build wrote nothing. Fix it by\n` +
+        `  taking ARTIFACT_GLOB_BEFORE's snapshot on a clean tree before \`nx build ui\` runs, never after.`,
+    );
+  }
+}
+
 const IS_MAIN = Boolean(process.argv[1]) && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (SELF_TEST && IS_MAIN) {
@@ -181,6 +203,33 @@ if (SELF_TEST && IS_MAIN) {
   report(excused('packages/ui/node_modules/foo'), 'a runtime cache is excused by prefix');
   report(!excused('packages/ui/dist'), 'a build output is not excused');
 
+  try {
+    assertBuildWroteDist(['packages/ui/dist/kai.es.js', 'packages/ui/src/elements/compiled.css']);
+    report(true, 'a written set that includes packages/ui/dist passes');
+  } catch {
+    report(false, 'a written set that includes packages/ui/dist passes');
+  }
+
+  try {
+    assertBuildWroteDist([]);
+    report(false, 'THE FIX: an empty written set (a stale pre-build snapshot) is a hard failure, not a vacuous pass');
+  } catch (err) {
+    report(
+      err instanceof GuardError && /packages\/ui\/dist/.test(err.message),
+      'THE FIX: an empty written set (a stale pre-build snapshot) is a hard failure, not a vacuous pass',
+    );
+  }
+
+  try {
+    assertBuildWroteDist(['packages/ui/src/elements/compiled.css']);
+    report(false, 'a non-empty written set that never touched packages/ui/dist is still a hard failure');
+  } catch (err) {
+    report(
+      err instanceof GuardError && /packages\/ui\/dist/.test(err.message),
+      'a non-empty written set that never touched packages/ui/dist is still a hard failure',
+    );
+  }
+
   if (failed > 0) {
     console.error(`\n✗ verify-artifact-glob self-test: ${failed} case(s) failed.`);
     process.exit(1);
@@ -241,6 +290,12 @@ if (IS_MAIN) {
 
   const before = ignoredPaths(readFileSync(BEFORE, 'utf8'));
   const written = after.filter((p) => !before.includes(p));
+  try {
+    assertBuildWroteDist(written);
+  } catch (err) {
+    if (!(err instanceof GuardError)) throw err;
+    fail(err.message);
+  }
   const uncovered = written.filter((p) => !excused(p) && !covers(globs, p));
 
   if (uncovered.length > 0) {
