@@ -1,0 +1,6 @@
+# Agent worktrees under .claude/worktrees/ are full repo copies, each with its own
+# node_modules. Nx's project-graph construction walks into them and tries to load
+# nx plugins out of their node_modules, which breaks project-graph processing in the
+# main checkout once enough stale worktrees accumulate. Keep Nx from discovering
+# projects or plugins inside them.
+.claude/worktrees/
