@@ -297,6 +297,17 @@ describe('verify:pack still detects', () => {
     expect(output).toContain('dist/index.js is missing');
   });
 
+  it('fires when the tarball has no dist/blocks/** at all', () => {
+    // The other half of what the CLI ships, same failure shape as the
+    // dist/templates/** case above: a bundled CLI with no blocks installs
+    // cleanly and only fails at the user's first `create-kai add`.
+    const root = fixtureRoot(tree({ 'blocks/assistant/registry-item.json': null }));
+    const { code, output } = runVerifier(root);
+
+    expect(code, 'a tarball with no blocks at all was accepted').toBe(1);
+    expect(output).toContain('no dist/blocks/**');
+  });
+
   /**
    * THE PIN `create-kai@0.1.2` SHIPPED. That release went to npm bundling
    * `^0.24.0`.
