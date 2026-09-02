@@ -153,6 +153,14 @@ const COMPILES_TYPESCRIPT = 30_000;
  */
 const TRANSFORMS_A_MODULE_GRAPH = 20_000;
 
+/**
+ * Spawns real `playwright test --list` runs from inside a test body. Each one
+ * is a fresh node process that type-strips a config and loads every spec file
+ * that config matches, which is the same kind of cost as COMPILES_TYPESCRIPT
+ * and is charged to the test's budget.
+ */
+const SPAWNS_PLAYWRIGHT_LIST = 30_000;
+
 export const TEST_TIMEOUT_BUDGETS: readonly TestTimeoutBudget[] = [
   {
     file: 'tests/elements/element-types-lib-check.test.ts',
@@ -185,6 +193,12 @@ export const TEST_TIMEOUT_BUDGETS: readonly TestTimeoutBudget[] = [
     file: 'tests/primitives/highlighter.test.ts',
     timeout: TRANSFORMS_A_MODULE_GRAPH,
     because: 'loads the real Shiki engine and its language grammars rather than a stub',
+  },
+  {
+    file: 'tests/scripts/playwright-projects-guard-wiring.test.ts',
+    timeout: SPAWNS_PLAYWRIGHT_LIST,
+    because:
+      'its `--self-test` case spawns three real `playwright test --list` runs against planted config copies, each type-stripping a config and loading every spec it matches; measured 4555ms on a 2-core GitHub runner (run 33592435122), 91% of the default. The other cases in the file were made cheap instead of being listed here: two that re-ran the full three-config check are now one config and a `--list-configs` scan, since verifying all fourteen projects is the required dist-guards step, and the detection case dropped a second playwright spawn by reading the same fact off the guard message',
   },
 ];
 

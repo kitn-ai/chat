@@ -264,6 +264,19 @@ function checkScripts(scripts, projectsByConfig) {
 }
 
 /**
+ * `--list-configs`: print the scanned config paths, one per line, and stop.
+ *
+ * No playwright is spawned, so this costs milliseconds where a full run costs
+ * seconds per config. It exists so the wiring test can assert the SCAN (that the
+ * config list comes off disk rather than out of a hardcoded array) without
+ * paying for three listings to learn something the listings do not tell it. The
+ * floor still applies, so this is also the cheapest way to see the scan is alive.
+ */
+function runListConfigs() {
+  for (const name of scanConfigs()) console.log(`${CONFIG_REL}/${name}`);
+}
+
+/**
  * `--config <path>`: check exactly one config and nothing else. The scan, its
  * floor and the npm-script cross-check are all skipped, because none of them is
  * meaningful for a single file. This exists for the wiring test, which plants a
@@ -428,6 +441,7 @@ const args = process.argv.slice(2);
 const one = args.indexOf('--config');
 try {
   if (args.includes('--self-test')) selfTest();
+  else if (args.includes('--list-configs')) runListConfigs();
   else if (one !== -1) {
     if (!args[one + 1]) throw new GuardError('--config needs a path');
     runOne(args[one + 1]);

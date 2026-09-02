@@ -64,8 +64,16 @@ function runCheck(args: string[]): { code: number; output: string } {
  * scan skips it (and so does `tsconfig.tests.json`'s `config/**` include).
  */
 const planted: string[] = [];
-function plantConfig(source: string, mutate: (src: string) => string): string {
-  const name = `.wiring-${process.pid}-${source}`;
+function plantConfig(
+  source: string,
+  mutate: (src: string) => string,
+  opts: { visibleToScan?: boolean } = {},
+): string {
+  // `visibleToScan` drops the dot so the guard's own scan DOES see the copy.
+  // Only the scan probe wants that; everything else must stay invisible.
+  const name = opts.visibleToScan
+    ? `zz-wiring-probe-${process.pid}-${source}`
+    : `.wiring-${process.pid}-${source}`;
   const path = join(CONFIG_DIR, name);
   const src = readFileSync(join(CONFIG_DIR, source), 'utf-8');
   const out = mutate(src);
@@ -76,6 +84,13 @@ function plantConfig(source: string, mutate: (src: string) => string): string {
 
 afterEach(() => {
   while (planted.length > 0) rmSync(planted.pop() as string, { force: true });
+  // Belt and braces: a copy left behind by a killed run would be picked up by
+  // the real guard and by tsconfig.tests.json's `config/**` include.
+  for (const n of readdirSync(CONFIG_DIR)) {
+    if (n.startsWith('zz-wiring-probe-') || n.startsWith('.wiring-')) {
+      rmSync(join(CONFIG_DIR, n), { force: true });
+    }
+  }
 });
 
 describe('the playwright project-coverage guard detects, and CI runs it', () => {
@@ -106,6 +121,13 @@ describe('the playwright project-coverage guard detects, and CI runs it', () => 
     ).toContain(NPM_SCRIPT);
   });
 
+  // THE EXPENSIVE ONE, and the reason this file has a per-file entry in
+  // `test-timeout-budgets.ts`. `--self-test` spawns three real
+  // `playwright test --list` runs against planted config copies, and each of
+  // those type-strips and loads every spec the config matches. Measured at
+  // 4555ms on a 2-core GitHub runner, which is 91% of the strict 5000ms
+  // default. It cannot be made cheaper without making it prove less: spawning
+  // real playwright against a real planted fault IS the thing being checked.
   it('its own --self-test passes (planted faults all fire, control passes)', () => {
     const { code, output } = runCheck(['--self-test']);
     expect(code, `the self-test did not pass:\n${output}`).toBe(0);
@@ -113,29 +135,54 @@ describe('the playwright project-coverage guard detects, and CI runs it', () => 
     expect(output).toContain('control');
   });
 
-  it('the real tree is currently clean, and the run PRINTS the per-project counts', () => {
-    const { code, output } = runCheck([]);
+  it('PRINTS a per-project count for the config it was pointed at', () => {
+    // ONE config, not all three. Verifying that all fourteen projects are
+    // currently healthy is the REQUIRED `dist-guards` step's job -- it runs the
+    // same script with no arguments on every CI run, and it is where a broken
+    // testMatch must go red. Re-running it here bought a duplicate verdict and
+    // cost three playwright listings: 5503ms on a 2-core runner, over the
+    // strict 5000ms default. What this test owes is narrower and is fully
+    // covered by one config: the guard exits 0 on a healthy config and PRINTS
+    // the counts rather than just saying "ok".
+    //
+    // cross-origin is the cheapest (one project, one spec file).
+    const { code, output } = runCheck(['--config', 'config/playwright/cross-origin.config.ts']);
     expect(code, `a project matches no spec files:\n${output}`).toBe(0);
-    // The counts are the useful output: "green" here means "every project has at
-    // least one test", and a reader needs to see which projects those were.
-    expect(output).toContain('config/playwright/storybook.config.ts');
-    expect(output).toContain('config/playwright/bare.config.ts');
     expect(output).toContain('config/playwright/cross-origin.config.ts');
-    expect(output).toMatch(/\btest\(s\)/);
+    // The count itself, not a pinned number: pinning one would rot the day
+    // somebody adds a cross-origin test, and "prints a count" is the claim.
+    expect(output, `no per-project count line in:\n${output}`).toMatch(
+      /chromium\s+\d+ test\(s\)/,
+    );
   });
 
-  it('the config directory is scanned, not hardcoded: every config on disk is reported', () => {
+  it('the config directory is SCANNED, not hardcoded: a new config on disk is picked up', () => {
+    // `--list-configs` runs the real `scanConfigs` and stops, so this costs
+    // milliseconds instead of three playwright listings (the previous shape ran
+    // the full check and measured 4369ms on a 2-core runner, 87% of budget).
+    // It is also STRONGER than what it replaces: comparing the scan against the
+    // current directory would agree with a hardcoded list that happened to be
+    // correct today, so a fourth config is planted and must show up.
     const onDisk = readdirSync(CONFIG_DIR)
       .filter((n) => n.endsWith('.config.ts') && !n.startsWith('.'))
       .sort();
-    // Anti-vacuity: an empty directory would make the loop below assert nothing.
     expect(onDisk.length, `no playwright configs found in ${CONFIG_DIR}`).toBeGreaterThan(0);
-    const { output } = runCheck([]);
+
+    const before = runCheck(['--list-configs']);
+    expect(before.code, `--list-configs failed:\n${before.output}`).toBe(0);
     for (const name of onDisk) {
-      expect(output, `${name} is on disk but the guard did not report it`).toContain(
+      expect(before.output, `${name} is on disk but the scan did not report it`).toContain(
         `config/playwright/${name}`,
       );
     }
+
+    const extra = plantConfig('cross-origin.config.ts', (src) => src, { visibleToScan: true });
+    const after = runCheck(['--list-configs']);
+    expect(after.code, `--list-configs failed with a fourth config present:\n${after.output}`).toBe(0);
+    expect(
+      after.output,
+      'a config added to the directory was not reported, so the list is not coming off disk',
+    ).toContain(extra);
   });
 
   it('FIRES on a project that matches no spec files (the case playwright exits 0 on)', () => {
@@ -150,23 +197,21 @@ describe('the playwright project-coverage guard detects, and CI runs it', () => 
       return out;
     });
 
-    // The control that makes this discriminating: playwright itself is HAPPY.
-    let pwCode = 0;
-    try {
-      execFileSync('npx', ['playwright', 'test', '--config', rel, '--list'], {
-        cwd: pkgRoot,
-        encoding: 'utf-8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-    } catch (err) {
-      pwCode = (err as { status?: number }).status ?? -1;
-    }
-    expect(pwCode, 'playwright rejected the planted config, so this fixture proves nothing').toBe(0);
-
     const { code, output } = runCheck(['--config', rel]);
     expect(code, `the guard did not fire on an empty project:\n${output}`).not.toBe(0);
     expect(output).toContain('content-brand-bleed');
     expect(output).toContain('ZERO spec files');
+
+    // The control that makes this discriminating: playwright ITSELF was happy
+    // with the planted config, so the guard is reporting something playwright
+    // would not have. Read off the guard's own message rather than from a
+    // second `playwright --list` spawn, which cost another second and a half to
+    // learn the same fact: the guard appends a `THE LISTING ITSELF EXITED n`
+    // section if and only if the listing exited non-zero.
+    expect(
+      output,
+      'playwright rejected the planted config, so this fixture proves nothing about the exit-0 case',
+    ).not.toContain('THE LISTING ITSELF EXITED');
   });
 
   it('PASSES over an unmodified copy of the same config (so the fixture is the fault, not the copy)', () => {
