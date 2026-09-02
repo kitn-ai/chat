@@ -1,6 +1,6 @@
 // Blocks generation (Task 3.1, blocks-and-parts plan 2026-08-31): the
-// filesystem half of mcp/blocks/registry.ts. Scans
-// packages/ui/blocks/<id>/ (a block IS a directory with a registry-item.json
+// filesystem half of @kitn.ai/blocks's src/registry.ts. Scans
+// packages/blocks/blocks/<id>/ (a block IS a directory with a registry-item.json
 // - adding one moves every output with no list to edit), validates manifests
 // and the kai- contract checks, then emits the derived artifacts.
 //
@@ -72,7 +72,18 @@ async function importTs(entry) {
   return mod;
 }
 
-const blocksMod = await importTs(join(ROOT, 'mcp/blocks/registry.ts'));
+// The entry is READ OUT OF the package's exports map, not restated: there is
+// then one identity for the module, and a change to the map moves this with it.
+// Resolving it through node's own resolver instead would depend on which
+// conditions apply to a require of a .ts file, which is a detail this script
+// has no reason to care about.
+const blocksExports = JSON.parse(readFileSync(BLOCKS_PKG_JSON, 'utf8')).exports;
+const blocksEntry = blocksExports?.['.']?.default;
+if (typeof blocksEntry !== 'string') {
+  console.error('gen-blocks: @kitn.ai/blocks has no exports["."].default -- cannot locate the registry entry');
+  process.exit(1);
+}
+const blocksMod = await importTs(join(BLOCKS_PKG_ROOT, blocksEntry));
 const scaffolderRegistry = await importTs(join(ROOT, 'mcp/registry.ts'));
 
 // Axes and inputs, each read where it lives - never restated:

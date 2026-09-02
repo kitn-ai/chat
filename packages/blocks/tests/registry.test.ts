@@ -8,27 +8,27 @@
  * - MANIFEST VALIDATION: each rule of the adopted registry-item skeleton is
  *   watched FAILING on a planted bad manifest (checks-that-prove-nothing:
  *   a validator nobody saw red is a validator that may check nothing).
- * - GENERATOR SHAPE: the CDN form is self-contained; its pins are generated
- *   from packages/ui/package.json and EQUAL that version (the lint:cdn-pins
- *   invariant, asserted here at the source); only the phase-2-proven entries
- *   resolve; the root export is refused loudly.
+ * - GENERATOR SHAPE: the CDN form is self-contained; its pins come from the
+ *   INJECTED version and nothing else (rendered twice under two versions, so a
+ *   baked-in pin could not pass); only the phase-2-proven entries resolve; the
+ *   root export is refused loudly.
  * - CONTRACT CHECKS: rich-prop-as-attribute, the kitn- prefix, document-level
  *   kai-* listeners and hand-rolled SSE are each caught on a plant.
- * - The BUILT artifacts (dist/blocks + the generated driver page - owner
- *   ruling 2026-08-31: generated forms are build artifacts, never committed)
- *   match what the builders produce from the current sources (the gen-blocks
- *   --check verdict, reproduced here without a spawn so the unit suite
- *   catches a stale build too).
+ *
+ * WHAT IS NOT HERE, and where it went. Four assertions need inputs this package
+ * does not have: the kit's real integration catalog, its real
+ * element-nonscalar.json, its real version (the lint:cdn-pins equality), and
+ * the BUILT artifacts under its dist/blocks/. They live in
+ * packages/ui/mcp/tests/blocks-artifacts.test.ts, in the package that owns
+ * those inputs, plus verify:blocks on the emitted artifact. The split is by
+ * what each assertion's INPUTS are, not by its subject.
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { join, resolve, dirname } from 'node:path';
-import { createRequire } from 'node:module';
+import { join, resolve } from 'node:path';
 import {
   discoverBlocks,
   validateBlockManifest,
-  buildRegistryIndex,
-  buildRegistryItem,
   generateCdnForm,
   rewriteBareImport,
   rewriteBlockScript,
@@ -36,33 +36,27 @@ import {
   CDN_IMPORT_ENTRIES,
   type Block,
   type RawBlockSource,
-} from '../blocks/registry';
-import { listIntegrations } from '../registry';
+} from '../src/registry';
 
-const ROOT = resolve(__dirname, '../..');
-const BLOCKS_DIR = join(
-  dirname(createRequire(import.meta.url).resolve('@kitn.ai/blocks/package.json')),
-  'blocks',
-);
-const DIST_BLOCKS = join(ROOT, 'dist', 'blocks');
+const BLOCKS_DIR = resolve(__dirname, '../blocks');
 
-/** Generated block artifacts live under dist/ (never committed), so a fresh
- *  checkout has none — fail naming the exact path and how to produce it (the
- *  custom-elements.json pattern), never by walking somewhere else. */
-function readBuiltArtifact(path: string): string {
-  if (!existsSync(path)) {
-    throw new Error(
-      `${path} is missing — generated block artifacts are build outputs, not committed. ` +
-        'Run `nx build ui` (or, after build:api, `node scripts/gen-blocks.mjs` from packages/ui) first.',
-    );
-  }
-  return readFileSync(path, 'utf8');
-}
-const VERSION = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version as string;
-const ROUTES = listIntegrations().map((i) => i.id);
-const NONSCALAR = JSON.parse(
-  readFileSync(join(ROOT, 'src/elements/element-nonscalar.json'), 'utf8'),
-) as Record<string, string[]>;
+/**
+ * FIXTURES, not the real catalogs, and that is the point. `routeIntegrations`
+ * and `nonscalarByTag` reach the registry BY INJECTION precisely so this module
+ * does not know them; a test of an injection seam that reaches for the real
+ * value is testing the caller instead. Reading them here would also mean a
+ * relative hop into packages/ui, which is the reach the package boundary exists
+ * to delete.
+ *
+ * The real catalogs meeting the real blocks is `pnpm --filter @kitn.ai/ui run
+ * verify:blocks` ([contracts] and [pins]) plus
+ * packages/ui/mcp/tests/blocks-artifacts.test.ts, both of which live in the
+ * package that has them. Neither half is lost; each is asserted where its
+ * inputs are.
+ */
+const ROUTES = ['fixture-route-a', 'fixture-route-b'];
+const NONSCALAR: Record<string, string[]> = { 'kai-thread': ['messages'] };
+const VERSION = '9.9.9-fixture';
 
 /** The same walk gen-blocks.mjs does — a dir is a block iff it holds a
  *  registry-item.json. */
@@ -108,26 +102,21 @@ const discoverOne = (src: RawBlockSource) => discoverBlocks([src], ROUTES);
 
 describe('registry derivation (the directory scan is the list)', () => {
   const sources = scanRealBlocks();
-  const { blocks, errors } = discoverBlocks(sources, ROUTES);
+  const { blocks } = discoverBlocks(sources, ROUTES);
 
-  it('every blocks/<dir> with a manifest is discovered, error-free', () => {
-    expect(errors).toEqual([]);
+  it('every blocks/<dir> with a manifest is discovered', () => {
+    // NOT `expect(errors).toEqual([])`. Discovery validates `registryDependencies`
+    // against the routeIntegrations it is handed, and the routes here are
+    // FIXTURES. That assertion passes today only because all three real manifests
+    // happen to declare `registryDependencies: []`; the first block to declare a
+    // real `route:<id>` dep would turn it red against a fixture list that cannot
+    // contain the id. Error-free discovery against the REAL catalog is asserted
+    // in packages/ui/mcp/tests/blocks-artifacts.test.ts and by verify:blocks
+    // [contracts], both of which have the real catalog. What belongs HERE is the
+    // derivation claim: the scan is the list.
     expect(blocks.map((b) => b.name).sort()).toEqual(sources.map((s) => s.dirName).sort());
     expect(blocks.length).toBeGreaterThanOrEqual(1); // a zero-block scan is a broken walk
     expect(blocks.some((b) => b.name === 'support-widget')).toBe(true);
-  });
-
-  it('the real blocks pass the kai- contract checks', () => {
-    for (const block of blocks) expect(checkBlockContracts(block, NONSCALAR)).toEqual([]);
-  });
-
-  it('the built dist/blocks/registry.json and r/<name>.json match what the current sources produce', () => {
-    const builtIndex = JSON.parse(readBuiltArtifact(join(DIST_BLOCKS, 'registry.json')));
-    expect(builtIndex).toEqual(buildRegistryIndex(blocks));
-    for (const block of blocks) {
-      const built = JSON.parse(readBuiltArtifact(join(DIST_BLOCKS, 'r', `${block.name}.json`)));
-      expect(built).toEqual(buildRegistryItem(block));
-    }
   });
 });
 
@@ -176,14 +165,17 @@ describe('the CDN-form generator', () => {
   const { blocks } = discoverBlocks(scanRealBlocks(), ROUTES);
   const widget = blocks.find((b) => b.name === 'support-widget') as Block;
 
-  it('pins are generated from package.json and EQUAL its version (the lint:cdn-pins invariant)', () => {
-    const { html, errors } = generateCdnForm(widget, { version: VERSION });
-    expect(errors).toEqual([]);
-    const pins = [...(html as string).matchAll(/@kitn\.ai\/ui@(\d+\.\d+\.\d+(?:-[\w.-]+)?)/g)].map((m) => m[1]);
-    expect(pins.length).toBeGreaterThan(0);
-    expect(new Set(pins)).toEqual(new Set([VERSION]));
-    // Every pinned line is release-wired (inline annotation, pin first on line).
-    for (const line of (html as string).split('\n')) {
+  it('pins are generated from the injected version, never baked in', () => {
+    const a = generateCdnForm(widget, { version: '1.2.3-fixture' });
+    const b = generateCdnForm(widget, { version: '4.5.6-fixture' });
+    expect(a.errors).toEqual([]);
+    expect(b.errors).toEqual([]);
+    const pins = (html: string) =>
+      new Set([...html.matchAll(/@kitn\.ai\/ui@([\d.]+(?:-[\w.-]+)?)/g)].map((m) => m[1]));
+    expect(pins(a.html as string)).toEqual(new Set(['1.2.3-fixture']));
+    expect(pins(b.html as string)).toEqual(new Set(['4.5.6-fixture']));
+    // Every pinned line stays release-wired (inline annotation, pin first on line).
+    for (const line of (a.html as string).split('\n')) {
       if (/@kitn\.ai\/ui@\d/.test(line)) expect(line).toMatch(/x-release-please-version/);
     }
   });
@@ -204,13 +196,6 @@ describe('the CDN-form generator', () => {
     expect(html).not.toMatch(/@kitn\.ai\/ui@\d/);
     expect(html).toContain("from '/kit/state.js'");
     expect(html).not.toMatch(/x-release-please/);
-  });
-
-  it('the built cdn.html and generated driver page match what the current sources produce', () => {
-    const cdn = generateCdnForm(widget, { version: VERSION });
-    expect(readBuiltArtifact(join(DIST_BLOCKS, 'r', 'support-widget.cdn.html'))).toBe(cdn.html);
-    const local = generateCdnForm(widget, { version: VERSION, base: '/kit/' });
-    expect(readBuiltArtifact(join(ROOT, 'scripts/block-driver/pages/generated/support-widget/index.html'))).toBe(local.html);
   });
 
   it('maps ONLY the phase-2-proven entries, refusing the root export loudly', () => {

@@ -685,7 +685,7 @@ describe('a taken builder port fails helpfully, not with an EADDRINUSE stack (ow
 // ── the blocks gallery route (Task 5.1) ─────────────────────────────────────
 
 import { handleGalleryRequest, isBlockName, blockFromRegistryItem, galleryPreviewHtml, storeZip, type GalleryDirs } from './dev';
-import { BLOCK_FORMS } from '../blocks/forms';
+import { BLOCK_FORMS } from '@kitn.ai/blocks/forms';
 
 const ITEM = {
   name: 'demo-block',

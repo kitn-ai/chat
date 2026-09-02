@@ -1,6 +1,6 @@
 /**
  * The block form renderers moved to the kit's shared pure module layer —
- * `packages/ui/mcp/blocks/forms.ts` — so the `kai dev` gallery
+ * `@kitn.ai/blocks/forms` — so the `kai dev` gallery
  * and this CLI render every delivery form through ONE renderer (the same
  * precedent as `registry.ts`, which `blocks.ts` already bundle-imports; the
  * rationale comments travel with the functions). This shim keeps the CLI's
@@ -16,4 +16,4 @@ export {
   renderJsxTypings,
   wrapEntryScript,
   wrapWcEntryScript,
-} from '../../ui/mcp/blocks/forms';
+} from '@kitn.ai/blocks/forms';
