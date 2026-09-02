@@ -15,6 +15,6 @@
     "jsxImportSource": "solid-js",
     "baseUrl": "."
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["node_modules", "dist", "frameworks", "src/agent-tooling/mcp"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "mcp/**/*.ts", "mcp/**/*.tsx"],
+  "exclude": ["node_modules", "dist", "frameworks", "src/agent-tooling/mcp", "mcp/mcp", "mcp/tests"]
 }
