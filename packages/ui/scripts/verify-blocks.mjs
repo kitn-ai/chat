@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // verify:blocks (V-2, blocks-and-parts plan 2026-08-31 Task 3.3): the CI cell
 // that makes every block provably work per release. The block LIST is derived
-// from the packages/ui/blocks/ directory scan every run (a block IS a
+// from the packages/blocks/blocks/ directory scan every run (a block IS a
 // directory with a registry-item.json; adding one adds its cells with no list
 // to edit), and each discovered block must pass FOUR checks:
 //
 //   [contracts]  its manifest validates and the kai- contract checks pass
 //                (discoverBlocks + checkBlockContracts from
-//                mcp/blocks/registry.ts -- the one module that
+//                @kitn.ai/blocks's src/registry.ts -- the one module that
 //                understands the layout; nothing is re-implemented here)
 //   [fresh]      the generated forms under dist/blocks/ and the driver pages
 //                are current against the block sources (gen-blocks.mjs
@@ -51,11 +51,16 @@ import { readFileSync, readdirSync, existsSync, writeFileSync, mkdtempSync, rmSy
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import * as esbuild from 'esbuild';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const BLOCKS_DIR = join(ROOT, 'blocks');
+// The authored block sources are their own package; the driver, its baselines
+// and the generated pages stay here, because they need this package's build.
+const BLOCKS_PKG_JSON = createRequire(import.meta.url).resolve('@kitn.ai/blocks/package.json');
+const BLOCKS_PKG_ROOT = dirname(BLOCKS_PKG_JSON);
+const BLOCKS_DIR = join(BLOCKS_PKG_ROOT, 'blocks');
 const DRIVER_DIR = join(ROOT, 'scripts', 'block-driver');
 const BASELINES_DIR = join(DRIVER_DIR, 'baselines');
 const OUT_DIR = join(ROOT, 'dist', 'blocks');
@@ -79,7 +84,13 @@ async function importTs(entry) {
   return mod;
 }
 
-const registry = await importTs(join(ROOT, 'mcp/blocks/registry.ts'));
+// The entry, read out of the package's exports map (the gen-blocks.mjs pattern).
+const blocksEntry = JSON.parse(readFileSync(BLOCKS_PKG_JSON, 'utf8')).exports?.['.']?.default;
+if (typeof blocksEntry !== 'string') {
+  console.error('verify-blocks: @kitn.ai/blocks has no exports["."].default -- cannot locate the registry entry');
+  process.exit(1);
+}
+const registry = await importTs(join(BLOCKS_PKG_ROOT, blocksEntry));
 const scaffolder = await importTs(join(ROOT, 'mcp/registry.ts'));
 const routeIntegrations = scaffolder.listIntegrations().map((i) => i.id);
 const nonscalarByTag = JSON.parse(readFileSync(join(ROOT, 'src/elements/element-nonscalar.json'), 'utf8'));
@@ -120,7 +131,7 @@ function driverPrereqErrors(name) {
   const baseline = join(BASELINES_DIR, `${name}.json`);
   const page = join(DRIVER_DIR, 'pages', 'generated', name, 'index.html');
   if (!existsSync(states)) {
-    errors.push(`${name}: no state script at blocks/${name}/states.mjs -- every block declares its driver states (V-1); a block cannot ship unverified`);
+    errors.push(`${name}: no state script at packages/blocks/blocks/${name}/states.mjs -- every block declares its driver states (V-1); a block cannot ship unverified`);
   }
   if (!existsSync(page)) {
     errors.push(`${name}: no generated driver page at scripts/block-driver/pages/generated/${name}/index.html -- build first (gen-blocks writes it in postbuild)`);
@@ -128,7 +139,7 @@ function driverPrereqErrors(name) {
   if (!existsSync(baseline)) {
     errors.push(
       `${name}: no committed baseline at scripts/block-driver/baselines/${name}.json -- a block cannot ship unverified. Record one (from packages/ui, after a real build):\n` +
-      `    node scripts/block-driver/driver.mjs blocks/${name}/states.mjs --serve scripts/block-driver/pages --pages block --record scripts/block-driver/baselines/${name}.json --shots <dir>\n` +
+      `    node scripts/block-driver/driver.mjs ../blocks/blocks/${name}/states.mjs --serve scripts/block-driver/pages --pages block --record scripts/block-driver/baselines/${name}.json --shots <dir>\n` +
       `  then review the shots and COMMIT the baseline (screenshots go under baselines/screenshots-${name}/ per the house precedent).`,
     );
   }

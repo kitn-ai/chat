@@ -3,12 +3,13 @@
  *
  * THE REGISTRY IS THE KIT'S, NOT A COPY. Block logic (manifest validation,
  * discovery, the CDN-form generator) is imported from
- * `../../ui/mcp/blocks/registry` and bundled at build time,
+ * `@kitn.ai/blocks` and bundled at build time,
  * exactly the way `catalog.ts` imports the scaffolder registry - one source,
  * a build failure as the drift failure mode. That module is a deliberate leaf
  * (pure, no zod, nothing under `mcp/`), so `bundleGraphProblem` stays green.
  * The block FILES ride the published CLI the way templates do:
- * `scripts/build.mjs` copies `packages/ui/blocks/` into `dist/blocks/`, and
+ * `scripts/build.mjs` copies the resolved `@kitn.ai/blocks` package's
+ * `blocks/` directory into `dist/blocks/`, and
  * the loader here walks whatever directory it is handed.
  *
  * THE PER-BLOCK JSON URL IS THE SAME PATH. `add https://host/r/name.json`
@@ -27,12 +28,12 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 
-import { discoverBlocks } from '../../ui/mcp/blocks/registry';
+import { discoverBlocks } from '@kitn.ai/blocks';
 import type {
   Block,
   BlockManifest,
   RawBlockSource,
-} from '../../ui/mcp/blocks/registry';
+} from '@kitn.ai/blocks';
 // The FORM RENDERING is the kit's shared pure module too (same bundle-import
 // precedent as the registry line above): one renderer serves this planner AND
 // the `kai dev` gallery's per-framework code view, so what the gallery shows
@@ -44,7 +45,7 @@ import {
   renderReactForm,
   renderWcForm,
   type BlockFormId,
-} from '../../ui/mcp/blocks/forms';
+} from '@kitn.ai/blocks/forms';
 
 import { getIntegration, listIntegrations } from './catalog';
 import type { Integration } from './catalog';
@@ -319,7 +320,7 @@ export function planAdd(resolved: ResolvedAdd, opts: PlanOptions): AddPlan {
 }
 
 // The three per-form file sets come from the ONE shared renderer
-// (`mcp/blocks/forms.ts` — the gallery serves the identical output);
+// (`@kitn.ai/blocks/forms` — the gallery serves the identical output);
 // what stays here is what only the CLI knows: where the files land in the
 // consumer's project, and the note printed about them.
 

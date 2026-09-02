@@ -480,6 +480,11 @@ one version fact a block carries, and it is generated, never typed
   directory; the gallery, the CLI menu, the MCP listing and the CI cell
   count all move on their own. (`create-kai add --list` prints the
   count; no count is written anywhere.)
+
+  **Path note, 2026-09-02:** the block sources moved to
+  `packages/blocks/blocks/<id>/` and the registry to `@kitn.ai/blocks`. See
+  `docs/superpowers/specs/2026-09-02-blocks-package-and-site-design.md` section
+  2. Everything this bullet says about the mechanism still holds.
 - **What `add` writes:** the block's `add`-form files into a
   conventional path (announced, collision-checked, never overwriting
   silently), plus the dependency line (`@kitn.ai/ui` at the CLI's

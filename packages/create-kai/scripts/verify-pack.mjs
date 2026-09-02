@@ -140,6 +140,17 @@ if (templateFiles.length === 0) {
   );
 }
 
+// The same failure shape as the templates case above, on the other half of what
+// the CLI ships. A tarball with a bundled CLI and no blocks passes every check
+// over the tree: `create-kai add` installs cleanly and then finds nothing to
+// write, at the user's first run.
+const blockFiles = files.filter((f) => f.startsWith('dist/blocks/'));
+if (blockFiles.length === 0) {
+  problems.push(
+    'no dist/blocks/** in the tarball - `create-kai add` would install and then find no block to write',
+  );
+}
+
 // The template set, from the packed listing UNION the directories on disk. A
 // template that packed to nothing at all is absent from the listing, so deriving
 // the set from the listing alone would drop it from every per-template rule

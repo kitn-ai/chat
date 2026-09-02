@@ -18,8 +18,8 @@ import { fileURLToPath } from 'node:url';
 import { generateProject, writeProject, type GeneratedFile, type GenerateOptions } from './codegen';
 import { npmArgs, npmInvocation } from './local-kit';
 import { validateConstruct, type Construct, type ConstructProblem } from './schema';
-import { generateCdnForm, type Block, type BlockManifest } from '../blocks/registry';
-import { BLOCK_FORMS, isBlockFormId, renderBlockForm, type FormFile } from '../blocks/forms';
+import { generateCdnForm, type Block, type BlockManifest } from '@kitn.ai/blocks';
+import { BLOCK_FORMS, isBlockFormId, renderBlockForm, type FormFile } from '@kitn.ai/blocks/forms';
 import { buildableTemplates, inferTemplateId, templateById, type ConstructListing } from './templates';
 
 export type { ConstructListing } from './templates';
@@ -811,7 +811,7 @@ export function handleGalleryRequest(url: string, dirs: GalleryDirs): GalleryRes
       return { kind: 'file', type: 'text/plain; charset=utf-8', body: readFileSync(file) };
     }
     // The delivery-form routes (round-2 owner feedback): the SAME shared
-    // renderer `create-kai add` plans with (`blocks/forms.ts`), so the code
+    // renderer `create-kai add` plans with (`@kitn.ai/blocks/forms`), so the code
     // view and the zip a visitor downloads are byte-for-byte what `add`
     // writes for that framework. `form` answers JSON for the page's code
     // view; `zip` answers the identical file set as a store-only zip. The

@@ -59,6 +59,7 @@
   },
   "devDependencies": {
     "@clack/prompts": "^0.11.0",
+    "@kitn.ai/blocks": "workspace:*",
     "@kitn.ai/ui": "workspace:*",
     "@types/node": "^26.0.0",
     "esbuild": "^0.28.1",

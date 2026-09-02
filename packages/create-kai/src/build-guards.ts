@@ -413,6 +413,44 @@ export function missingStarterProblem(
 }
 
 /**
+ * Refuse to build when the block sources package resolves to a directory that
+ * is not there.
+ *
+ * `@kitn.ai/blocks` lives in its own workspace package (see packages/blocks):
+ * one source for the block registry and forms shared by the `kai dev`
+ * gallery and this CLI, behind a package boundary instead of a relative
+ * reach across packages. `cp` throws its own ENOENT on a missing source, so this
+ * rule buys the same thing missingStarterProblem buys for a starter: the
+ * message names the resolved directory instead of leaving a stack trace to
+ * explain that a workspace resolve came back wrong.
+ *
+ * The existence check has to run before the `cp` it explains, not after: `cp`
+ * on a missing source throws before this rule's sibling, zeroBlocksCopiedProblem,
+ * ever gets a `count` to look at.
+ */
+export function blocksSourceRootProblem(
+  blocksDir: string,
+  exists: (absolutePath: string) => boolean,
+): string | null {
+  if (exists(blocksDir)) return null;
+  return `create-kai build: no blocks directory at ${blocksDir} - @kitn.ai/blocks resolved, but its blocks/ directory is not there`;
+}
+
+/**
+ * Refuse to build a tarball that copied zero block directories.
+ *
+ * A silent zero-block copy is the failure shape `add` would otherwise hit at
+ * a user's first run: the CLI installs cleanly and then finds nothing to
+ * write. blocksSourceRootProblem above catches a missing directory; this
+ * catches the source directory existing but being empty, which `cp` does not
+ * treat as an error at all.
+ */
+export function zeroBlocksCopiedProblem(count: number): string | null {
+  if (count > 0) return null;
+  return 'create-kai build: copied zero block directories from @kitn.ai/blocks - a zero-block copy is a broken resolve, not an empty catalog';
+}
+
+/**
  * The name a starter carries its ignore file under.
  *
  * Re-exported rather than declared: it is one row of `STRIPPED_DOTFILES`
@@ -644,6 +682,10 @@ export function sharedDevDepsProblem(mine: Manifest, kit: Manifest): string | nu
  *     even in the case where the offending module happens to shake clean today,
  *     which is the version of this bug that comes back.
  *
+ *     The blocks registry and the form renderer are the same kind of leaf and
+ *     now live in their own package, `@kitn.ai/blocks`; `missingReuseInputsProblem`
+ *     below asserts the bundle really reaches it rather than a local copy.
+ *
  * ONE KNOWN FUTURE COLLISION, stated so it is not a surprise: `renderSurface`
  * lives in `tools/scaffold.ts`, and `generate()` will need it the day the
  * `generated` surface path is wired (it throws today rather than emit an unrun
@@ -688,7 +730,43 @@ export function bundleGraphProblem(inputs: readonly string[]): string | null {
       .join('\n') +
     '\n  The CLI is one bundled zero-dependency file so `npx` cold start is fast, and\n' +
     '  every user downloads all of it. Read what you need from the LEAF modules at the\n' +
-    '  root of mcp/ — registry.ts, types.ts, route-emit.ts. If the fact you\n' +
-    '  need only exists inside mcp/, move it to a leaf rather than importing the tool.'
+    '  root of mcp/ - registry.ts, types.ts, route-emit.ts - or from @kitn.ai/blocks,\n' +
+    '  which is a whole package of them. If the fact you need only exists inside\n' +
+    '  mcp/, move it to a leaf rather than importing the tool.'
+  );
+}
+
+/**
+ * The POSITIVE half of the bundle-graph rule.
+ *
+ * `bundleGraphProblem` says what the CLI may not reach. It cannot say what the
+ * CLI MUST reach, and the difference matters: the reuse boundary this build
+ * asserts is that block logic comes from `@kitn.ai/blocks` and is never copied
+ * here. A vendored copy breaks no ban rule, so the ban half stays green while
+ * the exact drift the boundary exists to prevent has already happened.
+ *
+ * A workspace-linked package's inputs resolve to real paths under
+ * `packages/blocks/`, not to `node_modules/@kitn.ai/blocks/`, which is also why
+ * the ban rules keep working unchanged across this move.
+ */
+export function missingReuseInputsProblem(inputs: readonly string[]): string | null {
+  const normalized = inputs.map((input) => input.replaceAll('\\', '/'));
+  const required: { what: RegExp; why: string }[] = [
+    {
+      what: /(?:^|\/)(?:packages\/)?blocks\/src\//,
+      why: '@kitn.ai/blocks (packages/blocks/src) - the registry and the shared form renderer',
+    },
+  ];
+
+  const missing = required.filter((rule) => !normalized.some((input) => rule.what.test(input)));
+  if (missing.length === 0) return null;
+
+  return (
+    'create-kai build: the CLI bundle does NOT reach a module it must.\n' +
+    missing.map((rule) => `  · ${rule.why}`).join('\n') +
+    '\n  Block logic is the blocks package, never a copy here: one source, a build\n' +
+    '  failure as the drift failure mode. If this fires after an intentional\n' +
+    '  refactor, the fix is to import the package, not to delete this rule - a\n' +
+    '  vendored copy breaks no ban rule, so the ban half cannot see it.'
   );
 }

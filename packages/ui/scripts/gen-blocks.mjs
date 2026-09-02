@@ -1,6 +1,6 @@
 // Blocks generation (Task 3.1, blocks-and-parts plan 2026-08-31): the
-// filesystem half of mcp/blocks/registry.ts. Scans
-// packages/ui/blocks/<id>/ (a block IS a directory with a registry-item.json
+// filesystem half of @kitn.ai/blocks's src/registry.ts. Scans
+// packages/blocks/blocks/<id>/ (a block IS a directory with a registry-item.json
 // - adding one moves every output with no list to edit), validates manifests
 // and the kai- contract checks, then emits the derived artifacts.
 //
@@ -46,10 +46,18 @@ import { readFileSync, writeFileSync, readdirSync, mkdirSync, mkdtempSync, rmSyn
 import { join, resolve, dirname, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import * as esbuild from 'esbuild';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const BLOCKS_DIR = join(ROOT, 'blocks');
+// The authored block sources live in their own package now. Resolve it rather
+// than joining a path literal: a repo-root literal is exactly the hand-typed
+// restatement that goes stale the next time something moves.
+const BLOCKS_PKG_JSON = createRequire(import.meta.url).resolve('@kitn.ai/blocks/package.json');
+const BLOCKS_PKG_ROOT = dirname(BLOCKS_PKG_JSON);
+const BLOCKS_DIR = join(BLOCKS_PKG_ROOT, 'blocks');
+// The OUTPUTS stay in packages/ui: dist/blocks/ ships inside @kitn.ai/ui, and
+// the driver pages are served by this package's block driver.
 const OUT_DIR = join(ROOT, 'dist', 'blocks');
 const DRIVER_PAGES_DIR = join(ROOT, 'scripts', 'block-driver', 'pages', 'generated');
 const CHECK = process.argv.includes('--check');
@@ -64,7 +72,18 @@ async function importTs(entry) {
   return mod;
 }
 
-const blocksMod = await importTs(join(ROOT, 'mcp/blocks/registry.ts'));
+// The entry is READ OUT OF the package's exports map, not restated: there is
+// then one identity for the module, and a change to the map moves this with it.
+// Resolving it through node's own resolver instead would depend on which
+// conditions apply to a require of a .ts file, which is a detail this script
+// has no reason to care about.
+const blocksExports = JSON.parse(readFileSync(BLOCKS_PKG_JSON, 'utf8')).exports;
+const blocksEntry = blocksExports?.['.']?.default;
+if (typeof blocksEntry !== 'string') {
+  console.error('gen-blocks: @kitn.ai/blocks has no exports["."].default -- cannot locate the registry entry');
+  process.exit(1);
+}
+const blocksMod = await importTs(join(BLOCKS_PKG_ROOT, blocksEntry));
 const scaffolderRegistry = await importTs(join(ROOT, 'mcp/registry.ts'));
 
 // Axes and inputs, each read where it lives - never restated:

@@ -24,16 +24,19 @@ import * as esbuild from 'esbuild';
 import {
   GITIGNORE_SOURCE_NAME,
   appPathProblem,
+  blocksSourceRootProblem,
   bundleGraphProblem,
   declaredPathsProblem,
   emittedContentProblem,
   gitignoreProblem,
+  missingReuseInputsProblem,
   missingStarterProblem,
   patchMatchProblem,
   readyFrameworksProblem,
   sharedDevDepsProblem,
   templateIgnoreProblem,
   templateSkips,
+  zeroBlocksCopiedProblem,
 } from '../src/build-guards';
 import type { TemplateReader } from '../src/build-guards';
 import { FRAMEWORKS, getFramework } from '../src/frameworks';
@@ -442,6 +445,37 @@ describe('the bundle-graph guard', () => {
   });
 });
 
+describe('missingReuseInputsProblem', () => {
+  // esbuild metafile input keys are relative to the process cwd, which for this
+  // build is packages/create-kai, so the blocks package arrives as
+  // ../blocks/src/registry.ts. The rule matches the path SEGMENT rather than a
+  // prefix, the same shape bundleGraphProblem's ban rules use, so it survives
+  // being run from a different cwd.
+  it('is silent when the graph reaches the blocks package source', () => {
+    expect(
+      missingReuseInputsProblem([
+        'src/index.ts',
+        '../blocks/src/registry.ts',
+        '../blocks/src/forms.ts',
+      ]),
+    ).toBeNull();
+  });
+
+  it('names the miss when the graph does not reach it', () => {
+    const msg = missingReuseInputsProblem(['src/index.ts', '../ui/mcp/registry.ts']);
+    expect(msg).toMatch(/packages\/blocks\/src/);
+    expect(msg).toMatch(/copy/i);
+  });
+
+  it('a vendored copy under create-kai does not satisfy it', () => {
+    // The failure this guards against is somebody re-adding a local copy of the
+    // registry rather than importing the package: the ban rules would stay
+    // green, because a copy breaks no ban.
+    const msg = missingReuseInputsProblem(['src/index.ts', 'src/vendor/blocks-registry.ts']);
+    expect(msg).toMatch(/packages\/blocks\/src/);
+  });
+});
+
 describe('the ready-framework guard', () => {
   it('rejects a table where the last ready row has been flipped to planned', () => {
     // The real table, with the one field that decides this flipped on every row
@@ -479,6 +513,41 @@ describe('the missing-starter guard', () => {
         `${framework.id}: templateDir must name a real starter`,
       ).toBeNull();
     }
+  });
+});
+
+describe('the blocks-source guard', () => {
+  it('rejects a blocks directory that does not exist', () => {
+    const absent = path.join(PKG_ROOT, 'no-such-blocks-dir');
+
+    const msg = blocksSourceRootProblem(absent, existsSync);
+    expectRejected(msg, `no blocks directory at ${absent}`);
+    // Distinct from zeroBlocksCopiedProblem's message: this rule runs before
+    // the cp, so nothing was copied yet, and a CI log must be able to tell
+    // the two apart.
+    expect(msg).not.toContain('copied zero');
+  });
+
+  it('holds the real @kitn.ai/blocks resolve against the tree', () => {
+    // THE CONTROL and the live check at once: the same resolve build.mjs makes,
+    // so a future move of packages/blocks fails this test before it fails a
+    // published tarball.
+    const blocksDir = path.join(
+      path.dirname(createRequire(import.meta.url).resolve('@kitn.ai/blocks/package.json')),
+      'blocks',
+    );
+
+    expect(blocksSourceRootProblem(blocksDir, existsSync)).toBeNull();
+  });
+});
+
+describe('the zero-blocks guard', () => {
+  it('rejects a copy that landed zero block directories', () => {
+    expectRejected(zeroBlocksCopiedProblem(0), 'copied zero block directories from @kitn.ai/blocks');
+  });
+
+  it('accepts a copy that landed at least one block directory', () => {
+    expect(zeroBlocksCopiedProblem(3)).toBeNull();
   });
 });
 
