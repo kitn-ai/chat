@@ -62,6 +62,33 @@ function srcSpecifiersToDist(filePath: string, content: string): string {
   );
 }
 
+/**
+ * Put `'@kitn.ai/ui/elements'` back where the wrappers wrote it.
+ *
+ * The generated wrappers type each ref as ITS element interface and import those
+ * from the PUBLIC subpath, exactly what a consumer writes. tsconfig.react.json
+ * maps that bare specifier at `./src/elements/element-types.d.ts` and cannot map
+ * it at `dist/elements.d.ts` instead: the first build in the chain empties dist/,
+ * and dist/elements.d.ts is not rewritten until `build:elements`, long AFTER this
+ * react build runs. vite-plugin-dts resolves the tsconfig alias and writes the
+ * mapped location into the emitted declaration as '../../src/elements/element-types.d.ts'.
+ *
+ * srcSpecifiersToDist below cannot repair that one, and the miss is silent-ish:
+ * it probes for a `.ts`/`.tsx` SOURCE before rewriting, a `.d.ts` has none, so it
+ * bails by design and leaves a specifier that escapes dist/ and fails verify:dts.
+ * The right output form here is not a dist/ path but the subpath itself: the
+ * exports map already points `./elements` at dist/elements.d.ts, and a
+ * self-reference to a DECLARED subpath is the case verify-dts-boundaries.mjs's
+ * own self-test admits as clean. Runs BEFORE srcSpecifiersToDist so that
+ * function never sees it (blocks contract spike, F-9).
+ */
+function elementTypesToPublicSubpath(content: string): string {
+  return content.replace(
+    /(['"])(?:\.\.\/)+src\/elements\/element-types(?:\.d\.ts)?\1/g,
+    (_whole, quote: string) => `${quote}@kitn.ai/ui/elements${quote}`,
+  );
+}
+
 // Fourth build (after main + provider; the MCP build can follow). Compiles the
 // React subpath entry (frameworks/react/index.tsx + its ./runtime) to a compiled
 // ESM bundle + generated .d.ts, so consumers resolve `@kitn.ai/ui/react` to
@@ -94,7 +121,7 @@ export default defineConfig({
       // Keep the emitted declarations inside dist/ — see srcSpecifiersToDist above.
       beforeWriteFile: (filePath, content) => ({
         filePath,
-        content: srcSpecifiersToDist(filePath, content),
+        content: srcSpecifiersToDist(filePath, elementTypesToPublicSubpath(content)),
       }),
     }),
   ],

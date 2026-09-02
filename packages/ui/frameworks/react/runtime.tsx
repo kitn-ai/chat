@@ -74,7 +74,14 @@ export function registerAll(): Promise<unknown> | undefined {
   return registerAllLoad;
 }
 
-export function createWebComponent<P extends WebComponentProps>(
+export function createWebComponent<
+  P extends WebComponentProps,
+  /** The generated interface for THIS tag (`KaiViewStackElement`, ...), so a
+   *  forwarded ref hands back the element's real methods instead of a bare
+   *  HTMLElement that needs casting at every call site. Defaults to
+   *  HTMLElement, which keeps a one-argument call compiling unchanged. */
+  E extends HTMLElement = HTMLElement,
+>(
   tagName: string,
   /** DOM-property names to assign from props (incl. `theme`). */
   propNames: readonly string[],
@@ -83,12 +90,12 @@ export function createWebComponent<P extends WebComponentProps>(
   /** Client-only thunk that loads + registers this element (a literal dynamic
    *  import of its `@kitn.ai/ui/elements/<name>` chunk). */
   register?: () => Promise<unknown>,
-): ForwardRefExoticComponent<PropsWithoutRef<P> & RefAttributes<HTMLElement>> {
+): ForwardRefExoticComponent<PropsWithoutRef<P> & RefAttributes<E>> {
   const eventEntries = Object.entries(eventMap);
 
-  const Component = forwardRef<HTMLElement, P>((props, ref) => {
-    const elRef = useRef<HTMLElement | null>(null);
-    useImperativeHandle(ref, () => elRef.current as HTMLElement, []);
+  const Component = forwardRef<E, P>((props, ref) => {
+    const elRef = useRef<E | null>(null);
+    useImperativeHandle(ref, () => elRef.current as E, []);
     const p = props as Record<string, unknown>;
 
     // Hold the latest handlers in a ref so the registered listeners always call
@@ -173,5 +180,5 @@ export function createWebComponent<P extends WebComponentProps>(
   });
 
   Component.displayName = tagName;
-  return Component as ForwardRefExoticComponent<PropsWithoutRef<P> & RefAttributes<HTMLElement>>;
+  return Component as ForwardRefExoticComponent<PropsWithoutRef<P> & RefAttributes<E>>;
 }

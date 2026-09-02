@@ -32,6 +32,20 @@ export function writeReact(root, elements, IMPORTS) {
     .map(([src, names]) => `import type { ${names.sort().join(', ')} } from '${src}';`)
     .join('\n');
 
+  // Every wrapper's ref is typed as ITS element interface, which this same
+  // generator chain already emits into src/elements/element-types.d.ts and
+  // dist/elements.d.ts. Imported by the BARE subpath, not `../../src/...`:
+  // config/vite/react.ts's srcSpecifiersToDist rewrites relative src/
+  // specifiers in the EMITTED declarations by probing for a `.ts`/`.tsx`
+  // source, which a `.d.ts` misses, leaving a specifier pointing outside
+  // dist/ that verify:dts fails on. A bare self-reference to a subpath the
+  // exports map declares is what that guard accepts, and it is what a
+  // consumer writes.
+  const elementTypeImport = `import type {\n${elements
+    .map((el) => `  ${el.className},`)
+    .sort()
+    .join('\n')}\n} from '@kitn.ai/ui/elements';`;
+
   const blocks = elements.map((el) => {
     // `universal` props (theme, injected by define.tsx for every element) are
     // already declared on WebComponentProps, which every wrapper extends — so they
@@ -50,6 +64,7 @@ export function writeReact(root, elements, IMPORTS) {
 
     const name = el.displayName;
     const propsName = `${name}Props`;
+    const elementType = el.className;
     // Lazy-import the element by its SOURCE-MODULE basename (set in gen-element-api.mjs),
     // not its tag: the per-element build emits dist/elements/<source-file>.js, so deriving
     // from the tag (e.g. kai-confirm → "confirm") points at a file that does not exist.
@@ -58,7 +73,7 @@ export function writeReact(root, elements, IMPORTS) {
 ${[...propLines, ...eventLines].join('\n')}
 }
 
-export const ${name} = /*#__PURE__*/ createWebComponent<${propsName}>(
+export const ${name} = /*#__PURE__*/ createWebComponent<${propsName}, ${elementType}>(
   '${el.tag}',
   ${propNames},
   ${eventMap},
@@ -76,6 +91,7 @@ export const ${name} = /*#__PURE__*/ createWebComponent<${propsName}>(
 // — not the register-all bundle. SSR-safe: registration fires only in a client effect.
 // For eager all-registration call registerAll() or import '@kitn.ai/ui/elements'.
 import { createWebComponent, registerAll, type WebComponentProps } from './runtime';
+${elementTypeImport}
 export { registerAll };
 export { useKaiChat } from './use-kai-chat';
 export type { UseKaiChatOptions, KaiChatController } from './use-kai-chat';
