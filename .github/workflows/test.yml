@@ -1177,6 +1177,12 @@ jobs:
       # first time, with the reason sitting unread in a log nobody printed.
       # Hence the `cat` on failure: a boot that does not answer must say why in
       # the job output, not in a temp file the runner throws away.
+      #
+      # `npm run storybook` runs `build:css` first, which rewrites
+      # `compiled.css` AFTER this leg's mtime restamp above (`find
+      # packages/ui/dist -exec touch {} +`) runs -- so every mtime-sensitive
+      # step, including the hover-card stale-bundle guard above, must stay
+      # ABOVE this step, never below it.
       - name: Start Storybook once for both IVPs (each config reuses it)
         run: |
           nohup pnpm --filter @kitn.ai/ui run storybook --ci --quiet > "$RUNNER_TEMP/storybook.log" 2>&1 &
@@ -1318,6 +1324,7 @@ jobs:
     needs: [storybook]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Require all storybook shards to pass
         run: |
