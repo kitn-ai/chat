@@ -36,13 +36,13 @@ function synthCheckout(opts: { built?: boolean; sourceMtime?: number } = {}): st
     JSON.stringify({ name: '@kitn.ai/ui', version: '9.9.9', exports: { '.': { default: './dist/index.js' } } }),
     OLD,
   );
-  write(join(pkgRoot, 'src', 'agent-tooling', 'construct', 'cli.ts'), '// the CLI source', opts.sourceMtime ?? OLD);
+  write(join(pkgRoot, 'mcp', 'construct', 'cli.ts'), '// the CLI source', opts.sourceMtime ?? OLD);
   if (opts.built !== false) write(join(pkgRoot, 'dist', 'index.js'), 'export const x = 1;\n', OLD + 50);
   return pkgRoot;
 }
 
 /** What an installed package looks like: `node_modules/@kitn.ai/ui`, dist and
- *  bin present, no .ts under src/agent-tooling. */
+ *  bin present, no .ts under mcp/. */
 function synthInstall(opts: { consumerIsAPnpmWorkspace?: boolean } = {}): string {
   const consumer = mkdtempSync(join(tmpdir(), 'kai-consumer-'));
   write(join(consumer, 'package.json'), JSON.stringify({ name: 'some-app' }));
@@ -63,7 +63,7 @@ function synthInstall(opts: { consumerIsAPnpmWorkspace?: boolean } = {}): string
 describe('resolveKitPackageRoot', () => {
   it('finds the package root by NAME, from any depth below it', () => {
     const pkgRoot = synthCheckout();
-    for (const start of [pkgRoot, join(pkgRoot, 'dist'), join(pkgRoot, 'src', 'agent-tooling', 'construct')]) {
+    for (const start of [pkgRoot, join(pkgRoot, 'dist'), join(pkgRoot, 'mcp', 'construct')]) {
       const out = resolveKitPackageRoot(start);
       expect('dir' in out && out.dir, start).toBe(pkgRoot);
     }
@@ -176,7 +176,7 @@ describe('classifyKit', () => {
   it('a newer build-GENERATED json under src/ is not staleness (postbuild writes those)', () => {
     const pkgRoot = synthCheckout();
     write(join(pkgRoot, 'src', 'elements', 'element-meta.json'), '{}', NEW);
-    write(join(pkgRoot, 'src', 'agent-tooling', 'construct', 'construct.v1.schema.json'), '{}', NEW);
+    write(join(pkgRoot, 'mcp', 'construct', 'construct.v1.schema.json'), '{}', NEW);
     write(join(pkgRoot, 'src', 'elements', 'compiled.css'), '.a{}', NEW);
     expect(classifyKit(undefined, pkgRoot).kind).toBe('checkout');
   });

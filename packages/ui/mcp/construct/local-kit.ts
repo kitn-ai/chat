@@ -138,12 +138,14 @@ export function localKitStartDir(): string {
 /**
  * The two markers that are true in a checkout and false in an install.
  *
- * `src/agent-tooling/construct/cli.ts` — the published tarball's `files`
- * carries `dist`, `bin`, `frameworks`, the stylesheets and exactly TWO json
- * files under src/elements. So `src/` alone is NOT a discriminator (an
- * install has one); a .ts under src/agent-tooling is, and this particular
- * one is the file the CLI itself is compiled from, so it cannot be deleted
- * without deleting the thing being detected.
+ * `mcp/construct/cli.ts` -- the published tarball's `files` carries `dist`,
+ * `bin`, `frameworks`, the stylesheets and exactly TWO json files under
+ * src/elements. `mcp/` is not in that list at all, so the whole directory is
+ * absent from an install; this particular file is the one the CLI itself is
+ * compiled from, so it cannot be deleted without deleting the thing being
+ * detected. (Before the 2026-09-02 move the marker was
+ * src/agent-tooling/construct/cli.ts and the argument was subtler, because an
+ * install DOES have a src/.)
  *
  * `../../pnpm-workspace.yaml` — the workspace root two levels above
  * `packages/ui`. In an install the package root is
@@ -153,13 +155,13 @@ export function localKitStartDir(): string {
  * themselves a pnpm workspace does not trip it. Pinned by a test that builds
  * exactly that shape.
  *
- * BOTH, not either: the src marker alone would fire inside a tarball someone
+ * BOTH, not either: the mcp marker alone would fire inside a tarball someone
  * extracted by hand, and the workspace marker alone inside any pnpm repo that
  * happens to vendor the package at the wrong depth.
  */
 export function isSourceCheckout(pkgRoot: string): boolean {
   return (
-    existsSync(join(pkgRoot, 'src', 'agent-tooling', 'construct', 'cli.ts')) &&
+    existsSync(join(pkgRoot, 'mcp', 'construct', 'cli.ts')) &&
     existsSync(join(pkgRoot, '..', '..', 'pnpm-workspace.yaml'))
   );
 }
@@ -191,8 +193,8 @@ const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.css'];
 
 /** Generated, despite the extension: build:css writes it (as `prebuild`, so
  *  normally older than the bundles — but `build:css` is runnable alone, and
- *  Storybook runs it). Paths are relative to `src/`, which is the root the
- *  walk below reports against. */
+ *  Storybook runs it). Paths are relative to whichever root (`src/` or
+ *  `mcp/`) the walk below is reporting against. */
 const GENERATED_SOURCES = new Set([join('elements', 'compiled.css')]);
 
 function isSourceInput(rel: string): boolean {
@@ -255,7 +257,12 @@ export function distProblem(pkgRoot: string): string | null {
       .join(', ')} — the build is incomplete.`;
   }
 
-  const newestSource = newestFile(join(pkgRoot, 'src'), isSourceInput);
+  // Two source roots feed dist/: src/ (the library) and mcp/ (the MCP server
+  // and the construct CLI, both built by their own `KAI_BUILD` targets). A
+  // checkout is stale if EITHER is newer than everything already built.
+  const newestSource = [newestFile(join(pkgRoot, 'src'), isSourceInput), newestFile(join(pkgRoot, 'mcp'), isSourceInput)]
+    .filter((entry): entry is { file: string; mtimeMs: number } => entry !== null)
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)[0];
   const newestBuilt = newestFile(distDir, () => true);
   if (newestSource && newestBuilt && newestSource.mtimeMs > newestBuilt.mtimeMs) {
     return (

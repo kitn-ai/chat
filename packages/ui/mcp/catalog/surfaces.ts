@@ -212,7 +212,7 @@ export const surfaceRecipes: TSurfaceRecipe[] = [
     corpus: [
       'packages/ui/src/elements/chat-slots.stories.tsx',
       'packages/ui/src/elements/split-workspace.stories.tsx',
-      'packages/ui/src/agent-tooling/catalog/surfaces.test.ts',
+      'packages/ui/mcp/catalog/surfaces.test.ts',
     ],
   },
   {
@@ -313,8 +313,8 @@ export const surfaceRecipes: TSurfaceRecipe[] = [
       'untrusted-model-output',
     ],
     corpus: [
-      'packages/ui/src/agent-tooling/recipes/composed-thread.ts',
-      'packages/ui/src/agent-tooling/catalog/surfaces.test.ts',
+      'packages/ui/mcp/recipes/composed-thread.ts',
+      'packages/ui/mcp/catalog/surfaces.test.ts',
     ],
   },
 ];

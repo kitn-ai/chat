@@ -80,7 +80,7 @@ describe('resolveManifestPath — the manifest is addressed, not searched for', 
 
       // Our package, correctly shaped, simply not built.
       writeAt(root, join('pkg', 'package.json'), JSON.stringify({ name: '@kitn.ai/ui' }));
-      const origin = join(root, 'pkg', 'src', 'agent-tooling', 'mcp');
+      const origin = join(root, 'pkg', 'mcp', 'mcp');
       mkdirSync(origin, { recursive: true });
 
       const expected = join(root, 'pkg', 'dist', 'custom-elements.json');
@@ -109,7 +109,7 @@ describe('resolveManifestPath — the manifest is addressed, not searched for', 
     inTempTree((root) => {
       writeAt(root, join('other', 'package.json'), JSON.stringify({ name: 'not-our-package' }));
       writeAt(root, join('other', 'dist', 'custom-elements.json'), MANIFEST_JSON);
-      const origin = join(root, 'other', 'src', 'agent-tooling', 'mcp');
+      const origin = join(root, 'other', 'mcp', 'mcp');
       mkdirSync(origin, { recursive: true });
 
       expect(() => resolveManifestPath(origin)).toThrowError(
@@ -120,7 +120,7 @@ describe('resolveManifestPath — the manifest is addressed, not searched for', 
 
   it('THROWS naming the derived root when there is no package.json at all', () => {
     inTempTree((root) => {
-      const origin = join(root, 'nowhere', 'src', 'agent-tooling', 'mcp');
+      const origin = join(root, 'nowhere', 'mcp', 'mcp');
       mkdirSync(origin, { recursive: true });
       expect(() => resolveManifestPath(origin)).toThrowError(
         new RegExp(escapeRegExp(join(root, 'nowhere'))),
@@ -134,7 +134,7 @@ describe('resolveManifestPath — the manifest is addressed, not searched for', 
     inTempTree((root) => {
       writeAt(root, join('pkg', 'package.json'), JSON.stringify({ name: '@kitn.ai/ui' }));
       const manifest = writeAt(root, join('pkg', 'dist', 'custom-elements.json'), MANIFEST_JSON);
-      const origin = join(root, 'pkg', 'src', 'agent-tooling', 'mcp');
+      const origin = join(root, 'pkg', 'mcp', 'mcp');
       mkdirSync(origin, { recursive: true });
 
       expect(resolveManifestPath(origin)).toBe(manifest);
