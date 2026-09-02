@@ -109,8 +109,15 @@
 *::-webkit-scrollbar-thumb:hover { background-color: var(--kai-brand-hover); }
 ::selection { background: var(--kai-brand); color: #fff; }
 
-/* header is fully overridden (Header.astro) — just size the search box */
-.kai-search { width: min(14rem, 38vw); }
+/* header is fully overridden (Header.astro) — just size the search box.
+   Only from 50rem up: that is where Starlight's search control is a full-width
+   box worth sizing. Below it the control is a bare 20px magnifier button, so a
+   14rem width left the icon stranded at the left edge of a 224px empty box in
+   the middle of the mobile header. Intrinsic width there parks it next to the
+   menu button, which is what the reserved header padding-inline-end expects. */
+@media (min-width: 50rem) {
+  .kai-search { width: min(14rem, 38vw); }
+}
 .header { border-bottom-width: 2px !important; }   /* thicker divider (was 1px) */
 
 /* clean, borderless panes: no vertical dividers between sidebar / content / TOC */
