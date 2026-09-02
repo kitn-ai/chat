@@ -1647,7 +1647,7 @@ async function attachmentStagingCheck(scaffold, attachmentEmitPlan) {
 async function loadCatalogAxes(esbuild) {
   const bundle = join(tmp, 'registry.bundle.mjs');
   await esbuild.build({
-    entryPoints: [resolve(ROOT, 'src/agent-tooling/registry.ts')],
+    entryPoints: [resolve(ROOT, 'mcp/registry.ts')],
     bundle: true,
     platform: 'node',
     format: 'esm',
@@ -1808,7 +1808,7 @@ async function main() {
   const esbuild = await import('esbuild');
   await loadCatalogAxes(esbuild);
   await esbuild.build({
-    entryPoints: [resolve(ROOT, 'src/agent-tooling/mcp/tools/scaffold.ts')],
+    entryPoints: [resolve(ROOT, 'mcp/mcp/tools/scaffold.ts')],
     bundle: true,
     platform: 'node',
     format: 'esm',

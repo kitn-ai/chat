@@ -20,7 +20,7 @@
 // `events`->`eventz` left the suite green with that field empty on every
 // element). So the list is not left unattended: catalog-derived.test.ts pins it
 // against the keys of `DerivedElement`'s zod shape in
-// src/agent-tooling/catalog/catalog-types.ts, an independently authored
+// mcp/catalog/catalog-types.ts, an independently authored
 // statement of the same six. Drop one here and that test goes red naming it.
 //
 // The PREDICATE is deliberately NOT shared. Each side spells out "at least one
