@@ -288,6 +288,14 @@ export default defineConfig({
               { label: 'Theme editor', slug: 'theme/editor' },
             ],
           },
+          // Plain external link, not a topic with its own sidebar — the
+          // deployed Storybook lives outside the Astro build.
+          {
+            label: 'Storybook',
+            link: 'https://ui.kitn.ai/storybook',
+            icon: 'storybook',
+            attrs: { target: '_blank', rel: 'noopener' },
+          },
         ]),
       ],
     }),
