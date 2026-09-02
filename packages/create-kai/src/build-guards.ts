@@ -416,9 +416,10 @@ export function missingStarterProblem(
  * Refuse to build when the block sources package resolves to a directory that
  * is not there.
  *
- * `@kitn.ai/blocks` lives in its own workspace package, moved out of this
- * kit's tree so it can be built and versioned on its own (see
- * packages/blocks). `cp` throws its own ENOENT on a missing source, so this
+ * `@kitn.ai/blocks` lives in its own workspace package (see packages/blocks):
+ * one source for the block registry and forms shared by the `kai dev`
+ * gallery and this CLI, behind a package boundary instead of a relative
+ * reach across packages. `cp` throws its own ENOENT on a missing source, so this
  * rule buys the same thing missingStarterProblem buys for a starter: the
  * message names the resolved directory instead of leaving a stack trace to
  * explain that a workspace resolve came back wrong.
@@ -432,7 +433,7 @@ export function blocksSourceRootProblem(
   exists: (absolutePath: string) => boolean,
 ): string | null {
   if (exists(blocksDir)) return null;
-  return `create-kai build: no blocks directory at ${blocksDir} - copied zero block directories from @kitn.ai/blocks - a zero-block copy is a broken resolve, not an empty catalog`;
+  return `create-kai build: no blocks directory at ${blocksDir} - @kitn.ai/blocks resolved, but its blocks/ directory is not there`;
 }
 
 /**

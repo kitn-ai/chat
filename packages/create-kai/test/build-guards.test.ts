@@ -520,7 +520,12 @@ describe('the blocks-source guard', () => {
   it('rejects a blocks directory that does not exist', () => {
     const absent = path.join(PKG_ROOT, 'no-such-blocks-dir');
 
-    expectRejected(blocksSourceRootProblem(absent, existsSync), `no blocks directory at ${absent}`);
+    const msg = blocksSourceRootProblem(absent, existsSync);
+    expectRejected(msg, `no blocks directory at ${absent}`);
+    // Distinct from zeroBlocksCopiedProblem's message: this rule runs before
+    // the cp, so nothing was copied yet, and a CI log must be able to tell
+    // the two apart.
+    expect(msg).not.toContain('copied zero');
   });
 
   it('holds the real @kitn.ai/blocks resolve against the tree', () => {

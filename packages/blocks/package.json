@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Authored kai blocks, the registry that understands their layout, and the shared form renderer. Never published: bundled into create-kai and the docs site.",
+  "description": "Authored kai blocks, the registry that understands their layout, and the shared form renderer. Never published: bundled into create-kai and the packages/ui/apps/gallery page served by kai dev; the docs site is a future consumer.",
   "license": "MIT",
   "repository": {
     "type": "git",

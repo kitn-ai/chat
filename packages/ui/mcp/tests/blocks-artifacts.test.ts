@@ -70,7 +70,7 @@ function scanRealBlocks(): RawBlockSource[] {
     }));
 }
 
-describe('the real blocks against this package real inputs', () => {
+describe("the real blocks against this package's real inputs", () => {
   const sources = scanRealBlocks();
   const { blocks, errors } = discoverBlocks(sources, ROUTES);
 

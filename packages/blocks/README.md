@@ -2,7 +2,8 @@
 
 The authored kai blocks, the registry that understands their layout, and the
 shared form renderer. Private: never published, bundled into `create-kai` and
-the docs site.
+the `packages/ui/apps/gallery` page served by `kai dev`. The docs site is a
+future consumer, not a current one.
 
 ## What is here
 
@@ -33,9 +34,9 @@ needs from the kit arrive by injection, from callers that have a filesystem:
 
 The `exports` map points at TypeScript source. Every consumer bundles it:
 `packages/ui/scripts/gen-blocks.mjs` and `verify-blocks.mjs` through their
-esbuild round trip, `create-kai` through its CLI bundle, the docs site through
-vite. A build here would put a build ordering between this package and the ui
-build and buy nothing.
+esbuild round trip, `create-kai` through its CLI bundle, and the
+`packages/ui/apps/gallery` page through vite. A build here would put a build
+ordering between this package and the ui build and buy nothing.
 
 ## Gates
 
