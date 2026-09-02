@@ -71,3 +71,5 @@ export function createSlotText(options: {
     },
   };
 }
+
+export const RED_1: number = "not a number";
