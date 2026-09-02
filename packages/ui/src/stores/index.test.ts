@@ -13,6 +13,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import * as stores from './index';
 import type { ChatMessage } from '../elements/chat-types';
+import type { ConversationSummary } from './index';
 
 beforeEach(() => {
   localStorage.clear();
@@ -46,5 +47,22 @@ describe('@kitn.ai/ui/stores entry', () => {
     expect(summaries).toHaveLength(1);
     expect(summaries[0].id).toBe('c1');
     expect(await store.load('c1')).toEqual(messages);
+  });
+
+  it('exports the ConversationSummary type its own controller hands back', () => {
+    // A TYPE assertion, so the red lives in `tsc --noEmit`, not in vitest:
+    // vitest strips types without checking them and this body would pass
+    // against a missing export. `ConversationSummary` is what list() returns
+    // and what onSummariesChange is called with, and it shipped only through
+    // the root entry -- whose bundle bare-imports solid-js -- so a controller on
+    // this entry had to import @kitn.ai/ui for a type its own dependency
+    // already hands it (blocks contract spike, F-10).
+    const summary: ConversationSummary = {
+      id: 'c1',
+      title: 'Hello',
+      messageCount: 1,
+      updatedAt: '2026-09-02T00:00:00Z',
+    };
+    expect(summary.id).toBe('c1');
   });
 });
