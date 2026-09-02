@@ -1,45 +1,61 @@
 ---
 // Full header override — total control of layout (Starlight's default fought
 // every CSS attempt to right-align the search). Left: logo + nav. Right:
-// search + GitHub + Ask AI + theme toggle. Mobile menu toggle on small screens.
+// search + GitHub + Ask AI + theme toggle.
+//
+// The nav is NOT a list of its own: it renders src/topics.mjs, the same array
+// astro.config.mjs hands to starlight-sidebar-topics. Add a topic there and it
+// appears here and in the sidebar switcher together.
+//
+// No mobile menu button here. Starlight's PageFrame already renders
+// <MobileMenuToggle /> as the sibling right before #starlight__sidebar, and its
+// drawer opens off `[aria-expanded='true'] ~ .sidebar-pane`. A second copy in
+// the header is a button with no drawer next to it: on a page with a sidebar it
+// sat underneath the real one, and on a sidebar-less page (the landing page) it
+// was the only one, so a tap set body[data-mobile-menu-expanded] (which locks
+// scrolling) and opened nothing.
 import Search from '@astrojs/starlight/components/Search.astro';
-import MobileMenuToggle from '@astrojs/starlight/components/MobileMenuToggle.astro';
 import SocialIcons from './SocialIcons.astro';
 import ThemeToggle from './ThemeToggle.astro';
 import { Icon } from 'astro-icon/components';
+import { topics } from '../../topics.mjs';
 
 // BASE_URL is '/' (root); strip any trailing slash so asset/nav URLs are always '/…'.
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const href = (p: string) => `${base}/${p.replace(/^\//, '')}`;
 const logo = href('kitn-logo.png');
-const nav = [
-  { label: 'Docs', to: 'guides/introduction' },
-  { label: 'Components', to: 'components/chat' },
-  { label: 'Patterns', to: 'patterns/compose-your-own' },
-  { label: 'Examples', to: 'examples/drop-in-chat' },
-  { label: 'Integrations', to: 'integrations/overview' },
-];
+// A topic's link is either a site path or a full external URL (Storybook).
+const linkTo = (t: (typeof topics)[number]) => (/^https?:\/\//.test(t.link) ? t.link : href(t.link));
+// Topics carrying a `headerIcon` (Theme, Storybook) are tools rather than
+// sections, so they sit after a divider with their icon.
+const sections = topics.filter((t) => !('headerIcon' in t));
+const tools = topics.filter((t) => 'headerIcon' in t);
 ---
 <div class="flex h-full w-full items-center gap-4">
   <a href={`${base}/`} class="flex shrink-0 items-center gap-2 no-underline">
     <img src={logo} alt="kitn" width="26" height="24" class="kai-logo-img h-6 w-[26px] shrink-0" />
     <span class="whitespace-nowrap text-xl font-black tracking-tight"><span class="text-ink">AI</span><span class="text-brand">/</span><span class="text-ink">UI</span></span>
   </a>
-  <nav class="ml-5 hidden items-center gap-5 md:flex" aria-label="Primary">
-    {nav.map((n) => (
-      <a href={href(n.to)} class="text-sm font-semibold text-ink-2 no-underline transition-colors hover:text-ink">{n.label}</a>
+  {/* `nav:` is the measured width the whole row stops fitting at, not a stock
+      Tailwind step — see --breakpoint-nav in app.css. Below it the sidebar's
+      topic switcher is the navigation. */}
+  <nav class="ml-5 hidden items-center gap-5 nav:flex" aria-label="Primary">
+    {sections.map((t) => (
+      <a href={linkTo(t)} {...t.attrs} class="whitespace-nowrap text-sm font-semibold text-ink-2 no-underline transition-colors hover:text-ink">{t.label}</a>
     ))}
-    {/* Theme editor is its own thing — set off with a divider + palette icon. */}
-    <span class="text-ink-3" aria-hidden="true">|</span>
-    <a href={href('theme/editor')} class="flex items-center gap-1.5 text-sm font-semibold text-ink-2 no-underline transition-colors hover:text-ink">
-      <Icon name="lucide:palette" class="size-4 shrink-0" />
-      <span>Theme</span>
-    </a>
+    {tools.length > 0 && <span class="text-ink-3" aria-hidden="true">|</span>}
+    {tools.map((t) => (
+      <a href={linkTo(t)} {...t.attrs} class="flex items-center gap-1.5 whitespace-nowrap text-sm font-semibold text-ink-2 no-underline transition-colors hover:text-ink">
+        <Icon name={t.headerIcon} class="size-4 shrink-0" />
+        <span>{t.label}</span>
+      </a>
+    ))}
   </nav>
 
   <div class="ml-auto flex items-center gap-3">
     <div class="kai-search"><Search /></div>
-    <div class="hidden items-center gap-3 md:flex"><SocialIcons /><ThemeToggle /></div>
-    <div class="md:hidden"><MobileMenuToggle /></div>
+    {/* `chrome:` is Starlight's own 50rem mobile line: below it these two move
+        into the drawer's MobileMenuFooter, which is hidden at exactly 50rem. */}
+    <div class="hidden items-center gap-3 chrome:flex"><SocialIcons /><ThemeToggle /></div>
   </div>
 </div>

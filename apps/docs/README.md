@@ -50,7 +50,8 @@ apps/docs/
 │   │   └── overrides/      # Starlight component overrides (Header, ThemeToggle, …)
 │   ├── content/docs/       # the pages (.md/.mdx) — one route per file
 │   ├── data/samples/       # hand-authored per-element sample data (tracked)
-│   └── styles/             # tokens.css (one source) + app.css
+│   ├── styles/             # tokens.css (one source) + app.css
+│   └── topics.mjs          # the nav: one array, read by astro.config.mjs AND the header
 └── astro.config.mjs
 ```
 

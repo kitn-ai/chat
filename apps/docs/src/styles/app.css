@@ -35,10 +35,36 @@
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
-/* Topic switching: on desktop the custom header nav (Docs · Components · Examples)
-   is the switcher, so hide the plugin's in-sidebar topic list there (no redundant
-   topic title in the sidebar). Keep it on mobile, where the header nav collapses. */
-@media (min-width: 50rem) {
+/* Two named breakpoints, because two different things collapse at two different
+   widths and both used to be a guessed `md:` (Tailwind's 768px, which matched
+   neither).
+
+   --breakpoint-chrome is Starlight's OWN mobile line. Everything of its own that
+   switches (the sidebar becoming a drawer, the menu button appearing, the social
+   + theme controls moving into MobileMenuFooter) does so at 50rem, so the header
+   copy of those controls has to hide at exactly 50rem too. Between 768px and
+   800px the old value showed them twice; the sidebar was a drawer while the
+   header still claimed to be a desktop header.
+
+   --breakpoint-nav is where the header ROW stops fitting: logo + five sections +
+   Theme + Storybook + the search box + the controls. Measured in Chromium on
+   /guides/introduction/ (scrollWidth of the header's children plus its gaps and
+   padding) the row needs 1162px, so it collapses below 75rem/1200px, leaving a
+   little room for wider font metrics, and the sidebar's topic switcher becomes
+   the navigation. Re-measure after adding a topic: an overflowing row does not
+   fail loudly, it just crowds the search box. */
+@theme {
+  --breakpoint-chrome: 50rem;
+  --breakpoint-nav: 75rem;
+}
+
+/* Topic switching: where the header nav is showing, IT is the switcher, so the
+   plugin's in-sidebar topic list is redundant and hidden. The two are one
+   control with one breakpoint, so this reads the same token the header does.
+   Below it the switcher is the only way to change topic, so it must appear at
+   the exact width the header nav disappears (at 50rem it did not, and 50rem to
+   74rem had no topic navigation at all). */
+@media (width >= theme(--breakpoint-nav)) {
   .starlight-sidebar-topics { display: none; }
 }
 
