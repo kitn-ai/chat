@@ -20,21 +20,30 @@ interface Target {
 }
 
 const TARGETS: Record<string, Target> = {
-  // Built AFTER KAI_BUILD=schemas: this bundle compiles the MCP against the
-  // BUILT dist/schemas.js, not against src. vitest.config.ts records the same
-  // dependency from the other side.
+  // Third build (after main + provider). Compiles the stdio MCP entry to a runnable
+  // Node ESM bundle so `bin/mcp.js` can `import()` it — a bin runs under plain Node,
+  // which can't execute .ts.
   //
-  // Approach: an SSR (Node-target) build rather than browser `lib` mode. `lib`
-  // mode is a browser build — it would pull in browser polyfills/conditions.
-  // `build.ssr` gives a Node bundle directly (Node export conditions, no
-  // polyfills) with one knob, which is cleaner for a tool that only ever runs
-  // under Node. The output filename is set via output.entryFileNames (build.ssr
-  // takes precedence over lib.fileName).
+  // Approach: an SSR (Node-target) build rather than browser `lib` mode. The brief
+  // suggests mirroring vite.config.provider.ts's `lib` config, but `lib` mode is a
+  // browser build — it would pull in browser polyfills/conditions. `build.ssr`
+  // gives a Node bundle directly (Node export conditions, no polyfills) with one
+  // knob, which is cleaner for a tool that only ever runs under Node. We name the
+  // output mcp.es.js via output.entryFileNames (build.ssr takes precedence over
+  // lib.fileName, so we set the filename on rollup output instead).
   //
-  // external — keep deps the runtime provides out of the bundle: zod, the whole
-  // @modelcontextprotocol/sdk (regex covers its subpaths like /server/stdio.js),
-  // and every Node builtin (bare + node: prefixed). OUR code (registry, tools)
-  // is bundled inline.
+  // Other knobs and why:
+  //  • emptyOutDir: false — main build (vite.config.ts) ran first with
+  //    emptyOutDir: true; we must NOT clobber its dist output.
+  //  • external — keep deps the runtime provides out of the bundle: zod, the whole
+  //    @modelcontextprotocol/sdk (regex covers its subpaths like /server/stdio.js),
+  //    and every Node builtin (bare + node: prefixed). OUR code (registry, tools)
+  //    is bundled inline.
+  //
+  // Note: in this merged file the ordering is no longer "third build after main +
+  // provider" -- it now runs after KAI_BUILD=schemas, because this bundle compiles
+  // the MCP against the BUILT dist/schemas.js, not against src. vitest.config.ts
+  // records the same dependency from the other side.
   mcp: {
     entry: 'src/agent-tooling/mcp/stdio.ts',
     out: 'mcp.es.js',
@@ -61,8 +70,6 @@ if (!target) {
 
 export default defineConfig({
   build: {
-    // main build (vite.config.ts) ran first with emptyOutDir: true; we must NOT
-    // clobber its dist output.
     emptyOutDir: false,
     ssr: target.entry,
     target: 'node18',
