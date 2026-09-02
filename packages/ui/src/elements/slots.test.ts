@@ -281,21 +281,22 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
   // directory is scanned by default, and the only way to lose coverage is to
   // name the directory here, in the diff, on purpose.
   //
-  // Both entries below are for source that is NOT part of any `kai-*` element's
-  // shadow DOM, so a `part=` in them is not a styling surface we owe consumers
+  // The entry below is for source that is NOT part of any `kai-*` element's
+  // shadow DOM, so a `part=` in it is not a styling surface we owe consumers
   // documentation for:
-  //   - `agent-tooling/` is the `kai` MCP scaffolder. The code it EMITS lives in
-  //     string literals; a `part=` there belongs to the consumer app it
-  //     generates, not to a kit element.
   //   - `stories/` is Storybook demo/doc pages -- the same category the existing
   //     `.stories.tsx` filename filter already excludes; this just covers the
   //     non-`.stories` helpers that sit in that directory.
-  // Excluding these matters in BOTH directions: counting them would manufacture
+  // Excluding it matters in BOTH directions: counting it would manufacture
   // forward-guard failures that tempt bogus registry entries, and it would WEAKEN
   // the reverse guard by letting a template string "justify" a registered name
-  // that no element actually renders. Neither directory contains a `part=` today,
-  // so both exclusions are provably no-ops at the time they were written.
-  const UNSCANNED_DIRS = new Set(['agent-tooling', 'stories']);
+  // that no element actually renders. The directory contains no `part=` today,
+  // so the exclusion is provably a no-op at the time it was written.
+  //
+  // `agent-tooling/` used to be the other entry here. It left src/ in the
+  // 2026-09-02 move, so this scan no longer reaches it and an entry naming it
+  // would be a rule that can never fire.
+  const UNSCANNED_DIRS = new Set(['stories']);
 
   // These scans read the tree thousands of times over (the import closures below
   // revisit shared modules once per element), and the source cannot change mid-run,
