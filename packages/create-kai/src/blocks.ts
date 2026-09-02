@@ -319,7 +319,7 @@ export function planAdd(resolved: ResolvedAdd, opts: PlanOptions): AddPlan {
 }
 
 // The three per-form file sets come from the ONE shared renderer
-// (`agent-tooling/blocks/forms.ts` — the gallery serves the identical output);
+// (`mcp/blocks/forms.ts` — the gallery serves the identical output);
 // what stays here is what only the CLI knows: where the files land in the
 // consumer's project, and the note printed about them.
 

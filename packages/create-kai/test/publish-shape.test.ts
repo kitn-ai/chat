@@ -285,7 +285,7 @@ describe('the publish-build hook', () => {
  * nowhere automatic — so both failure modes it was written for were unguarded on
  * the merge path, and the hook above was going to be the first thing to ever run
  * it. A check that runs nowhere is the shape of the bug it guards against; this
- * is the same wiring assertion `tests/agent-tooling/emitted-project-wiring.test.ts`
+ * is the same wiring assertion `packages/ui/mcp/tests/emitted-project-wiring.test.ts`
  * makes for the emitted project.
  */
 describe('the CI wiring for the tarball verifier', () => {

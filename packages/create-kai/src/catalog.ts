@@ -4,7 +4,7 @@
  * path and bundled at build time.
  *
  * WHY A RELATIVE SOURCE IMPORT AND NOT A PACKAGE IMPORT. `@kitn.ai/ui`'s exports
- * map does not expose `agent-tooling`, and it should not: the catalog is
+ * map does not expose `mcp`, and it should not: the catalog is
  * dev-time tooling, not runtime API, and `create-kai` is deliberately not a
  * runtime dependency of anything. Bundling the source at build time gives the
  * CLI the real `Integration` objects (with `deps`, `keyExposure`, `envVars`,

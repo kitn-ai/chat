@@ -17,7 +17,7 @@
  *
  * The DECLARATION around it is ours, and that is a deliberate split rather than
  * a gap. The kit's `kai` MCP has its own per-framework wrappers in
- * `agent-tooling/mcp/tools/scaffold.ts` (`WEB_ROUTE_ADAPTERS`), and they are not
+ * `mcp/mcp/tools/scaffold.ts` (`WEB_ROUTE_ADAPTERS`), and they are not
  * reusable here even in principle: an MCP wrapper emits a PASTE-ABLE SNIPPET —
  * one string that concatenates three files with `// ── vite-chat-api.ts ───`
  * separators and a commented-out `// export default defineConfig(...)` line for

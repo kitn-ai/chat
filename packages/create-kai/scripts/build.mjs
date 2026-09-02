@@ -13,7 +13,7 @@
  *      are the ones that ship the defect, so the output is what gets graded.
  *   3. Bundle `src/index.ts` to one zero-dependency ESM file, so `npx` cold
  *      start is fast. `@clack/prompts` and `picocolors` are bundled in; so is
- *      the kit's `agent-tooling` catalog, which is why the CLI can hand out real
+ *      the kit's `mcp` catalog, which is why the CLI can hand out real
  *      `Integration` objects without depending on `@kitn.ai/ui` at runtime.
  *
  * THE RULES THEMSELVES ARE NOT IN THIS FILE, and that is deliberate. This module
