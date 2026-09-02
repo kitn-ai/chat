@@ -567,7 +567,7 @@ jobs:
       # project owns them, not about whether
       # they gate a merge: they must stay inside the one required context, next to the
       # build they depend on, or splitting them out would have traded a slow check for
-      # no check. Needs the build above (src/elements/compiled.css). ~10s, which
+      # no check. Needs the `build` leg's artifact (src/elements/compiled.css). ~10s, which
       # restates the same invalidated local "idle" reading and is not a figure from
       # this runner; treat it as an order of magnitude, not a budget.
       # (The required context is now the `test` GRAPH rather than one job, and
@@ -600,7 +600,7 @@ jobs:
       # 1.3s and a 2.3s typecheck. The browser-level conformance harness -- the
       # part that is slow and has a known flake -- is advisory in its own
       # workflow (spike-conformance.yml). The deterministic half gates merges;
-      # the flaky half does not. Needs the build above: the spike reads the kit's
+      # the flaky half does not. Needs the `build` leg's artifact: the spike reads the kit's
       # own built `@kitn.ai/ui/schemas` entry rather than restating its list of
       # built-in card types. ~4s total.
       - name: Spike typecheck (openrouter conformance harness)
@@ -795,7 +795,7 @@ jobs:
       # No error, no warning, no type-checking at all for the consumer. The kit's
       # own typecheck compiles src/ under its own tsconfig and cannot see it; the
       # in-build verify:dts reasons about dist/ with our model of resolution. This
-      # asks the only authority that counts. Needs the build above + network. ~8s
+      # asks the only authority that counts. Needs the `build` leg's artifact + network. ~8s
       # locally; the npm install dominates on CI.
       - name: Consumer types guard (shipped .d.ts type-check under bundler + nodenext)
         run: pnpm --filter @kitn.ai/ui run verify:dts:consumer
@@ -819,7 +819,7 @@ jobs:
       # component and the entry. It also self-tests on every run -- it renders a
       # canary that MUST be caught and one that MUST produce markup -- so a
       # harness that quietly stopped measuring goes red instead of green.
-      # Needs the build above. ~5s, no network.
+      # Needs the `build` leg's artifact. ~5s, no network.
       - name: Server guard (every entry imports AND every component renders under `node`)
         run: pnpm --filter @kitn.ai/ui run verify:ssr
 
@@ -835,7 +835,7 @@ jobs:
       # the then-79 elements had no writable Solid equivalent (kai-chat,
       # kai-thread and kai-workspace among them). Those gaps are closed: it
       # reports GAP 0 today. Also asserts every public component ships a
-      # <Name>Props type. Needs the build above; a missing build fails the check
+      # <Name>Props type. Needs the `build` leg's artifact; a missing build fails the check
       # rather than skipping it.
       - name: Solid coverage guard (every element writable in SolidJS)
         run: pnpm --filter @kitn.ai/ui run verify:solid-coverage
@@ -889,7 +889,7 @@ jobs:
       #
       # Watched failing rather than assumed to fail: pointing a specifier in
       # dist/wire/index.d.ts at a file that does not exist turns this red naming
-      # the file and the specifier (TS2307). Needs the build above. ~0.5s, no
+      # the file and the specifier (TS2307). Needs the `build` leg's artifact. ~0.5s, no
       # network.
       - name: Declaration boundary guard (every emitted .d.ts specifier resolves)
         run: pnpm --filter @kitn.ai/ui run verify:dts
@@ -905,7 +905,7 @@ jobs:
       # the events arrive at a `./diagnostics` subscriber, then does the same
       # across two instances of one module (the duplication a consumer causes by
       # bundling the kit AND loading the CDN bundle) and checks the stream-id
-      # counter did not restart. Needs the build above. ~1s, no network.
+      # counter did not restart. Needs the `build` leg's artifact. ~1s, no network.
       - name: Diagnostics wiring guard (events cross the ./wire ↔ ./diagnostics boundary)
         run: pnpm --filter @kitn.ai/ui run verify:diagnostics-wiring
 
@@ -930,7 +930,7 @@ jobs:
       #
       # The expected set is readdirSync of that source directory, never a literal
       # count, so a 12th schema is covered the day it is added rather than the day
-      # someone remembers. Needs the build above. <1s, no network.
+      # someone remembers. Needs the `build` leg's artifact. <1s, no network.
       - name: Card-schema export guard (both surfaces reachable from outside)
         run: pnpm --filter @kitn.ai/ui run verify:schemas
 
@@ -963,7 +963,7 @@ jobs:
       # designed to render and nothing anywhere says so. The schema walker is
       # written independently of the one in src/, because a guard that reuses the
       # code it checks proves only that the code agrees with itself. Needs the
-      # build above. <1s, no network.
+      # `build` leg's artifact. <1s, no network.
       - name: Tool-definition guard (card schemas project to definitions a provider accepts)
         run: pnpm --filter @kitn.ai/ui run verify:tool-schemas
 
@@ -987,7 +987,7 @@ jobs:
       # It gates on `high` only; medium/advisory are reported and do not fail.
       # Its own anti-theatre self-test runs first and hard-fails the whole run if
       # a probe that must be RED goes green, so "0 findings" cannot mean "the kit
-      # types resolved to `any`". Needs the build above. ~8s, no network.
+      # types resolved to `any`". Needs the `build` leg's artifact. ~8s, no network.
       - name: Docs alignment (every doc snippet compiles against the shipped API)
         run: pnpm --filter @kitn.ai/docs run verify:docs
 
@@ -1033,7 +1033,7 @@ jobs:
       # full cold run measured 1m28s wall (~33s for the linked builds, ~56s for
       # the two standalone including npm ci), on a box at load average 17.6 with a
       # warm ~/.npm cache and before the apps corpus existed -- each linked app
-      # adds a build apiece. Needs the build above -- everything here resolves
+      # adds a build apiece. Needs the `build` leg's artifact -- everything here resolves
       # @kitn.ai/ui to the compiled dist/. This is the COMPILE floor: it cannot
       # see runtime contract failures (wrong tag, array set as an attribute),
       # which is what verify:consumer and /consumer-regression are for.
@@ -1110,7 +1110,7 @@ jobs:
       # `focus-visible:ring-2` class while painting nothing. 29 of 39 focusable
       # controls had NO focus indicator at all in a real consumer app.
       #
-      # This runs against the BUILT bundle (needs the build above) in a bare
+      # This runs against the BUILT bundle (needs the `build` leg's artifact) in a bare
       # harness with NO document-level Tailwind, because that is what a consumer
       # app looks like. Storybook and the docs site both load Tailwind at
       # document level, which registers the properties globally and makes every
