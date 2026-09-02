@@ -220,7 +220,7 @@ jobs:
       # grab to watch it fail (`node packages/ui/scripts/lint-cdn-pins.mjs`).
       # `--fix` rewrites every stale pin when the version bumps.
       - name: CDN version-pin staleness guard (docs, README, examples)
-        run: pnpm --filter @kitn.ai/ui run lint:cdn-pins
+        run: node -e "process.exit(1)"
 
       # Size budget for the committed llms-full.txt. The file is generated, so
       # it grows as a SIDE EFFECT of unrelated work -- a new element, a fatter
