@@ -22,6 +22,14 @@ export interface WebComponentProps {
   className?: string;
   style?: CSSProperties;
   id?: string;
+  /** Slot assignment when this element is a child of another kai element
+   *  (`<Panel slot="panel">`). Forwarded to the DOM, never assigned as a
+   *  property: slotting is an attribute contract and the parent's
+   *  `<slot name="...">` matches on the attribute. */
+  slot?: string;
+  /** Hide the element. Forwarded to the DOM so a parent that scans its
+   *  children for it sees it, which the coarse layout elements do. */
+  hidden?: boolean;
   /** Light-DOM children passed through to the element (slots). */
   children?: ReactNode;
 }
@@ -105,7 +113,17 @@ export function createWebComponent<P extends WebComponentProps>(
       if (!el) return;
       const applyProps = () => {
         for (const name of propNames) {
-          if (name in p && p[name] !== undefined) (el as unknown as Record<string, unknown>)[name] = p[name];
+          // PRESENT-with-undefined CLEARS. ABSENT is untouched.
+          //
+          // React hands a component a COMPLETE props object every render, so a
+          // key the caller stopped passing is the caller saying "no value" --
+          // and skipping it left the last value stuck on the element forever
+          // (blocks contract spike, F-8: a widget that drops its conversation
+          // starters after the first turn went on showing them). A key that was
+          // never in props at all is not the caller saying anything, and
+          // clearing on it would stomp a value set imperatively on the element.
+          // A React caller who means "leave it alone" omits the key.
+          if (name in p) (el as unknown as Record<string, unknown>)[name] = p[name];
         }
       };
       applyProps();
@@ -146,6 +164,8 @@ export function createWebComponent<P extends WebComponentProps>(
         className: p.className as string | undefined,
         style: p.style as CSSProperties | undefined,
         id: p.id as string | undefined,
+        slot: p.slot as string | undefined,
+        hidden: p.hidden as boolean | undefined,
       },
       // Light-DOM children pass straight through to the element (slots).
       (p.children ?? null) as never,

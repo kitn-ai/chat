@@ -10,7 +10,7 @@
  */
 import { render, cleanup } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
-import { Conversations, PromptInput, Chat } from '@kitn.ai/ui/react';
+import { Conversations, PromptInput, Chat, Panel, Row, Suggestions } from '@kitn.ai/ui/react';
 
 afterEach(cleanup);
 
@@ -122,4 +122,59 @@ test('object prop (messages) on Chat reaches the element unstringified', async (
   expect(el.messages).toBe(messages);
   expect(el.getAttribute('messages')).toBeNull();
   expect(el.shadowRoot?.textContent).toContain('Hi there');
+});
+
+// ─── F-8: slot, hidden, and clearing a prop ──────────────────────────────────
+// The blocks contract spike (docs/superpowers/research/2026-09-02-blocks-contract-spike.md,
+// F-8) found three holes in one block. `slot` and `hidden` were not declared on
+// WebComponentProps and not forwarded, so composing kai elements into kai SLOTS --
+// which most blocks do -- did not type-check and did not work; and a prop set back
+// to `undefined` was skipped rather than cleared, so a widget that drops its
+// conversation starters after the first turn showed them forever.
+
+test('slot is forwarded to the element (composing into a kai slot)', async () => {
+  const { container } = render(<Panel slot="panel" />);
+  const el = container.querySelector('kai-panel') as unknown as AnyEl;
+  await flush();
+  // The ATTRIBUTE is the one that matters: slot assignment is an attribute
+  // contract, and a parent's <slot name="panel"> matches on it.
+  expect(el.getAttribute('slot')).toBe('panel');
+});
+
+test('hidden is forwarded, and toggles back off', async () => {
+  const { container, rerender } = render(<Row hidden />);
+  const el = container.querySelector('kai-row') as unknown as AnyEl;
+  await flush();
+  expect(el.hidden).toBe(true);
+  expect(el.hasAttribute('hidden')).toBe(true);
+
+  rerender(<Row />);
+  await flush();
+  expect(el.hidden).toBe(false);
+  expect(el.hasAttribute('hidden')).toBe(false);
+});
+
+test('a prop re-rendered as undefined CLEARS it on the element', async () => {
+  const { container, rerender } = render(<Suggestions suggestions={['a', 'b']} />);
+  const el = container.querySelector('kai-suggestions') as unknown as AnyEl;
+  await flush();
+  expect(el.suggestions).toEqual(['a', 'b']);
+
+  rerender(<Suggestions suggestions={undefined} />);
+  await flush();
+  expect(el.suggestions).toBeUndefined();
+});
+
+test('a prop ABSENT from props is left alone (not cleared)', async () => {
+  // The other half of the rule, and the reason the guard is `name in p` rather
+  // than a plain assignment: React callers who mean "leave whatever is on the
+  // element alone" omit the key. `undefined` is a value; an absent key is not.
+  const { container, rerender } = render(<PromptInput placeholder="Ask" />);
+  const el = container.querySelector('kai-prompt-input') as unknown as AnyEl;
+  await flush();
+
+  el.loading = true; // set imperatively, never passed through React
+  rerender(<PromptInput placeholder="Ask again" />);
+  await flush();
+  expect(el.loading).toBe(true);
 });
