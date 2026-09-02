@@ -71,7 +71,7 @@ const ENTRY_POINTS = [
 
 /**
  * The fence the MCP slices on. REGISTERED COPY: the same two literals live in
- * src/agent-tooling/mcp/tools/reference.ts (`renderProgrammaticAppendix`),
+ * mcp/mcp/tools/reference.ts (`renderProgrammaticAppendix`),
  * which cannot import this .mjs. Change one and the reference tests fail on
  * the "Missing build artifact" branch, so the drift is loud, not silent.
  */
@@ -138,13 +138,13 @@ function moduleDeclarations(modulePath) {
 
 /**
  * The `ChatRequestBody` contract, extracted from the scaffolder's own preamble
- * (`src/agent-tooling/route-emit.ts`, `CHAT_REQUEST_BODY_DECL`) — the single
+ * (`mcp/route-emit.ts`, `CHAT_REQUEST_BODY_DECL`) — the single
  * source every emitted backend route already injects. Only the leading plain
  * string-literal lines are taken (the type + its doc); the guard functions that
  * follow use template substitutions and are implementation, not contract.
  */
 function chatRequestBodyDecl() {
-  const path = resolve(root, 'src/agent-tooling/route-emit.ts');
+  const path = resolve(root, 'mcp/route-emit.ts');
   const sf = parse(path);
   let arr;
   const visit = (node) => {
@@ -160,7 +160,7 @@ function chatRequestBodyDecl() {
     ts.forEachChild(node, visit);
   };
   visit(sf);
-  if (!arr) fail('CHAT_REQUEST_BODY_DECL not found in src/agent-tooling/route-emit.ts — the contract moved; update this extractor.');
+  if (!arr) fail('CHAT_REQUEST_BODY_DECL not found in mcp/route-emit.ts — the contract moved; update this extractor.');
   const lines = [];
   for (const el of arr.elements) {
     // Plain literals only. The first templated line (`ChatRequestError` uses

@@ -15,7 +15,7 @@
 // ~293 KB of duplicate llms-full weight in every install — and the two copies
 // were observed to drift (a stale dist copy without the programmatic markers
 // beside a current root copy). The MCP's programmatic-topic slicer reads the
-// root copy (src/agent-tooling/mcp/tools/reference.ts), and `generate()`
+// root copy (mcp/mcp/tools/reference.ts), and `generate()`
 // below removes any stale `dist/llms/` left by an earlier build so it cannot
 // keep shipping — dist/ is packed wholesale.
 

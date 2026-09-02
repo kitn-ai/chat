@@ -1,5 +1,5 @@
 // Blocks generation (Task 3.1, blocks-and-parts plan 2026-08-31): the
-// filesystem half of src/agent-tooling/blocks/registry.ts. Scans
+// filesystem half of mcp/blocks/registry.ts. Scans
 // packages/ui/blocks/<id>/ (a block IS a directory with a registry-item.json
 // - adding one moves every output with no list to edit), validates manifests
 // and the kai- contract checks, then emits the derived artifacts.
@@ -64,8 +64,8 @@ async function importTs(entry) {
   return mod;
 }
 
-const blocksMod = await importTs(join(ROOT, 'src/agent-tooling/blocks/registry.ts'));
-const scaffolderRegistry = await importTs(join(ROOT, 'src/agent-tooling/registry.ts'));
+const blocksMod = await importTs(join(ROOT, 'mcp/blocks/registry.ts'));
+const scaffolderRegistry = await importTs(join(ROOT, 'mcp/registry.ts'));
 
 // Axes and inputs, each read where it lives - never restated:
 const routeIntegrations = scaffolderRegistry.listIntegrations().map((i) => i.id);
