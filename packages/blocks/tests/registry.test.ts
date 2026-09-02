@@ -100,23 +100,57 @@ function syntheticSource(overrides: Partial<{ manifest: Record<string, unknown>;
 
 const discoverOne = (src: RawBlockSource) => discoverBlocks([src], ROUTES);
 
+/**
+ * The exports map is not decoration: `tsc` follows `types` while gen-blocks.mjs
+ * and verify-blocks.mjs read `default` out of this same map to locate the entry
+ * they esbuild-bundle. If the two ever disagree, the typechecked module and the
+ * generated artifacts come from different files and nothing else would say so.
+ * (Re-homed from the deleted tests/skeleton.test.ts, which pinned `default`.)
+ */
+describe('the package exports map', () => {
+  const pkg = JSON.parse(readFileSync(resolve(__dirname, '../package.json'), 'utf8')) as {
+    exports: Record<string, { types: string; default: string }>;
+  };
+
+  it('points both entries at their real source files', () => {
+    expect(pkg.exports['.'].default).toBe('./src/registry.ts');
+    expect(pkg.exports['./forms'].default).toBe('./src/forms.ts');
+  });
+
+  it('resolves `types` and `default` to the SAME file for every entry', () => {
+    for (const subpath of ['.', './forms']) {
+      expect(pkg.exports[subpath].types).toBe(pkg.exports[subpath].default);
+    }
+  });
+});
+
 describe('registry derivation (the directory scan is the list)', () => {
   const sources = scanRealBlocks();
   const { blocks } = discoverBlocks(sources, ROUTES);
 
-  it('every blocks/<dir> with a manifest is discovered', () => {
-    // NOT `expect(errors).toEqual([])`. Discovery validates `registryDependencies`
-    // against the routeIntegrations it is handed, and the routes here are
-    // FIXTURES. That assertion passes today only because all three real manifests
-    // happen to declare `registryDependencies: []`; the first block to declare a
-    // real `route:<id>` dep would turn it red against a fixture list that cannot
-    // contain the id. Error-free discovery against the REAL catalog is asserted
-    // in packages/ui/mcp/tests/blocks-artifacts.test.ts and by verify:blocks
-    // [contracts], both of which have the real catalog. What belongs HERE is the
-    // derivation claim: the scan is the list.
+  // THE WALK, which depends on nothing but the directory layout. A zero-block
+  // scan is a broken walk, and naming one real block catches a walk that found
+  // directories but not these ones.
+  it('the directory walk finds the authored block directories', () => {
+    expect(sources.length).toBeGreaterThanOrEqual(1);
+    expect(sources.map((s) => s.dirName)).toContain('support-widget');
+  });
+
+  // THE DERIVATION: everything the walk found is everything discovery returns,
+  // so adding a block is adding a directory.
+  //
+  // THIS ASSERTION DEPENDS ON THE FIXTURE `ROUTES` ABOVE, and is not immune to a
+  // real route dependency. `discoverBlocks` DROPS a source whose manifest fails
+  // validation (src/registry.ts: `if (errs.length) { errors.push(...errs);
+  // continue; }`), so the day a manifest declares a `route:<id>` the fixture list
+  // does not contain, that block validates red, never reaches `blocks`, and this
+  // equality goes red with it. The fix then is to add the id to ROUTES, not to
+  // weaken this. The real-catalog version of this claim, which cannot drift that
+  // way, lives in packages/ui/mcp/tests/blocks-artifacts.test.ts (and verify:blocks
+  // [contracts]); both have the real integration catalog, and this package
+  // deliberately does not.
+  it('every walked directory is discovered, and nothing else is', () => {
     expect(blocks.map((b) => b.name).sort()).toEqual(sources.map((s) => s.dirName).sort());
-    expect(blocks.length).toBeGreaterThanOrEqual(1); // a zero-block scan is a broken walk
-    expect(blocks.some((b) => b.name === 'support-widget')).toBe(true);
   });
 });
 

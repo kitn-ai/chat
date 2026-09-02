@@ -23,7 +23,6 @@ import {
   buildRegistryItem,
   generateCdnForm,
   checkBlockContracts,
-  type Block,
   type RawBlockSource,
 } from '@kitn.ai/blocks';
 import { listIntegrations } from '../registry';
@@ -95,7 +94,7 @@ describe('the real blocks against this package real inputs', () => {
   });
 
   it('the built cdn.html and generated driver page match what the current sources produce, pinned to this package version', () => {
-    for (const block of blocks as Block[]) {
+    for (const block of blocks) {
       const cdn = generateCdnForm(block, { version: VERSION });
       expect(cdn.errors).toEqual([]);
       expect(readBuiltArtifact(join(DIST_BLOCKS, 'r', `${block.name}.cdn.html`))).toBe(cdn.html);
