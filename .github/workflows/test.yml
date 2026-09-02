@@ -837,9 +837,6 @@ jobs:
       # reports GAP 0 today. Also asserts every public component ships a
       # <Name>Props type. Needs the build above; a missing build fails the check
       # rather than skipping it.
-      - name: Solid coverage guard (every element writable in SolidJS)
-        run: pnpm --filter @kitn.ai/ui run verify:solid-coverage
-
       # Packs the tarball and weighs what a consumer actually downloads. `files`
       # ships the whole of `src/` on purpose -- consumers read source, and source
       # maps point into it -- and that blanket include is how 300 KB of generated
@@ -1263,6 +1260,13 @@ jobs:
   # aggregates all shards into one REQUIRED status context -- ruleset 18328421
   # requires `test` and `storybook-gate`. A real, repeatable regression still
   # fails every retry and shows red here.
+  orphan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Solid coverage guard (every element writable in SolidJS)
+        run: pnpm --filter @kitn.ai/ui run verify:solid-coverage
+
   storybook:
     runs-on: ubuntu-latest
     timeout-minutes: 30
