@@ -241,7 +241,7 @@ async function loadAuthored(catalogDir) {
  * a title that is not the meta's is not a registration. Same parser idiom
  * lint-silent-drops.mjs uses to read the MessagePart union.
  *
- * REGISTERED COPY of src/agent-tooling/catalog/labs-titles.ts — a .mjs cannot
+ * REGISTERED COPY of mcp/catalog/labs-titles.ts — a .mjs cannot
  * import a .ts at runtime. The guard-wiring test asserts the two agree, which
  * catches drift and is blind to a bug they share.
  */
@@ -682,7 +682,7 @@ function storyExtensions() {
 }
 
 async function main() {
-  const catalogDir = join(ROOT, 'src/agent-tooling/catalog');
+  const catalogDir = join(ROOT, 'mcp/catalog');
   const derived = JSON.parse(readFileSync(join(catalogDir, 'derived.json'), 'utf8'));
   const authored = await loadAuthored(catalogDir);
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));

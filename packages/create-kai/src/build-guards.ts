@@ -285,7 +285,7 @@ export function routeSymbolsProblem(
       'declarations.\n' +
       '  Every webRoute in the catalog narrows its body through readChatRequest, so a preamble with\n' +
       '  nothing in it means the contract moved. Re-read chatRoutePreamble in\n' +
-      '  agent-tooling/route-emit.ts before trusting this emit.'
+      '  mcp/route-emit.ts before trusting this emit.'
     );
   }
 
@@ -616,7 +616,7 @@ export function sharedDevDepsProblem(mine: Manifest, kit: Manifest): string | nu
  *
  * THE FAILURE THIS EXISTS FOR HAS ALREADY HAPPENED, and it was invisible at
  * every seam that was being watched. One import — three symbols out of
- * `agent-tooling/mcp/tools/scaffold.ts` — took `dist/index.js` from 203 kB to
+ * `mcp/mcp/tools/scaffold.ts` — took `dist/index.js` from 203 kB to
  * 904 kB, of which 505 kB was zod this CLI never executes, and pushed `npx` cold
  * start from 30 ms to 45 ms. Nothing failed. Every test passed, the emitted
  * output was byte-identical, and the build printed the new size as a fact rather
@@ -637,10 +637,10 @@ export function sharedDevDepsProblem(mine: Manifest, kit: Manifest): string | nu
  *   · `zod` — the 505 kB. Named directly because it is the cost, and because a
  *     future route into it that does not pass through `mcp/` would still be a
  *     bug this CLI should not pay for.
- *   · anything under `agent-tooling/mcp/` — the CAUSE. `create-kai` is not the
+ *   · anything under `mcp/mcp/` — the CAUSE. `create-kai` is not the
  *     `kai` MCP; the reuse boundary `src/catalog.ts` describes is the catalog,
  *     and the three modules that serve it (`registry.ts`, `types.ts`,
- *     `route-emit.ts`) all sit at the root of `agent-tooling/`. This half fires
+ *     `route-emit.ts`) all sit at the root of `mcp/`. This half fires
  *     even in the case where the offending module happens to shake clean today,
  *     which is the version of this bug that comes back.
  *
@@ -663,7 +663,7 @@ export function bundleGraphProblem(inputs: readonly string[]): string | null {
       why: 'zod — 505 kB the CLI never executes, on every `npx create-kai`',
     },
     {
-      what: /(?:^|\/)agent-tooling\/mcp\//,
+      what: /(?:^|\/)mcp\/mcp\//,
       why: "the kai MCP's own modules — they build zod schemas at module scope, which esbuild cannot shake past",
     },
   ];
@@ -688,7 +688,7 @@ export function bundleGraphProblem(inputs: readonly string[]): string | null {
       .join('\n') +
     '\n  The CLI is one bundled zero-dependency file so `npx` cold start is fast, and\n' +
     '  every user downloads all of it. Read what you need from the LEAF modules at the\n' +
-    '  root of agent-tooling/ — registry.ts, types.ts, route-emit.ts. If the fact you\n' +
+    '  root of mcp/ — registry.ts, types.ts, route-emit.ts. If the fact you\n' +
     '  need only exists inside mcp/, move it to a leaf rather than importing the tool.'
   );
 }

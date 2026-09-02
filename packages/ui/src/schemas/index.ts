@@ -313,7 +313,7 @@ export type { CardValidationIssue, CardValidationReport, CardValidationTier } fr
 // `CardEnvelope.type` -> the `kai-*` element that renders it — exported because a
 // server-side reader needed it and was inventing its own answer instead.
 //
-// src/agent-tooling/mcp/manifest.ts used to RE-DERIVE this map from the element
+// mcp/mcp/manifest.ts used to RE-DERIVE this map from the element
 // manifest by convention (`kai-<type>`, else the single `kai-<type>-*`). The
 // derivation was correct — it even got `link` -> `kai-link-preview` right, via the
 // prefix branch — but it was a second copy of a fact the repo already held, kept

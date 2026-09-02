@@ -417,7 +417,7 @@ ${
 
 ${
   e.fabricationProposals.length
-    ? `## Proposed FABRICATED.md rows\n\nPaste into \`src/agent-tooling/catalog/fabrications.ts\` after checking each tag. **Not written automatically:** a mis-scored run editing the catalog would teach every later agent that a real element is imaginary.\n\n\`\`\`json\n${JSON.stringify(e.fabricationProposals, null, 2)}\n\`\`\`\n`
+    ? `## Proposed FABRICATED.md rows\n\nPaste into \`mcp/catalog/fabrications.ts\` after checking each tag. **Not written automatically:** a mis-scored run editing the catalog would teach every later agent that a real element is imaginary.\n\n\`\`\`json\n${JSON.stringify(e.fabricationProposals, null, 2)}\n\`\`\`\n`
     : ''
 }
 ## Read this before quoting the score

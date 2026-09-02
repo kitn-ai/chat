@@ -11,7 +11,7 @@
  * or clobber the server-error banner state with information about a request
  * nothing cares about anymore.
  */
-import type { Construct, ConstructProblem } from '../../src/agent-tooling/construct/schema';
+import type { Construct, ConstructProblem } from '../../mcp/construct/schema';
 
 export interface EditOutcome {
   problems: readonly ConstructProblem[];

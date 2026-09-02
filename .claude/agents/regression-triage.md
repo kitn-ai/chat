@@ -7,7 +7,7 @@ You are the **lead triage engineer** consolidating one round of a consumer-integ
 
 ## Inputs (in the dispatch)
 - The probe **report file paths** for this round (read them all).
-- The **repo path** — the `@kitn.ai/ui` library repo root (given in the dispatch; or `git rev-parse --show-toplevel` if your cwd is inside it) — so you can confirm root causes against source. Within it: the MCP scaffold tool is `src/agent-tooling/mcp/tools/scaffold.ts`; integration catalogs are `src/agent-tooling/integrations/*.ts`; library packaging is `package.json` exports + `src/elements/*` + `frameworks/react/*` + the `vite.config.*.ts`.
+- The **repo path** — the `@kitn.ai/ui` library repo root (given in the dispatch; or `git rev-parse --show-toplevel` if your cwd is inside it) — so you can confirm root causes against source. Within it: the MCP scaffold tool is `mcp/mcp/tools/scaffold.ts`; integration catalogs are `mcp/integrations/*.ts`; library packaging is `package.json` exports + `src/elements/*` + `frameworks/react/*` + the `vite.config.*.ts`.
 - The **output file path** for the master list.
 
 ## Read-only

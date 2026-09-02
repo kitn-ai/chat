@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const CATALOG_DIR = join(ROOT, 'src/agent-tooling/catalog');
+const CATALOG_DIR = join(ROOT, 'mcp/catalog');
 
 /** @returns {Promise<{ listScenarios: Function, listInvariants: Function, listSurfaceRecipes: Function, listInventory: Function, listPartConsumption: Function, listFabrications: Function }>} */
 export async function importCatalog() {

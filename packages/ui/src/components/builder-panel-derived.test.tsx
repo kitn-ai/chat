@@ -4,8 +4,8 @@ import { render, cleanup, screen, fireEvent } from '@solidjs/testing-library';
 import { createSignal } from 'solid-js';
 import { DerivedBuilderPanel, FIELD_OVERRIDES } from './builder-panel-derived';
 import { schemaNodeAt, getAtPath } from './construct-form-paths';
-import { buildableTemplates, type BuildableTemplate } from '../agent-tooling/construct/templates';
-import type { Construct } from '../agent-tooling/construct/schema';
+import { buildableTemplates, type BuildableTemplate } from '../../mcp/construct/templates';
+import type { Construct } from '../../mcp/construct/schema';
 
 afterEach(cleanup);
 

@@ -43,7 +43,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { check, readLabsTitles as titlesInLint } from '../../scripts/lint-catalog-drift.mjs';
-import { readLabsTitles as titlesInSrc } from '../../src/agent-tooling/catalog/labs-titles';
+import { readLabsTitles as titlesInSrc } from '../../mcp/catalog/labs-titles';
 import { requiredGateBlock } from './lib/required-gate-block';
 
 const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -159,7 +159,7 @@ describe('the catalog drift guard detects, and CI runs it', () => {
 
 /**
  * THE REGISTERED COPY, GUARDED. `readLabsTitles` exists twice — once in
- * scripts/lint-catalog-drift.mjs and once in src/agent-tooling/catalog/
+ * scripts/lint-catalog-drift.mjs and once in mcp/catalog/
  * labs-titles.ts — because a Node .mjs cannot import a .ts at runtime, and
  * `surfaces.test.ts` lives under `src/`, whose typecheck pass has no `allowJs`,
  * so the .ts side cannot import the .mjs either (measured: TS7016). Both decide

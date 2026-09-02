@@ -5,7 +5,7 @@
 // WHY GENERATE IT RATHER THAN WRITE IT
 // ------------------------------------
 // Every line of that route lives inside a string literal in
-// `packages/ui/src/agent-tooling/integrations/vercel-ai-sdk.ts`, assembled by
+// `packages/ui/mcp/integrations/vercel-ai-sdk.ts`, assembled by
 // the scaffolder's own `next` adapter and its `readChatRequest` / `wireParts`
 // preamble. A hand-copied version in this directory would be a FORK: it would
 // keep passing after the shipped route broke, and the whole point of driving it
@@ -54,7 +54,7 @@ try {
   const esbuild = await import('esbuild');
   const bundle = join(tmp, 'scaffold.bundle.mjs');
   await esbuild.build({
-    entryPoints: [join(UI, 'src', 'agent-tooling', 'mcp', 'tools', 'scaffold.ts')],
+    entryPoints: [join(UI, 'mcp', 'mcp', 'tools', 'scaffold.ts')],
     bundle: true,
     platform: 'node',
     format: 'esm',

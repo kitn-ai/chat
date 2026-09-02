@@ -30,7 +30,7 @@
 import type { BuilderConstruct } from './builder-panel';
 
 // ── accent contrast, duplicated (not imported) from
-// agent-tooling/construct/codegen.ts's resolveContrastForeground ──────────
+// mcp/construct/codegen.ts's resolveContrastForeground ──────────
 // A genuine cross-bundle-boundary exception to "derive it, don't type it"
 // (CLAUDE.md), recorded rather than silent: codegen.ts imports `node:fs`/
 // `node:module`/`node:path` (it writes files to disk) and is Node-only,

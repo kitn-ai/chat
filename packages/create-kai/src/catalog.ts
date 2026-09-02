@@ -1,10 +1,10 @@
 /**
  * The reuse boundary. Everything the CLI knows about gateways and renderable
- * surfaces comes from `packages/ui/src/agent-tooling/`, imported by relative
+ * surfaces comes from `packages/ui/mcp/`, imported by relative
  * path and bundled at build time.
  *
  * WHY A RELATIVE SOURCE IMPORT AND NOT A PACKAGE IMPORT. `@kitn.ai/ui`'s exports
- * map does not expose `agent-tooling`, and it should not: the catalog is
+ * map does not expose `mcp`, and it should not: the catalog is
  * dev-time tooling, not runtime API, and `create-kai` is deliberately not a
  * runtime dependency of anything. Bundling the source at build time gives the
  * CLI the real `Integration` objects (with `deps`, `keyExposure`, `envVars`,
@@ -28,7 +28,7 @@ import {
   getIntegration,
   listCapabilityGroups,
   listIntegrations,
-} from '../../ui/src/agent-tooling/registry';
+} from '../../ui/mcp/registry';
 /**
  * The route-emission half of the boundary, from the kit's scaffold module.
  *
@@ -58,8 +58,8 @@ import {
   CLIENT_MODEL_IDS,
   chatRoutePreamble,
   defaultModelFor,
-} from '../../ui/src/agent-tooling/route-emit';
-import type { Integration } from '../../ui/src/agent-tooling/types';
+} from '../../ui/mcp/route-emit';
+import type { Integration } from '../../ui/mcp/types';
 
 export { BASE_COMPONENT, getIntegration, listIntegrations };
 export { CLIENT_MODEL_IDS, chatRoutePreamble, defaultModelFor };

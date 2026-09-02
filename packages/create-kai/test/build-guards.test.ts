@@ -365,7 +365,7 @@ describe('the shared-devDeps guard', () => {
  *
  * This one is not hypothetical and the numbers below are measured, not
  * illustrative: exporting `chatRoutePreamble` + `CLIENT_MODEL_IDS` +
- * `defaultModelFor` from `agent-tooling/mcp/tools/scaffold.ts` and importing
+ * `defaultModelFor` from `mcp/mcp/tools/scaffold.ts` and importing
  * them here took `dist/index.js` from 203 kB to 904 kB, 505 kB of it zod the CLI
  * never executes. Every seam that was being watched stayed green — the emitted
  * scaffold output was byte-identical, `verify:scaffold` was 616/616 and 99/99,
@@ -378,10 +378,10 @@ describe('the bundle-graph guard', () => {
     'src/index.ts',
     'src/catalog.ts',
     'src/routes.ts',
-    '../ui/src/agent-tooling/registry.ts',
-    '../ui/src/agent-tooling/types.ts',
-    '../ui/src/agent-tooling/route-emit.ts',
-    '../ui/src/agent-tooling/integrations/anthropic.ts',
+    '../ui/mcp/registry.ts',
+    '../ui/mcp/types.ts',
+    '../ui/mcp/route-emit.ts',
+    '../ui/mcp/integrations/anthropic.ts',
     '../../node_modules/.pnpm/@clack+prompts@0.11.0/node_modules/@clack/prompts/dist/index.mjs',
   ];
 
@@ -407,13 +407,13 @@ describe('the bundle-graph guard', () => {
    */
   it('rejects reaching into the MCP even when zod itself shook clean', () => {
     expectRejected(
-      bundleGraphProblem([...legitimateGraph, '../ui/src/agent-tooling/mcp/tools/scaffold.ts']),
-      'agent-tooling/mcp/tools/scaffold.ts',
+      bundleGraphProblem([...legitimateGraph, '../ui/mcp/mcp/tools/scaffold.ts']),
+      'mcp/mcp/tools/scaffold.ts',
       'move it to a leaf',
     );
     // …and it must not be satisfied by the leaf that replaced it. `route-emit.ts`
-    // sits at the root of agent-tooling/ precisely so this rule can tell the two
-    // apart; a rule keyed on `agent-tooling/` would reject the fix along with the
+    // sits at the root of mcp/ precisely so this rule can tell the two
+    // apart; a rule keyed on `mcp/` would reject the fix along with the
     // defect.
     expect(bundleGraphProblem(legitimateGraph)).toBeNull();
   });

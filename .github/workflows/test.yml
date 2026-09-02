@@ -498,7 +498,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.npm
-          key: construct-npm-${{ hashFiles('packages/ui/src/agent-tooling/construct/construct.v1.schema.json', 'packages/ui/src/agent-tooling/construct/templates.ts', 'packages/ui/package.json') }}
+          key: construct-npm-${{ hashFiles('packages/ui/mcp/construct/construct.v1.schema.json', 'packages/ui/mcp/construct/templates.ts', 'packages/ui/package.json') }}
           restore-keys: construct-npm-
 
       # The construct engine's real emit chain: node bin/mcp.js eject (the CLI,
@@ -574,7 +574,7 @@ jobs:
       # this leg is inside it -- the argument was always about which context
       # gates the merge, not about which runner executes the step.)
       #
-      # `tests/agent-tooling/emitted-project-wiring.test.ts`, which runs in the `unit`
+      # `packages/ui/mcp/tests/emitted-project-wiring.test.ts`, which runs in the `unit`
       # project above, fails if this step stops naming --project=emitted, if the
       # project's include glob stops matching any file, or if one of these tests is
       # written outside the directory the project owns.

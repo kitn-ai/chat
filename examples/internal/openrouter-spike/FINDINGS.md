@@ -218,7 +218,7 @@ papercut rather than a bundling problem, but it is surprising.
 
 ## The existing SSE reader is not enough
 
-`packages/ui/src/agent-tooling/mcp/tools/scaffold.ts` emits a reader that
+`packages/ui/mcp/mcp/tools/scaffold.ts` emits a reader that
 handles `choices[0].delta.content` and nothing else. Scaffolded apps that add
 tools or reasoning will get neither. It also breaks on three things a real
 OpenRouter stream does:

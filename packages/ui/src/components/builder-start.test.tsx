@@ -10,7 +10,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, screen, fireEvent } from '@solidjs/testing-library';
 import { BuilderStart, BUILDER_TEMPLATES, BUILDABLE_BUILDER_TEMPLATES } from './builder-start';
-import { TEMPLATES } from '../agent-tooling/construct/templates';
+import { TEMPLATES } from '../../mcp/construct/templates';
 
 afterEach(cleanup);
 

@@ -86,7 +86,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 // src/elements/element-meta.json — which made the answer depend on where you
 // happened to be standing, and let a run bind to a different checkout than the one
 // you were editing. Same defect class as the manifest walk-up in
-// src/agent-tooling/mcp/manifest.ts, which was measured escaping an agent worktree
+// mcp/mcp/manifest.ts, which was measured escaping an agent worktree
 // and verifying a six-week-old artifact from another tree while reporting success.
 //
 // A verifier that cannot say WHICH tree it verified is not a verifier. Deriving from

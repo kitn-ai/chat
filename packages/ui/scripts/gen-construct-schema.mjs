@@ -1,5 +1,5 @@
 // Emits the construct format's PUBLISHED JSON Schema, derived from the Zod
-// source of truth (src/agent-tooling/construct/schema.ts) — never hand-edited.
+// source of truth (mcp/construct/schema.ts) — never hand-edited.
 // Two addresses, one artifact: the checked-in copy beside the source (what the
 // MCP tool and tests read) and apps/docs/public/schemas/construct/v1.json
 // (served at https://ui.kitn.ai/schemas/construct/v1.json — what a
@@ -43,7 +43,7 @@ async function importTs(entry) {
 async function loadSchemaModule() {
   const { z } = await import('zod');
   const { ConstructSchema, CONSTRUCT_SCHEMA_URL } = await importTs(
-    join(PKG_ROOT, 'src/agent-tooling/construct/schema.ts'),
+    join(PKG_ROOT, 'mcp/construct/schema.ts'),
   );
   return { z, ConstructSchema, CONSTRUCT_SCHEMA_URL };
 }
@@ -57,7 +57,7 @@ const schema = {
 const body = `${JSON.stringify(schema, null, 2)}\n`;
 
 for (const out of [
-  join(PKG_ROOT, 'src/agent-tooling/construct/construct.v1.schema.json'),
+  join(PKG_ROOT, 'mcp/construct/construct.v1.schema.json'),
   join(PKG_ROOT, '../../apps/docs/public/schemas/construct/v1.json'),
 ]) {
   mkdirSync(dirname(out), { recursive: true });

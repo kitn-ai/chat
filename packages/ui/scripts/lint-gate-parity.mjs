@@ -3,8 +3,9 @@
 // WHY IT EXISTS
 // A handoff document said "every gate is green" over a five-command list. The
 // required `test` job was red at the time -- on `verify:pack`, which was not one
-// of the five. `src/agent-tooling/catalog/derived.json` had grown past that
-// check's 64 KiB per-file ceiling and was shipping to every consumer, and the
+// of the five. `mcp/catalog/derived.json` (src/agent-tooling/catalog/derived.json
+// at the time) had grown past that check's 64 KiB per-file ceiling and was
+// shipping to every consumer, and the
 // list that was supposed to prove the tree healthy could not see it, because a
 // list somebody typed once is not the job. The document has since been amended
 // to say so in prose ("treat any list here as a subset that rots"), which is the

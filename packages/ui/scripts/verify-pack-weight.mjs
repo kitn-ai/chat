@@ -191,8 +191,9 @@ if (SELF_TEST) {
  * chunks, Solid components, their d.ts, manifest/meta/llms rows), the
  * `@kitn.ai/ui/state` thread/persistence helpers (threads.ts + persistence.ts
  * + dist), and the workspace BLOCK emission inside dist/mcp.es.js +
- * src/agent-tooling (which ships by design). No tests, stories, probe scripts
- * or scripts/ entries are in the tarball (checked explicitly).
+ * src/agent-tooling/ (which shipped by design at the time; that path moved
+ * to mcp/ in the 2026-09-02 move). No tests, stories, probe scripts or
+ * scripts/ entries are in the tarball (checked explicitly).
  *
  * 13.0 → 13.5 MiB (2026-08-25, the rung-6 fix waves): tripped at 13.23 MiB,
  * audited against the pack listing after removing the one piece of dead
@@ -206,7 +207,8 @@ if (SELF_TEST) {
  * tables, dist/mcp.es.js; (2) wave 2's F-46 fix — the programmatic-layer
  * section in llms-full.txt (~50 KB × the two copies `files` deliberately
  * ships), derived verbatim from the dist/state + dist/wire declarations, plus
- * the composed-thread code recipe in src/agent-tooling + dist/mcp.es.js.
+ * the composed-thread code recipe in src/agent-tooling/ (now mcp/) +
+ * dist/mcp.es.js.
  * Trimming the embedded declarations was considered and declined: the largest
  * blocks (AssistantStream, the encoder docs, MockTurn) are exactly the
  * measured hard core rung 6 filed as its one S1, and the whole section gone
@@ -310,7 +312,7 @@ if (SELF_TEST) {
  * reachable by any consumer: `./element-meta.json` and `./icon-names.json`,
  * the sole `exports` subpaths that resolve into `src/`. Every other
  * `.ts`/`.tsx` file under `src/` -- including
- * `src/agent-tooling/mcp/tools/scaffold.ts` (326.9 KiB) and
+ * `mcp/mcp/tools/scaffold.ts` (326.9 KiB) and
  * `src/elements/element-types.d.ts` (311.9 KiB), both individually over
  * MAX_FILE_BYTES -- had no import path a bundler or `require`/`import` could
  * reach; `dist/mcp.es.js` was grepped for `src/` references and every hit was
@@ -323,7 +325,7 @@ if (SELF_TEST) {
  * time, not by reading `src/` post-install) depends on the shipped-`src/`
  * path existing. Also dropped two trivial leaks the old `files` globs didn't
  * cover: `bin/route.test.js` and the three construct fixture JSONs under
- * `src/agent-tooling/construct/fixtures/` (both fell away as a side effect
+ * `mcp/construct/fixtures/` (both fell away as a side effect
  * of the `src/` narrowing; `bin/route.test.js` additionally needed its own
  * negation in `files` since `bin/` itself stays there). ALLOWED_LARGE_FILES
  * was pruned to match: every entry that named a now-unpacked `src/` file
@@ -337,6 +339,11 @@ if (SELF_TEST) {
  * 9,819,432 bytes / 9.3645 MiB / 581 files after this fix alone (down from
  * 13,838,986 bytes / 947 files, a drop of ~3.83 MiB matching the audit's
  * estimate almost exactly).
+ *
+ * Those paths were src/agent-tooling/... until the 2026-09-02 move; the
+ * files are the same files, and every src/agent-tooling path in the
+ * entries above was rewritten the same way. No ceiling moves with them:
+ * mcp/ is not in `files`, so nothing under it can be packed.
  *
  * (2) The shiki chunk dedupe (cherry-picked from a sibling worktree,
  * commit 3d516188). The elements build and the barrel/index/solid builds

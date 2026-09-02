@@ -33,7 +33,7 @@ import type { ChatMessage } from './chat-types';
 // confirm" interaction is future work (T-2's own text), not this round's.
 //
 // The starting construct is shaped like `kai dev`'s own `owner-widget`
-// fixture (`agent-tooling/construct/fixtures/owner-widget.construct.json`)
+// fixture (`mcp/construct/fixtures/owner-widget.construct.json`)
 // — same header title, greeting/links, starters, attachments, history,
 // conversations, widget position ("top-start")/defaultOpen, and a mock
 // provider. Not byte-identical: the stub `BuilderConstruct` type this

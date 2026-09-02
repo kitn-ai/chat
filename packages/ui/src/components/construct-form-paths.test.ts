@@ -6,8 +6,8 @@
  * form → construct byte-identical" means when the form holds no copy.
  */
 import { describe, expect, it } from 'vitest';
-import { CROSS_FIELD_RULES, validateConstruct, type Construct } from '../agent-tooling/construct/schema';
-import { buildableTemplates } from '../agent-tooling/construct/templates';
+import { CROSS_FIELD_RULES, validateConstruct, type Construct } from '../../mcp/construct/schema';
+import { buildableTemplates } from '../../mcp/construct/templates';
 import {
   getAtPath,
   setAtPath,

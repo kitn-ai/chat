@@ -24,7 +24,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { listScenarios } from '../../src/agent-tooling/catalog/scenarios';
+import { listScenarios } from '../../mcp/catalog/scenarios';
 import { dimension, rubricFor, scoreRun } from '../../scripts/lib/rubric.mjs';
 import { planFiles } from '../../scripts/lib/compile-plan.mjs';
 import { codeUnits } from '../../scripts/lib/output-scan.mjs';

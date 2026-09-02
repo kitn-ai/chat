@@ -3,7 +3,7 @@
  *
  * THE REGISTRY IS THE KIT'S, NOT A COPY. Block logic (manifest validation,
  * discovery, the CDN-form generator) is imported from
- * `../../ui/src/agent-tooling/blocks/registry` and bundled at build time,
+ * `../../ui/mcp/blocks/registry` and bundled at build time,
  * exactly the way `catalog.ts` imports the scaffolder registry - one source,
  * a build failure as the drift failure mode. That module is a deliberate leaf
  * (pure, no zod, nothing under `mcp/`), so `bundleGraphProblem` stays green.
@@ -27,12 +27,12 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 
-import { discoverBlocks } from '../../ui/src/agent-tooling/blocks/registry';
+import { discoverBlocks } from '../../ui/mcp/blocks/registry';
 import type {
   Block,
   BlockManifest,
   RawBlockSource,
-} from '../../ui/src/agent-tooling/blocks/registry';
+} from '../../ui/mcp/blocks/registry';
 // The FORM RENDERING is the kit's shared pure module too (same bundle-import
 // precedent as the registry line above): one renderer serves this planner AND
 // the `kai dev` gallery's per-framework code view, so what the gallery shows
@@ -44,7 +44,7 @@ import {
   renderReactForm,
   renderWcForm,
   type BlockFormId,
-} from '../../ui/src/agent-tooling/blocks/forms';
+} from '../../ui/mcp/blocks/forms';
 
 import { getIntegration, listIntegrations } from './catalog';
 import type { Integration } from './catalog';
@@ -319,7 +319,7 @@ export function planAdd(resolved: ResolvedAdd, opts: PlanOptions): AddPlan {
 }
 
 // The three per-form file sets come from the ONE shared renderer
-// (`agent-tooling/blocks/forms.ts` — the gallery serves the identical output);
+// (`mcp/blocks/forms.ts` — the gallery serves the identical output);
 // what stays here is what only the CLI knows: where the files land in the
 // consumer's project, and the note printed about them.
 

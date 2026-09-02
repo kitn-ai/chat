@@ -12,7 +12,7 @@
  * renders, and what the panel shows in the window between "the construct file
  * exists" and "Vite is listening". `fetch` and `EventSource` are stubbed —
  * this file is about the page's own state machine, not the server's (see
- * `agent-tooling/construct/dev.test.ts` for the other side of the same fix).
+ * `mcp/construct/dev.test.ts` for the other side of the same fix).
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';

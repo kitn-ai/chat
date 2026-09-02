@@ -48,7 +48,7 @@ const TARGETS: Record<string, Target> = {
   // target in config/vite/lib.ts, and `vite.config.ts` (the main build) is
   // `KAI_BUILD=register vite build --config config/vite/elements.ts`.
   mcp: {
-    entry: 'src/agent-tooling/mcp/stdio.ts',
+    entry: 'mcp/mcp/stdio.ts',
     out: 'mcp.es.js',
     external: ['zod', /^@modelcontextprotocol\/sdk/, ...NODE_BUILTINS],
   },
@@ -57,7 +57,7 @@ const TARGETS: Record<string, Target> = {
   // dev/compile run them inside the GENERATED project via npm scripts, so this
   // bundle never imports them.
   'construct-cli': {
-    entry: 'src/agent-tooling/construct/cli-entry.ts',
+    entry: 'mcp/construct/cli-entry.ts',
     out: 'construct-cli.es.js',
     external: ['zod', ...NODE_BUILTINS],
   },

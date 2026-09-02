@@ -2,7 +2,13 @@ import { defineConfig } from 'vite';
 import type { PluginOption } from 'vite';
 import solidPlugin from 'vite-plugin-solid';
 import dts from 'vite-plugin-dts';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
+
+// Matches an actual import specifier crossing the mcp/ boundary
+// ('../../mcp/...' or import('../../mcp/...')), not any mention of "/mcp/"
+// -- a TSDoc comment that merely names the mcp/ directory must not trip the
+// rewrite/throw below.
+const MCP_SPECIFIER = /(?:from|import\()\s*['"]\.\.\/\.\.\/mcp\//;
 
 // One config for every library subpath bundle. Selected by KAI_BUILD, one value
 // per emitted file, named after the output stem so the mapping needs no lookup.
@@ -118,7 +124,6 @@ const TARGETS: Record<string, Target> = {
         'src/**/*.stories.tsx',
         'src/**/*.test.ts',
         'src/**/*.test.tsx',
-        'src/agent-tooling/**',
         'src/stories/**',
         // Captured SSE fixtures and their replay harness are TEST DATA. The
         // `files` field already keeps src/wire/fixtures out of the tarball;
@@ -133,6 +138,50 @@ const TARGETS: Record<string, Target> = {
         // matching !**/*.testlib.* negations in package.json `files`.
         'src/**/*.testlib.ts',
       ],
+      // THE ONE PLACE THE MOVE IS NOT A PURE RELOCATION.
+      //
+      // A handful of SHIPPED declarations under dist/components/ (three at the
+      // time of writing; read the count off the tree with
+      // `grep -rln "\.\./agent-tooling/" dist --include='*.d.ts'`, never off
+      // this comment) import the construct
+      // schema and the template registry across the boundary by a relative
+      // path. That worked for free while the source lived at
+      // src/agent-tooling/: src/components -> ../agent-tooling and
+      // dist/components -> ../agent-tooling are the same string. With the
+      // source at mcp/, the source specifier is '../../mcp/construct/schema'
+      // and tsc emits it verbatim, where from dist/components/ it points
+      // outside dist/ at a directory `files` does not ship. A consumer's tsc
+      // then cannot resolve Construct, and the emit itself says nothing: it
+      // succeeds and the bytes look plausible. One thing downstream does say
+      // so -- `verify:dts` (scripts/verify-dts-boundaries.mjs, self-tested)
+      // runs in `postbuild` and fails on any relative specifier resolving
+      // outside dist/. That is a backstop, not the mechanism: it fires after
+      // the whole emit, names the file rather than the depth, and does not
+      // know how to repair it. The rewrite below is what keeps the emit right
+      // in the first place.
+      //
+      // The declarations for those targets ARE emitted, by the construct target
+      // below, at dist/agent-tooling/construct/. So the fix is to rewrite the
+      // specifier back to the path that already exists.
+      //
+      // It THROWS rather than no-ops on an unexpected shape, because the
+      // rewrite is depth-sensitive: every affected file today sits exactly one
+      // directory under dist/, so '../../mcp/' maps to '../agent-tooling/'. A
+      // future importer at another depth must fail loudly here instead of
+      // silently emitting a path that resolves to nothing.
+      beforeWriteFile(filePath: string, content: string) {
+        if (!MCP_SPECIFIER.test(content)) return;
+        const rel = relative(resolve(PKG, 'dist'), filePath);
+        const depth = rel.split(/[\\/]/).length - 1;
+        if (depth !== 1) {
+          throw new Error(
+            `config/vite/lib.ts: ${rel} imports across the mcp/ boundary from depth ${depth}. ` +
+              `The rewrite below only knows depth 1 (dist/<dir>/<file>.d.ts). Teach it the new ` +
+              `depth or stop importing mcp/ from that file.`,
+          );
+        }
+        return { content: content.replaceAll("'../../mcp/", "'../agent-tooling/") };
+      },
       outDir: 'dist',
       entryRoot: 'src',
       // The barrel entry src/index.ts -> dist/index.d.ts. This is the canonical
@@ -395,7 +444,7 @@ const TARGETS: Record<string, Target> = {
   //
   // The construct schema as a JS module (@kitn.ai/ui/construct): ConstructSchema,
   // validateConstruct, CONSTRUCT_SCHEMA_URL + the Construct/ConstructProblem/
-  // ValidationOutcome types, re-exported from src/agent-tooling/construct/public.ts.
+  // ValidationOutcome types, re-exported from mcp/construct/public.ts.
   // Compiled to dist/construct.js. Sibling of vite.config.schemas.ts (read its
   // header) but NOT the same entry: that one ships the card JSON Schemas as data
   // with a documented size budget zod does not fit, so this is its own exports
@@ -407,13 +456,16 @@ const TARGETS: Record<string, Target> = {
   // normally, and bundling it a second time here would be dead weight.
   //
   // The .d.ts is NOT emitted by the barrel build (vite.config.barrel.ts): that
-  // build's dts plugin excludes `src/agent-tooling/**` wholesale (see its own
-  // comment) because most of agent-tooling is Node/MCP-only tooling that must
-  // not leak its types into the "." browser entry. So this build carries its
-  // own vite-plugin-dts pass instead, scoped to just the two files this entry
-  // needs (public.ts + the schema.ts it re-exports). `entryRoot: 'src'` mirrors
-  // the barrel config, so declarations land at
-  // dist/agent-tooling/construct/public.d.ts — the same "types nested, JS flat"
+  // build's dts `include` is src/**, and this tree lives at mcp/, so it cannot
+  // enter that emit at all. (Before the 2026-09-02 move the same source sat at
+  // src/agent-tooling/ and was held out by an explicit exclude; the exclude is
+  // gone because it could no longer fire.) Keeping it out is still the point:
+  // most of mcp/ is Node/MCP-only tooling that must not leak its types into the
+  // "." browser entry. So this build carries its own vite-plugin-dts pass
+  // instead, scoped to just the two files this entry needs (public.ts + the
+  // schema.ts it re-exports). See the outDir/entryRoot comment on the target
+  // below for how declarations still land at
+  // dist/agent-tooling/construct/public.d.ts, the same "types nested, JS flat"
   // shape "./schemas" already uses (dist/schemas/index.d.ts next to dist/schemas.js).
   //
   // rollupTypes is deliberately NOT set: it invokes api-extractor over the whole
@@ -425,38 +477,49 @@ const TARGETS: Record<string, Target> = {
   // public.d.ts re-exports from './schema', and schema.d.ts is emitted alongside
   // it by the same include list, so the reference resolves without bundling.
   //
-  // url-scheme-policy.ts is NOT in `include` — schema.ts imports isSafeUrl from
-  // it, but the barrel build (which ran earlier in the chain) already emitted
-  // dist/primitives/url-scheme-policy.d.ts, and schema.d.ts's relative import
-  // resolves to that existing file.
+  // url-scheme-policy.ts is NOT in `include`, and does not need to be: schema.ts
+  // imports isSafeUrl for a runtime .refine() only, so no emitted declaration
+  // references it. Checked, not assumed:
+  //   grep -n "url-scheme" dist/agent-tooling/construct/*.d.ts
+  // returns nothing. An earlier version of this comment claimed the emit relied
+  // on the barrel build having produced dist/primitives/url-scheme-policy.d.ts
+  // first; it does not, and that claim would have made this move look blocked.
   //
   // emptyOutDir: false — the main build ran first; do NOT clobber.
   construct: {
-    entry: 'src/agent-tooling/construct/public.ts',
+    entry: 'mcp/construct/public.ts',
     fileName: 'construct.js',
     transform: 'none',
     external: ['zod'],
     dts: {
       include: [
-        'src/agent-tooling/construct/public.ts',
-        'src/agent-tooling/construct/schema.ts',
-        'src/agent-tooling/construct/schema-url.ts',
+        'mcp/construct/public.ts',
+        'mcp/construct/schema.ts',
+        'mcp/construct/schema-url.ts',
         // The blocks pure-module layer (registry + the shared form renderer).
         // Browser-safe by their own discipline headers (no node:*, no zod-free
-        // violation — registry/forms are plain functions over injected data).
+        // violation -- registry/forms are plain functions over injected data).
         // Needed here because apps/gallery/GalleryPage.tsx imports BLOCK_FORMS
-        // types from '../../src/agent-tooling/blocks/forms', and (the parallel
-        // case) apps/builder/HomeScreen.tsx imports ConstructListing from
-        // '../../src/agent-tooling/construct/templates' — neither app lives
-        // under src/ or the dts include anymore, and public.ts re-exports only
-        // from './schema', so these two include entries currently have no
-        // in-repo consumer and are kept only pending a separate removal
-        // decision. forms.d.ts imports './registry', so both are listed.
-        'src/agent-tooling/blocks/registry.ts',
-        'src/agent-tooling/blocks/forms.ts',
+        // types from '../../mcp/blocks/forms', and (the parallel case)
+        // apps/builder/HomeScreen.tsx imports ConstructListing from
+        // '../../mcp/construct/templates' -- neither app lives under src/ or
+        // the dts include anymore, and public.ts re-exports only from
+        // './schema', so these two include entries currently have no in-repo
+        // consumer and are kept only pending a separate removal decision.
+        // forms.d.ts imports './registry', so both are listed.
+        'mcp/blocks/registry.ts',
+        'mcp/blocks/forms.ts',
       ],
-      outDir: 'dist',
-      entryRoot: 'src',
+      // outDir + entryRoot, not outDir alone. vite-plugin-dts writes each file
+      // to resolve(outDir, relative(entryRoot, emittedPath)), so this pair is
+      // what keeps declarations landing at dist/agent-tooling/construct/... now
+      // that the source is at mcp/construct/. That path is NOT cosmetic: it is
+      // the literal value of exports["./construct"].types and of the
+      // typesVersions entry, both pinned by
+      // tests/scripts/construct-export-smoke.test.ts. Changing it is a
+      // consumer-visible change; holding it is free.
+      outDir: 'dist/agent-tooling',
+      entryRoot: 'mcp',
     },
   },
 
@@ -481,16 +544,19 @@ const TARGETS: Record<string, Target> = {
   // templates.d.ts's `import type { Construct } from './schema'` resolves to
   // the schema.d.ts that config already emits earlier in the build chain.
   'construct-templates': {
-    entry: 'src/agent-tooling/construct/templates.ts',
+    entry: 'mcp/construct/templates.ts',
     fileName: 'construct-templates.js',
     transform: 'none',
     dts: {
       include: [
-        'src/agent-tooling/construct/templates.ts',
-        'src/agent-tooling/construct/schema-url.ts',
+        'mcp/construct/templates.ts',
+        'mcp/construct/schema-url.ts',
       ],
-      outDir: 'dist',
-      entryRoot: 'src',
+      // Same outDir/entryRoot pair as the construct target above; read its
+      // comment. exports["./construct/templates"].types names
+      // dist/agent-tooling/construct/templates.d.ts.
+      outDir: 'dist/agent-tooling',
+      entryRoot: 'mcp',
     },
   },
 };

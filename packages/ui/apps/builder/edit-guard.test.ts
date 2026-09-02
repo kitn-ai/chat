@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { createEditGuard } from './edit-guard';
-import type { Construct } from '../../src/agent-tooling/construct/schema';
+import type { Construct } from '../../mcp/construct/schema';
 
 const construct = (name: string): Construct =>
   ({ name, layout: 'fullscreen', provider: { mode: 'mock' } }) as Construct;

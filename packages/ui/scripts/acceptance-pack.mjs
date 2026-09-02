@@ -46,7 +46,7 @@ import { NEEDLE_TABLE, NEEDLES, verifyNeedles, selfTestNeedles, variantsOf } fro
 import { renderFabricatedPage } from './lib/fabrications.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const CATALOG_DIR = join(ROOT, 'src/agent-tooling/catalog');
+const CATALOG_DIR = join(ROOT, 'mcp/catalog');
 const args = process.argv.slice(2);
 
 function fail(msg) {
@@ -866,7 +866,7 @@ ${list(bySort('ingredient'))}
 }
 
 // The page is rendered by scripts/lib/fabrications.mjs from the authored record
-// in src/agent-tooling/catalog/fabrications.ts -- the write-back path this page
+// in mcp/catalog/fabrications.ts -- the write-back path this page
 // did not have. Both states (empty, populated) are tested directly against that
 // renderer, which is why the rendering does not live here: with the record empty
 // today, a test through the packer could only ever exercise one of them.
@@ -1408,7 +1408,7 @@ write(
       kitVersion,
       scenario: scenario.id,
       generatedFrom: {
-        derived: 'packages/ui/src/agent-tooling/catalog/derived.json',
+        derived: 'packages/ui/mcp/catalog/derived.json',
         elementMeta: 'packages/ui/src/elements/element-meta.json',
       },
       derived,

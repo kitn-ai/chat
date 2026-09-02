@@ -7,7 +7,7 @@
 //
 //   [contracts]  its manifest validates and the kai- contract checks pass
 //                (discoverBlocks + checkBlockContracts from
-//                src/agent-tooling/blocks/registry.ts -- the one module that
+//                mcp/blocks/registry.ts -- the one module that
 //                understands the layout; nothing is re-implemented here)
 //   [fresh]      the generated forms under dist/blocks/ and the driver pages
 //                are current against the block sources (gen-blocks.mjs
@@ -79,8 +79,8 @@ async function importTs(entry) {
   return mod;
 }
 
-const registry = await importTs(join(ROOT, 'src/agent-tooling/blocks/registry.ts'));
-const scaffolder = await importTs(join(ROOT, 'src/agent-tooling/registry.ts'));
+const registry = await importTs(join(ROOT, 'mcp/blocks/registry.ts'));
+const scaffolder = await importTs(join(ROOT, 'mcp/registry.ts'));
 const routeIntegrations = scaffolder.listIntegrations().map((i) => i.id);
 const nonscalarByTag = JSON.parse(readFileSync(join(ROOT, 'src/elements/element-nonscalar.json'), 'utf8'));
 
