@@ -7,15 +7,33 @@ export function isKaiViewElement(el: Element): boolean {
   return el.tagName.toLowerCase() === 'kai-view';
 }
 
-/** Read a `<kai-view>`'s declarative registration: `name` (falling back to
- *  the host `id`, else empty) and the `tab-root` flag. Pure — unit-tested
- *  directly, the pattern `parseKaiConversationElement` set. */
+/** Read a `<kai-view>`'s declarative registration: `name` (the PROPERTY a
+ *  framework sets, else the attribute, else the host `id`) and the `tab-root`
+ *  flag. Pure -- unit-tested directly, the pattern `parseKaiConversationElement`
+ *  set.
+ *
+ *  Property FIRST, and this order is load-bearing: a component framework
+ *  assigns a declared prop as a DOM property and never writes the attribute, so
+ *  an attribute-only read saw every child as `{ name: '', tabRoot: false }` and
+ *  the stack matched nothing. Same order, helper for helper, as
+ *  `readTabBarItemValue` and `isTabBarItemDisabled` in `../components/tab-bar`. */
 export function readViewEntry(el: Element): ViewEntry {
+  const nameProp = (el as Element & { name?: unknown }).name;
+  const tabRootProp = (el as Element & { tabRoot?: unknown }).tabRoot;
   return {
-    name: el.getAttribute('name') ?? (el as HTMLElement).id,
-    // A bare boolean attribute: present and not explicitly ="false" is ON,
-    // the same policy `flag()` applies to facade props.
-    tabRoot: el.hasAttribute('tab-root') && el.getAttribute('tab-root') !== 'false',
+    name:
+      typeof nameProp === 'string' && nameProp
+        ? nameProp
+        : (el.getAttribute('name') ?? (el as HTMLElement).id),
+    // A real boolean is the framework's answer and wins outright. Otherwise the
+    // bare boolean attribute: present and not explicitly ="false" is ON, the
+    // same policy `flag()` applies to facade props. The `typeof` test is what
+    // keeps the two apart -- solid-element syncs the ATTRIBUTE onto the prop as
+    // a string, which must not be mistaken for a host-supplied boolean.
+    tabRoot:
+      typeof tabRootProp === 'boolean'
+        ? tabRootProp
+        : el.hasAttribute('tab-root') && el.getAttribute('tab-root') !== 'false',
   };
 }
 
