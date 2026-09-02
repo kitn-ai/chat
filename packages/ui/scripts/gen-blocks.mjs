@@ -46,10 +46,18 @@ import { readFileSync, writeFileSync, readdirSync, mkdirSync, mkdtempSync, rmSyn
 import { join, resolve, dirname, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import * as esbuild from 'esbuild';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const BLOCKS_DIR = join(ROOT, 'blocks');
+// The authored block sources live in their own package now. Resolve it rather
+// than joining a path literal: a repo-root literal is exactly the hand-typed
+// restatement that goes stale the next time something moves.
+const BLOCKS_PKG_JSON = createRequire(import.meta.url).resolve('@kitn.ai/blocks/package.json');
+const BLOCKS_PKG_ROOT = dirname(BLOCKS_PKG_JSON);
+const BLOCKS_DIR = join(BLOCKS_PKG_ROOT, 'blocks');
+// The OUTPUTS stay in packages/ui: dist/blocks/ ships inside @kitn.ai/ui, and
+// the driver pages are served by this package's block driver.
 const OUT_DIR = join(ROOT, 'dist', 'blocks');
 const DRIVER_PAGES_DIR = join(ROOT, 'scripts', 'block-driver', 'pages', 'generated');
 const CHECK = process.argv.includes('--check');

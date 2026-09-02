@@ -51,11 +51,15 @@ import { readFileSync, readdirSync, existsSync, writeFileSync, mkdtempSync, rmSy
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import * as esbuild from 'esbuild';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const BLOCKS_DIR = join(ROOT, 'blocks');
+// The authored block sources are their own package; the driver, its baselines
+// and the generated pages stay here, because they need this package's build.
+const BLOCKS_PKG_ROOT = dirname(createRequire(import.meta.url).resolve('@kitn.ai/blocks/package.json'));
+const BLOCKS_DIR = join(BLOCKS_PKG_ROOT, 'blocks');
 const DRIVER_DIR = join(ROOT, 'scripts', 'block-driver');
 const BASELINES_DIR = join(DRIVER_DIR, 'baselines');
 const OUT_DIR = join(ROOT, 'dist', 'blocks');
@@ -120,7 +124,7 @@ function driverPrereqErrors(name) {
   const baseline = join(BASELINES_DIR, `${name}.json`);
   const page = join(DRIVER_DIR, 'pages', 'generated', name, 'index.html');
   if (!existsSync(states)) {
-    errors.push(`${name}: no state script at blocks/${name}/states.mjs -- every block declares its driver states (V-1); a block cannot ship unverified`);
+    errors.push(`${name}: no state script at packages/blocks/blocks/${name}/states.mjs -- every block declares its driver states (V-1); a block cannot ship unverified`);
   }
   if (!existsSync(page)) {
     errors.push(`${name}: no generated driver page at scripts/block-driver/pages/generated/${name}/index.html -- build first (gen-blocks writes it in postbuild)`);
@@ -128,7 +132,7 @@ function driverPrereqErrors(name) {
   if (!existsSync(baseline)) {
     errors.push(
       `${name}: no committed baseline at scripts/block-driver/baselines/${name}.json -- a block cannot ship unverified. Record one (from packages/ui, after a real build):\n` +
-      `    node scripts/block-driver/driver.mjs blocks/${name}/states.mjs --serve scripts/block-driver/pages --pages block --record scripts/block-driver/baselines/${name}.json --shots <dir>\n` +
+      `    node scripts/block-driver/driver.mjs ../blocks/blocks/${name}/states.mjs --serve scripts/block-driver/pages --pages block --record scripts/block-driver/baselines/${name}.json --shots <dir>\n` +
       `  then review the shots and COMMIT the baseline (screenshots go under baselines/screenshots-${name}/ per the house precedent).`,
     );
   }

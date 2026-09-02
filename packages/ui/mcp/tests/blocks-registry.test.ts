@@ -22,7 +22,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
+import { createRequire } from 'node:module';
 import {
   discoverBlocks,
   validateBlockManifest,
@@ -39,7 +40,10 @@ import {
 import { listIntegrations } from '../registry';
 
 const ROOT = resolve(__dirname, '../..');
-const BLOCKS_DIR = join(ROOT, 'blocks');
+const BLOCKS_DIR = join(
+  dirname(createRequire(import.meta.url).resolve('@kitn.ai/blocks/package.json')),
+  'blocks',
+);
 const DIST_BLOCKS = join(ROOT, 'dist', 'blocks');
 
 /** Generated block artifacts live under dist/ (never committed), so a fresh

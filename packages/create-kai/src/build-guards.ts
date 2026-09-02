@@ -413,6 +413,43 @@ export function missingStarterProblem(
 }
 
 /**
+ * Refuse to build when the block sources package resolves to a directory that
+ * is not there.
+ *
+ * `@kitn.ai/blocks` lives in its own workspace package, moved out of this
+ * kit's tree so it can be built and versioned on its own (see
+ * packages/blocks). `cp` throws its own ENOENT on a missing source, so this
+ * rule buys the same thing missingStarterProblem buys for a starter: the
+ * message names the resolved directory instead of leaving a stack trace to
+ * explain that a workspace resolve came back wrong.
+ *
+ * The existence check has to run before the `cp` it explains, not after: `cp`
+ * on a missing source throws before this rule's sibling, zeroBlocksCopiedProblem,
+ * ever gets a `count` to look at.
+ */
+export function blocksSourceRootProblem(
+  blocksDir: string,
+  exists: (absolutePath: string) => boolean,
+): string | null {
+  if (exists(blocksDir)) return null;
+  return `create-kai build: no blocks directory at ${blocksDir} - copied zero block directories from @kitn.ai/blocks - a zero-block copy is a broken resolve, not an empty catalog`;
+}
+
+/**
+ * Refuse to build a tarball that copied zero block directories.
+ *
+ * A silent zero-block copy is the failure shape `add` would otherwise hit at
+ * a user's first run: the CLI installs cleanly and then finds nothing to
+ * write. blocksSourceRootProblem above catches a missing directory; this
+ * catches the source directory existing but being empty, which `cp` does not
+ * treat as an error at all.
+ */
+export function zeroBlocksCopiedProblem(count: number): string | null {
+  if (count > 0) return null;
+  return 'create-kai build: copied zero block directories from @kitn.ai/blocks - a zero-block copy is a broken resolve, not an empty catalog';
+}
+
+/**
  * The name a starter carries its ignore file under.
  *
  * Re-exported rather than declared: it is one row of `STRIPPED_DOTFILES`

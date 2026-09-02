@@ -24,6 +24,7 @@ import * as esbuild from 'esbuild';
 import {
   GITIGNORE_SOURCE_NAME,
   appPathProblem,
+  blocksSourceRootProblem,
   bundleGraphProblem,
   declaredPathsProblem,
   emittedContentProblem,
@@ -34,6 +35,7 @@ import {
   sharedDevDepsProblem,
   templateIgnoreProblem,
   templateSkips,
+  zeroBlocksCopiedProblem,
 } from '../src/build-guards';
 import type { TemplateReader } from '../src/build-guards';
 import { FRAMEWORKS, getFramework } from '../src/frameworks';
@@ -479,6 +481,36 @@ describe('the missing-starter guard', () => {
         `${framework.id}: templateDir must name a real starter`,
       ).toBeNull();
     }
+  });
+});
+
+describe('the blocks-source guard', () => {
+  it('rejects a blocks directory that does not exist', () => {
+    const absent = path.join(PKG_ROOT, 'no-such-blocks-dir');
+
+    expectRejected(blocksSourceRootProblem(absent, existsSync), `no blocks directory at ${absent}`);
+  });
+
+  it('holds the real @kitn.ai/blocks resolve against the tree', () => {
+    // THE CONTROL and the live check at once: the same resolve build.mjs makes,
+    // so a future move of packages/blocks fails this test before it fails a
+    // published tarball.
+    const blocksDir = path.join(
+      path.dirname(createRequire(import.meta.url).resolve('@kitn.ai/blocks/package.json')),
+      'blocks',
+    );
+
+    expect(blocksSourceRootProblem(blocksDir, existsSync)).toBeNull();
+  });
+});
+
+describe('the zero-blocks guard', () => {
+  it('rejects a copy that landed zero block directories', () => {
+    expectRejected(zeroBlocksCopiedProblem(0), 'copied zero block directories from @kitn.ai/blocks');
+  });
+
+  it('accepts a copy that landed at least one block directory', () => {
+    expect(zeroBlocksCopiedProblem(3)).toBeNull();
   });
 });
 
