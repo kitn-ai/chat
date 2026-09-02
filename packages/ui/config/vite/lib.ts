@@ -47,6 +47,187 @@ interface Target {
 }
 
 const TARGETS: Record<string, Target> = {
+  // dist/kai-provider.es.js, the "./provider" export. No Solid plugin: the
+  // provider is plain TypeScript, and solid-js / solid-js/web are external
+  // because the host page supplies them. dist/kai.es.js must not be clobbered:
+  // the main build runs first.
+  //
+  // The remote card-protocol provider bundle (@kitn.ai/ui/provider), compiled to
+  // dist/kai-provider.es.js.
+  //
+  // JS-ONLY, deliberately. This build used to run vite-plugin-dts with
+  // `entryRoot: 'src/remote'`, which FLATTENED every src/remote/*.ts into
+  // dist/*.d.ts. That was wrong twice over:
+  //
+  //   1. It emitted dist/wire.d.ts from src/remote/wire.ts (the remote CARD
+  //      PROTOCOL). Once @kitn.ai/ui/wire shipped as dist/wire.js + dist/wire/,
+  //      a sibling-.d.ts lookup for dist/wire.js (a deep import, node10
+  //      resolution, or editor go-to-definition) silently served card-protocol
+  //      types for the model-stream adapter.
+  //   2. The flattened files kept their ORIGINAL relative imports, so
+  //      dist/provider-runtime.d.ts imported '../primitives/card-contract' and
+  //      resolved OUTSIDE dist/, where nothing exists. The provider's own public
+  //      types did not typecheck for a consumer.
+  //
+  // The barrel build (vite.config.barrel.ts) already emits every src/**/*.ts
+  // declaration with `entryRoot: 'src'`, so src/remote/provider.ts lands at
+  // dist/remote/provider.d.ts with its relative imports intact. The exports map
+  // points "./provider" at that file. One dts owner, no flattened duplicates, no
+  // ambiguous dist/wire.d.ts.
+  provider: {
+    entry: 'src/remote/provider.ts',
+    fileName: 'kai-provider.es.js',
+    transform: 'none',
+    external: ['solid-js', 'solid-js/web'],
+  },
+
+  // dist/index.js, the "." export under the `browser` and `default` conditions.
+  // This is ALSO the only declaration emit over src/**: every other subpath's
+  // .d.ts comes from this pass plus scripts/emit-subpath-dts.mjs.
+  //
+  // Fifth build (after main + provider + react). Compiles the root entry
+  // (src/index.ts — the SolidJS primitives/components barrel) to a compiled ESM
+  // bundle + generated .d.ts, so consumers resolve `@kitn.ai/ui` (".") to
+  // JS+.d.ts — never the raw src/*.ts(x) SOURCE. Shipping source on "." is the
+  // core of LIB-2: a consumer's tsc resolves src/index.ts, then compiles the
+  // library's SolidJS internals under the consumer's React/Vue/Svelte JSX config
+  // and emits dozens of errors inside node_modules/@kitn.ai/ui/src.
+  //
+  // solid-js / solid-js/web are external (peer dep the host provides). Everything
+  // else (the component tree) is bundled inline.
+  //
+  // emptyOutDir: false — the main build (vite.config.ts) ran first; do NOT clobber.
+  index: {
+    entry: 'src/index.ts',
+    fileName: 'index.js',
+    transform: 'dom',
+    external: SOLID_ELEMENT,
+    dts: {
+      include: ['src/**/*.ts', 'src/**/*.tsx'],
+      exclude: [
+        'src/**/*.stories.tsx',
+        'src/**/*.test.ts',
+        'src/**/*.test.tsx',
+        'src/agent-tooling/**',
+        'src/stories/**',
+        // Captured SSE fixtures and their replay harness are TEST DATA. The
+        // `files` field already keeps src/wire/fixtures out of the tarball;
+        // without this the dts build still emitted type stubs for them into
+        // dist/wire/fixtures/, describing modules that do not ship.
+        'src/wire/fixtures/**',
+        // *.testlib.ts files are TEST-ONLY loaders (node:path / node:url).
+        // This tsconfig deliberately has no node types — that absence is what
+        // keeps Node imports out of shipped browser code — so including a
+        // testlib here logs TS2307 on every build and emits a d.ts for a
+        // module that must not ship. Excluded from the tarball by the
+        // matching !**/*.testlib.* negations in package.json `files`.
+        'src/**/*.testlib.ts',
+      ],
+      outDir: 'dist',
+      entryRoot: 'src',
+      // The barrel entry src/index.ts -> dist/index.d.ts. This is the canonical
+      // owner of dist/index.d.ts (the react build renames its own entry to
+      // react.d.ts to avoid the collision).
+    },
+  },
+
+  // dist/index.server.js, the "." export under `node` / `deno` / `worker`.
+  //
+  // Server-safe twin of vite.config.barrel.ts → dist/index.server.js, wired into the
+  // package's "." export under the `node` condition.
+  //
+  // WHY: vite.config.barrel.ts compiles the barrel with Solid's DOM transform, which
+  // emits 121 module-scope `template("<div>")` calls and 24 module-scope
+  // `delegateEvents([...])` calls. It also (correctly) leaves solid-js external. Under
+  // Node, `solid-js/web` resolves to Solid's SERVER build, where `template` is the
+  // `notSup` stub — so merely IMPORTING `@kitn.ai/ui` on a server threw
+  // "Client-only API called on the server side" and hard-failed any SSR/prerender pass
+  // that touched a value export. Bundling solid-js instead does NOT fix it: the client
+  // runtime's `delegateEvents(events, doc = window.document)` then throws
+  // "window is not defined" at module scope, and every Solid consumer gets a duplicated
+  // reactive runtime. The transform is the problem, not the resolution — so we ship a
+  // second bundle compiled with Solid's SSR transform, which emits `ssr` template
+  // strings and no event delegation at all.
+  //
+  // hydratable: false — deliberately matched to the DOM build, which vite-plugin-solid
+  // compiles with hydratable: false. Hydration needs BOTH halves flipped together;
+  // flipping only this one would emit hydration keys the client build cannot consume.
+  // This entry exists so a server can IMPORT the barrel (and render static markup),
+  // not so it can hand off to hydrate().
+  //
+  // Externals are identical to the DOM build: the host provides solid-js, and under Node
+  // that resolves to Solid's server renderer, which is exactly what this output targets.
+  //
+  // emptyOutDir: false — later build in the chain; do NOT clobber earlier output.
+  'index.server': {
+    entry: 'src/index.ts',
+    fileName: 'index.server.js',
+    transform: 'ssr',
+    external: SOLID_ELEMENT,
+  },
+
+  // dist/solid.js, the "./solid" export.
+  //
+  // The `@kitn.ai/ui/solid` entry (src/solid.ts → dist/solid.js) — the COMPLETE
+  // SolidJS surface: a writable component for EVERY registered element plus a
+  // `<Name>Props` type for every public component. The catalog is
+  // src/elements/element-meta.json; `npm run verify:solid-coverage` prints the
+  // element count and fails on any gap, so the number is not restated here.
+  //
+  // WHY IT IS ITS OWN BUILD TARGET RATHER THAN PART OF THE BARREL
+  // ------------------------------------------------------------
+  // Full Solid coverage costs ~114KB raw / ~23KB gzipped. The root entry "." is
+  // resolved by EVERY consumer, so carrying that surface there taxed React, Vue,
+  // Svelte and vanilla users for components only Solid can render. Compiling this
+  // as a separate lib target keeps that code out of dist/index.js entirely — the
+  // two bundles share source but no output, so a React consumer's bundler never
+  // walks into it.
+  //
+  // src/solid.ts composes the root barrel (`export * from './index'`) so that
+  // "./solid ⊇ ." is a compiler invariant instead of a copied list. That is a
+  // SOURCE-level composition: rollup inlines it here, so dist/solid.js is
+  // standalone and importing it does not pull in dist/index.js.
+  //
+  // Externals and the dts owner are deliberately identical to vite.config.barrel.ts:
+  // solid-js is the host-provided peer, and dist/solid.d.ts is emitted by the barrel
+  // build's dts pass (include: src/**/*.ts, entryRoot: src), so this build is JS-only.
+  //
+  // emptyOutDir: false — later build in the chain; do NOT clobber earlier output.
+  solid: {
+    entry: 'src/solid.ts',
+    fileName: 'solid.js',
+    transform: 'dom',
+    external: SOLID_ELEMENT,
+  },
+
+  // dist/solid.server.js, the "./solid" server twin.
+  //
+  // Server-safe twin of vite.config.solid.ts → dist/solid.server.js, wired into the
+  // package's "./solid" export under the `node` / `deno` / `worker` conditions.
+  //
+  // This exists for exactly the reason vite.config.barrel.server.ts does, and the
+  // reasoning there is the full story. In short: the DOM build compiles Solid's
+  // client transform, which emits module-scope `template(...)` and `delegateEvents(...)`
+  // calls. Under Node, `solid-js/web` resolves to Solid's SERVER build where
+  // `template` is the `notSup` stub, so merely IMPORTING the entry threw
+  // "Client-only API called on the server side" and hard-failed any SSR/prerender/RSC
+  // pass. That bug was live on npm through 0.19.0 for "."; shipping `./solid` without
+  // a server twin would reintroduce it on a brand-new entry, and `verify:ssr` (which
+  // derives its entry list from the exports map) would fail the build the day
+  // "./solid" was added.
+  //
+  // hydratable: false — matched to the DOM build, exactly as the barrel pair is.
+  // This entry exists so a server can IMPORT the Solid surface and render static
+  // markup, not so it can hand off to hydrate().
+  //
+  // emptyOutDir: false — later build in the chain; do NOT clobber earlier output.
+  'solid.server': {
+    entry: 'src/solid.ts',
+    fileName: 'solid.server.js',
+    transform: 'ssr',
+    external: SOLID_ELEMENT,
+  },
+
   // dist/state.js
   //
   // Framework-neutral state core (@kitn.ai/ui/state). Pure functions over
@@ -58,6 +239,249 @@ const TARGETS: Record<string, Target> = {
     fileName: 'state.js',
     transform: 'dom',
     external: SOLID,
+  },
+
+  // dist/wire.js
+  //
+  // The wire adapter (@kitn.ai/ui/wire). Reads a Response / ReadableStream /
+  // AsyncIterable and drives an AssistantStreamSink. No provider SDK and no Solid
+  // runtime, but the plugin stays for consistency with the other lib builds and
+  // because it imports src/state/parts.ts, which lives in a Solid-compiled tree.
+  // Compiled to dist/wire.js.
+  //
+  // The .d.ts is emitted by the barrel build (vite-plugin-dts over src/**, with
+  // entryRoot: 'src', so src/wire/index.ts becomes dist/wire/index.d.ts). This
+  // build is JS-only.
+  //
+  // emptyOutDir: false -- the main build ran first; do NOT clobber.
+  wire: {
+    entry: 'src/wire/index.ts',
+    fileName: 'wire.js',
+    transform: 'dom',
+    external: SOLID,
+  },
+
+  // dist/stores.js
+  //
+  // The conversation stores (@kitn.ai/ui/stores). localStorageStore/fetchStore +
+  // the ConversationStore contract helpers — plain solid-free glue (I/O, so NOT
+  // part of ./state, whose contract is pure folds) compiled to a self-contained
+  // dist/stores.js so a no-bundler CDN page can reach the built-ins the root
+  // export (which bare-imports solid-js) denies it. See src/stores/index.ts for
+  // the full decision record. solid-js stays external here for symmetry with the
+  // other lib builds; the entry must not actually pull it in at runtime, and
+  // `verify:cdn-entries` (postbuild) fails the build if any bare import appears
+  // in the emitted bundle. The .d.ts is emitted by the barrel build (entryRoot
+  // src → dist/stores/index.d.ts), so this build is JS-only.
+  // emptyOutDir: false — the main build ran first; do NOT clobber.
+  stores: {
+    entry: 'src/stores/index.ts',
+    fileName: 'stores.js',
+    transform: 'dom',
+    external: SOLID,
+  },
+
+  // dist/define.js. solid-element is deliberately NOT external here: it is not
+  // a declared peer, so this entry bundles it for consumers.
+  //
+  // The facade seam (@kitn.ai/ui/define). Sibling of vite.config.state.ts: one
+  // small public entry, browser lib build, solid-js external (the consumer
+  // project provides it), emptyOutDir false because the main build already
+  // populated dist/.
+  //
+  // The .d.ts is NOT emitted here. The barrel build (vite-plugin-dts over
+  // src/**, entryRoot: 'src') already emits dist/elements/define-entry.d.ts —
+  // but this subpath's declared `types` is the flat dist/define.d.ts, matching
+  // the flat dist/define.js this build produces, so scripts/emit-subpath-dts.mjs
+  // generates dist/define.d.ts as a shim onto the barrel's real declarations
+  // (see REAL_TYPES_SOURCE in that script). This build is JS-only.
+  define: {
+    entry: 'src/elements/define-entry.ts',
+    fileName: 'define.js',
+    transform: 'dom',
+    external: SOLID,
+  },
+
+  // dist/define.server.js, matching the DOM twin's externals exactly.
+  //
+  // Server-safe twin of vite.config.define.ts → dist/define.server.js, wired into
+  // the package's "./define" export under the `node` / `deno` / `worker`
+  // conditions.
+  //
+  // This exists for exactly the reason vite.config.solid.server.ts and
+  // vite.config.barrel.server.ts do, and the reasoning there is the full story.
+  // In short: the DOM build compiles Solid's client transform, which emits
+  // module-scope `template(...)` calls for define.tsx's own JSX (the facade
+  // wrapper's `<style>` and outer `<div>`) — hoisted to module scope regardless
+  // of the function they render inside, which is what makes this a MODULE-LOAD
+  // failure rather than a call-time one. Under Node, `solid-js/web` resolves to
+  // Solid's SERVER build where `template` is the `notSup` stub, so merely
+  // IMPORTING the entry threw "Client-only API called on the server side" and
+  // hard-failed `verify:ssr` (verify-ssr-imports.mjs derives its entry list from
+  // the exports map, so a new entry with no server twin fails the build the day
+  // it is added — same shape this repo already hit twice for "." and "./solid").
+  //
+  // defineWebComponent() ITSELF is already SSR-safe by construction (`typeof
+  // customElements === 'undefined'` short-circuits before ever calling
+  // solid-element's customElement()) — this fix is unrelated to that call-time
+  // guard. It is purely about the module load succeeding at all.
+  //
+  // hydratable: false — matched to the DOM build and the solid.server pair.
+  //
+  // emptyOutDir: false — later build in the chain; do NOT clobber earlier output.
+  'define.server': {
+    entry: 'src/elements/define-entry.ts',
+    fileName: 'define.server.js',
+    transform: 'ssr',
+    external: SOLID,
+  },
+
+  // dist/diagnostics.js
+  //
+  // The devtools recorder hook (@kitn.ai/ui/diagnostics). The browser-only half of
+  // the diagnostic stream: it installs window.__KAI_DEVTOOLS_HOOK__ and holds the
+  // session buffer, while src/wire produces the events and touches no global.
+  // Compiled to dist/diagnostics.js. The .d.ts is emitted by the barrel build
+  // (entryRoot src -> dist/diagnostics/index.d.ts), so this build is JS-only.
+  // emptyOutDir:false — the main build ran first; do NOT clobber.
+  diagnostics: {
+    entry: 'src/diagnostics/index.ts',
+    fileName: 'diagnostics.js',
+    transform: 'dom',
+    external: SOLID,
+  },
+
+  // dist/schemas.js. MUST build before the mcp target in config/vite/node.ts:
+  // that bundle compiles the MCP against this built file, not against src.
+  // vitest.config.ts records the same dependency from the other side.
+  //
+  // The card JSON Schemas as a JS module (@kitn.ai/ui/schemas). Data only: the
+  // schema documents are imported from src/primitives/card-schemas/*.json and
+  // INLINED by rollup, so the built dist/schemas.js is self-contained — no fs, no
+  // fetch, no DOM, no Solid runtime. That is what lets a backend route import it.
+  //
+  // The raw JSON ships alongside it (dist/schemas/*.schema.json, via
+  // scripts/copy-card-schemas.mjs and the "./schemas/*" exports key) for Python/Go
+  // backends. This entry exists because a JS import is the only form that works in
+  // all 11 framework targets without an import attribute, `resolveJsonModule`, or a
+  // wrangler rule.
+  //
+  // The .d.ts is emitted by the barrel build (vite-plugin-dts over src/**, with
+  // entryRoot: 'src', so src/schemas/index.ts becomes dist/schemas/index.d.ts, which
+  // lands in the same directory the JSON is copied into). This build is JS-only.
+  //
+  // The solid plugin stays for consistency with the other lib builds; nothing here
+  // needs it.
+  //
+  // emptyOutDir: false — the main build ran first; do NOT clobber.
+  schemas: {
+    entry: 'src/schemas/index.ts',
+    fileName: 'schemas.js',
+    transform: 'dom',
+    external: SOLID,
+  },
+
+  // dist/construct.js, the "./construct" export. No Solid plugin.
+  //
+  // The construct schema as a JS module (@kitn.ai/ui/construct): ConstructSchema,
+  // validateConstruct, CONSTRUCT_SCHEMA_URL + the Construct/ConstructProblem/
+  // ValidationOutcome types, re-exported from src/agent-tooling/construct/public.ts.
+  // Compiled to dist/construct.js. Sibling of vite.config.schemas.ts (read its
+  // header) but NOT the same entry: that one ships the card JSON Schemas as data
+  // with a documented size budget zod does not fit, so this is its own exports
+  // key rather than growing "./schemas".
+  //
+  // `zod` is external, matching vite.config.construct-cli.ts's build (the CLI
+  // bundle over the same source tree) — it's a real runtime `dependencies` entry
+  // of this package, so any consumer installing @kitn.ai/ui gets it resolved
+  // normally, and bundling it a second time here would be dead weight.
+  //
+  // The .d.ts is NOT emitted by the barrel build (vite.config.barrel.ts): that
+  // build's dts plugin excludes `src/agent-tooling/**` wholesale (see its own
+  // comment) because most of agent-tooling is Node/MCP-only tooling that must
+  // not leak its types into the "." browser entry. So this build carries its
+  // own vite-plugin-dts pass instead, scoped to just the two files this entry
+  // needs (public.ts + the schema.ts it re-exports). `entryRoot: 'src'` mirrors
+  // the barrel config, so declarations land at
+  // dist/agent-tooling/construct/public.d.ts — the same "types nested, JS flat"
+  // shape "./schemas" already uses (dist/schemas/index.d.ts next to dist/schemas.js).
+  //
+  // rollupTypes is deliberately NOT set: it invokes api-extractor over the whole
+  // already-emitted dist/**/*.d.ts tree (this build runs after the barrel build
+  // in the `build` script chain), and it errored trying to resolve dist/state.js
+  // (JS, not .d.ts — the sibling .d.ts shim is a POSTbuild step) while walking an
+  // unrelated barrel-emitted file (dist/primitives/create-kai-chat.d.ts). Plain
+  // per-file declaration emit has no such cross-file dependency and needs none:
+  // public.d.ts re-exports from './schema', and schema.d.ts is emitted alongside
+  // it by the same include list, so the reference resolves without bundling.
+  //
+  // url-scheme-policy.ts is NOT in `include` — schema.ts imports isSafeUrl from
+  // it, but the barrel build (which ran earlier in the chain) already emitted
+  // dist/primitives/url-scheme-policy.d.ts, and schema.d.ts's relative import
+  // resolves to that existing file.
+  //
+  // emptyOutDir: false — the main build ran first; do NOT clobber.
+  construct: {
+    entry: 'src/agent-tooling/construct/public.ts',
+    fileName: 'construct.js',
+    transform: 'none',
+    external: ['zod'],
+    dts: {
+      include: [
+        'src/agent-tooling/construct/public.ts',
+        'src/agent-tooling/construct/schema.ts',
+        'src/agent-tooling/construct/schema-url.ts',
+        // The blocks pure-module layer (registry + the shared form renderer).
+        // Browser-safe by their own discipline headers (no node:*, no zod-free
+        // violation — registry/forms are plain functions over injected data).
+        // Needed here because apps/gallery/GalleryPage.tsx imports BLOCK_FORMS
+        // types from '../../src/agent-tooling/blocks/forms', and (the parallel
+        // case) apps/builder/HomeScreen.tsx imports ConstructListing from
+        // '../../src/agent-tooling/construct/templates' — neither app lives
+        // under src/ or the dts include anymore, and public.ts re-exports only
+        // from './schema', so these two include entries currently have no
+        // in-repo consumer and are kept only pending a separate removal
+        // decision. forms.d.ts imports './registry', so both are listed.
+        'src/agent-tooling/blocks/registry.ts',
+        'src/agent-tooling/blocks/forms.ts',
+      ],
+      outDir: 'dist',
+      entryRoot: 'src',
+    },
+  },
+
+  // dist/construct-templates.js, the "./construct/templates" export. Nothing
+  // external: this bundle is self-contained by design.
+  //
+  // The template registry as its own ZOD-FREE entry
+  // (@kitn.ai/ui/construct/templates → dist/construct-templates.js). B-16:
+  // the existing ./construct entry is one bundled file with top-level
+  // z.discriminatedUnion side effects esbuild cannot tree-shake past (see
+  // create-kai's wizard.ts header), so the registry — structured data three
+  // surfaces read live — gets its own entry create-kai can bundle.
+  // bundleGraphProblem's zod ban in create-kai's build is the enforcement:
+  // if this entry ever grows a zod import, that build goes red on its own.
+  //
+  // No `external` config on purpose: templates.ts's only value import is the
+  // schema-url leaf, which inlines to a string. The emitted chunk must have
+  // ZERO imports — a zod import appearing here would surface in create-kai's
+  // metafile graph and fail its build.
+  //
+  // dts include mirrors vite.config.construct.ts's pattern (read its header):
+  // templates.d.ts's `import type { Construct } from './schema'` resolves to
+  // the schema.d.ts that config already emits earlier in the build chain.
+  'construct-templates': {
+    entry: 'src/agent-tooling/construct/templates.ts',
+    fileName: 'construct-templates.js',
+    transform: 'none',
+    dts: {
+      include: [
+        'src/agent-tooling/construct/templates.ts',
+        'src/agent-tooling/construct/schema-url.ts',
+      ],
+      outDir: 'dist',
+      entryRoot: 'src',
+    },
   },
 };
 
