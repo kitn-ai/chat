@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { PromptInput, useVoiceInput } from '@kitn.ai/ui/react';
 import type { PromptInputProps } from '@kitn.ai/ui/react';
+import type { KaiPromptInputElement } from '@kitn.ai/ui/elements';
 import type { Theme } from '../theme';
 
 interface ComposerProps {
@@ -33,13 +34,13 @@ interface ComposerProps {
 export function Composer({ theme, loading, suggestions, triggers, onSubmit, onSuggestionClick }: ComposerProps) {
   // Ref to the underlying <kai-prompt-input> element for the imperative pushes
   // (clear() on submit, ComposerDoc seed from voice); textRef mirrors the live text.
-  const promptRef = useRef<HTMLElement>(null);
+  const promptRef = useRef<KaiPromptInputElement>(null);
   const textRef = useRef('');
 
   const { supported: voiceSupported, start: startVoice } = useVoiceInput((transcript) => {
     const next = (textRef.current ? textRef.current + ' ' : '') + transcript;
     textRef.current = next;
-    const el = promptRef.current as (HTMLElement & { value?: unknown }) | null;
+    const el = promptRef.current;
     if (el) el.value = [{ type: 'text', text: next }];
   });
 
@@ -58,7 +59,7 @@ export function Composer({ theme, loading, suggestions, triggers, onSubmit, onSu
       // element's clear() method (uncontrolled-safe; never a string assignment) —
       // then hand the text up. The route owns append + streaming.
       textRef.current = '';
-      (promptRef.current as (HTMLElement & { clear?: () => void }) | null)?.clear?.();
+      promptRef.current?.clear();
       onSubmit(value);
     },
     [onSubmit],
