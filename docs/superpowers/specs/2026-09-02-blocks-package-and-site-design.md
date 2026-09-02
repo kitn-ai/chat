@@ -1,6 +1,6 @@
 # Blocks: the package, the authored contract, and the site
 
-**Date:** 2026-09-02 · **Status:** draft for owner review (rulings in section 9 were made in-session; the written spec awaits sign-off) · **Scope:** design only. The plan comes next, and sequences the five PRs in section 7, in the order A, B, C, D, B2. Section 8a carries the amendments agreed after review; where it and an earlier section disagreed, the earlier section has been rewritten to match.
+**Date:** 2026-09-02 · **Status:** draft for owner review (rulings in section 9 were made in-session; the written spec awaits sign-off) · **Scope:** design only. The plan comes next, and sequences the five PRs in section 7, in the order A, B, C, D, B2. Section 8a carries the amendments agreed after review and section 8b the ones the contract spike forced; where either and an earlier section disagreed, the earlier section has been rewritten to match.
 
 Successor to `docs/superpowers/specs/2026-08-31-blocks-and-parts-design.md`, which stands
 for what a block IS, the parts, the registry mechanics and the CLI flow. This
@@ -195,15 +195,46 @@ element** with a small binding syntax instead of being applied imperatively:
 | Syntax | Means | Renders as |
 |---|---|---|
 | `.prop="name"` | bind controller field `name` to the element's JS **property** `prop` | `el.prop = ...` (wc), `prop={...}` (react), `:prop.prop` (vue), `$effect` assignment (svelte), `[prop]` (angular), `prop:prop` or a Solid component prop (solid) |
-| `@kai-event="handler"` | bind controller action `handler` to a non-bubbling `kai-*` event **on that element** | `el.addEventListener('kai-...', ...)` (wc), the wrapper's derived handler prop (react), `@kai-event` (vue), `onkai-event` (svelte), `(kai-event)` (angular), `on:kai-event` (solid) |
+| `@event="handler"` | bind controller action `handler` to an event **on that element**; `kai-*` events are non-bubbling and are the preferred form where the element fires one | `el.addEventListener('kai-...', ...)` (wc), the wrapper's derived handler prop (react), `@kai-event` (vue), `onkai-event` (svelte), `(kai-event)` (angular), `on:kai-event` (solid) |
 | `:attr="name"` | bind controller field `name` to a scalar **attribute** the element reads at runtime (string, number, boolean) | `setAttribute` / `removeAttribute` on falsy for booleans (wc), the attribute-named prop in react/vue/svelte/angular/solid |
+| `*for="row of field"` | repeat this element once per item in list field `field`, with `row.<field>` legal as a binding target inside it. **`:key` is mandatory** | a keyed rebuild loop (wc), `.map()` + `key` (react), `v-for` + `:key` (vue), `{#each ... (key)}` (svelte), `*ngFor` + `trackBy` (angular), `<For each>` (solid) |
+| `seed:attr="literal"` | write this literal **once**, then never again; the element self-manages the prop from there | `setAttribute` before the first patch (wc), a mount effect that writes it once (react), a static attribute everywhere else, because vue/svelte/angular/solid do not re-patch statics |
 | `#ref="name"` | name an element the controller calls methods and setters on | a ref in whatever the framework calls one, holding the same element instance in every framework |
 
 Plain `attr="literal"` stays a literal, because a scalar that never changes is an
-attribute in every host. One shape per kind, and the leading punctuation is what
-makes each unambiguous against a plain attribute: `.` property, `:` attribute,
-`@` event, `#` ref. There is no separate boolean syntax; `:hidden="collapsed"`
-covers it, and the wc renderer removes the attribute when the field is falsy.
+attribute in every host. One shape per kind, and the prefix is what makes each
+unambiguous against a plain attribute: `.` property, `:` attribute, `@` event,
+`*` list, `#` ref, and the word `seed:` for the one-shot literal. There is no
+separate boolean syntax; `:hidden="collapsed"` covers it, and the wc renderer
+removes the attribute when the field is falsy. `seed:` is a word rather than a
+sixth punctuation mark because it modifies a literal rather than introducing a
+new kind of binding, and it is still one shape: there is no second way to spell
+it.
+
+**A binding holds an identifier, never an expression.** Optionally dotted inside
+a `*for` scope (`row.unread`), and nothing else: no negation, no comparison, no
+call. `:hidden="!drilled"` is illegal; the controller exports `backHidden`
+instead. That is what keeps every renderer cheap, and it costs field inflation in
+`State`, which section 3.2 accepts on purpose.
+
+**`.textContent` is a sanctioned property binding, and every renderer emits it as
+children.** It is legal under the existing `.prop` rule because `textContent` is
+a property on every element, and it is how a block gets data into a slotted span.
+The mechanical translation is wrong: `textContent={...}` is not a React prop and
+is silently wrong in Vue. Emit `el.textContent = ...` in the html form and
+`{state.field}` / `{{ state.field }}` as the element's children everywhere else.
+
+**`@` covers any event the element fires**, not only `kai-*` ones, so `@click` on
+a `<kai-button>` is legal rather than unspecified. Prefer the `kai-` form where
+the element has one: `kai-button` and `kai-row` both fire `kai-click`, the React
+wrapper maps it to `onClick`, and the non-bubbling `kai-` event is the one the
+kit contracts about.
+
+**`seed:` exists because a literal is a controlled-component trap in React.** The
+React wrapper re-applies every prop after every render, so a plain `view="home"`
+on `kai-view-stack` re-fires the seed on each render and silently undoes every
+navigation. Vue is unaffected, which is exactly what makes the bug expensive to
+find. Any prop an element self-manages after its initial value is a `seed:`.
 
 The runtime-attribute kind exists because controllers change attributes, not just
 properties: `support-widget` toggles `hidden` on the back button and changes
@@ -212,8 +243,10 @@ script and had nowhere to go on the markup.
 
 **Element methods are the one sanctioned DOM leak into the controller.** Some of
 what a block does is a call, not a binding: `stack.push('chat')`, `back()`,
-setting `dock.open`. `#ref` is the mechanism, and `ControllerDeps` (section 3.2)
-carries the named refs, typed against the element interfaces. This is identical
+setting `dock.open`. `#ref` is the mechanism, and `ControllerDeps.refs`
+(section 3.2) is the getter that hands them over, typed against the element
+interfaces and nullable because no framework has them at construction time. This
+is identical
 in all six frameworks because every framework hands back the same element
 instance, which is the property that makes a DOM call safe to put in
 framework-neutral code where a DOM *query* would not be.
@@ -225,14 +258,24 @@ with the non-scalar list derived from `src/elements/element-nonscalar.json`. The
 stays an error. **`:messages=` is the same error**, and the check has to be
 changed to say so: today the attribute-position regex requires whitespace
 immediately before the prop name, so a `:` prefix slips past it. `:` means
-attribute, and a non-scalar in attribute position is wrong however it is spelled.
-Plant that exact case in `--self-test`.
+attribute, and a non-scalar in attribute position is wrong however it is spelled;
+`seed:messages=` is the same error for the same reason. Plant those cases in
+`--self-test`. `.prop=` and `*for=` are the two prefixes that legitimately carry
+a non-scalar.
 
 ### 3.2 The controller: `<id>.controller.ts`
 
 TypeScript now, not `.js`. The framework-neutral logic, exported as:
 
 ```ts
+export interface ControllerDeps {
+  // A GETTER of nullable handles, one per #ref name, read lazily at each call
+  // site. No framework has its elements when the controller is constructed:
+  // React's ref is null through the first render, Vue's until mount.
+  refs: () => { stack: KaiViewStackElement | null; dock: KaiDockElement | null };
+  // plus whatever the block itself needs (transport, storage, clock)
+}
+
 export function createController(deps: ControllerDeps): {
   state: () => State;          // snapshot getter
   actions: Actions;            // named handlers the @-bindings point at
@@ -251,10 +294,17 @@ It uses `@kitn.ai/ui/state`, `/wire` and `/stores` exactly as
 `isConversationUnread`). No DOM access except through the refs handed in. No
 hand-rolled SSE reader, still greppable, still an error.
 
-`ControllerDeps` carries one typed ref per `#ref` name in the page, so the
-methods and setters the controller calls are checked by tsc rather than reached
-for by query. That is the sanctioned leak described in section 3.1 and the only
-one.
+`ControllerDeps.refs` carries one typed handle per `#ref` name in the page, so
+the methods the controller calls are checked by tsc rather than reached for by
+query. That is the sanctioned leak described in section 3.1 and the only one.
+
+**`State` is a view model, not domain state.** Because a binding is an identifier
+and never an expression, every derivation lands in the controller as its own
+field: the spike's conversion carries `backHidden`, `tabBarHidden`,
+`recentPreviewHidden` and four more that exist only to feed one span each. That
+is the deliberate trade. Dumb bindings are what six renderers can agree about,
+and the cost is that the field list is shaped by the layout, so a controller is
+not portable to a different arrangement of the same block.
 
 ### 3.3 The rest of the authored directory
 
@@ -501,17 +551,27 @@ Its inputs move to the package (section 2.2); its structure does not change.
    `FRAMEWORKS` in that script is itself still hand-written, which the
    derive-don't-type row in `docs/coupling-map.md` §4 already records.
 
-   **OPEN (recommend: extend the harness). This is PR B2 work**, since PR B
-   emits no SFC. Those projects compile `.ts` and
-   `.tsx`. `FRAMEWORK_PROJECT` maps vue and svelte to the `default` project and
-   `EXT` gives both `'ts'`, because the scaffolder's vue and svelte front ends
-   are plain TypeScript. A block's Vue SFC and Svelte component are not, and
-   `tsc` cannot see inside either. Recommendation: compile the extractable
-   TypeScript (the composable, the store adapter, the controller, the mock)
-   under the `default` project in v1, and add `vue-tsc` and `svelte-check` as
-   their own cells rather than pretending the `default` project covers the SFC.
-   Say out loud in the gate's output which half of each vue/svelte tree was
-   type-checked, so nobody reads the green as more than it is.
+   **The SFC frameworks need their own tools. PR B2 work**, since PR B emits no
+   SFC. Those projects compile `.ts` and `.tsx`. `FRAMEWORK_PROJECT` maps vue and
+   svelte to the `default` project and `EXT` gives both `'ts'`, because the
+   scaffolder's vue and svelte front ends are plain TypeScript. A block's Vue SFC
+   and Svelte component are not, and `tsc` cannot see inside either.
+
+   **`vue-tsc` IS the vue cell, not a supplement to a `default`-project pass.**
+   The spike measured it at roughly a quarter-second over `tsc` on the same
+   program, so this is not a budget question, and the `default`-project half
+   would have caught none of the four template-and-runtime defects the spike
+   found. Same intent for svelte with `svelte-check`.
+
+   **The cell is green-on-nothing without the augmentation, so pin it with a
+   planted-defect self-test.** `vue-tsc` is silently permissive about unknown
+   custom elements: with the kit's `GlobalComponents` augmentation reachable, a
+   planted `:value.prop="42"` on `kai-tab-bar` (whose `value` is `string`) fails
+   with TS2322; with the augmentation removed the same tree is green and the cell
+   has checked the script block and nothing about the template's kai props. The
+   shim is one real line (`import '@kitn.ai/ui/elements'` in a `.d.ts`) plus
+   `skipLibCheck: true`, and the self-test is what proves it is loaded. Assume
+   nothing here; watch it fail both ways.
 
 2. **Structural checks**, over what tsc cannot see:
    - the react tree imports kai elements only from `@kitn.ai/ui/react` (no raw
@@ -523,14 +583,22 @@ Its inputs move to the package (section 2.2); its structure does not change.
    - the `html` binder and the `cdn` file carry no TypeScript (section 3.5's
      strip step ran), while the framework trees still do.
 
-3. **Runtime parity.** In v1: the wc/cdn form through the existing block driver,
-   as today. **OPEN (recommend: compile-only for the other four).** React
-   additionally through the existing emit-chain machinery if it can host a block
-   cheaply. Recommendation: compile-only for vue, svelte, angular and solid
-   until a block actually breaks in one of them. The emitted project runs cost
-   seconds per file by construction (`packages/ui/emitted-code-tests.ts` owns
-   those timings), and four more framework runtimes is a real budget for a risk
-   nobody has yet observed.
+3. **Runtime parity. The wc/cdn form through the existing block driver, plus a
+   react RUNTIME cell.** The react one is not optional any more: the spike found
+   two defects that type-check perfectly and break the block. F-8's third hole
+   (`undefined` cannot clear a prop, so the react form shows stale conversation
+   starters forever) and F-6's controlled-component loop (a plain literal on a
+   self-managed prop undoes every navigation) are both invisible to tsc and
+   invisible to a compile cell. React is also the framework whose wrapper runtime
+   does the most on the block's behalf, which is why it is the one that can be
+   wrong while compiling.
+
+   Every other framework stays compile-only at runtime until a block actually
+   breaks in one: vue through `vue-tsc`, svelte through `svelte-check`, angular
+   and solid through `tsc`. The emitted project runs cost seconds per file by
+   construction (`packages/ui/emitted-code-tests.ts` owns those timings). **The
+   gate's output says which frameworks were compile-checked only**, so nobody
+   reads four greens as four running blocks.
 
 4. **A site test** that the path displayed on `/blocks` equals the CLI's target,
    for every block x framework. Both sides read `targets.ts`, so this is cheap
@@ -576,8 +644,8 @@ go red naming it, then fix it. A check nobody has seen fail is not evidence.
 
 ## 7. Sequencing
 
-One PR each, owner eval between, so the plan can split cleanly. Order: **A, B, C,
-D, B2.**
+One PR each, owner eval between, so the plan can split cleanly. Order: **A, B0,
+B, C, D, B2.**
 
 **PR A, the move.** `packages/blocks` created; sources, registry and forms
 relocated; every consumer on specifiers; the dead `dist/agent-tooling/blocks/*`
@@ -585,6 +653,17 @@ d.ts emission removed. Gates: `npm pack --dry-run --json` for `@kitn.ai/ui`
 identical name-for-name except the two deleted `.d.ts`; `verify:blocks` green;
 create-kai smoke green; `nx typecheck ui --skip-nx-cache`. No behaviour change,
 which is what makes the tarball diff a real gate.
+
+**PR B0, the kit fixes PR B needs.** The four in section 8b's "Kit fixes that
+gate PR B". They are kit changes, not blocks changes, they touch
+`packages/ui/src/elements/`, `frameworks/react/` and `gen-element-react.mjs`
+rather than anything PR A moves, and each one is a defect in its own right that
+would be worth fixing with no blocks round at all. **They ship before PR B**
+because PR B otherwise spends its budget rediscovering them, and because two of
+the four (F-8's `slot`, F-5's attribute scan) mean the react form of
+`support-widget` does not compile or does not render until they land. Regenerating
+the react wrappers is part of this PR; the generated wrapper files are its output,
+not a separate step.
 
 **PR B, the authored contract at parity.** The binding syntax, the controller
 seam, and the `html`, `react` and `cdn` renderers: the same three forms that
@@ -615,8 +694,10 @@ PR B because the risk in this round is the contract, not the count: four more
 renderers against a proven contract is mechanical, four more renderers against
 an unproven one multiplies every wrong guess by four.
 
-**B2 may slot earlier** if the spike (section 9, item 5) says the contract is
-stable. The sequence commits to B2 last, not to B2 late.
+**B2 may slot earlier.** The spike (section 9, item 5, report at
+`docs/superpowers/research/2026-09-02-blocks-contract-spike.md`) reported the
+contract stable with the section 8b changes, so the reason to hold B2 back is
+budget rather than risk. The sequence commits to B2 last, not to B2 late.
 
 ---
 
@@ -706,6 +787,109 @@ those projects compile. (Section 3.5.)
 
 ---
 
+## 8b. Amendments from the contract spike (2026-09-02)
+
+The spike ran `support-widget` through a hand conversion and hand-rendered it to
+React and Vue in throwaway apps, both driven headless end to end. Report:
+`docs/superpowers/research/2026-09-02-blocks-contract-spike.md`, findings
+numbered F-1..F-10 there and cited by number here.
+
+Its verdict: **the contract shape is right.** `state()` + `subscribe()` +
+`actions` carried both hosts with no escape hatches, each adapter is one call,
+and no view-stack or dock logic pulled DOM back into the controller. What follows
+are eight changes to the written contract, all folded into sections 3.1 and 3.2,
+plus four kit defects that have to land before PR B.
+
+**1. A list binding, `*for="row of field"`, with a mandatory `:key`.** (F-1) The
+`.prop` / `:attr` / `@event` / `#ref` set could not express the messages tab at
+all. It uses `kai-conversations` in item mode, building its own
+`kai-conversation-item` rows with slotted spans,
+which the authored script does in a 25-line imperative loop. Item mode is not
+incidental, the array-prop path renders a group header the block deliberately
+avoids, so "use the data-driven prop instead" changes what the block looks like.
+`:key` is mandatory rather than optional because the kai- reactivity contract is
+reference-keyed and every host framework needs a key anyway; making it optional
+buys nothing and costs a class of stale-render bug.
+
+**2. `.textContent` is a sanctioned property binding, emitted as children.**
+(F-2) No new syntax: `textContent` is a property on every element, so the
+existing `.prop` rule already covers it and it reads naturally. What needs
+writing down is that the mechanical translation is wrong. `textContent={...}` is
+not a React prop and is silently wrong in Vue, so every renderer special-cases it
+to the element's children.
+
+**3. Bindings are identifiers, never expressions.** (F-3) `:hidden="!drilled"`
+has no home, and the fix is a controller field rather than a grammar for
+negation. Dumb bindings are the reason six renderers can agree cheaply. The cost
+is real and is now stated in 3.2: `State` becomes a view model whose field count
+is shaped by the layout.
+
+**4. `@` covers any event the element fires**, with `kai-` forms preferred where
+one exists. (F-4) The authored block wires its buttons with `click`, which the
+old grammar (`@kai-event`) did not sanction and did not forbid either. Here the
+kit rescues it, since `kai-button` and `kai-row` fire their own `kai-click`, so
+`@kai-click` is the better authoring and the imperative block was using the
+weaker form. The grammar now says what happens for an element with no `kai-`
+equivalent instead of leaving it unspecified.
+
+**5. A seed marker, `seed:attr="literal"`, one shape.** (F-6) A plain literal on
+a prop the element self-manages is a controlled-component trap that fires in
+React only: the wrapper re-applies every prop after every render, so
+`view="home"` on `kai-view-stack` re-seeded the stack on each render and silently
+undid every navigation, including a manual `stack.push('chat')` from the console.
+Vue was unaffected, which is what makes this the expensive kind of bug. The
+alternative considered was forbidding the literal outright; a marker is better
+because the seed is sometimes genuinely wanted, and the renderers can honour it
+(a mount effect in React, a static attribute elsewhere). One shape, no second
+spelling.
+
+**6. `refs` is a getter of nullable handles.** (Q1, amendment 1) The old
+signature handed the controller its refs at construction. No framework has them
+then: React's ref is null through the first render, Vue's until mount. The
+signature that worked is `refs: () => { stack: ... | null; dock: ... | null }`,
+read lazily at each call site. The whole DOM surface the spike's controller
+needed was four method calls on two refs, all navigation with no declarative
+equivalent.
+
+**7. Non-react generated forms emit the registration import AND the `whenDefined`
+await.** (F-7) The authored script's first two lines are
+`import '@kitn.ai/ui/autoloader'` and
+`await Promise.all(tags.map((t) => customElements.whenDefined(t)))`. Moving the
+wiring out of the script took both with it, and both failures were observed: the
+vue tree registered nothing and hung on `customElements.get('kai-dock')` forever,
+and then, once registration was fixed, Vue created `<kai-conversations>` before
+the bundle finished defining it, so `:searchable.prop="false"` landed as an own
+data property on a plain `HTMLElement`, was discarded by the upgrade, and the
+block rendered a search box it does not have. React needs neither line because
+its wrappers self-register and its runtime re-applies props on `whenDefined`;
+**every other framework needs both**, and `adaptRegistrationForBundler` already
+knows the right specifier. Cheap, mechanical, and exactly the thing a
+"the wiring is generated now" round drops.
+
+**8. Renderers translate a `="false"` literal on a boolean prop, per framework.**
+(F-10) `searchable="false"` is the kit's own documented idiom for turning off a
+default-true flag, and it does not survive translation: vue-tsc rejects the
+string against the generated `searchable?: boolean` and it has to become
+`:searchable.prop="false"`. The authored form keeps the idiom; each renderer
+emits whatever its host needs.
+
+### Kit fixes that gate PR B
+
+Four defects the conversion exposed. They are kit bugs, not contract gaps, and
+they ship as **PR B0** before PR B (section 7).
+
+| # | Fix | Why it blocks |
+|---|---|---|
+| F-8 | `WebComponentProps` and the wrapper runtime gain `slot` and `hidden`; `undefined` clears a prop instead of being skipped | without `slot` the react form of this block does not compile at all (it needs `slot` seven times, and the obvious workaround, dropping to intrinsic JSX, is what section 5.2's structural check forbids) |
+| F-5 | `readViewEntry` and `kai-tab-bar`'s item reader prefer the property over the attribute | without it the react form renders every view stacked at once, and the vue form breaks intermittently, its trigger being import timing |
+| F-9 | `gen-element-react.mjs` types the forwarded ref as the element interface it already generates | `#ref` promises a typed handle the react form cannot honour; today a ref gives `HTMLElement` and `stack.push('chat')` needs a cast |
+| F-10 | re-export `ConversationSummary` from `@kitn.ai/ui/stores` | small; a framework-neutral controller has to reach into the heavy root entry for a type its own dependency hands it |
+
+F-8's third hole and F-6's loop are the two the runtime cell exists for
+(section 5.3): both type-check perfectly, and only running the block finds them.
+
+---
+
 ## 9. Owner rulings, 2026-09-02
 
 - **Blocks, not gallery.** Every new name, route, script and doc. `/blocks` is a
@@ -724,13 +908,21 @@ those projects compile. (Section 3.5.)
   Download button rides it. It is not a feature worth building.
 - **`components/<id>` roots**, and the displayed path equals the written path.
 - **Sticky global framework choice**, persisted per viewer.
+- **The contract is stable with the section 8b changes**, and four kit fixes ship
+  as PR B0 before PR B. Ruled on the spike's evidence, not on the design.
+- **`vue-tsc` is the vue cell**, pinned by a planted-defect self-test. Ruled from
+  open item 3.
+- **React gets a runtime cell**; every other framework is compile-only at
+  runtime, and the gate output says which is which. Ruled from open item 4.
 
-### Open items, with recommendations
+### Open items
 
-| # | Question | Recommendation |
+Items 3, 4 and 5 are closed; the rulings they became are in the list above.
+
+| # | Question | Recommendation / ruling |
 |---|---|---|
 | 1 | Does `kai dev` keep any blocks route? | Retire it. The public page plus the CDN preview covers the ground; a second local copy is a second thing to keep true, and its stated purpose (live theming) is out of this round. |
 | 2 | The Solid gap: `kai-tab-bar`/`kai-tab-bar-item` and `kai-icon` have no exported Solid component. | (a) Emit the custom element with `prop:` / `on:` where no component exists, and file the kit-fix. Honest, compiles, and the page never hides a framework. |
-| 3 | Vue and Svelte SFCs are outside what the existing tsc projects can check. | Compile the extractable TypeScript under the `default` project in v1 and add `vue-tsc` / `svelte-check` as their own cells. Say in the gate output which half was checked. |
-| 4 | Runtime parity beyond the wc/cdn driver. | Compile-only for vue, svelte, angular and solid until a block breaks in one. React through the existing emit-chain machinery if it hosts a block cheaply. |
-| 5 | Is the section 3 contract right? | Spike it: convert `support-widget` by hand and hand-render it to React and Vue in throwaway apps. **Runs in parallel with PR A**, which touches none of the same files. Its findings amend section 3 before the PR B plan is written, so the binding syntax is settled by a real conversion rather than by the first renderer that has to implement it. It is also what tells us whether B2 can move earlier. |
+| 3 | Vue and Svelte SFCs are outside what the existing tsc projects can check. | **RULED (spike Q3).** `vue-tsc` IS the vue cell, not a supplement: it costs about +0.25s over `tsc` on the same program, and the `default`-project half would have caught none of F-5, F-6, F-7 or F-8. It needs `skipLibCheck: true` and an explicitly imported augmentation shim, and it is green-on-nothing without that shim, so a planted-defect self-test pins it. Same intent for svelte with `svelte-check`. |
+| 4 | Runtime parity beyond the wc/cdn driver. | **RULED (spike F-6, F-8).** React gets a runtime cell. Compile-only was not enough: `undefined` failing to clear a prop and the controlled-component seed loop both type-check perfectly and both break the block. Every other framework stays compile-only at runtime until one breaks, with the gate output naming them as compile-checked only. |
+| 5 | Is the section 3 contract right? | **DONE.** The spike ran in parallel with PR A and reported the contract stable with eight changes and four kit fixes: `docs/superpowers/research/2026-09-02-blocks-contract-spike.md`. Section 8b carries the changes; PR B0 (section 7) carries the fixes. |
