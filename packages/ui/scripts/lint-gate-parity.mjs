@@ -371,6 +371,11 @@ const PLUMBING = [
   // readiness loop and nothing else, so a real check cannot hide inside one.
   /^nohup\s/,
   /^timeout\s+\d+\s+bash\s+-c\s+'until\s/,
+  // Re-stamping the downloaded build's mtimes. `find <dir> -exec touch {} +`
+  // reads no file and asserts nothing -- it only restores the ordering
+  // `upload-artifact` destroys. Pinned to that exact shape so the rule cannot
+  // swallow `find ... -exec <anything else>`, which could be a real check.
+  /^find\s+\S+\s+-exec\s+touch\s+\{\}\s\+$/,
 ];
 
 const stripEnvPrefix = (cmd) =>
@@ -1089,6 +1094,16 @@ if (SELF_TEST && IS_MAIN) {
     kindOf(`timeout 900 bash -c 'pnpm --filter @kitn.ai/ui run verify:pack'`) !== 'plumbing',
     'NEAR MISS: a real gate wrapped in `timeout ... bash -c` is NOT swallowed by the poll rule',
     `(${kindOf(`timeout 900 bash -c 'pnpm --filter @kitn.ai/ui run verify:pack'`)})`,
+  );
+
+  report(
+    kindOf('find packages/ui/dist -exec touch {} +') === 'plumbing',
+    'restamping the downloaded build is plumbing',
+  );
+  report(
+    kindOf('find packages/ui/dist -exec grep -L kai {} +') !== 'plumbing',
+    'NEAR MISS: `find ... -exec` with any other command is NOT swallowed by the touch rule',
+    `(${kindOf('find packages/ui/dist -exec grep -L kai {} +')})`,
   );
 
   // The reason the snapshot path travels in an env var: this spelling keeps the

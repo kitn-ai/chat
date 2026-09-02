@@ -467,6 +467,24 @@ jobs:
           name: kit-dist
           path: packages/ui
 
+      # `actions/upload-artifact` does not preserve mtimes: every file in the
+      # tarball is stamped at EXTRACTION time, in the order the zip holds them.
+      # `dist/**` comes out before `src/elements/compiled.css`, so the source ends
+      # up looking NEWER than the bundle built from it -- and the mtime-based
+      # stale-bundle guard in tests/e2e/hover-card-global-setup.ts reads exactly
+      # that shape as "you edited src and forgot to rebuild" and refuses to run.
+      # It fired on the browser leg the first time this split ran, over a bundle
+      # that was seconds old.
+      #
+      # The ordering the guard checks is REAL here -- `needs: build` means this
+      # artifact is this commit's build -- so restore the ordering the artifact
+      # hop destroyed rather than weakening the guard, which is the only thing
+      # standing between a local run and a pass measured on stale code. Every leg
+      # that downloads the build gets this, not just the one with the guard
+      # today: the breakage belongs to the download, not to the guard.
+      - name: Restore the build's mtimes (upload-artifact does not preserve them)
+        run: find packages/ui/dist -exec touch {} +
+
       # BEFORE the emit chain, not after it. This cache used to sit nine steps
       # downstream of the chain that does the npm install, so the shared install
       # ran fully cold on every single run and the cache warmed nothing.
@@ -519,6 +537,11 @@ jobs:
         with:
           name: kit-dist
           path: packages/ui
+
+      # Restores the mtime ordering the artifact hop destroys -- see the comment
+      # on this step in the `construct` leg.
+      - name: Restore the build's mtimes (upload-artifact does not preserve them)
+        run: find packages/ui/dist -exec touch {} +
 
       # Run ONLY the jsdom unit project. pnpm test (= vitest run) would also
       # spin up the storybook BROWSER project; that runs in its own job now.
@@ -677,6 +700,11 @@ jobs:
         with:
           name: kit-dist
           path: packages/ui
+
+      # Restores the mtime ordering the artifact hop destroys -- see the comment
+      # on this step in the `construct` leg.
+      - name: Restore the build's mtimes (upload-artifact does not preserve them)
+        run: find packages/ui/dist -exec touch {} +
 
       # Re-runs the generators and fails if any checked-in derived artifact
       # differs -- element-meta.json, element-types.d.ts, icon-names.json, the
@@ -1034,6 +1062,11 @@ jobs:
         with:
           name: kit-dist
           path: packages/ui
+
+      # Restores the mtime ordering the artifact hop destroys -- see the comment
+      # on this step in the `construct` leg.
+      - name: Restore the build's mtimes (upload-artifact does not preserve them)
+        run: find packages/ui/dist -exec touch {} +
 
       # Capped because this step has been observed stalling until the job's own
       # timeout — three times — with nothing after it ever running. A
