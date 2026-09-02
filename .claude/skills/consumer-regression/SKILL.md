@@ -49,7 +49,7 @@ Running from a **git worktree** is supported and intentional: `$REPO` resolves t
 2. Copy it to a **stable** path the probes install from — so a re-pack during a fix can't race a reading probe:
    `mkdir -p "$HARNESS" && cp kitn.ai-ui-*.tgz "$HARNESS/kitn-stable.tgz"`.
 3. `$HARNESS` is a **sibling of the main checkout, OUTSIDE it**: keeps the repo's git clean regardless of worktree.
-4. Generate the scaffolds for each cell from the live MCP bin (recipes.md `gen-scaffolds`). **After ANY `packages/ui/src/agent-tooling/mcp/tools/scaffold.ts` change, rebuild the bin first** (from `packages/ui`: `npx vite build --config vite.config.mcp.ts`) or you'll generate stale output.
+4. Generate the scaffolds for each cell from the live MCP bin (recipes.md `gen-scaffolds`). **After ANY `packages/ui/src/agent-tooling/mcp/tools/scaffold.ts` change, rebuild the bin first** (from `packages/ui`: `KAI_BUILD=mcp npx vite build --config config/vite/node.ts`) or you'll generate stale output.
 
 ### Phase 1 — Probe (parallel consumer-probe agents, MIXED models)
 Dispatch one `consumer-probe` per matrix cell, in a single message so they run concurrently. **Pass each probe the RESOLVED absolute paths** in its prompt — the repo path (`$REPO`), the tarball (`$HARNESS/kitn-stable.tgz`), its scaffold file, and its report path. The probe never resolves these itself (its cwd is a throwaway app, not the library repo). Deliberately spread model tiers (haiku/sonnet/opus — see Model strategy). Each returns a verdict + a report file.
