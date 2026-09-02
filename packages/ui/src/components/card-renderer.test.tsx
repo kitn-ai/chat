@@ -166,7 +166,7 @@ describe('CardRenderer: the cases the cards themselves do not handle', () => {
  * `<kai-thread>`, `<kai-message>` and `<kai-cards>` — each with exactly one
  * `[data-card-fallback]` carrying `role="alert"` and the text "Unsupported card type:
  * bogus". The belief that it rendered NOTHING came from misreading the header of
- * `tests/agent-tooling/emitted-card-path.live.test.ts`, which says that pointing its
+ * `mcp/tests/emitted-card-path.live.test.ts`, which says that pointing its
  * fixture at an unregistered type "leaves the text assertion GREEN and fails only on
  * [data-action-id]". That is a true statement about THAT FILE'S assertion scoping —
  * the tool panel echoes the model's arguments a few inches up the thread, so an

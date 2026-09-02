@@ -35,8 +35,8 @@ import {
   CDN_IMPORT_ENTRIES,
   type Block,
   type RawBlockSource,
-} from '../../mcp/blocks/registry';
-import { listIntegrations } from '../../mcp/registry';
+} from '../blocks/registry';
+import { listIntegrations } from '../registry';
 
 const ROOT = resolve(__dirname, '../..');
 const BLOCKS_DIR = join(ROOT, 'blocks');

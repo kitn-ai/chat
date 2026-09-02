@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { chatRoutePreamble } from '../../mcp/route-emit';
-import { scaffold } from '../../mcp/mcp/tools/scaffold';
+import { chatRoutePreamble } from '../route-emit';
+import { scaffold } from '../mcp/tools/scaffold';
 
 describe('chatRoutePreamble: the route survives a bare GET (F-10)', () => {
   const decl = chatRoutePreamble('const x = readChatRequest(request);').decl.join('\n');

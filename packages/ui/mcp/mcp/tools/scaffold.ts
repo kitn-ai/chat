@@ -2151,7 +2151,7 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
   // is emitted as a worked example of the `reactivity-two-halves` invariant
   // because a consumer who copies HALF of it gets a rail that is silently stale
   // rather than one that is obviously broken. Run-guarded by
-  // `tests/agent-tooling/emitted-conversation-rail.live.test.ts`, which reads the
+  // `mcp/tests/emitted-conversation-rail.live.test.ts`, which reads the
   // rail's SHADOW DOM — no string assertion can tell the two halves apart.
   const conversationsSetupLines = conversations
     ? [

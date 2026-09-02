@@ -5,7 +5,7 @@
  * MODEL-CONTROLLED text: the tool name, every argument the model streamed, the
  * output the tool returned, and the provider's error string. Before this file the
  * only thing in the tree that had ever watched it draw was
- * `tests/agent-tooling/emitted-card-path.live.test.ts`, and that file saw it
+ * `mcp/tests/emitted-card-path.live.test.ts`, and that file saw it
  * render and then deliberately steered AROUND it — its header comment says so:
  *
  *   "THE ASSERTION IS SCOPED TO THE CARD, AND THAT IS LOAD-BEARING. `<kai-tool>`

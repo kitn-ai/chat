@@ -66,8 +66,8 @@ import { describe, it, expect } from 'vitest';
 import { writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { scaffold } from '../../mcp/mcp/tools/scaffold';
-import { listCapabilityGroups, listSurfaceProbes } from '../../mcp/archetypes';
+import { scaffold } from '../mcp/tools/scaffold';
+import { listCapabilityGroups, listSurfaceProbes } from '../archetypes';
 
 const PKG = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 /** Outside `tests/` and outside `src/` — see emitted-card-path.live.test.ts. */

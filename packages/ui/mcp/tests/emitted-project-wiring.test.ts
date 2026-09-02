@@ -33,7 +33,7 @@ import {
   EMITTED_CODE_TEST_SUFFIX,
   EMITTED_PROJECT,
 } from '../../emitted-code-tests';
-import { requiredGateBlock } from '../scripts/lib/required-gate-block';
+import { requiredGateBlock } from '../../tests/scripts/lib/required-gate-block';
 
 const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const repoRoot = resolve(pkgRoot, '../..');
@@ -59,7 +59,11 @@ describe('the `emitted` vitest project is wired up', () => {
   });
 
   it('is the only home for them — a stray one would fall back into `unit`', () => {
-    const stray = [...filesUnder('tests'), ...filesUnder('src')]
+    // `mcp` is scanned as well as `tests` and `src` because the guards now LIVE
+    // under `mcp/`: scanning only the two directories they used to sit beside
+    // would leave the whole of their own tree unwatched, which is the half of
+    // this check that a reader would assume was covered.
+    const stray = [...filesUnder('tests'), ...filesUnder('src'), ...filesUnder('mcp')]
       .filter((f) => f.endsWith(EMITTED_CODE_TEST_SUFFIX))
       .filter((f) => !f.startsWith(`${EMITTED_CODE_TEST_DIR}/`));
 
