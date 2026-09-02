@@ -21,6 +21,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { requiredGateBlock } from './lib/required-gate-block';
 
 const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const repoRoot = resolve(pkgRoot, '../..');
@@ -31,25 +32,6 @@ const NPM_SCRIPT = 'lint:llms-size';
 const pkg = JSON.parse(readFileSync(resolve(pkgRoot, 'package.json'), 'utf-8')) as {
   scripts: Record<string, string>;
 };
-
-/**
- * The body of one top-level job in a GitHub workflow. Same crude extraction as
- * tests/scripts/cdn-pins-guard-wiring.test.ts, for the same reason — the repo
- * carries no YAML parser and the question is answerable from the job's lines.
- */
-function jobBlock(yaml: string, job: string): string {
-  const lines = yaml.split('\n');
-  const start = lines.findIndex((line) => line === `  ${job}:`);
-  if (start === -1) return '';
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i += 1) {
-    if (/^ {2}[A-Za-z0-9_-]+:/.test(lines[i])) {
-      end = i;
-      break;
-    }
-  }
-  return lines.slice(start, end).join('\n');
-}
 
 /** Runs the check and returns its exit code plus combined output. */
 function runCheck(args: string[]): { code: number; output: string } {
@@ -91,7 +73,7 @@ describe('the llms-full.txt size budget detects, and CI runs it', () => {
   });
 
   it('is invoked by the REQUIRED `test` job in CI', () => {
-    const block = jobBlock(readFileSync(WORKFLOW, 'utf-8'), 'test');
+    const block = requiredGateBlock(readFileSync(WORKFLOW, 'utf-8'));
     // If the extraction ever returns nothing (job renamed, indentation changed),
     // everything below would pass vacuously. Fail here instead.
     expect(block, `no \`test:\` job found in ${WORKFLOW}`).not.toBe('');

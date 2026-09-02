@@ -189,6 +189,7 @@
     "build:blocks": "node scripts/gen-blocks.mjs",
     "build:card-validation": "node scripts/gen-card-validation-schemas.mjs",
     "build:subpath-dts": "node scripts/emit-subpath-dts.mjs",
+    "verify:artifact-glob": "node scripts/verify-artifact-glob.mjs --self-test && node scripts/verify-artifact-glob.mjs",
     "verify:card-validation": "node scripts/gen-card-validation-schemas.mjs --self-test && node scripts/gen-card-validation-schemas.mjs --check",
     "verify:cdn-entries": "node scripts/verify-cdn-entries.mjs --self-test && node scripts/verify-cdn-entries.mjs",
     "verify:consumer": "node scripts/verify-consumer-sideeffects.mjs",

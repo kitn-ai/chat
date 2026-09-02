@@ -37,6 +37,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { requiredGateBlock } from './lib/required-gate-block';
 
 const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const repoRoot = resolve(pkgRoot, '../..');
@@ -47,25 +48,6 @@ const NPM_SCRIPT = 'lint:pack-parse';
 const pkg = JSON.parse(readFileSync(resolve(pkgRoot, 'package.json'), 'utf-8')) as {
   scripts: Record<string, string>;
 };
-
-/**
- * The body of one top-level job in a GitHub workflow. Same crude extraction as
- * tests/scripts/cdn-pins-guard-wiring.test.ts, for the same reason — the repo
- * carries no YAML parser and the question is answerable from the job's lines.
- */
-function jobBlock(yaml: string, job: string): string {
-  const lines = yaml.split('\n');
-  const start = lines.findIndex((line) => line === `  ${job}:`);
-  if (start === -1) return '';
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i += 1) {
-    if (/^ {2}[A-Za-z0-9_-]+:/.test(lines[i]!)) {
-      end = i;
-      break;
-    }
-  }
-  return lines.slice(start, end).join('\n');
-}
 
 function runLinter(args: string[]): { code: number; output: string } {
   try {
@@ -106,7 +88,7 @@ describe('lint:pack-parse is wired into the build and CI', () => {
   });
 
   it('the CI test job runs it', () => {
-    const job = jobBlock(readFileSync(WORKFLOW, 'utf-8'), 'test');
+    const job = requiredGateBlock(readFileSync(WORKFLOW, 'utf-8'));
     expect(job, 'parsed no `test` job — the extraction is broken').not.toBe('');
     expect(
       job,
@@ -120,7 +102,7 @@ describe('lint:pack-parse is wired into the build and CI', () => {
     // never run under npm 12 either; CI's node 22 bundles npm 10, which is the
     // shape that works. Without this line the ui guard is back to being tested
     // only under the npm that cannot reveal the problem.
-    const job = jobBlock(readFileSync(WORKFLOW, 'utf-8'), 'test');
+    const job = requiredGateBlock(readFileSync(WORKFLOW, 'utf-8'));
     const pinned = job
       .split('\n')
       .filter((l) => l.includes('VERIFY_PACK_NPM'))
