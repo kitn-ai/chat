@@ -7,13 +7,19 @@
 // astro.config.mjs hands to starlight-sidebar-topics. Add a topic there and it
 // appears here and in the sidebar switcher together.
 //
-// No mobile menu button here. Starlight's PageFrame already renders
-// <MobileMenuToggle /> as the sibling right before #starlight__sidebar, and its
-// drawer opens off `[aria-expanded='true'] ~ .sidebar-pane`. A second copy in
-// the header is a button with no drawer next to it: on a page with a sidebar it
-// sat underneath the real one, and on a sidebar-less page (the landing page) it
-// was the only one, so a tap set body[data-mobile-menu-expanded] (which locks
-// scrolling) and opened nothing.
+// One menu button, and only where nothing else provides one. Starlight's
+// PageFrame renders <MobileMenuToggle /> as the sibling right before
+// #starlight__sidebar, and its drawer opens off `[aria-expanded='true'] ~
+// .sidebar-pane`, but it renders that whole <nav> only when `hasSidebar`. So a
+// sidebar-less page (the landing page, template: splash) has no drawer at all,
+// and below the nav breakpoint it had no navigation either: logo and search,
+// with Docs, Components, Patterns, Examples, Integrations, Theme and Storybook
+// unreachable. The disclosure below fills exactly that gap and is gated on the
+// same `hasSidebar` flag PageFrame reads, so the two can never both appear.
+// A header copy of the button on a page that DOES have a drawer is the bug this
+// gate exists to avoid: it sat underneath the real one and, having no
+// .sidebar-pane next to it, set body[data-mobile-menu-expanded] (which locks
+// scrolling) while opening nothing.
 import Search from '@astrojs/starlight/components/Search.astro';
 import SocialIcons from './SocialIcons.astro';
 import ThemeToggle from './ThemeToggle.astro';
@@ -30,6 +36,8 @@ const linkTo = (t: (typeof topics)[number]) => (/^https?:\/\//.test(t.link) ? t.
 // sections, so they sit after a divider with their icon.
 const sections = topics.filter((t) => !('headerIcon' in t));
 const tools = topics.filter((t) => 'headerIcon' in t);
+// The same flag PageFrame gates its drawer on. False on the splash template.
+const { hasSidebar } = Astro.locals.starlightRoute;
 ---
 <div class="flex h-full w-full items-center gap-4">
   <a href={`${base}/`} class="flex shrink-0 items-center gap-2 no-underline">
@@ -57,5 +65,59 @@ const tools = topics.filter((t) => 'headerIcon' in t);
     {/* `chrome:` is Starlight's own 50rem mobile line: below it these two move
         into the drawer's MobileMenuFooter, which is hidden at exactly 50rem. */}
     <div class="hidden items-center gap-3 chrome:flex"><SocialIcons /><ThemeToggle /></div>
+    {!hasSidebar && (
+      <details class="kai-topics-menu relative nav:hidden" data-topics-menu>
+        <summary
+          class="flex size-8 cursor-pointer list-none items-center justify-center rounded-md text-ink transition-colors hover:bg-surface-2"
+          aria-label="Menu"
+        >
+          <Icon name="lucide:menu" class="size-5 shrink-0" />
+        </summary>
+        {/* Anchored to the header row, so it drops just under the header bar. */}
+        <div class="absolute end-0 top-[calc(100%+0.75rem)] w-56 rounded-lg border border-line bg-surface p-2 shadow-lg">
+          {/* Same list, same order and same treatment as the sidebar drawer's
+              topic switcher: plain text for the sections, an outlined icon for
+              the tools. */}
+          <ul class="m-0 list-none p-0">
+            {sections.map((t) => (
+              <li>
+                <a href={linkTo(t)} {...t.attrs} class="flex items-center gap-2 rounded-md px-2 py-[0.3em] text-base font-semibold text-ink no-underline hover:text-brand">{t.label}</a>
+              </li>
+            ))}
+            {tools.length > 0 && <li aria-hidden="true"><hr class="my-2 border-0 border-t border-line" /></li>}
+            {tools.map((t) => (
+              <li>
+                <a href={linkTo(t)} {...t.attrs} class="flex items-center gap-2 rounded-md px-2 py-[0.3em] text-base font-semibold text-ink no-underline hover:text-brand">
+                  <span class="flex items-center justify-center rounded border border-line p-1"><Icon name={t.headerIcon} class="size-4 shrink-0" /></span>
+                  <span>{t.label}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </details>
+    )}
   </div>
 </div>
+
+<style>
+  /* Safari still paints a disclosure triangle without this. */
+  .kai-topics-menu > summary::-webkit-details-marker { display: none; }
+</style>
+
+<script>
+  // Close on Escape and on a click outside. No scroll lock: the panel is seven
+  // links tall and the page behind it does not need freezing.
+  const menu = document.querySelector<HTMLDetailsElement>('[data-topics-menu]');
+  if (menu) {
+    const summary = menu.querySelector('summary');
+    document.addEventListener('click', (event) => {
+      if (menu.open && event.target instanceof Node && !menu.contains(event.target)) menu.open = false;
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !menu.open) return;
+      menu.open = false;
+      summary?.focus();
+    });
+  }
+</script>
