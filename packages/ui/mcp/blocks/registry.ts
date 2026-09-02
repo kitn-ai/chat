@@ -11,7 +11,7 @@
  * DISCIPLINE — pure functions over injected data, no `node:fs`. Two reasons:
  * (1) this file typechecks under the package's browser tsconfig (no node
  * types), and (2) create-kai imports registry logic at bundle time the way
- * `catalog.ts` imports `../../ui/src/agent-tooling/registry` — a pure module
+ * `catalog.ts` imports `../../ui/mcp/registry` -- a pure module
  * works in both worlds. The directory WALK lives in the one place that has a
  * filesystem (`scripts/gen-blocks.mjs`, and later the CLI's own loader); what
  * it feeds in here is derived from the scan, never hand-listed.
@@ -90,7 +90,7 @@ export interface BlockValidationContext {
   /** Sibling block names, for bare-name `registryDependencies`. */
   blockNames: readonly string[];
   /** Integration ids from the scaffolder registry, for `route:<id>` deps —
-   *  read from `agent-tooling/registry` by the caller, never restated. */
+   *  read from `mcp/registry` by the caller, never restated. */
   routeIntegrations: readonly string[];
 }
 

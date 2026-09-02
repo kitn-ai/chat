@@ -22,11 +22,11 @@ Every command below was run from the repo root and its output pasted verbatim.
 Half the confusion here is which files you may edit. `derived.json` is read out
 of the tree by a generator; everything else is written by hand.
 
-### `src/agent-tooling/catalog/`
+### `mcp/catalog/`
 
 | file | what it is | who writes it | edit by hand? |
 | --- | --- | --- | --- |
-| `derived.json` | Every element's props/events/methods/parts, the `MessagePart` variants, integrations, capability groups, theme tokens, event exceptions | `scripts/gen-catalog.mjs`, via `build:api` | **Never.** Change the source it reads (`src/elements/element-meta.json`, `src/elements/chat-types.ts`, `src/agent-tooling/registry.ts`, `archetypes.ts`, `theme.css`) and regenerate |
+| `derived.json` | Every element's props/events/methods/parts, the `MessagePart` variants, integrations, capability groups, theme tokens, event exceptions | `scripts/gen-catalog.mjs`, via `build:api` | **Never.** Change the source it reads (`src/elements/element-meta.json`, `src/elements/chat-types.ts`, `mcp/registry.ts`, `archetypes.ts`, `theme.css`) and regenerate |
 | `catalog-types.ts` | The Zod schemas every authored record is parsed against | you | yes |
 | `invariants.ts` | The rules that break real consumers, each with a statement, `diagnosis` symptom/cause pairs, wrong/right code examples, and an honest `enforcedBy` | you | yes |
 | `surfaces.ts` | `inventory` (what is a surface vs an ingredient vs corpus), `surfaceRecipes` (proven compositions with their host wiring written out), `partConsumption` | you | yes |
@@ -82,7 +82,7 @@ verify-generated-sync: regenerating 9 artifacts via `npm run build:api`
 
   ✓ packages/ui/src/elements/element-meta.json
   ...
-  ✓ packages/ui/src/agent-tooling/catalog/derived.json
+  ✓ packages/ui/mcp/catalog/derived.json
   ✓ docs/web-components.md
 
 ✓ verify-generated-sync: all 9 generated artifacts match their source (each one proven rewritten this run).
@@ -526,7 +526,7 @@ Fabrications are proposed, never written:
 ```md
 ## Proposed FABRICATED.md rows
 
-Paste into `src/agent-tooling/catalog/fabrications.ts` after checking each tag.
+Paste into `mcp/catalog/fabrications.ts` after checking each tag.
 **Not written automatically:** a mis-scored run editing the catalog would teach
 every later agent that a real element is imaginary.
 ```
@@ -598,7 +598,7 @@ nothing of the tree. The exceptions are documented at the top of `surfaces.ts`.
 pnpm --filter @kitn.ai/ui run lint:catalog-drift
 pnpm --filter @kitn.ai/ui run verify:generated
 pnpm --filter @kitn.ai/ui exec node scripts/acceptance-pack.mjs --floor
-pnpm --filter @kitn.ai/ui exec vitest run --project=unit src/agent-tooling/catalog tests/scripts
+pnpm --filter @kitn.ai/ui exec vitest run --project=unit mcp/catalog tests/scripts
 ```
 
 And, if you touched the `compiles` gate or the tsc projects it shares with

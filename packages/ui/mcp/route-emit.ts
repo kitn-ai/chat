@@ -98,7 +98,7 @@ export function defaultModelFor(integration: Integration): string | undefined {
     throw new Error(
       `Integration '${integration.id}' forwards the client's 'model' but has no CLIENT_MODEL_IDS entry, so the ` +
         `scaffold would emit a model id that is not valid for the host its route POSTs to. Add one in ` +
-        `agent-tooling/route-emit.ts.`,
+        `mcp/route-emit.ts.`,
     );
   }
   return id;

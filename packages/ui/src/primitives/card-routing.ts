@@ -4,7 +4,7 @@
 // host-side listener helper for the bare-element path.
 import type { CardEvent, CardPolicy } from './card-contract';
 // isSafeUrl/isScriptUrl live in their own DOM-free file so schema.ts
-// (agent-tooling/construct, checked under tsconfig.mcp.json's Node-only pass)
+// (mcp/construct, checked under tsconfig.mcp.json's Node-only pass)
 // can import isSafeUrl without dragging this file's HTMLElement/window/
 // CustomEvent references into a no-DOM-lib compile. Re-exported here so this
 // module's own public surface is unchanged.

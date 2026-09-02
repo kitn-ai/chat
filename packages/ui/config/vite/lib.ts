@@ -134,7 +134,10 @@ const TARGETS: Record<string, Target> = {
       ],
       // THE ONE PLACE THE MOVE IS NOT A PURE RELOCATION.
       //
-      // Four SHIPPED declarations under dist/components/ import the construct
+      // A handful of SHIPPED declarations under dist/components/ (three at the
+      // time of writing; read the count off the tree with
+      // `grep -rln "\.\./agent-tooling/" dist --include='*.d.ts'`, never off
+      // this comment) import the construct
       // schema and the template registry across the boundary by a relative
       // path. That worked for free while the source lived at
       // src/agent-tooling/: src/components -> ../agent-tooling and
@@ -142,8 +145,14 @@ const TARGETS: Record<string, Target> = {
       // source at mcp/, the source specifier is '../../mcp/construct/schema'
       // and tsc emits it verbatim, where from dist/components/ it points
       // outside dist/ at a directory `files` does not ship. A consumer's tsc
-      // then cannot resolve Construct, and NOTHING else in the build would say
-      // so -- the emit succeeds and the bytes look plausible.
+      // then cannot resolve Construct, and the emit itself says nothing: it
+      // succeeds and the bytes look plausible. One thing downstream does say
+      // so -- `verify:dts` (scripts/verify-dts-boundaries.mjs, self-tested)
+      // runs in `postbuild` and fails on any relative specifier resolving
+      // outside dist/. That is a backstop, not the mechanism: it fires after
+      // the whole emit, names the file rather than the depth, and does not
+      // know how to repair it. The rewrite below is what keeps the emit right
+      // in the first place.
       //
       // The declarations for those targets ARE emitted, by the construct target
       // below, at dist/agent-tooling/construct/. So the fix is to rewrite the

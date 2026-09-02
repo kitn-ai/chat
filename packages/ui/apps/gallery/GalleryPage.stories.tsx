@@ -19,7 +19,7 @@ import type { Block } from '../../mcp/blocks/registry';
  * plus the round-2 feedback): the gallery LEADS with the block's file tree —
  * per-file view + copy and the `npx create-kai add <name>` one-liner are the
  * primary affordances; the Code view carries a FRAMEWORK selector whose
- * forms come from the ONE shared renderer (`agent-tooling/blocks/forms.ts`
+ * forms come from the ONE shared renderer (`mcp/blocks/forms.ts`
  * — the stub forms below are rendered through it, so the story shows real
  * renderer output); Download + the icon Copy live in the code header; the
  * standalone CDN form is a secondary try-it row.

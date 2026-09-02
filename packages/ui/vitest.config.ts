@@ -56,7 +56,7 @@ export default defineConfig({
   plugins: [cssRawPlugin(), solidPlugin()],
   // `@kitn.ai/ui/schemas` -> src, for the test run ONLY.
   //
-  // src/agent-tooling/mcp/ imports the schemas barrel by its PUBLIC specifier
+  // mcp/mcp/ imports the schemas barrel by its PUBLIC specifier
   // (manifest.ts, tools/reference.ts, reference.test.ts) rather than by a relative
   // path, deliberately: the MCP emits that specifier into scaffolded routes, so
   // writing it here is what keeps the emitted form and the compiled form the same
@@ -136,7 +136,7 @@ export default defineConfig({
     // imports for its TEXT, not for its styling:
     //   • compiled.css — injected into shadow roots (src/elements/css.ts)
     //   • theme.css    — the `--kai-*` token names the theme MCP tool emits
-    //                    (src/agent-tooling/mcp/tools/theme.ts)
+    //                    (mcp/mcp/tools/theme.ts)
     // Silently empty is the dangerous failure here: it turns a derived list into
     // an empty one, so theme.test.ts asserts the parse is non-empty.
     css: {

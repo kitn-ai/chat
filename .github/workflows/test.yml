@@ -498,7 +498,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.npm
-          key: construct-npm-${{ hashFiles('packages/ui/src/agent-tooling/construct/construct.v1.schema.json', 'packages/ui/src/agent-tooling/construct/templates.ts', 'packages/ui/package.json') }}
+          key: construct-npm-${{ hashFiles('packages/ui/mcp/construct/construct.v1.schema.json', 'packages/ui/mcp/construct/templates.ts', 'packages/ui/package.json') }}
           restore-keys: construct-npm-
 
       # The construct engine's real emit chain: node bin/mcp.js eject (the CLI,

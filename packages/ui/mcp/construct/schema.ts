@@ -14,7 +14,7 @@
  */
 import { z } from 'zod';
 // REPO-INTERNAL ONLY: isSafeUrl is not reachable from the published package
-// (see agent-tooling/catalog/invariants.ts's own note on this), so the
+// (see mcp/catalog/invariants.ts's own note on this), so the
 // emitted App.tsx cannot import it — the sink codegen writes to
 // (launcherIcon -> <img src>) has no guard it can reach at runtime. Enforcing
 // the SAME policy here, at authoring time, is the reachable equivalent: a

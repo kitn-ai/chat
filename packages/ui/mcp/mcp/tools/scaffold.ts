@@ -16,7 +16,7 @@ import {
 // never re-export through here.
 import { chatRoutePreamble, defaultModelFor } from '../../route-emit';
 // The kit's media-type declaration, read rather than restated. This is the one
-// import in agent-tooling that reaches outside itself, and the module it reaches
+// import in mcp/ that reaches outside itself, and the module it reaches
 // for is the reason: `wire/media-types.ts` is pure (no I/O, no DOM, no solid-js),
 // so the Node MCP pass typechecks and bundles it unchanged. See
 // `ATTACHMENT_ACCEPT`.

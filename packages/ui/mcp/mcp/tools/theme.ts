@@ -63,7 +63,7 @@ function colorToken(suffix: string): string {
       `[kai mcp: theme] theme.css declares no \`${name}\`. The tool brands that token, ` +
         `so emitting it would hand the caller CSS that themes nothing. Either the token was ` +
         `renamed in packages/ui/theme.css (update the BRAND_TOKENS suffix in ` +
-        `src/agent-tooling/mcp/tools/theme.ts to match) or it was removed (drop the entry). ` +
+        `mcp/mcp/tools/theme.ts to match) or it was removed (drop the entry). ` +
         `Known --kai-color-* names: ${[...DECLARED_TOKENS].filter((n) => n.startsWith('--kai-color-')).sort().join(', ')}`,
     );
   }

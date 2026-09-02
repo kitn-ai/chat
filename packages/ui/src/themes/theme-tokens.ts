@@ -158,7 +158,7 @@ export function studioTokens(): ReadonlySet<string> {
 export type KitDefault = { light: string; dark: string };
 
 /** Every `--kai-*` name theme.css declares, anchored on `var(` the same way the
- *  MCP theme tool reads it (src/agent-tooling/mcp/tools/theme.ts): that is the
+ *  MCP theme tool reads it (mcp/mcp/tools/theme.ts): that is the
  *  only place a knob is wired up, and prose in the file mentions wildcards a bare
  *  `--kai-` scan would take for token names. */
 export function declaredKitTokens(css: string): ReadonlySet<string> {

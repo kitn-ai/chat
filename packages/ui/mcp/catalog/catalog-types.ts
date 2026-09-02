@@ -215,7 +215,7 @@ export const DerivedCatalog = z.object({
   // Deliberately no count here. The number is the extractor's to report, not
   // this comment's to restate: `npm run build:api` (its gen-catalog.mjs step)
   // prints the count as it writes, and the current set is the `eventExceptions`
-  // array in src/agent-tooling/catalog/derived.json. A hand-typed figure here
+  // array in mcp/catalog/derived.json. A hand-typed figure here
   // would be stale the first time an element opts in or out, on the schema for
   // the very field whose exception list was wrong before.
   eventExceptions: z.array(EventException).min(1),

@@ -101,7 +101,7 @@ export const BUILD_COMMAND = 'npx nx build ui (or: cd packages/ui && npm run bui
  * The kit's own package root, by bounded walk-up from `startDir`.
  *
  * Depth-independent ON PURPOSE, the same lesson `resolveBuilderPageDir` in
- * dev.ts is written from: this module is `src/agent-tooling/construct/` at
+ * dev.ts is written from: this module is `mcp/construct/` at
  * test time and lands wherever Rollup decides to put it at build time (the
  * dist root when inlined, `dist/assets/` when split out behind a dynamic
  * import). Anything that counts levels is right in one of those and silently
@@ -144,7 +144,7 @@ export function localKitStartDir(): string {
  * absent from an install; this particular file is the one the CLI itself is
  * compiled from, so it cannot be deleted without deleting the thing being
  * detected. (Before the 2026-09-02 move the marker was
- * src/agent-tooling/construct/cli.ts and the argument was subtler, because an
+ * mcp/construct/cli.ts and the argument was subtler, because an
  * install DOES have a src/.)
  *
  * `../../pnpm-workspace.yaml` — the workspace root two levels above

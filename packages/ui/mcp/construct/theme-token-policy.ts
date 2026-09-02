@@ -6,7 +6,7 @@
  * studio's own token catalog (`studioTokens()`), which is itself
  * drift-guarded against theme.css: tests/styles/theme-studio-coverage.test.ts
  * derives every `--kai-*` name theme.css wires (the same `var(--kai-…`
- * anchor the MCP theme tool scans by — src/agent-tooling/mcp/tools/theme.ts)
+ * anchor the MCP theme tool scans by — mcp/mcp/tools/theme.ts)
  * and fails CI if the catalog is missing one. Importing the catalog rather
  * than re-scanning theme.css here keeps this module free of `?raw` CSS
  * imports, which scripts/gen-construct-schema.mjs's esbuild bundling of

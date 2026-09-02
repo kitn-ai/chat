@@ -122,7 +122,7 @@ interface CustomElementsManifest {
 // tell them apart. It reports success for both.
 //
 // It was not hypothetical. Measured from an agent git worktree at
-// `<repo>/.claude/worktrees/<agent>/packages/ui/src/agent-tooling/mcp`, the loop
+// `<repo>/.claude/worktrees/<agent>/packages/ui/mcp/mcp`, the loop
 // climbed past the worktree's own (unbuilt) `packages/ui/dist`, out of the worktree
 // entirely, and bound on iteration 8 to `<repo>/dist/custom-elements.json` — a
 // leftover from the pre-monorepo layout, six weeks stale, 78 tags, and zero elements

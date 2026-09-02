@@ -16,7 +16,7 @@
  * `BLOCK_FORMS`, never hand-listed) — the file tree, per-file contents and
  * every copy/download affordance re-render for the SELECTED form, so what a
  * react consumer copies is the react form `add` would write, byte for byte
- * (one renderer: `agent-tooling/blocks/forms.ts`). Web components — the
+ * (one renderer: `mcp/blocks/forms.ts`). Web components — the
  * authored truth — is the default form. Download (a zip of the selected
  * form, served by the gallery's GET zip route) sits in the code header
  * beside the per-file Copy, which is an icon button with an accessible

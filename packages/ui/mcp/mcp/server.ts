@@ -27,7 +27,7 @@ const PACKAGE_NAME = '@kitn.ai/ui';
  * package.json off disk itself and compares.
  *
  * RESOLVED BY THE PACKAGE'S OWN NAME, not by path arithmetic. This module runs from
- * two places — `<package>/src/agent-tooling/mcp/server.ts` under vitest, and inlined
+ * two places — `<package>/mcp/mcp/server.ts` under vitest, and inlined
  * into `<package>/dist/mcp.es.js` for the bin — which sit at different depths, so a
  * relative hop would need one rule per context (what manifest.ts has to do, because
  * `dist/custom-elements.json` is a build artifact with no name to ask for). A

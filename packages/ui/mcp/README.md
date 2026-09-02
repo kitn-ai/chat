@@ -1,11 +1,20 @@
-# `agent-tooling/`
+# `mcp/`
 
 The kit's machine-facing front door: everything that makes AI coding agents
-and CLIs fluent building with `@kitn.ai/ui`. It is packaging and tooling on
-top of the library, not part of it — `grep -rn "agent-tooling"
-packages/ui/src/components packages/ui/src/elements` returns no imports (only
-a code comment and a test's `UNSCANNED_DIRS` entry mention the directory by
-name). Nothing a consumer's chat UI renders depends on anything in here.
+and CLIs fluent building with `@kitn.ai/ui`. It lives beside `src/` rather
+than inside it because it is packaging and tooling on top of the library, not
+part of it. The edges between the two trees are few and worth knowing, in
+both directions: non-test modules here reach into `src/` only for pure,
+DOM-free facts (media types, theme tokens, the URL-scheme policy, the element
+manifest, the chat-action and button-variant name lists, the mock stream), and
+`src/` reaches in here only from the builder modules that read
+`mcp/construct/*` for the construct schema and template registry. Read the
+current lists off the tree rather than off this paragraph:
+`grep -rn "\.\./\.\./mcp/" packages/ui/src` and
+`grep -rn "\.\./\.\./src/" packages/ui/mcp`. Tests under `mcp/` import
+elements freely, which is why `tsconfig.mcp.json` is scoped to `mcp/mcp/**`
+rather than all of `mcp/`. Nothing a consumer's chat UI renders depends on
+anything in here.
 
 ## The four parts
 
@@ -39,8 +48,8 @@ name). Nothing a consumer's chat UI renders depends on anything in here.
   - `construct.ts` — turn-by-turn authoring of a construct JSON file (one
     JSON file → one web component); stateless, the harness owns the file.
   - `scaffold.ts` — generates a full chat integration (framework + backend
-    route + integration wiring) from `agent-tooling/registry.ts` and
-    `agent-tooling/archetypes.ts` (backed by `agent-tooling/integrations/`).
+    route + integration wiring) from `mcp/registry.ts` and
+    `mcp/archetypes.ts` (backed by `mcp/integrations/`).
   - `reference.ts` — component/element/card lookup for an agent deciding what
     to use.
   - `theme.ts` — produces a `--kai-*` CSS token override block from a brand
