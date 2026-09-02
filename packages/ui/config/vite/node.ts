@@ -43,7 +43,10 @@ const TARGETS: Record<string, Target> = {
   // Note: in this merged file the ordering is no longer "third build after main +
   // provider" -- it now runs after KAI_BUILD=schemas, because this bundle compiles
   // the MCP against the BUILT dist/schemas.js, not against src. vitest.config.ts
-  // records the same dependency from the other side.
+  // records the same dependency from the other side. The two files the verbatim
+  // text above names are also gone: `vite.config.provider.ts` is the `provider`
+  // target in config/vite/lib.ts, and `vite.config.ts` (the main build) is
+  // `KAI_BUILD=register vite build --config config/vite/elements.ts`.
   mcp: {
     entry: 'src/agent-tooling/mcp/stdio.ts',
     out: 'mcp.es.js',
@@ -61,12 +64,13 @@ const TARGETS: Record<string, Target> = {
 };
 
 const requested = process.env.KAI_BUILD ?? '';
-const target = TARGETS[requested];
-if (!target) {
+// Own keys only -- see the note at the same guard in config/vite/lib.ts.
+if (!Object.hasOwn(TARGETS, requested)) {
   throw new Error(
     `config/vite/node.ts: KAI_BUILD must be one of [${Object.keys(TARGETS).join(', ')}], got ${JSON.stringify(process.env.KAI_BUILD)}`,
   );
 }
+const target = TARGETS[requested];
 
 export default defineConfig({
   build: {

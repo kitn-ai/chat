@@ -26,7 +26,7 @@ interface Page {
   paths?: Record<string, string>;
 }
 
-const PAGES: Record<string, Page> = {
+const TARGETS: Record<string, Page> = {
   // The kai dev --builder page (B-22..B-24): light-DOM Solid, prebuilt at kit
   // build time so the CLI's "second thin server" serves static files and
   // compiles nothing at consumer runtime. base './' because dev.ts serves it
@@ -62,12 +62,13 @@ const PAGES: Record<string, Page> = {
 };
 
 const requested = process.env.KAI_BUILD ?? '';
-const page = PAGES[requested];
-if (!page) {
+// Own keys only -- see the note at the same guard in config/vite/lib.ts.
+if (!Object.hasOwn(TARGETS, requested)) {
   throw new Error(
-    `config/vite/page.ts: KAI_BUILD must be one of [${Object.keys(PAGES).join(', ')}], got ${JSON.stringify(process.env.KAI_BUILD)}`,
+    `config/vite/page.ts: KAI_BUILD must be one of [${Object.keys(TARGETS).join(', ')}], got ${JSON.stringify(process.env.KAI_BUILD)}`,
   );
 }
+const page = TARGETS[requested];
 
 export default defineConfig({
   root: resolve(PKG, page.root),

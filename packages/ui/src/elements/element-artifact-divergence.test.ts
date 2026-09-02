@@ -18,7 +18,7 @@
  *
  * `<kai-remote>` mounts a sandboxed cross-origin iframe card and is opt-in by
  * design, reachable through `@kitn.ai/ui/elements/remote` or the React `Remote`
- * wrapper and deliberately absent from register-impl.ts. `vite.config.elements.ts`
+ * wrapper and deliberately absent from register-impl.ts. `config/vite/elements.ts`
  * says exactly that at the site, and builds its per-element module explicitly so
  * the subpath still resolves.
  *

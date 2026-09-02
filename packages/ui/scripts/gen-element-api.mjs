@@ -596,8 +596,8 @@ for (const file of facadeFiles) {
         ...(children.length ? { declarativeChildren: children } : {}),
       };
       // Source-module basename (e.g. confirm-card.tsx → "confirm-card"). The
-      // per-element build (vite.config.elements.ts) names each emitted module after
-      // its SOURCE FILE, not its tag, so the React wrappers must lazy-import
+      // per-element build (KAI_BUILD=split, config/vite/elements.ts) names each
+      // emitted module after its SOURCE FILE, not its tag, so the React wrappers must lazy-import
       // `@kitn.ai/ui/elements/<module>` (not `<tag>`) to resolve a real dist file.
       // Non-enumerable so it stays out of the serialized element-meta.json.
       Object.defineProperty(el, 'module', { value: basename(file).replace(/\.(tsx|ts)$/, ''), enumerable: false });

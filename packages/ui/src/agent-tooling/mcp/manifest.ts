@@ -273,7 +273,7 @@ export function entryForTag(tag: string): string | undefined {
  *
  * WHY IT IS READ AND NOT DERIVED. Stripping `kai-` is wrong for ten of the eighty
  * elements, so guessing here risks exactly the broken import this tool exists to
- * catch. The fact is stated in vite.config.elements.ts, which adds an explicit
+ * catch. The fact is stated in config/vite/elements.ts, which adds an explicit
  * entry for each opt-in element precisely "so `@kitn.ai/ui/elements/remote`
  * resolves to a real dist file" — but a vite config is not shipped in the
  * package, so the runtime reads that intent where it LANDS: dist/elements/. A

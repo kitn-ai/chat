@@ -12,6 +12,11 @@ const PKG = resolve(__dirname, '../..');
 const distRoot = resolve(PKG, 'dist');
 const srcRoot = resolve(PKG, 'src');
 
+// Note: the comments in this file moved here VERBATIM from vite.config.react.ts,
+// so they still name two files that are gone. `vite.config.barrel.ts` is the
+// `index` target in config/vite/lib.ts. `vite.config.ts`, the main register-all
+// build, is `KAI_BUILD=register vite build --config config/vite/elements.ts`.
+
 /**
  * Rewrite `'../../src/x'` specifiers in the EMITTED declarations to the compiled
  * `dist/` declaration that corresponds to them.

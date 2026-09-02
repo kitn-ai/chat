@@ -24,6 +24,16 @@ import { resolve } from 'node:path';
 // `define` replacement of process.env.NODE_ENV inside bundled dependencies.
 // Any of that flipping would change emitted bytes, which is the one thing this
 // consolidation must not do. KAI_BUILD touches nothing Vite reads.
+//
+// Note: the per-target comments below moved here VERBATIM from the config files
+// they came from, so they still name paths like `vite.config.barrel.ts`. None of
+// those files exists any more. To read one: `vite.config.<stem>.ts` is the
+// `<stem>` key in the TARGETS table below, except `barrel` (now `index`) and
+// `barrel.server` (now `index.server`). `vite.config.construct-cli.ts` is the
+// `construct-cli` target in config/vite/node.ts. And `vite.config.ts` -- the
+// register-all build that runs first and is the only emptyOutDir:true build
+// writing to dist/ root -- is now `KAI_BUILD=register vite build --config
+// config/vite/elements.ts`.
 
 // This file lives two levels below the package root, so entries resolve from
 // PKG rather than __dirname. Vite's `root` is process.cwd(), always packages/ui
@@ -486,12 +496,17 @@ const TARGETS: Record<string, Target> = {
 };
 
 const requested = process.env.KAI_BUILD ?? '';
-const target = TARGETS[requested];
-if (!target) {
+// Object.hasOwn, not a truthiness test on the lookup. `TARGETS['constructor']`
+// -- and toString, valueOf, hasOwnProperty, __proto__ -- resolves up the
+// prototype chain to a truthy value, so `if (!target)` lets those names through
+// and the build dies later inside resolve() on an undefined path, naming
+// nothing. Own keys only, so an unknown KAI_BUILD is always refused by name.
+if (!Object.hasOwn(TARGETS, requested)) {
   throw new Error(
     `config/vite/lib.ts: KAI_BUILD must be one of [${Object.keys(TARGETS).join(', ')}], got ${JSON.stringify(process.env.KAI_BUILD)}`,
   );
 }
+const target = TARGETS[requested];
 
 const plugins: PluginOption[] = [];
 if (target.transform === 'dom') plugins.push(solidPlugin());

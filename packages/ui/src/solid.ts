@@ -11,8 +11,9 @@
 // four of the five supported frameworks cannot even call.
 //
 // So the full Solid catalog lives here instead, and this file is compiled as its
-// OWN build target (vite.config.solid.ts -> dist/solid.js, plus the SSR twin
-// vite.config.solid.server.ts -> dist/solid.server.js, mirroring "."). Nothing
+// OWN build target (KAI_BUILD=solid in config/vite/lib.ts -> dist/solid.js, plus
+// the SSR twin KAI_BUILD=solid.server -> dist/solid.server.js, mirroring ".").
+// Nothing
 // below is reachable from dist/index.js, which is the entire point: a React
 // consumer's bundle never sees it.
 //

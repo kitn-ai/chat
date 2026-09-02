@@ -1,7 +1,7 @@
 // Post-build dedupe for the shiki `core-*.js` / `engine-javascript-*.js` lazy
 // chunks. 8b3970ac (dedupe shared lazy chunks between dist/ and
-// dist/elements/chunks/) made the elements build (vite.config.elements.ts)
-// write its lazy chunks to the SAME directory as the other four lib builds
+// dist/elements/chunks/) made the elements build (KAI_BUILD=split,
+// config/vite/elements.ts) write its lazy chunks to the SAME directory as the other four lib builds
 // (register-all / barrel / barrel.server / solid / solid.server) so that
 // Rollup's content-hash chunk naming could collide them onto one file. That
 // works whenever the two builds render a shared module to byte-identical
@@ -47,7 +47,8 @@
 //
 // listJsFiles only reads dist/ itself, non-recursively — it does not walk
 // dist/elements/chunks/ or any other subdirectory. That's fine as long as
-// vite.config.elements.ts keeps writing its lazy chunks into the shared
+// the split elements build (KAI_BUILD=split, config/vite/elements.ts) keeps
+// writing its lazy chunks into the shared
 // dist/ root (the 8b3970ac fix this script builds on); if a future change
 // reverts that and chunks fork back into a nested directory, duplicates
 // would regrow there invisibly to this script. Rule 2 (the total pack-size

@@ -15,7 +15,9 @@ import { transform } from 'esbuild';
 // named form is TS2459 and leaves `chunk` unknown.
 //
 // Both configs live in this file now, so the two copies are one import and one
-// note.
+// note. The two notes are verbatim, so they still name `vite.config.ts` (now the
+// `register` target below, KAI_BUILD=register) and `vite.config.elements.ts` (now
+// the `split` target below, KAI_BUILD=split). Both files are gone.
 import type { Plugin, Rollup, UserConfig } from 'vite';
 
 type OutputBundle = Rollup.OutputBundle;
@@ -44,7 +46,8 @@ type OutputChunk = Rollup.OutputChunk;
 // PKG rather than __dirname.
 const PKG = resolve(__dirname, '../..');
 
-// Was duplicated verbatim in vite.config.ts and vite.config.elements.ts.
+// Was duplicated verbatim in vite.config.ts and vite.config.elements.ts, the two
+// files now merged into the `register` and `split` targets below.
 // The `import(` rewrite marks the emitted dynamic imports @vite-ignore so a
 // consumer's bundler leaves the lazy chunk boundaries alone.
 //
@@ -203,17 +206,18 @@ function splitConfig(): UserConfig {
   };
 }
 
-const CONFIGS: Record<string, () => UserConfig> = {
+const TARGETS: Record<string, () => UserConfig> = {
   register: registerConfig,
   split: splitConfig,
 };
 
 const requested = process.env.KAI_BUILD ?? '';
-const build = CONFIGS[requested];
-if (!build) {
+// Own keys only -- see the note at the same guard in config/vite/lib.ts.
+if (!Object.hasOwn(TARGETS, requested)) {
   throw new Error(
-    `config/vite/elements.ts: KAI_BUILD must be one of [${Object.keys(CONFIGS).join(', ')}], got ${JSON.stringify(process.env.KAI_BUILD)}`,
+    `config/vite/elements.ts: KAI_BUILD must be one of [${Object.keys(TARGETS).join(', ')}], got ${JSON.stringify(process.env.KAI_BUILD)}`,
   );
 }
+const build = TARGETS[requested];
 
 export default defineConfig(build());

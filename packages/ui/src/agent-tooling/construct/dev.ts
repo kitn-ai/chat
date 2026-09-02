@@ -174,8 +174,8 @@ export async function dev(
 // ── kai dev --builder (B-22/B-23) ───────────────────────────────────────────
 // A SECOND, thin server beside the loop above — dev() itself is untouched
 // (plain `kai dev` stays byte-identical). The builder page is PREBUILT into
-// dist/builder-page at kit build time (vite.config.builder-page.ts), so at
-// consumer runtime this server compiles nothing: it serves static files,
+// dist/builder-page at kit build time (KAI_BUILD=builder, config/vite/page.ts),
+// so at consumer runtime this server compiles nothing: it serves static files,
 // exposes ONE validate-then-write endpoint (the construct FILE is the sole
 // state), and iframes the generated project's own Vite dev server. Deviation
 // from the spec's "thin Vite server" wording, recorded in the plan: a
@@ -588,7 +588,8 @@ export function builderPageDir(): string {
 }
 
 /** dist/theme-studio, resolved by the same walk as dist/builder-page (it is
- *  prebuilt right beside it — vite.config.theme-studio.ts). Nullable rather
+ *  prebuilt right beside it — KAI_BUILD=theme-studio, config/vite/page.ts).
+ *  Nullable rather
  *  than throwing: the studio route is additive, and a build predating it must
  *  not take the whole builder down — the route 404s with instructions. */
 export function themeStudioDir(): string | undefined {
@@ -596,7 +597,8 @@ export function themeStudioDir(): string | undefined {
   return 'dir' in out ? out.dir : undefined;
 }
 
-/** dist/gallery (the prebuilt blocks-gallery page, vite.config.gallery.ts) —
+/** dist/gallery (the prebuilt blocks-gallery page, KAI_BUILD=gallery,
+ *  config/vite/page.ts) —
  *  same walk, same nullable contract as the theme studio: additive route,
  *  404s with instructions on an older build. */
 export function galleryPageDir(): string | undefined {

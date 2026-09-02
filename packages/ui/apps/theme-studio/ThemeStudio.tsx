@@ -20,7 +20,8 @@
  *  "Default" theme is the kit's, byte for byte, and cannot drift from it.
  *
  *  This file is a standalone APP (apps/theme-studio/, built by
- *  vite.config.theme-studio.ts into dist/theme-studio and served by the
+ *  KAI_BUILD=theme-studio in config/vite/page.ts into dist/theme-studio and
+ *  served by the
  *  construct dev server at /theme-studio/), and is ALSO what the docs site's
  *  /theme/editor page renders (apps/docs re-exports it). It must never be
  *  imported from any component/elements/react entry point — it is a dev tool,

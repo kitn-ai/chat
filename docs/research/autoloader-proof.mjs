@@ -3,7 +3,7 @@
 // other element modules — and that kai-chat rendered. The selective module graph
 // is also the tree-shaking proof (chat.js does not reach artifact/form/etc.).
 //
-// Build first:  npx vite build --config vite.config.elements.ts
+// Build first:  KAI_BUILD=split npx vite build --config config/vite/elements.ts
 // Then run:     node docs/research/autoloader-proof.mjs
 import http from 'node:http';
 import fs from 'node:fs';

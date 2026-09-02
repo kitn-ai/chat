@@ -16,8 +16,8 @@
  * WHY NOT `@kitn.ai/ui/state`: that entry is the I/O-free pure-fold layer
  * (functions over ChatMessage[], no side effects). Stores are I/O by
  * definition — localStorage and fetch — so they get their own subpath,
- * built exactly the way state/wire are (vite.config.stores.ts, solid-js
- * external and absent, verified solid-free by verify:cdn-entries).
+ * built exactly the way state/wire are (KAI_BUILD=stores in config/vite/lib.ts,
+ * solid-js external and absent, verified solid-free by verify:cdn-entries).
  *
  * The package root re-exports everything here unchanged (src/index.ts), so
  * bundler consumers importing from '@kitn.ai/ui' are untouched; this entry
