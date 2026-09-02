@@ -731,6 +731,28 @@ jobs:
       - name: Generated artifacts in sync with their source
         run: pnpm --filter @kitn.ai/ui run verify:generated
 
+      # Every Playwright PROJECT still matches at least one spec file. The
+      # 2026-09-01 consolidation turned 14 root playwright configs into three
+      # under packages/ui/config/playwright/, one project per old config, so a
+      # `testMatch` regex and a spec filename are now a pair that nothing else
+      # asserts. Measured on a deliberately unmatchable testMatch: a run that
+      # names the project with `--project` fails loudly, but a run of the whole
+      # config lists the other projects and EXITS 0 -- and most of these projects
+      # are named by no CI step at all (the audio, shot, promptinput, composer,
+      # slots and input-mask suites have scripts nothing invokes), so for those
+      # a broken pattern is noticed by nothing until a human reads a count.
+      #
+      # Here rather than in the `browser` leg because it needs neither: it runs
+      # `playwright test --list` only, which starts no webServer and runs no
+      # globalSetup, so it needs no browser download and no fresh dist/. Under a
+      # second per config. `--self-test` plants an unmatchable testMatch in a
+      # temp copy of a real config, a config with no projects, and a script
+      # naming a project that does not exist, and requires each to fire -- plus a
+      # control run over an unmodified copy, so an always-throwing check cannot
+      # self-test green either.
+      - name: Playwright project coverage (no project matches zero specs)
+        run: pnpm --filter @kitn.ai/ui run verify:playwright-projects
+
       - name: Typecheck
         run: pnpm exec nx typecheck ui
 
@@ -1152,10 +1174,14 @@ jobs:
       # script as proof for months while it ran nowhere. If this step fails with
       # a missing config, PR #284 has not landed yet: that is a sequencing
       # problem to resolve by merging it, NOT by deleting this step.
-      # Expects: packages/ui/playwright.hovercard.config.ts
+      # Expects: packages/ui/config/playwright/bare.config.ts (project: hovercard)
       #          packages/ui/tests/e2e/hover-card-tabstops.spec.ts
+      # Spelled as the npm script, not `exec playwright test --project=hovercard`:
+      # classifyCommand in packages/ui/scripts/lint-gate-parity.mjs matches
+      # `exec playwright test` and then REQUIRES `--config`, returning `unknown`
+      # without it, and an unknown step shape is a hard failure there.
       - name: Hover-card tab-stop guard (built bundle)
-        run: pnpm --filter @kitn.ai/ui exec playwright test --config playwright.hovercard.config.ts
+        run: pnpm --filter @kitn.ai/ui run test:hovercard
 
       # ONE Storybook for BOTH IVPs below. Their configs already set
       # `reuseExistingServer: true` (not `!CI`), so each will attach to a server

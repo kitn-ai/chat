@@ -7,7 +7,7 @@ import { CHAT_SLOTS } from '../../src/elements/slots';
  * in a real browser, that consumer light-DOM is actually assigned to the
  * Solid-rendered shadow slots — something jsdom unit tests structurally cannot.
  *
- * Run: `npx playwright test --config playwright.slots.config.ts`
+ * Run: `npm run test:slots-ivp`
  * (Storybook must be serving on :6006.)
  */
 

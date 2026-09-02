@@ -5,7 +5,8 @@
  * counterpart to examples/remote-provider/. Used as the host side of the
  * standalone Playwright matrix (tests/e2e/remote-element.spec.ts).
  *
- * Served by Vite on http://localhost:6006 (see playwright.config.ts); the provider
+ * Served by Vite on http://localhost:6006 (see
+ * packages/ui/config/playwright/cross-origin.config.ts); the provider
  * runs on http://localhost:6007 — two distinct origins, so postMessage is REAL
  * cross-origin (not a same-origin shortcut).
  *

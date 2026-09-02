@@ -57,12 +57,14 @@ import { fileURLToPath } from 'node:url';
  *   - Scenario 8 runs the same keystrokes into a bare unmasked input.
  *
  * CI: NOT WIRED, deliberately and exactly like the rest of this family
- * (menu / composer / command / slots IVPs). Each has a standalone
- * `playwright.<name>.config.ts` + an npm script, and the required CI `test` job
- * runs none of them; the root `playwright.config.ts` `testMatch`es only
- * `remote-element.spec.ts`. This file follows that arrangement.
+ * (menu / composer / command / slots IVPs). Each is a `--project` of
+ * `config/playwright/storybook.config.ts` + an npm script; the cross-origin
+ * config (`config/playwright/cross-origin.config.ts`, run by `test:e2e`)
+ * `testMatch`es only `remote-element.spec.ts`. The
+ * required CI `test` job runs the menu and command ones and not this one. This
+ * file follows that arrangement.
  *
- * Run: `npx playwright test --config playwright.input-mask.config.ts`
+ * Run: `npm run test:input-mask-ivp`
  */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
