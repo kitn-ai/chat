@@ -326,6 +326,7 @@ async function main() {
     },
   });
   failIf(guards.bundleGraphProblem(Object.keys(bundled.metafile.inputs)));
+  failIf(guards.missingReuseInputsProblem(Object.keys(bundled.metafile.inputs)));
   await stat(path.join(dist, 'index.js')).then((s) =>
     console.log(`  bundle    dist/index.js    ${(s.size / 1024).toFixed(1)} kB`),
   );

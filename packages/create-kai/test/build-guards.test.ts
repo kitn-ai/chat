@@ -29,6 +29,7 @@ import {
   declaredPathsProblem,
   emittedContentProblem,
   gitignoreProblem,
+  missingReuseInputsProblem,
   missingStarterProblem,
   patchMatchProblem,
   readyFrameworksProblem,
@@ -441,6 +442,37 @@ describe('the bundle-graph guard', () => {
     // ~90 modules, so anything near zero means the bundle step, not the rule.
     expect(inputs.length).toBeGreaterThan(20);
     expect(bundleGraphProblem(inputs)).toBeNull();
+  });
+});
+
+describe('missingReuseInputsProblem', () => {
+  // esbuild metafile input keys are relative to the process cwd, which for this
+  // build is packages/create-kai, so the blocks package arrives as
+  // ../blocks/src/registry.ts. The rule matches the path SEGMENT rather than a
+  // prefix, the same shape bundleGraphProblem's ban rules use, so it survives
+  // being run from a different cwd.
+  it('is silent when the graph reaches the blocks package source', () => {
+    expect(
+      missingReuseInputsProblem([
+        'src/index.ts',
+        '../blocks/src/registry.ts',
+        '../blocks/src/forms.ts',
+      ]),
+    ).toBeNull();
+  });
+
+  it('names the miss when the graph does not reach it', () => {
+    const msg = missingReuseInputsProblem(['src/index.ts', '../ui/mcp/registry.ts']);
+    expect(msg).toMatch(/packages\/blocks\/src/);
+    expect(msg).toMatch(/copy/i);
+  });
+
+  it('a vendored copy under create-kai does not satisfy it', () => {
+    // The failure this guards against is somebody re-adding a local copy of the
+    // registry rather than importing the package: the ban rules would stay
+    // green, because a copy breaks no ban.
+    const msg = missingReuseInputsProblem(['src/index.ts', 'src/vendor/blocks-registry.ts']);
+    expect(msg).toMatch(/packages\/blocks\/src/);
   });
 });
 

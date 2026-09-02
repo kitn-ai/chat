@@ -681,6 +681,10 @@ export function sharedDevDepsProblem(mine: Manifest, kit: Manifest): string | nu
  *     even in the case where the offending module happens to shake clean today,
  *     which is the version of this bug that comes back.
  *
+ *     The blocks registry and the form renderer are the same kind of leaf and
+ *     now live in their own package, `@kitn.ai/blocks`; `missingReuseInputsProblem`
+ *     below asserts the bundle really reaches it rather than a local copy.
+ *
  * ONE KNOWN FUTURE COLLISION, stated so it is not a surprise: `renderSurface`
  * lives in `tools/scaffold.ts`, and `generate()` will need it the day the
  * `generated` surface path is wired (it throws today rather than emit an unrun
@@ -725,7 +729,43 @@ export function bundleGraphProblem(inputs: readonly string[]): string | null {
       .join('\n') +
     '\n  The CLI is one bundled zero-dependency file so `npx` cold start is fast, and\n' +
     '  every user downloads all of it. Read what you need from the LEAF modules at the\n' +
-    '  root of mcp/ — registry.ts, types.ts, route-emit.ts. If the fact you\n' +
-    '  need only exists inside mcp/, move it to a leaf rather than importing the tool.'
+    '  root of mcp/ - registry.ts, types.ts, route-emit.ts - or from @kitn.ai/blocks,\n' +
+    '  which is a whole package of them. If the fact you need only exists inside\n' +
+    '  mcp/, move it to a leaf rather than importing the tool.'
+  );
+}
+
+/**
+ * The POSITIVE half of the bundle-graph rule.
+ *
+ * `bundleGraphProblem` says what the CLI may not reach. It cannot say what the
+ * CLI MUST reach, and the difference matters: the reuse boundary this build
+ * asserts is that block logic comes from `@kitn.ai/blocks` and is never copied
+ * here. A vendored copy breaks no ban rule, so the ban half stays green while
+ * the exact drift the boundary exists to prevent has already happened.
+ *
+ * A workspace-linked package's inputs resolve to real paths under
+ * `packages/blocks/`, not to `node_modules/@kitn.ai/blocks/`, which is also why
+ * the ban rules keep working unchanged across this move.
+ */
+export function missingReuseInputsProblem(inputs: readonly string[]): string | null {
+  const normalized = inputs.map((input) => input.replaceAll('\\', '/'));
+  const required: { what: RegExp; why: string }[] = [
+    {
+      what: /(?:^|\/)(?:packages\/)?blocks\/src\//,
+      why: '@kitn.ai/blocks (packages/blocks/src) - the registry and the shared form renderer',
+    },
+  ];
+
+  const missing = required.filter((rule) => !normalized.some((input) => rule.what.test(input)));
+  if (missing.length === 0) return null;
+
+  return (
+    'create-kai build: the CLI bundle does NOT reach a module it must.\n' +
+    missing.map((rule) => `  · ${rule.why}`).join('\n') +
+    '\n  Block logic is the blocks package, never a copy here: one source, a build\n' +
+    '  failure as the drift failure mode. If this fires after an intentional\n' +
+    '  refactor, the fix is to import the package, not to delete this rule - a\n' +
+    '  vendored copy breaks no ban rule, so the ban half cannot see it.'
   );
 }

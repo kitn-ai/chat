@@ -88,6 +88,9 @@ const tree = (over: Tree = {}): Tree => ({
   'templates/vue/package.json': '{"name":"vue-app","private":true}\n',
   'templates/vue/_gitignore': 'node_modules/\n.env.local\n',
   'templates/vue/src/App.vue': '<template><div /></template>\n',
+  // One block, so the "no dist/blocks/**" rule sees the same believable-built
+  // shape the templates already give it.
+  'blocks/assistant/registry-item.json': '{"name":"assistant"}\n',
   // The files the CLI patches in these two templates, so a clean fixture is
   // clean by the completeness rule too.
   ...patchedFixtureFiles('react'),
@@ -265,6 +268,7 @@ describe('verify:pack still detects', () => {
       'templates/tanstack-start/package.json': '{"name":"ts-app","private":true}\n',
       'templates/tanstack-start/_gitignore': 'node_modules/\n',
       ...patchedFixtureFiles('tanstack-start'),
+      'blocks/assistant/registry-item.json': '{"name":"assistant"}\n',
     });
     const { code, output } = runVerifier(root);
 
