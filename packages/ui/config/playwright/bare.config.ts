@@ -25,6 +25,30 @@ import { fileURLToPath } from 'node:url';
 // fourth is a Vite static serve. Measured cost is a couple of seconds on a suite
 // whose own ceiling is 180s.
 //
+// WHAT THAT COSTS IN CI, corrected: all FOUR of these projects are required
+// gates, not one. The `browser` leg runs `test:focus-ring`,
+// `test:message-text-token`, `test:content-brand-bleed` and `test:hovercard` as
+// four separate steps (`node scripts/lint-gate-parity.mjs --list` prints the
+// set), so the four-server boot is paid four times, not once. Measured against
+// the times the deleted configs recorded, the added cost is roughly two seconds
+// per step. That is the whole bill and it is not worth restructuring for.
+//
+// THE PART THAT IS WORTH KNOWING is not the seconds, it is that four CI steps
+// now bind the SAME four ports. `reuseExistingServer` is `!process.env.CI`, so
+// on CI it is false and every step starts its own servers rather than attaching
+// to a neighbour's; Playwright tears down the servers it started when the run
+// exits, which is why four sequential steps do not collide. Two consequences:
+//
+//   1. These steps must stay SEQUENTIAL on one runner. Run two of them
+//      concurrently and the second fails to bind. It fails loudly, which is the
+//      right direction, but it fails.
+//   2. `reuseExistingServer: !process.env.CI` must stay false on CI. Flip it to
+//      plain `true` and a server leaked by a hard-killed step would be silently
+//      REUSED by the next one -- and these three paint guards measure the built
+//      bundle, so they would be measuring whatever `dist/` the leaked server was
+//      started against. That is the same stale-bundle failure the globalSetup
+//      below exists to prevent, arriving by a route globalSetup cannot see.
+//
 // globalSetup ENFORCES a fresh dist/ rather than asking politely in a comment.
 // It arrived with the hover-card suite, whose header below records why: a
 // deliberately broken fix produced a GREEN run against a stale bundle. The other
@@ -80,7 +104,10 @@ export default defineConfig({
   retries: 0,
   // The three paint guards each hardcoded `'list'`; hover-card already spelled
   // this conditional. Config-wide now, matching config/playwright/storybook.config.ts.
-  // Only CI log formatting changes.
+  // Only CI log formatting changes -- but it changes for three more REQUIRED
+  // gates, not for nothing: all four projects here are steps in the `browser`
+  // leg. An earlier note here said none of the three was a CI gate. That was
+  // wrong; they have been gates since the focus-ring round.
   reporter: process.env.CI ? 'github' : 'list',
   projects: [
     {
@@ -212,6 +239,9 @@ export default defineConfig({
        * either. It has to: `classifyCommand` in scripts/lint-gate-parity.mjs returns
        * `unknown` for `exec playwright test` without a `--config`, so the CI step
        * cannot spell `--project=hovercard` directly and must route through a script.
+       * The "hermetic-CI reason `playwright.config.ts` documents" is now
+       * documented in `config/playwright/cross-origin.config.ts`, which is that
+       * file moved and renamed; nothing sits at the package root any more.
        *
        * No `timeout` here on purpose: the deleted config set none either, so this
        * project keeps Playwright's 30s default rather than inheriting a neighbour's.

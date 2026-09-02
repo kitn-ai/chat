@@ -58,8 +58,9 @@ import { fileURLToPath } from 'node:url';
  *
  * CI: NOT WIRED, deliberately and exactly like the rest of this family
  * (menu / composer / command / slots IVPs). Each is a `--project` of
- * `config/playwright/storybook.config.ts` + an npm script; the root
- * `playwright.config.ts` `testMatch`es only `remote-element.spec.ts`. The
+ * `config/playwright/storybook.config.ts` + an npm script; the cross-origin
+ * config (`config/playwright/cross-origin.config.ts`, run by `test:e2e`)
+ * `testMatch`es only `remote-element.spec.ts`. The
  * required CI `test` job runs the menu and command ones and not this one. This
  * file follows that arrangement.
  *
