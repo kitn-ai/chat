@@ -369,7 +369,10 @@ const PLUMBING = [
   // Setup for the steps after them, in the same sense as the playwright
   // download above. Narrow on purpose -- `timeout <n> bash -c 'until ...` is a
   // readiness loop and nothing else, so a real check cannot hide inside one.
-  /^nohup\s/,
+  // Pinned to the Storybook pre-boot's exact shape (not bare `^nohup\s`) so a
+  // backgrounded real gate -- `nohup pnpm --filter @kitn.ai/ui run
+  // verify:pack &` -- cannot hide behind the same rule.
+  /^nohup\s+pnpm\s+--filter\s+@kitn\.ai\/ui\s+(run|exec)\s+storybook\b/,
   /^timeout\s+\d+\s+bash\s+-c\s+'until\s/,
   // Re-stamping the downloaded build's mtimes. `find <dir> -exec touch {} +`
   // reads no file and asserts nothing -- it only restores the ordering
@@ -1084,6 +1087,11 @@ if (SELF_TEST && IS_MAIN) {
     kindOf('node scripts/nohup-runner.mjs') === 'gate',
     'NEAR MISS: a script whose NAME contains nohup is still a gate',
     `(${JSON.stringify(classifyCommand('node scripts/nohup-runner.mjs'))})`,
+  );
+  report(
+    kindOf('nohup pnpm --filter @kitn.ai/ui run verify:pack &') !== 'plumbing',
+    'NEAR MISS: a backgrounded real gate is not swallowed by the Storybook pre-boot shape',
+    `(${JSON.stringify(classifyCommand('nohup pnpm --filter @kitn.ai/ui run verify:pack &'))})`,
   );
 
   report(
