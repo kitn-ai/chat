@@ -206,9 +206,26 @@ export default defineConfig({
       timeout: 60_000,
       expect: { timeout: 15_000 },
       use: {
+        // NO `viewport` AND NO `deviceScaleFactor` HERE, ON PURPOSE. The header
+        // above claims 1400x1000 at 2x, and that claim was never in effect on
+        // main. In both deleted configs those two keys sat on the top-level
+        // `testConfig.use` while the project's `use` was
+        // `{ ...devices['Desktop Chrome'], launchOptions }`. Playwright merges
+        // project `use` over config `use` key by key, and `devices['Desktop
+        // Chrome']` defines `viewport: {width: 1280, height: 720}` and
+        // `deviceScaleFactor: 1`, so the project won both keys every time: the
+        // suites really ran at 1280x720 at 1x. Leaving them out reproduces that
+        // exactly, which is what this consolidation owes. Writing them before
+        // the spread would read better as a record but does not compile:
+        // TS2783, "specified more than once, so this usage will be overwritten".
+        // Making the header's claim TRUE is a SEPARATE change with its own
+        // verification, not a side effect of moving a file: the suite is
+        // already red on main (check 7 deterministically, plus a second check
+        // that rotates) and has a follow-up.
         ...CHROMIUM,
-        viewport: { width: 1400, height: 1000 },
-        deviceScaleFactor: 2,
+        // AFTER the spread on purpose: unlike the two above, this one DID take
+        // effect on main, because `launchOptions` was on the project `use`
+        // there too and `devices['Desktop Chrome']` does not define it.
         launchOptions: {
           args: [
             '--disable-dev-shm-usage',
@@ -270,9 +287,23 @@ export default defineConfig({
       timeout: 90_000,
       expect: { timeout: 15_000 },
       use: {
+        // NO `viewport` AND NO `deviceScaleFactor` HERE, ON PURPOSE. The header
+        // above claims 1400x1000 at 2x, and that claim was never in effect on
+        // main. In both deleted configs those two keys sat on the top-level
+        // `testConfig.use` while the project's `use` was
+        // `{ ...devices['Desktop Chrome'], launchOptions }`. Playwright merges
+        // project `use` over config `use` key by key, and `devices['Desktop
+        // Chrome']` defines `viewport: {width: 1280, height: 720}` and
+        // `deviceScaleFactor: 1`, so the project won both keys every time: the
+        // suites really ran at 1280x720 at 1x. Leaving them out reproduces that
+        // exactly, which is what this consolidation owes. Writing them before
+        // the spread would read better as a record but does not compile:
+        // TS2783, "specified more than once, so this usage will be overwritten".
+        // Making the header's claim TRUE is a SEPARATE change with its own
+        // verification, not a side effect of moving a file: the suite is
+        // already red on main (check 7 deterministically, plus a second check
+        // that rotates) and has a follow-up.
         ...CHROMIUM,
-        viewport: { width: 1400, height: 1000 },
-        deviceScaleFactor: 2,
       },
     },
   ],
