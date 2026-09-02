@@ -548,6 +548,17 @@ jobs:
       - name: Unit tests (jsdom)
         run: pnpm --filter @kitn.ai/ui exec vitest run --project=unit
 
+      # The blocks package: pure functions over injected data plus the authored
+      # block sources. Node-environment, no build input of any kind, so it sits
+      # here rather than behind the kit artifact. The block CELLS -- contracts,
+      # freshness, pins and the recorded browser baseline per block -- are
+      # verify:blocks in the `browser` leg, which needs the kit's dist.
+      - name: Blocks package typecheck
+        run: pnpm --filter @kitn.ai/blocks run typecheck
+
+      - name: Blocks package tests
+        run: pnpm --filter @kitn.ai/blocks exec vitest run
+
       # The run-the-emitted-code guards, in the REQUIRED job on purpose.
       #
       # They write the `kai` MCP scaffolder's emitted `src/main.ts` to a real module
@@ -1104,7 +1115,7 @@ jobs:
       - name: Cross-origin e2e matrix
         run: pnpm --filter @kitn.ai/ui test:e2e
 
-      # Every block in packages/ui/blocks/ gets its CI cell (V-2, blocks-and-
+      # Every block in packages/blocks/blocks/ gets its CI cell (V-2, blocks-and-
       # parts 2026-08-31): the list is DERIVED from the directory scan each
       # run, and per block it asserts (a) the manifest validates and the kai-
       # contract checks pass, (b) the generated forms under dist/blocks/ are
