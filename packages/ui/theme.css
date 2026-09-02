@@ -110,7 +110,7 @@
      .superpowers/sdd/2026-08-26-conversations/rework-report.md Round 4 for
      the worked numbers.) Override via --kai-color-unread; a construct author
      can also set it per-widget through `theme.unreadColor` (construct
-     vocabulary -- see mcp/construct/schema.ts). */
+     vocabulary — see agent-tooling/construct/schema.ts). */
   --color-unread: var(--kai-color-unread, hsl(0 84% 60%));
   /* MARKED text — the fill behind a keyword the app has flagged (the composer's
      `highlights` rules, decorated through the CSS Custom Highlight API). This is
