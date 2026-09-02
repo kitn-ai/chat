@@ -66,6 +66,7 @@ function serveRemoteProvider(): Plugin {
 // `storybook-solidjs-vite` framework). Do NOT reintroduce a vite.config.ts at
 // packages/ui/ root: Storybook would start merging it again, silently. Nothing
 // enforces this but the absence of the file -- recorded in docs/coupling-map.md.
+
 const config: StorybookConfig = {
   stories: ['../src/**/*.mdx', '../src/**/*.stories.@(ts|tsx)', '../apps/**/*.stories.@(ts|tsx)'],
   framework: 'storybook-solidjs-vite',
