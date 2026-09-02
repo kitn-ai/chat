@@ -94,7 +94,7 @@ const CANVAS_BG = 'color-mix(in oklab, var(--color-muted) 30%, transparent)';
  *  error).
  *
  *  Deliberately the same shape and voice as the preview placeholder codegen
- *  emits (`emitWorkSurfacePage` in `agent-tooling/construct/codegen.ts`): a
+ *  emits (`emitWorkSurfacePage` in `mcp/construct/codegen.ts`): a
  *  short headline, what the surface is, and the one key that replaces it. The
  *  difference is that this one is a COMPONENT, not an emitted HTML file — it
  *  renders in the host document with the kit's tokens available, and it lives

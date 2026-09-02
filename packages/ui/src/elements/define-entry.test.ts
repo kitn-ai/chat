@@ -8,9 +8,9 @@ describe('@kitn.ai/ui/define', () => {
     expect(typeof defineWebComponent).toBe('function');
   });
 
-  // Same shape as `./solid`'s server twin (vite.config.solid.server.ts):
-  // `node`/`deno`/`worker` resolve to a Solid-SSR-transformed build
-  // (dist/define.server.js, vite.config.define.server.ts) so merely IMPORTING
+  // Same shape as `./solid`'s server twin (KAI_BUILD=solid.server in
+  // config/vite/lib.ts): `node`/`deno`/`worker` resolve to a Solid-SSR-transformed
+  // build (dist/define.server.js, KAI_BUILD=define.server) so merely IMPORTING
   // the entry under Node doesn't hit Solid's client-only `notSup` stub at
   // module scope — the same class of bug verify-ssr-imports.mjs exists to
   // catch. `browser`/`default` still resolve to the DOM build.

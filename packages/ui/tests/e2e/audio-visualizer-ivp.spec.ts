@@ -1,6 +1,7 @@
 import { test, expect, chromium, type Page, type Locator } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Task 18 — independent visual verification for the audio-visualizer epic.
@@ -33,11 +34,31 @@ import { join } from 'node:path';
  * `<html>` class), so it sticks — as long as nothing else appends to `body`
  * afterward in the same test.
  *
- * Run: `pnpm --filter @kitn.ai/ui exec playwright test --config playwright.audio-visualizer.config.ts`
+ * Run: `npm run test:audio-visualizer`
  */
 
-const SHOT_ROOT =
-  '/private/tmp/claude-501/-Users-home-Projects-kitn-ai-kitn-chat/7992d800-96a5-48f7-882d-22fafce9017d/scratchpad/av-ivp';
+// Evidence directory, derived from THIS FILE's location, never from the machine
+// that happened to write the spec. It used to be an absolute path into one
+// session's scratchpad under a temp root that does not exist on a Linux runner,
+// and the failure was much worse than a missing screenshot: `mkdirSync` ran at
+// MODULE level, so on CI it threw EACCES while Playwright was loading the file,
+// and a spec that throws at load aborts the WHOLE config's collection. All nine
+// projects of config/playwright/storybook.config.ts listed `Total: 0 tests in 0
+// files`. Nothing had gone wrong with any of the other eight.
+//
+// Two rules follow, and both are why this is shaped like
+// audio-visualizer-band-shape.spec.ts's identical block:
+//   1. Derive the path from `import.meta.url`, with an env override for a
+//      one-off custom location. `test-results/` is already gitignored.
+//   2. Do the mkdir in `test.beforeAll`, not at module scope. A directory that
+//      cannot be created should fail the SUITE, loudly and by name; at module
+//      scope it takes eight unrelated suites down with it and reports the
+//      symptom (nine projects matching nothing) rather than the cause.
+const HERE = dirname(fileURLToPath(import.meta.url));
+const DEFAULT_EVIDENCE_DIR = join(HERE, '..', '..', 'test-results', 'av-ivp');
+const SHOT_ROOT = process.env.AV_IVP_EVIDENCE_DIR
+  ? resolve(process.env.AV_IVP_EVIDENCE_DIR)
+  : DEFAULT_EVIDENCE_DIR;
 const DIRS = {
   matrix: join(SHOT_ROOT, '1-matrix'),
   transparency: join(SHOT_ROOT, '3-transparency'),
@@ -49,7 +70,9 @@ const DIRS = {
   mic: join(SHOT_ROOT, '9-mic'),
   recompile: join(SHOT_ROOT, '10-recompile-guard'),
 };
-for (const d of Object.values(DIRS)) mkdirSync(d, { recursive: true });
+test.beforeAll(() => {
+  for (const d of Object.values(DIRS)) mkdirSync(d, { recursive: true });
+});
 
 // Points at the real "Bar" story specifically -- do not swap this for a
 // shader story (wave/aurora/custom) casually. This anchor's only job is to

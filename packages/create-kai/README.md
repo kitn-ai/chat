@@ -147,7 +147,7 @@ is the axis that actually gates widening:
 ### What is read from the kit, and what it costs
 
 `chatRoutePreamble(fragment)`, `CLIENT_MODEL_IDS` and `defaultModelFor` come
-from `agent-tooling/route-emit.ts` — a **leaf module** whose only import is
+from `mcp/route-emit.ts` — a **leaf module** whose only import is
 type-only. This package used to carry copies of the first two plus guards to
 watch them drift; both copies and one guard are gone.
 
@@ -158,7 +158,7 @@ unused declaration is a hard `--noUnusedLocals` error. Emitted proof — the
 `openrouter` route declares none of them, and both compile.
 
 **WHICH MODULE THEY COME FROM IS THE WHOLE COST.** They were briefly exported
-from `agent-tooling/mcp/tools/scaffold.ts` instead, and that one import line cost
+from `mcp/mcp/tools/scaffold.ts` instead, and that one import line cost
 two things nobody priced in advance:
 
 1. **Bundle.** `dist/index.js` went 203 kB → 904 kB, **505 kB of it zod the CLI
@@ -192,7 +192,7 @@ that was never meant to be here.
 grades the esbuild **metafile's module graph** — not the output text and not a
 byte ceiling, because a ceiling has to be raised as the templates grow and
 raising it is the moment nobody looks. It bans `zod` (the cost) and everything
-under `agent-tooling/mcp/` (the cause). Watched failing three ways: the rule
+under `mcp/mcp/` (the cause). Watched failing three ways: the rule
 against a written-out graph, the rule against the real bundle, and `npm run
 build` exiting 1 with the same message when the original import is put back.
 
@@ -213,7 +213,7 @@ Two sources of truth, neither of them copied:
   Everything except the `package.json` rewrite and the patches in
   `src/patches.ts` is a byte-for-byte copy.
 - **Gateways and renderable surfaces** come from
-  `packages/ui/src/agent-tooling/`, imported by relative path and bundled at
+  `packages/ui/mcp/`, imported by relative path and bundled at
   build time (`src/catalog.ts`). Env var names, `deps`, `keyExposure`, route
   templates and `renderSurface` are read, never restated. A second copy of any
   of those has a build failure as its failure mode.
@@ -248,7 +248,7 @@ not evidence.
 | `scripts/build.mjs` app-path check | `paths.app` naming a file the template does not have. It is written into `kai.json` and quoted in the emitted README, and nothing else opens it at build time — so React's `src/App.tsx` copied onto a Vue row would go unnoticed |
 | `scripts/build.mjs` devDep check | a devDependency range disagreeing with `packages/ui`. `.npmrc` sets `node-linker=hoisted`, so one version wins workspace-wide — an `@types/node: ^22` here downgraded the KIT from 26 and broke its emitted-code suite |
 | `test/kit-contract.test.ts` | a template importing something the kit does not export |
-| `scripts/build.mjs` bundle-graph check | the CLI bundle reaching a module it must not. Three symbols imported out of the MCP's `tools/scaffold.ts` took `dist/index.js` from 203 kB to 904 kB, 505 kB of it zod, and **every other check stayed green** — emitted output was byte-identical, `verify:scaffold` was 616/616. It grades the esbuild metafile's real module graph, so it bans the CAUSE (anything under `agent-tooling/mcp/`) and not only the symptom |
+| `scripts/build.mjs` bundle-graph check | the CLI bundle reaching a module it must not. Three symbols imported out of the MCP's `tools/scaffold.ts` took `dist/index.js` from 203 kB to 904 kB, 505 kB of it zod, and **every other check stayed green** — emitted output was byte-identical, `verify:scaffold` was 616/616. It grades the esbuild metafile's real module graph, so it bans the CAUSE (anything under `mcp/mcp/`) and not only the symptom |
 | `scripts/verify-pack.mjs` | what only the PACKED tarball can show. npm drops a fixed set of names from every package whatever `files` says, so a template carrying one loses it at publish time and nowhere else: the working tree has it, the build copies it, every test that reads `dist/templates` sees it. `.gitignore` was handled from the start; `.npmrc` was not, and 0.1.0 shipped `nextjs` and `tanstack-start` with none while the bundled CLI still patched one — `ENOENT: ... open '.../myapp/.npmrc'` on the first command a user runs, two of eight frameworks, with this script printing `tarball OK`. It now checks the whole `STRIPPED_DOTFILES` list rather than one name, and asserts every file the patch tables OPEN is in the listing — derived from `PATCHES`/`GATEWAY_PATCHES`, because a hand-written list would have had exactly the hole that produced this. Also: templates missing from `files`, and a template that packs to nothing |
 | `scripts/smoke.mjs` | an emitted project that installs but does not build. `--framework all` covers every ready framework; without a flag it only ever built React, which meant it answered "does React still build" no matter which framework you had just turned on |
 

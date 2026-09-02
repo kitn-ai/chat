@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFil
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { listScenarios } from '../../src/agent-tooling/catalog/scenarios';
+import { listScenarios } from '../../mcp/catalog/scenarios';
 import { EXECUTION_PATHS, OPENROUTER_ALLOWED, decideRoute, isOpenRouterAllowed, looksAnthropic, routeModel } from '../../scripts/lib/run-routing.mjs';
 import { verifyHandover } from '../../scripts/lib/handover.mjs';
 

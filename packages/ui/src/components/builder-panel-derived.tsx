@@ -23,8 +23,8 @@ import { ColorField } from '../ui/color-field';
 import { BUTTON_VARIANT_NAMES } from '../ui/button-variant-names';
 import { Section, Field, Row, TagEditor, AcceptTypeEditor, LinksEditor } from './builder-panel';
 import { ActionRowPicker, USER_ACTION_CATALOG, ASSISTANT_ACTION_CATALOG } from './builder-message-actions';
-import type { BuildableTemplate } from '../agent-tooling/construct/templates';
-import type { Construct, ConstructProblem } from '../agent-tooling/construct/schema';
+import type { BuildableTemplate } from '../../mcp/construct/templates';
+import type { Construct, ConstructProblem } from '../../mcp/construct/schema';
 import {
   getAtPath, setAtPath, deleteAtPath,
   readPresenceBoolean, writePresenceBoolean, PRESENCE_BOOLEAN_PATHS,

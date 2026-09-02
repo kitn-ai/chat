@@ -7,7 +7,8 @@ import { resolve } from 'node:path';
  * imports straight from ../../../packages/ui/src (no prior build needed; Vite handles TS).
  *
  * Run via:  vite examples/remote-host --port 6006 --strictPort
- * (Playwright's first webServer entry; see playwright.config.ts.)
+ * (Playwright's first webServer entry; see
+ * packages/ui/config/playwright/cross-origin.config.ts.)
  */
 export default defineConfig({
   root: resolve(__dirname),

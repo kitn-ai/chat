@@ -20,7 +20,7 @@ import { test, expect, type Page } from '@playwright/test';
  * that layer can close this. `page.keyboard.press('Tab')` can. Everything in
  * this file goes through it.
  *
- * Run: `npx playwright test --config playwright.hovercard.config.ts`
+ * Run: `npm run test:hovercard`
  */
 
 const FIXTURE = '/tests/e2e/fixtures/hover-card-tabstops.html';

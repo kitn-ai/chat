@@ -12,7 +12,7 @@ import { X } from 'lucide-solid';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — a design-round stub of the real construct.v1 schema
-// (agent-tooling/construct/schema.ts), narrowed to the fields this panel
+// (mcp/construct/schema.ts), narrowed to the fields this panel
 // edits. NOT the source of truth: a real build derives its FormDefinition
 // from ConstructSchema (per RECOMMENDATION.md, that derivation is the hard
 // part and is out of scope here). Presence, not a boolean, is what turns
@@ -60,7 +60,7 @@ export type BuilderProviderMode = 'mock' | 'endpoint';
 export type BuilderProviderWire = 'openai' | 'anthropic';
 
 /** Mirrors `construct.v1`'s own `provider` discriminated union
- *  (`agent-tooling/construct/schema.ts`'s `ProviderSchema`) — `mock` needs
+ *  (`mcp/construct/schema.ts`'s `ProviderSchema`) — `mock` needs
  *  nothing else; `endpoint` needs the consumer's own chat route + wire
  *  format. A DISPLAY/edit stub, not a real one: no dev-server exists for
  *  this design round to actually call, so there's nothing to validate the

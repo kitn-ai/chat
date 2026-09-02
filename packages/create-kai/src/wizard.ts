@@ -162,7 +162,7 @@ function wizardStarter(shape: Exclude<ShapeId, 'app'>): Record<string, unknown> 
  * `validateProjectName` accepts and safeParses the RESULT against the real,
  * live `ConstructSchema` — proof the derivation is right regardless of
  * whether this mirror is byte-identical to the private regex in
- * `packages/ui/src/agent-tooling/construct/schema.ts` (that regex is not
+ * `packages/ui/mcp/construct/schema.ts` (that regex is not
  * exported; even a test cannot import it directly).
  */
 const CONSTRUCT_TAG_RE = /^[a-z][a-z0-9]*-[a-z0-9-]+$/;

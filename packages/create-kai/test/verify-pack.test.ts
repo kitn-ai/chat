@@ -88,6 +88,9 @@ const tree = (over: Tree = {}): Tree => ({
   'templates/vue/package.json': '{"name":"vue-app","private":true}\n',
   'templates/vue/_gitignore': 'node_modules/\n.env.local\n',
   'templates/vue/src/App.vue': '<template><div /></template>\n',
+  // One block, so the "no dist/blocks/**" rule sees the same believable-built
+  // shape the templates already give it.
+  'blocks/assistant/registry-item.json': '{"name":"assistant"}\n',
   // The files the CLI patches in these two templates, so a clean fixture is
   // clean by the completeness rule too.
   ...patchedFixtureFiles('react'),
@@ -265,6 +268,7 @@ describe('verify:pack still detects', () => {
       'templates/tanstack-start/package.json': '{"name":"ts-app","private":true}\n',
       'templates/tanstack-start/_gitignore': 'node_modules/\n',
       ...patchedFixtureFiles('tanstack-start'),
+      'blocks/assistant/registry-item.json': '{"name":"assistant"}\n',
     });
     const { code, output } = runVerifier(root);
 
@@ -291,6 +295,17 @@ describe('verify:pack still detects', () => {
     const { code, output } = runVerifier(fixtureRoot(tree({ 'index.js': null })));
     expect(code).toBe(1);
     expect(output).toContain('dist/index.js is missing');
+  });
+
+  it('fires when the tarball has no dist/blocks/** at all', () => {
+    // The other half of what the CLI ships, same failure shape as the
+    // dist/templates/** case above: a bundled CLI with no blocks installs
+    // cleanly and only fails at the user's first `create-kai add`.
+    const root = fixtureRoot(tree({ 'blocks/assistant/registry-item.json': null }));
+    const { code, output } = runVerifier(root);
+
+    expect(code, 'a tarball with no blocks at all was accepted').toBe(1);
+    expect(output).toContain('no dist/blocks/**');
   });
 
   /**

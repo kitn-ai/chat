@@ -1,5 +1,5 @@
 // Writes each BUILDABLE template starter (and every variant starter) to
-// src/agent-tooling/construct/fixtures/templates/<name>.construct.json —
+// mcp/construct/fixtures/templates/<name>.construct.json —
 // the §4-registered DERIVED COPY of templates.ts (B-15/B-18). The copy
 // exists because verify-construct.mjs is an .mjs gate that reads JSON
 // fixtures, not TS; verify:generated guards its drift (this generator runs
@@ -33,10 +33,10 @@ async function importTs(entry) {
 }
 
 const { buildableTemplates } = await importTs(
-  join(PKG_ROOT, 'src/agent-tooling/construct/templates.ts'),
+  join(PKG_ROOT, 'mcp/construct/templates.ts'),
 );
 
-const OUT_DIR = join(PKG_ROOT, 'src/agent-tooling/construct/fixtures/templates');
+const OUT_DIR = join(PKG_ROOT, 'mcp/construct/fixtures/templates');
 mkdirSync(OUT_DIR, { recursive: true });
 
 for (const template of buildableTemplates()) {

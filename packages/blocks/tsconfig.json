@@ -1,0 +1,20 @@
+{
+  "comment": "The SOURCE pass. TWO options here are load-bearing and neither is an omission. `types: []` means no ambient type packages, which turns a `node:fs` import in this package into a compile error rather than a discipline nobody re-checks. `lib` is ES2023 with NO DOM: this package emits HTML as STRINGS and never touches a document, so granting DOM would let a real DOM reach compile silently. Measured before it was written down: both source files compile clean with no DOM lib (the one `HTMLElement` in forms.ts sits inside a string literal, not a type position). The filesystem WALK lives in the callers that have a filesystem (packages/ui/scripts/gen-blocks.mjs, packages/ui/scripts/verify-blocks.mjs, packages/create-kai/src/blocks.ts); what they feed in is derived from their scan, never hand-listed. The tests DO read the filesystem and get their own pass in tsconfig.tests.json.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023"],
+    "types": [],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"]
+}

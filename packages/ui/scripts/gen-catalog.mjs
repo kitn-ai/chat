@@ -1,4 +1,4 @@
-// Emits src/agent-tooling/catalog/derived.json: the catalog's derived
+// Emits mcp/catalog/derived.json: the catalog's derived
 // ingredient layer.
 //
 // Runs inside build:api, which is what lets verify:generated regenerate and diff
@@ -18,7 +18,7 @@ import { readVariants, MIN_VARIANTS } from './lib/message-part-variants.mjs';
 import { ELEMENT_META_KEYS } from './lib/element-meta-keys.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const DEFAULT_OUT = join(ROOT, 'src/agent-tooling/catalog/derived.json');
+const DEFAULT_OUT = join(ROOT, 'mcp/catalog/derived.json');
 
 // `--out <path>` redirects the write. The DEFAULT is the committed artifact, so
 // build:api and a bare `node scripts/gen-catalog.mjs` behave identically to
@@ -152,8 +152,8 @@ const partVariants = readVariants(readFileSync(join(ROOT, 'src/elements/chat-typ
 if (partVariants.length < MIN_VARIANTS) fail(`union parse degraded: ${partVariants.length} variants.`);
 
 // 3. Integrations and capability groups, esbuild-imported from the TS registries.
-const registry = await importTs(join(ROOT, 'src/agent-tooling/registry.ts'));
-const archetypes = await importTs(join(ROOT, 'src/agent-tooling/archetypes.ts'));
+const registry = await importTs(join(ROOT, 'mcp/registry.ts'));
+const archetypes = await importTs(join(ROOT, 'mcp/archetypes.ts'));
 const integrations = registry.listIntegrations().map((i) => ({
   id: i.id,
   category: i.category,

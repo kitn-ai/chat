@@ -3,8 +3,9 @@
 // WHY IT EXISTS
 // A handoff document said "every gate is green" over a five-command list. The
 // required `test` job was red at the time -- on `verify:pack`, which was not one
-// of the five. `src/agent-tooling/catalog/derived.json` had grown past that
-// check's 64 KiB per-file ceiling and was shipping to every consumer, and the
+// of the five. `mcp/catalog/derived.json` (src/agent-tooling/catalog/derived.json
+// at the time) had grown past that check's 64 KiB per-file ceiling and was
+// shipping to every consumer, and the
 // list that was supposed to prove the tree healthy could not see it, because a
 // list somebody typed once is not the job. The document has since been amended
 // to say so in prose ("treat any list here as a subset that rots"), which is the
@@ -13,9 +14,19 @@
 //
 // THE INVARIANT
 // A block in `docs/superpowers/**` that CLAIMS to enumerate the merge gate must
-// equal the `test` job's gate set, both directions. A block that looks like such
-// an enumeration and claims nothing is a hard failure until somebody says which
-// of the two it is.
+// equal the REQUIRED GRAPH's gate set, both directions. A block that looks like
+// such an enumeration and claims nothing is a hard failure until somebody says
+// which of the two it is.
+//
+// THE GATE IS A GRAPH, NOT A JOB. `test` is an aggregator whose legs run in
+// parallel, so the gate set is `test` UNION every job transitively reachable
+// through its `needs:`, read from the workflow rather than listed here. Two hard
+// failures hold that shape up: a root `test` with no `needs:` and no gates (the
+// half-finished split), and any job in this workflow that carries a gate-shaped
+// step and is NOT reachable from `test` (the check that runs while gating
+// nothing). The second is the whole reason the split is safe, and `storybook` /
+// `storybook-gate` are exempt from it BY NAME, in EXEMPT_JOBS, with the reason
+// written there.
 //
 // WHAT IT ASSERTS
 //   1. The `test` job's every step is recognised. An unknown `run:` shape fails
@@ -101,6 +112,16 @@ const LIST = argv.includes('--list');
 
 const WORKFLOW = '.github/workflows/test.yml';
 const JOB = 'test';
+
+// Jobs that carry gate-shaped steps and are deliberately NOT part of the
+// required graph. `storybook` runs the flaky browser project and aggregates
+// through `storybook-gate`, which is its OWN required context in ruleset
+// 18328421 -- a sibling gate, not a leg of this one. Exempting them by name, in
+// one place, with this reason, is the same idiom as the doc scan's exemption of
+// CLAUDE.md. Anything else in this workflow that carries a gate must be
+// reachable from `test`, or the step runs while gating nothing.
+const EXEMPT_JOBS = new Set(['storybook', 'storybook-gate']);
+
 const DOC_ROOT = 'docs/superpowers';
 
 // The vacuity floor. NOT a count of anything -- it is the tripwire that fires
@@ -240,6 +261,94 @@ const unquote = (s) => {
 };
 
 // ---------------------------------------------------------------------------
+// the job graph
+//
+// The required gate is no longer one job. It is `test` plus every job
+// transitively reachable through its `needs:`, and it is READ from the workflow
+// rather than listed here -- `derive it, don't type it`, applied to the thing
+// the split creates. Over a workflow whose `test` declares no `needs:` the union
+// degenerates to `test` alone, so this is backward compatible by construction.
+// ---------------------------------------------------------------------------
+
+/** Every top-level job name, in file order. */
+export function jobNames(yamlText) {
+  const lines = yamlText.split('\n');
+  const jobsAt = lines.findIndex((l) => /^jobs:\s*$/.test(l));
+  if (jobsAt === -1) throw new GuardError('no top-level `jobs:` mapping in the workflow');
+  const names = [];
+  for (let i = jobsAt + 1; i < lines.length; i++) {
+    const l = lines[i];
+    if (isSkippable(l)) continue;
+    if (indentOf(l) === 0) break; // left the jobs mapping
+    const m = /^\s{2}([A-Za-z0-9_-]+):\s*$/.exec(l);
+    if (m) names.push(m[1]);
+  }
+  return names;
+}
+
+/** One job's `needs:`, in any of the three spellings GitHub accepts. */
+export function needsOf(yamlText, jobName) {
+  const lines = yamlText.split('\n');
+  const jobsAt = lines.findIndex((l) => /^jobs:\s*$/.test(l));
+  if (jobsAt === -1) throw new GuardError('no top-level `jobs:` mapping in the workflow');
+
+  let jobAt = -1;
+  for (let i = jobsAt + 1; i < lines.length; i++) {
+    if (isSkippable(lines[i])) continue;
+    if (indentOf(lines[i]) === 0) break;
+    if (new RegExp(`^\\s{2}${jobName}:\\s*$`).test(lines[i])) {
+      jobAt = i;
+      break;
+    }
+  }
+  if (jobAt === -1) throw new GuardError(`no \`${jobName}:\` job in the workflow`);
+
+  const jobIndent = indentOf(lines[jobAt]);
+  for (let i = jobAt + 1; i < lines.length; i++) {
+    if (isSkippable(lines[i])) continue;
+    if (indentOf(lines[i]) <= jobIndent) break; // left the job
+    if (indentOf(lines[i]) !== jobIndent + 2) continue;
+    const m = /^\s*needs:\s*(.*)$/.exec(lines[i]);
+    if (!m) continue;
+    const rest = m[1].trim();
+    if (rest.startsWith('[')) {
+      return rest
+        .replace(/^\[/, '')
+        .replace(/\]$/, '')
+        .split(',')
+        .map((s) => unquote(s))
+        .filter((s) => s !== '');
+    }
+    if (rest !== '') return [unquote(rest)];
+    const out = [];
+    for (let j = i + 1; j < lines.length; j++) {
+      if (isSkippable(lines[j])) continue;
+      if (indentOf(lines[j]) <= jobIndent) break;
+      const seq = /^\s*-\s+(\S+)\s*$/.exec(lines[j]);
+      if (!seq) break;
+      out.push(unquote(seq[1]));
+    }
+    return out;
+  }
+  return [];
+}
+
+/** `rootJob` plus every job reachable through `needs:`, breadth-first, root first. */
+export function requiredJobGraph(yamlText, rootJob = JOB) {
+  const seen = [];
+  const queue = [rootJob];
+  while (queue.length > 0) {
+    const job = queue.shift();
+    if (seen.includes(job)) continue;
+    seen.push(job);
+    for (const n of needsOf(yamlText, job)) {
+      if (!seen.includes(n)) queue.push(n);
+    }
+  }
+  return seen;
+}
+
+// ---------------------------------------------------------------------------
 // canonicalization: one command -> one stable identifier, by RULE
 //
 // No hand-typed list of the job's steps exists anywhere in this file. Every
@@ -254,6 +363,23 @@ const PLUMBING = [
   /^npm\s+(install|ci)\b/,
   /^npx\s+playwright\s+install\b/,
   /^echo\b/,
+  // A working-tree snapshot redirected to a file. It asserts nothing on its
+  // own; the step that READS it (`verify:artifact-glob`) is the gate.
+  /^git\s+status\b/,
+  // A backgrounded server, and the bounded poll that waits for it to answer.
+  // Setup for the steps after them, in the same sense as the playwright
+  // download above. Narrow on purpose -- `timeout <n> bash -c 'until ...` is a
+  // readiness loop and nothing else, so a real check cannot hide inside one.
+  // Pinned to the Storybook pre-boot's exact shape (not bare `^nohup\s`) so a
+  // backgrounded real gate -- `nohup pnpm --filter @kitn.ai/ui run
+  // verify:pack &` -- cannot hide behind the same rule.
+  /^nohup\s+pnpm\s+--filter\s+@kitn\.ai\/ui\s+(run|exec)\s+storybook\b/,
+  /^timeout\s+\d+\s+bash\s+-c\s+'until\s/,
+  // Re-stamping the downloaded build's mtimes. `find <dir> -exec touch {} +`
+  // reads no file and asserts nothing -- it only restores the ordering
+  // `upload-artifact` destroys. Pinned to that exact shape so the rule cannot
+  // swallow `find ... -exec <anything else>`, which could be a real check.
+  /^find\s+\S+\s+-exec\s+touch\s+\{\}\s\+$/,
 ];
 
 const stripEnvPrefix = (cmd) =>
@@ -337,59 +463,112 @@ function commandsOf(run) {
  * workflow's text. Throws a GuardError on an unrecognised step shape or on an
  * implausibly small step count.
  */
-export function analyzeWorkflow(yamlText, { jobName = JOB, minRunSteps = MIN_RUN_STEPS } = {}) {
-  const steps = extractSteps(yamlText, jobName);
-  const withRun = steps.filter((s) => typeof s.run === 'string' && s.run.trim() !== '');
-  if (withRun.length < minRunSteps) {
+export function analyzeWorkflow(
+  yamlText,
+  { jobName = JOB, minRunSteps = MIN_RUN_STEPS, exemptJobs = EXEMPT_JOBS } = {},
+) {
+  const graph = requiredJobGraph(yamlText, jobName);
+
+  const steps = [];
+  const gates = new Map(); // id -> [step names]
+  const plumbing = [];
+  const unknown = [];
+  let runStepCount = 0;
+
+  for (const job of graph) {
+    for (const step of extractSteps(yamlText, job)) {
+      steps.push(step);
+      const hasRun = typeof step.run === 'string' && step.run.trim() !== '';
+      if (hasRun) runStepCount += 1;
+      if (!hasRun) {
+        // `uses:` steps are actions -- checkout, setup-node, the pnpm action,
+        // the caches, the artifact upload and download. None of them gate.
+        if (step.uses) {
+          plumbing.push({ step, job, why: `uses: ${step.uses}` });
+          continue;
+        }
+        unknown.push({ step, job, cmd: '(no `run:` and no `uses:`)' });
+        continue;
+      }
+      for (const cmd of commandsOf(step.run)) {
+        const c = classifyCommand(cmd, { stepName: step.name, workingDirectory: step.workingDirectory });
+        if (c.kind === 'gate') {
+          if (!gates.has(c.id)) gates.set(c.id, []);
+          gates.get(c.id).push(step.name ?? `line ${step.line}`);
+        } else if (c.kind === 'plumbing') {
+          plumbing.push({ step, job, why: cmd });
+        } else {
+          unknown.push({ step, job, cmd });
+        }
+      }
+    }
+  }
+
+  // The degenerate aggregator, named before the size floor gets to it. A thin
+  // `test` that neither runs a gate nor names a leg IS the half-finished split,
+  // and the floor would only catch it by accident of being small.
+  if (graph.length === 1 && gates.size === 0) {
+    throw new GuardError(
+      `the \`${jobName}\` job declares no \`needs:\` and runs no gate.\n` +
+        `  That is an aggregator with nothing behind it: the required check would be green over a\n` +
+        `  workflow that gates nothing. Either it runs the gates, or it names the jobs that do.`,
+    );
+  }
+
+  if (runStepCount < minRunSteps) {
     throw new GuardError(
       `extractor found almost nothing -- the workflow moved.\n` +
-        `  Parsed ${steps.length} step(s) in job \`${jobName}\`, ${withRun.length} of them with a \`run:\`,\n` +
+        `  Parsed ${steps.length} step(s) across the required graph (${graph.join(', ')}), ` +
+        `${runStepCount} of them with a \`run:\`,\n` +
         `  which is below the floor of ${minRunSteps}. An empty-ish gate set would make every documented\n` +
         `  list match, so this refuses to run rather than pass. Fix the extractor, not the floor.`,
     );
   }
 
-  const gates = new Map(); // id -> [step names]
-  const plumbing = [];
-  const unknown = [];
-
-  for (const step of steps) {
-    if (!step.run) {
-      // `uses:` steps are actions -- checkout, setup-node, the pnpm action, the
-      // npm cache. None of them gate anything.
-      if (step.uses) {
-        plumbing.push({ step, why: `uses: ${step.uses}` });
-        continue;
-      }
-      unknown.push({ step, cmd: '(no `run:` and no `uses:`)' });
-      continue;
-    }
-    for (const cmd of commandsOf(step.run)) {
-      const c = classifyCommand(cmd, { stepName: step.name, workingDirectory: step.workingDirectory });
-      if (c.kind === 'gate') {
-        if (!gates.has(c.id)) gates.set(c.id, []);
-        gates.get(c.id).push(step.name ?? `line ${step.line}`);
-      } else if (c.kind === 'plumbing') {
-        plumbing.push({ step, why: cmd });
-      } else {
-        unknown.push({ step, cmd });
-      }
-    }
-  }
-
   if (unknown.length > 0) {
     const detail = unknown
-      .map((u) => `    ${u.step.name ?? `(unnamed, line ${u.step.line})`}\n      ${u.cmd}`)
+      .map((u) => `    [${u.job}] ${u.step.name ?? `(unnamed, line ${u.step.line})`}\n      ${u.cmd}`)
       .join('\n');
     throw new GuardError(
-      `unrecognised step shape(s) in job \`${jobName}\` -- teach me this shape or mark it plumbing.\n` +
+      `unrecognised step shape(s) in the required graph (${graph.join(', ')}) -- teach me this shape or mark it plumbing.\n` +
         `  Every step must canonicalize to a stable identifier or be classified as setup, or a new\n` +
         `  kind of gate silently falls outside every documented list:\n${detail}\n` +
         `  Add a rule to classifyCommand() in ${relative(REPO_ROOT, fileURLToPath(import.meta.url))}.`,
     );
   }
 
-  return { steps, gates, plumbing, runStepCount: withRun.length };
+  // THE TEETH OF THE SPLIT. A job carrying gate-shaped steps that no `needs:`
+  // chain reaches from `test` still runs on every PR, still prints in `--list`,
+  // and gates NOTHING -- a check wearing the shape of coverage, which is the
+  // failure this repo has already been bitten by twice. Moving a step out of the
+  // graph must be as loud as deleting it.
+  for (const job of jobNames(yamlText)) {
+    if (graph.includes(job) || exemptJobs.has(job)) continue;
+    let jobSteps;
+    try {
+      jobSteps = extractSteps(yamlText, job);
+    } catch {
+      continue; // a job with no steps gates nothing
+    }
+    const found = [];
+    for (const step of jobSteps) {
+      if (typeof step.run !== 'string' || step.run.trim() === '') continue;
+      for (const cmd of commandsOf(step.run)) {
+        const c = classifyCommand(cmd, { stepName: step.name, workingDirectory: step.workingDirectory });
+        if (c.kind === 'gate') found.push(`    ${c.id}\n      ${step.name ?? `line ${step.line}`}`);
+      }
+    }
+    if (found.length > 0) {
+      throw new GuardError(
+        `job \`${job}\` runs gate(s) and is not reachable from \`${jobName}\` through \`needs:\`.\n` +
+          `${found.join('\n')}\n` +
+          `  The required graph is ${graph.join(', ')}. A check outside it runs on every PR and blocks\n` +
+          `  nothing. Add the edge, or exempt the job by name in EXEMPT_JOBS with a written reason.`,
+      );
+    }
+  }
+
+  return { steps, gates, plumbing, runStepCount, graph };
 }
 
 // ---------------------------------------------------------------------------
@@ -671,6 +850,71 @@ jobs:
         run: pnpm --filter @kitn.ai/ui run lint:not-this-job
 `;
 
+// The SAME seven gates as FIXTURE_WORKFLOW, spread across a split graph. If the
+// union derivation is right, these two workflows analyze identically -- which is
+// the property that makes the real split a refactor rather than a rewrite of the
+// gate set. `storybook` carries a gate and is NOT reachable from `test`: it is
+// the exempt case, and renaming it is how the unreachable rule gets watched.
+const FIXTURE_SPLIT_WORKFLOW = `name: test
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Alpha guard
+        run: pnpm --filter @kitn.ai/ui run lint:alpha
+
+      - name: Build
+        run: pnpm exec nx build ui
+
+  unit:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Unit tests (jsdom)
+        run: pnpm --filter @kitn.ai/ui exec vitest run --project=unit
+
+      - name: Bare script spelling
+        run: pnpm --filter @kitn.ai/ui test:react
+
+  browser:
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Suite in a subtree
+        working-directory: examples/starters/tanstack-start
+        run: node --test --test-reporter=spec
+
+      - name: Two packages, one step
+        run: |
+          npm install --prefix "\$RUNNER_TEMP/pin" npm@12.0.2
+          pnpm --filter create-kai run verify:pack
+          pnpm --filter @kitn.ai/ui run verify:pack
+
+  test:
+    needs: [build, unit, browser]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verdict
+        run: echo 'every leg green'
+
+  storybook:
+    runs-on: ubuntu-latest
+    steps:
+      - name: A gate in the EXEMPT storybook job
+        run: pnpm --filter @kitn.ai/ui run lint:not-this-job
+`;
+
 const FIXTURE_GATES = [
   '@kitn.ai/ui run lint:alpha',
   '@kitn.ai/ui vitest unit',
@@ -745,6 +989,64 @@ if (SELF_TEST && IS_MAIN) {
     );
   }
 
+  // -- the job graph --
+  try {
+    const split = analyzeWorkflow(FIXTURE_SPLIT_WORKFLOW, { minRunSteps: 5 });
+    const got = [...split.gates.keys()].sort();
+    const want = [...FIXTURE_GATES].sort();
+    report(
+      JSON.stringify(got) === JSON.stringify(want),
+      'a split graph yields the SAME gate set as the single-job workflow',
+      `\n    got  ${JSON.stringify(got)}\n    want ${JSON.stringify(want)}`,
+    );
+    report(
+      JSON.stringify(split.graph) === JSON.stringify(['test', 'build', 'unit', 'browser']),
+      'the graph is `test` plus its transitive needs, root first',
+      `(${split.graph.join(', ')})`,
+    );
+  } catch (err) {
+    report(false, 'a split graph yields the SAME gate set as the single-job workflow', `threw: ${err.message}`);
+  }
+
+  // A gate-bearing job nobody aggregates is the split's own failure mode: the
+  // step still runs, `--list` still prints it, and nothing gates on it.
+  try {
+    analyzeWorkflow(FIXTURE_SPLIT_WORKFLOW.replace('  storybook:', '  stray:'), { minRunSteps: 5 });
+    report(false, 'a gate-bearing job unreachable from `test` is a hard failure');
+  } catch (err) {
+    report(
+      err instanceof GuardError &&
+        /not reachable from/.test(err.message) &&
+        /stray/.test(err.message) &&
+        /lint:not-this-job/.test(err.message),
+      'a gate-bearing job unreachable from `test` is a hard failure',
+      `(${err.message.split('\n')[0]})`,
+    );
+  }
+
+  // The degenerate aggregator: a thin `test` with no `needs:` and no gates. The
+  // step floor would also catch it, but only by accident of size -- this names
+  // the actual shape, and it is the shape a half-finished split leaves behind.
+  try {
+    analyzeWorkflow(FIXTURE_SPLIT_WORKFLOW.replace('    needs: [build, unit, browser]\n', ''), {
+      minRunSteps: 1,
+    });
+    report(false, 'a root `test` with no `needs:` and no gates is a hard failure');
+  } catch (err) {
+    report(
+      err instanceof GuardError && /declares no `needs:` and runs no gate/.test(err.message),
+      'a root `test` with no `needs:` and no gates is a hard failure',
+      `(${err.message.split('\n')[0]})`,
+    );
+  }
+
+  // Exempt by NAME, so the exemption cannot silently widen.
+  report(
+    EXEMPT_JOBS.has('storybook') && EXEMPT_JOBS.has('storybook-gate') && EXEMPT_JOBS.size === 2,
+    'the unreachable rule exempts exactly the two storybook jobs, by name',
+    `(${[...EXEMPT_JOBS].join(', ')})`,
+  );
+
   // -- an unrecognised step shape --
   try {
     analyzeWorkflow(FIXTURE_WORKFLOW.replace('run: pnpm exec nx build ui', 'run: make -j4 everything'), {
@@ -757,6 +1059,70 @@ if (SELF_TEST && IS_MAIN) {
       'an unrecognised `run:` shape is a hard failure naming the step',
     );
   }
+
+  // -- the split's three plumbing shapes, and the near-misses beside each --
+  //
+  // A plumbing rule is a HOLE in the gate set by construction: whatever it
+  // matches stops being a gate and stops being an unrecognised shape. So each
+  // of the three is watched twice -- once on the command it exists for, and
+  // once on a command that looks like it and IS a check. The near-misses are
+  // the half that can fail if a rule is widened later.
+  const kindOf = (cmd, ctx) => classifyCommand(cmd, ctx).kind;
+
+  report(
+    kindOf('git status --porcelain --ignored=matching packages/ui > "$RUNNER_TEMP/before.txt"') === 'plumbing',
+    'a working-tree snapshot is plumbing (the step that READS it is the gate)',
+  );
+  report(
+    kindOf('git diff --exit-code packages/ui/src') !== 'plumbing',
+    'NEAR MISS: `git diff --exit-code` is a check, and stays outside the plumbing hole',
+    `(${kindOf('git diff --exit-code packages/ui/src')})`,
+  );
+
+  report(
+    kindOf('nohup pnpm --filter @kitn.ai/ui exec storybook dev -p 6006 --ci > "$RUNNER_TEMP/sb.log" 2>&1 &') ===
+      'plumbing',
+    'a backgrounded server is plumbing',
+  );
+  report(
+    kindOf('node scripts/nohup-runner.mjs') === 'gate',
+    'NEAR MISS: a script whose NAME contains nohup is still a gate',
+    `(${JSON.stringify(classifyCommand('node scripts/nohup-runner.mjs'))})`,
+  );
+  report(
+    kindOf('nohup pnpm --filter @kitn.ai/ui run verify:pack &') !== 'plumbing',
+    'NEAR MISS: a backgrounded real gate is not swallowed by the Storybook pre-boot shape',
+    `(${JSON.stringify(classifyCommand('nohup pnpm --filter @kitn.ai/ui run verify:pack &'))})`,
+  );
+
+  report(
+    kindOf(`timeout 120 bash -c 'until curl -sf http://127.0.0.1:6006 > /dev/null; do sleep 2; done'`) === 'plumbing',
+    'a bounded readiness poll is plumbing',
+  );
+  report(
+    kindOf(`timeout 900 bash -c 'pnpm --filter @kitn.ai/ui run verify:pack'`) !== 'plumbing',
+    'NEAR MISS: a real gate wrapped in `timeout ... bash -c` is NOT swallowed by the poll rule',
+    `(${kindOf(`timeout 900 bash -c 'pnpm --filter @kitn.ai/ui run verify:pack'`)})`,
+  );
+
+  report(
+    kindOf('find packages/ui/dist -exec touch {} +') === 'plumbing',
+    'restamping the downloaded build is plumbing',
+  );
+  report(
+    kindOf('find packages/ui/dist -exec grep -L kai {} +') !== 'plumbing',
+    'NEAR MISS: `find ... -exec` with any other command is NOT swallowed by the touch rule',
+    `(${kindOf('find packages/ui/dist -exec grep -L kai {} +')})`,
+  );
+
+  // The reason the snapshot path travels in an env var: this spelling keeps the
+  // gate identifier stable, and `-- --before <path>` would not.
+  report(
+    classifyCommand('ARTIFACT_GLOB_BEFORE="$RUNNER_TEMP/before.txt" pnpm --filter @kitn.ai/ui run verify:artifact-glob')
+      .id === '@kitn.ai/ui run verify:artifact-glob',
+    'the env-var spelling of the artifact-glob gate canonicalizes to a stable id',
+    `(${classifyCommand('ARTIFACT_GLOB_BEFORE="$RUNNER_TEMP/before.txt" pnpm --filter @kitn.ai/ui run verify:artifact-glob').id})`,
+  );
 
   // -- the doc scanner, on a real temp tree --
   const tmp = mkdtempSync(join(tmpdir(), 'gate-parity-'));
@@ -884,13 +1250,16 @@ if (LIST) {
     console.log(`  ${id}\n      ${steps.join(' · ')}`);
   }
   console.log(`\n  plus ${analysis.plumbing.length} plumbing step(s) (checkout, install, cache, browser download).`);
+  if (analysis.graph.length > 1) {
+    console.log(`  the gate is the job GRAPH: ${analysis.graph.join(', ')}`);
+  }
   process.exit(0);
 }
 
 const docFiles = walkMarkdown(docRoot);
 console.log(
-  `  · ${analysis.gates.size} gate(s) from ${WORKFLOW}:${JOB} (${analysis.runStepCount} run steps), ` +
-    `${docFiles.length} doc file(s) under ${DOC_ROOT}/`,
+  `  · ${analysis.gates.size} gate(s) from ${WORKFLOW}:${analysis.graph.join('+')} ` +
+    `(${analysis.runStepCount} run steps), ${docFiles.length} doc file(s) under ${DOC_ROOT}/`,
 );
 
 const findings = scanDocs(docRoot, analysis.gates);

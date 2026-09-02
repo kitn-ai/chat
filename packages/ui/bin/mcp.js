@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// AI/UI MCP server launcher. Loads the compiled stdio entry (built by
-// vite.config.mcp.ts). A bin must run under plain Node, which can't execute .ts,
-// so we import the dist ESM emit. `npx @kitn.ai/ui mcp` runs this (the sole bin).
+// AI/UI MCP server launcher. Loads the compiled stdio entry (built by the `mcp`
+// target in config/vite/node.ts). A bin must run under plain Node, which can't
+// execute .ts, so we import the dist ESM emit. `npx @kitn.ai/ui mcp` runs this (the sole bin).
 //
 // The built module (dist/mcp.es.js) auto-starts the server on import. We own the
 // fatal-error / exit handling here (a .js file, outside tsc's typed src/), so the

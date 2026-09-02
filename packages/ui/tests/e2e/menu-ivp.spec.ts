@@ -12,7 +12,7 @@ import { test, expect, type Page } from '@playwright/test';
  * The Solid story renders into the light DOM (no shadow root), so locators query
  * the document directly; portaled menus mount under the Storybook root.
  *
- * Run: `npx playwright test --config playwright.menu.config.ts`
+ * Run: `npm run test:menu-ivp`
  */
 
 const STORY = '/iframe.html?id=components-primitives-dropdown--cascading-menu&viewMode=story';

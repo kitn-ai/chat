@@ -14,8 +14,8 @@ import { BuilderStart, BUILDABLE_BUILDER_TEMPLATES, type BuilderTemplateId } fro
 import { WorkspaceVariantPicker, type WorkspaceVariantId } from '../../src/components/builder-workspace-variants';
 import { DerivedBuilderPanel } from '../../src/components/builder-panel-derived';
 import { BuilderHeader } from '../../src/components/builder-header';
-import { buildableTemplates, templateById, inferTemplateId, type BuildableTemplate } from '../../src/agent-tooling/construct/templates';
-import type { Construct, ConstructProblem } from '../../src/agent-tooling/construct/schema';
+import { buildableTemplates, templateById, inferTemplateId, type BuildableTemplate } from '../../mcp/construct/templates';
+import type { Construct, ConstructProblem } from '../../mcp/construct/schema';
 import { HomeScreen, type ConstructListing } from './HomeScreen';
 import { createEditGuard, type EditOutcome } from './edit-guard';
 import type { ThemePayload } from '../../src/themes/theme-payload';

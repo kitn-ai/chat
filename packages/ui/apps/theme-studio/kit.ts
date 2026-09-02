@@ -7,7 +7,8 @@
 // The specifier is the package's own `./elements` export. In the docs site's
 // bundle it resolves through the workspace exactly like the docs' own loadKit
 // (same resolved module → one registration, no double define). In the
-// STANDALONE app build it is external (vite.config.theme-studio.ts) and
+// STANDALONE app build it is external (KAI_BUILD=theme-studio,
+// config/vite/page.ts) and
 // rewritten to /theme-studio/kit/kai.es.js — the dist bundle, served by the
 // construct dev server's /theme-studio/kit/* route — so dist/theme-studio
 // never re-bundles the kit.

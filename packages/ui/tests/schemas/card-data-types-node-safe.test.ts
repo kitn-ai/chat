@@ -21,7 +21,7 @@
  * property that matters about it is not "it compiles" but "it compiles WITHOUT
  * `jsx`", which every other pass in `nx typecheck ui` is too permissive to see:
  * tsconfig.json, tsconfig.tests.json and both react configs all set a `jsx`, and
- * tsconfig.mcp.json (which does not) includes only `src/agent-tooling/mcp/**`, so
+ * tsconfig.mcp.json (which does not) includes only `mcp/mcp/**`, so
  * nothing there imports these types and nothing would notice them moving back.
  *
  * WATCHED IN THE DISCRIMINATING DIRECTION. Test 2 points the identical probe at a

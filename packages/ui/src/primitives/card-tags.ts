@@ -8,7 +8,7 @@
 // nothing but Solid. The map itself has no Solid in it — it is `Record<string, string>`
 // — but sharing a module with the component map meant no Node/no-DOM project could
 // import it AS SOURCE, and the `kai` MCP server is exactly that: tsconfig.mcp.json is
-// Node-only, `lib: ["ESNext"]`, no `jsx`. So src/agent-tooling/mcp/manifest.ts
+// Node-only, `lib: ["ESNext"]`, no `jsx`. So mcp/mcp/manifest.ts
 // RE-DERIVED each tag by convention (`kai-<type>`, else the single `kai-<type>-*`) —
 // a second copy of a fact this repo already held, one that happened to agree.
 //

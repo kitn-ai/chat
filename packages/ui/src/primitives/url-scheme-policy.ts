@@ -2,7 +2,7 @@
 // The kit's one URL-scheme allow/deny policy, split out of card-routing.ts so it
 // has NO DOM dependency (`URL` is a global in both the browser and Node — the
 // rest of card-routing.ts uses HTMLElement/window/CustomEvent, which aren't).
-// That split matters beyond tidiness: this schema.ts (agent-tooling/construct)
+// That split matters beyond tidiness: this schema.ts (mcp/construct)
 // runs under tsconfig.mcp.json's Node-only, no-DOM-lib pass (it's imported
 // transitively via mcp/tools/construct.ts), and importing anything from
 // card-routing.ts there drags its HTMLElement/window/Document/CustomEvent

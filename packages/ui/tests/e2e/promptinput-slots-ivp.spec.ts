@@ -6,7 +6,7 @@ import { test, expect, type Page } from '@playwright/test';
  * and proves, in a real browser, that consumer light-DOM is actually assigned
  * to the Solid-rendered shadow slots — something jsdom unit tests cannot verify.
  *
- * Run: `npx playwright test --config playwright.slots.config.ts`
+ * Run: `npm run test:slots-ivp`
  * (Storybook must be serving on :6006.)
  */
 

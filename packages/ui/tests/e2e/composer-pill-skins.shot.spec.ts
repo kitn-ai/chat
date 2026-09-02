@@ -6,7 +6,7 @@ import { test, type Page } from '@playwright/test';
  * Captures the "Pill kinds" composer story in light + dark for visual review
  * against the Claude Code web reference.
  *
- * Run: `npx playwright test --config playwright.shot.config.ts`
+ * Run: `npm run test:shot`
  * Output: tests/e2e/__screenshots__/pill-skins/{light,dark}.png
  */
 

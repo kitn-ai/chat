@@ -486,7 +486,7 @@ describe('constructTagName: derives a schema-valid Construct.name from any valid
   // THE PROPERTY THAT ACTUALLY MATTERS: not that this function's OWN mirror
   // regex agrees with itself, but that its output survives the REAL, live
   // `ConstructSchema` — the one the private tag regex in
-  // `packages/ui/src/agent-tooling/construct/schema.ts` actually enforces
+  // `packages/ui/mcp/construct/schema.ts` actually enforces
   // and which this file cannot import (see `constructTagName`'s header on
   // why it isn't a live import). `validateProjectName` (src/args.ts) accepts
   // a broader character set than the construct schema does — this fixture

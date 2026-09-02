@@ -1,0 +1,20 @@
+{
+  "comment": "The TESTS pass. Same strictness as the source pass; the one difference is `types: [\"node\"]`, because the suite scans the real blocks/ directory off disk. Keeping this separate is what lets the source pass declare no ambient types and no DOM lib at all.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noEmit": true
+  },
+  "include": ["tests/**/*.ts", "src/**/*.ts"]
+}

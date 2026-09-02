@@ -125,7 +125,7 @@ reviews:
         Provider SSE is untrusted input: flag a parser that trusts a field's
         type or presence without checking it.
 
-    - path: "packages/ui/src/agent-tooling/**"
+    - path: "packages/ui/mcp/**"
       instructions: |
         The `kai` MCP scaffolder. Its output is emitted as string literals, so
         the compiler is not watching it -- review the emitted text as if it were

@@ -11,7 +11,7 @@
  * screen. The cost of that coverage is that such a test transforms a heavy module
  * graph through Vite and then DRIVES it — seconds, not milliseconds, by construction.
  *
- * `tests/agent-tooling/emitted-card-path.live.test.ts` measures 7.7s with no added
+ * `mcp/tests/emitted-card-path.live.test.ts` measures 7.7s with no added
  * load and 36.8s under CPU starvation (32 spinning processes on 10 cores), both
  * medians of 3 -- see THE BUDGET below for the conditions, which were NOT idle. It
  * used to sit in the
@@ -92,7 +92,7 @@
  * "does this file belong in this project at all", which is the question worth asking
  * about a guard that runs emitted code.
  *
- * ADDING A FILE. Name it `*.live.test.ts` and put it under `tests/agent-tooling/`.
+ * ADDING A FILE. Name it `*.live.test.ts` and put it under `mcp/tests/`.
  * Both halves matter: `emitted-project-wiring.test.ts` fails if a `.live.test.ts`
  * turns up anywhere else, because such a file would be collected by `unit` on the
  * strict 5000ms default and flake there instead of running here.
@@ -140,7 +140,7 @@
  */
 
 /** Directory that owns the run-the-emitted-code guards. */
-export const EMITTED_CODE_TEST_DIR = 'tests/agent-tooling';
+export const EMITTED_CODE_TEST_DIR = 'mcp/tests';
 
 /** Filename suffix that marks a test as one of them. */
 export const EMITTED_CODE_TEST_SUFFIX = '.live.test.ts';

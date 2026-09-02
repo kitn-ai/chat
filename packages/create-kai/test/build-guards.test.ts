@@ -24,16 +24,19 @@ import * as esbuild from 'esbuild';
 import {
   GITIGNORE_SOURCE_NAME,
   appPathProblem,
+  blocksSourceRootProblem,
   bundleGraphProblem,
   declaredPathsProblem,
   emittedContentProblem,
   gitignoreProblem,
+  missingReuseInputsProblem,
   missingStarterProblem,
   patchMatchProblem,
   readyFrameworksProblem,
   sharedDevDepsProblem,
   templateIgnoreProblem,
   templateSkips,
+  zeroBlocksCopiedProblem,
 } from '../src/build-guards';
 import type { TemplateReader } from '../src/build-guards';
 import { FRAMEWORKS, getFramework } from '../src/frameworks';
@@ -365,7 +368,7 @@ describe('the shared-devDeps guard', () => {
  *
  * This one is not hypothetical and the numbers below are measured, not
  * illustrative: exporting `chatRoutePreamble` + `CLIENT_MODEL_IDS` +
- * `defaultModelFor` from `agent-tooling/mcp/tools/scaffold.ts` and importing
+ * `defaultModelFor` from `mcp/mcp/tools/scaffold.ts` and importing
  * them here took `dist/index.js` from 203 kB to 904 kB, 505 kB of it zod the CLI
  * never executes. Every seam that was being watched stayed green — the emitted
  * scaffold output was byte-identical, `verify:scaffold` was 616/616 and 99/99,
@@ -378,10 +381,10 @@ describe('the bundle-graph guard', () => {
     'src/index.ts',
     'src/catalog.ts',
     'src/routes.ts',
-    '../ui/src/agent-tooling/registry.ts',
-    '../ui/src/agent-tooling/types.ts',
-    '../ui/src/agent-tooling/route-emit.ts',
-    '../ui/src/agent-tooling/integrations/anthropic.ts',
+    '../ui/mcp/registry.ts',
+    '../ui/mcp/types.ts',
+    '../ui/mcp/route-emit.ts',
+    '../ui/mcp/integrations/anthropic.ts',
     '../../node_modules/.pnpm/@clack+prompts@0.11.0/node_modules/@clack/prompts/dist/index.mjs',
   ];
 
@@ -407,13 +410,13 @@ describe('the bundle-graph guard', () => {
    */
   it('rejects reaching into the MCP even when zod itself shook clean', () => {
     expectRejected(
-      bundleGraphProblem([...legitimateGraph, '../ui/src/agent-tooling/mcp/tools/scaffold.ts']),
-      'agent-tooling/mcp/tools/scaffold.ts',
+      bundleGraphProblem([...legitimateGraph, '../ui/mcp/mcp/tools/scaffold.ts']),
+      'mcp/mcp/tools/scaffold.ts',
       'move it to a leaf',
     );
     // …and it must not be satisfied by the leaf that replaced it. `route-emit.ts`
-    // sits at the root of agent-tooling/ precisely so this rule can tell the two
-    // apart; a rule keyed on `agent-tooling/` would reject the fix along with the
+    // sits at the root of mcp/ precisely so this rule can tell the two
+    // apart; a rule keyed on `mcp/` would reject the fix along with the
     // defect.
     expect(bundleGraphProblem(legitimateGraph)).toBeNull();
   });
@@ -439,6 +442,37 @@ describe('the bundle-graph guard', () => {
     // ~90 modules, so anything near zero means the bundle step, not the rule.
     expect(inputs.length).toBeGreaterThan(20);
     expect(bundleGraphProblem(inputs)).toBeNull();
+  });
+});
+
+describe('missingReuseInputsProblem', () => {
+  // esbuild metafile input keys are relative to the process cwd, which for this
+  // build is packages/create-kai, so the blocks package arrives as
+  // ../blocks/src/registry.ts. The rule matches the path SEGMENT rather than a
+  // prefix, the same shape bundleGraphProblem's ban rules use, so it survives
+  // being run from a different cwd.
+  it('is silent when the graph reaches the blocks package source', () => {
+    expect(
+      missingReuseInputsProblem([
+        'src/index.ts',
+        '../blocks/src/registry.ts',
+        '../blocks/src/forms.ts',
+      ]),
+    ).toBeNull();
+  });
+
+  it('names the miss when the graph does not reach it', () => {
+    const msg = missingReuseInputsProblem(['src/index.ts', '../ui/mcp/registry.ts']);
+    expect(msg).toMatch(/packages\/blocks\/src/);
+    expect(msg).toMatch(/copy/i);
+  });
+
+  it('a vendored copy under create-kai does not satisfy it', () => {
+    // The failure this guards against is somebody re-adding a local copy of the
+    // registry rather than importing the package: the ban rules would stay
+    // green, because a copy breaks no ban.
+    const msg = missingReuseInputsProblem(['src/index.ts', 'src/vendor/blocks-registry.ts']);
+    expect(msg).toMatch(/packages\/blocks\/src/);
   });
 });
 
@@ -479,6 +513,41 @@ describe('the missing-starter guard', () => {
         `${framework.id}: templateDir must name a real starter`,
       ).toBeNull();
     }
+  });
+});
+
+describe('the blocks-source guard', () => {
+  it('rejects a blocks directory that does not exist', () => {
+    const absent = path.join(PKG_ROOT, 'no-such-blocks-dir');
+
+    const msg = blocksSourceRootProblem(absent, existsSync);
+    expectRejected(msg, `no blocks directory at ${absent}`);
+    // Distinct from zeroBlocksCopiedProblem's message: this rule runs before
+    // the cp, so nothing was copied yet, and a CI log must be able to tell
+    // the two apart.
+    expect(msg).not.toContain('copied zero');
+  });
+
+  it('holds the real @kitn.ai/blocks resolve against the tree', () => {
+    // THE CONTROL and the live check at once: the same resolve build.mjs makes,
+    // so a future move of packages/blocks fails this test before it fails a
+    // published tarball.
+    const blocksDir = path.join(
+      path.dirname(createRequire(import.meta.url).resolve('@kitn.ai/blocks/package.json')),
+      'blocks',
+    );
+
+    expect(blocksSourceRootProblem(blocksDir, existsSync)).toBeNull();
+  });
+});
+
+describe('the zero-blocks guard', () => {
+  it('rejects a copy that landed zero block directories', () => {
+    expectRejected(zeroBlocksCopiedProblem(0), 'copied zero block directories from @kitn.ai/blocks');
+  });
+
+  it('accepts a copy that landed at least one block directory', () => {
+    expect(zeroBlocksCopiedProblem(3)).toBeNull();
   });
 });
 

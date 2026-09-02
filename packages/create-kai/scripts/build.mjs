@@ -13,7 +13,7 @@
  *      are the ones that ship the defect, so the output is what gets graded.
  *   3. Bundle `src/index.ts` to one zero-dependency ESM file, so `npx` cold
  *      start is fast. `@clack/prompts` and `picocolors` are bundled in; so is
- *      the kit's `agent-tooling` catalog, which is why the CLI can hand out real
+ *      the kit's `mcp` catalog, which is why the CLI can hand out real
  *      `Integration` objects without depending on `@kitn.ai/ui` at runtime.
  *
  * THE RULES THEMSELVES ARE NOT IN THIS FILE, and that is deliberate. This module
@@ -35,6 +35,7 @@ import { chmod, cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import * as esbuild from 'esbuild';
 
 // The workspace kit, imported in THIS SCRIPT'S OWN node process — a
@@ -159,9 +160,20 @@ async function main() {
   // rules over its contents live where a test can drive them - the registry
   // module validates every manifest and `test/add.test.ts` drives every block
   // through the real add path against this very copy.
-  await cp(path.join(repoRoot, 'packages/ui/blocks'), path.join(dist, 'blocks'), { recursive: true });
+  // Resolved through the package, never `path.join(repoRoot, ...)`. A repo-root
+  // path literal is the copy the derive-don't-type rule is about: it survives a
+  // move silently until the directory it names is empty, and an empty copy here
+  // means `add` installs and then finds nothing to write.
+  const blocksPkgRoot = path.dirname(createRequire(import.meta.url).resolve('@kitn.ai/blocks/package.json'));
+  const blocksSrcDir = path.join(blocksPkgRoot, 'blocks');
+  // existsSync precondition, not a try/catch around cp: cp on a missing source
+  // throws ENOENT before the post-copy blockCount check ever runs, so
+  // zeroBlocksCopiedProblem below would be unreachable without this.
+  failIf(guards.blocksSourceRootProblem(blocksSrcDir, existsSync));
+  await cp(blocksSrcDir, path.join(dist, 'blocks'), { recursive: true });
   const blockCount = (await readdir(path.join(dist, 'blocks'), { withFileTypes: true })).filter((d) => d.isDirectory()).length;
-  console.log(`  blocks    ${blockCount} copied from packages/ui/blocks`);
+  failIf(guards.zeroBlocksCopiedProblem(blockCount));
+  console.log(`  blocks    ${blockCount} copied from ${path.relative(repoRoot, blocksPkgRoot)}/blocks`);
 
   const { FRAMEWORKS } = await loadTs('src/frameworks.ts');
   const { patchesFor, gatewayPatchesFor } = await loadTs('src/patches.ts');
@@ -314,6 +326,7 @@ async function main() {
     },
   });
   failIf(guards.bundleGraphProblem(Object.keys(bundled.metafile.inputs)));
+  failIf(guards.missingReuseInputsProblem(Object.keys(bundled.metafile.inputs)));
   await stat(path.join(dist, 'index.js')).then((s) =>
     console.log(`  bundle    dist/index.js    ${(s.size / 1024).toFixed(1)} kB`),
   );

@@ -38,7 +38,7 @@ import type { ChatMessage, ChatMessageAction, CustomAction } from './chat-types'
 // Layout radio here either (`sections={{ layout: false, ... }}` on
 // `BuilderPanel`).
 //
-// The starting construct is `agent-tooling/construct/fixtures/
+// The starting construct is `mcp/construct/fixtures/
 // ops-console.construct.json`, translated into the stub `BuilderConstruct`
 // shape field-for-field (provider endpoint/url/wire, theme.accent, the two
 // starters, attachments, `history.persistence: 'local'`, the

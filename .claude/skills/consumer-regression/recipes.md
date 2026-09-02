@@ -37,7 +37,7 @@ mkdir -p "$HARNESS" && cp kitn.ai-ui-*.tgz "$HARNESS/kitn-stable.tgz"
 After a **library** change: re-run the build + `npm pack` + refresh `$HARNESS/kitn-stable.tgz`, then re-probe.
 After a **scaffold.ts** change: rebuild ONLY the MCP bin (fast) before regenerating scaffolds, from `packages/ui`:
 ```bash
-cd "$PKG" && npx vite build --config vite.config.mcp.ts
+cd "$PKG" && KAI_BUILD=mcp npx vite build --config config/vite/node.ts
 ```
 
 ### Post-build churn
@@ -82,7 +82,7 @@ setTimeout(()=>{p.kill();cells.forEach(([n],i)=>{const t=out.find(m=>m.id===40+i
 
 The same client calls the other tools: `theme` (brand → token block), `component_reference` (the real API), `debug` (gotcha → fix).
 
-**Sanity:** the bin is `$PKG/bin/mcp.js` (built by `vite.config.mcp.ts` → `$PKG/dist/mcp.es.js`). If a generated `.md` comes out empty/tiny, the bin didn't run: `ls "$PKG/bin/mcp.js" "$PKG/dist/mcp.es.js"`, rebuild the bin, re-run. Always eyeball one generated scaffold (it should contain `kai-chat` / `<Chat`, the suggestions, and the backend block) before fanning out probes against it.
+**Sanity:** the bin is `$PKG/bin/mcp.js` (built by `config/vite/node.ts` (`KAI_BUILD=mcp`) → `$PKG/dist/mcp.es.js`). If a generated `.md` comes out empty/tiny, the bin didn't run: `ls "$PKG/bin/mcp.js" "$PKG/dist/mcp.es.js"`, rebuild the bin, re-run. Always eyeball one generated scaffold (it should contain `kai-chat` / `<Chat`, the suggestions, and the backend block) before fanning out probes against it.
 
 ## The test matrix
 

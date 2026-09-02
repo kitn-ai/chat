@@ -22,7 +22,7 @@
 /* source(none): the shipped sheet is compiled from the SHIPPED source only. The
    default auto-detection scans the whole package (gitignore-aware), which pulled
    in every class referenced only by stories, .storybook, tests, scripts and the
-   agent-tooling scaffold templates: 257 classes and ~2 KB gzip that no element
+   mcp/ scaffold templates: 257 classes and ~2 KB gzip that no element
    could ever use, paid by every consumer. The @source lines below name the
    directories whose class strings ship in dist/; stories and tests are excluded
    by pattern so a story sitting inside src/components does not sneak back in.

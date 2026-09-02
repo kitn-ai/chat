@@ -285,7 +285,7 @@ export function routeSymbolsProblem(
       'declarations.\n' +
       '  Every webRoute in the catalog narrows its body through readChatRequest, so a preamble with\n' +
       '  nothing in it means the contract moved. Re-read chatRoutePreamble in\n' +
-      '  agent-tooling/route-emit.ts before trusting this emit.'
+      '  mcp/route-emit.ts before trusting this emit.'
     );
   }
 
@@ -410,6 +410,44 @@ export function missingStarterProblem(
 ): string | null {
   if (exists(starterPath)) return null;
   return `create-kai build: no starter at ${starterPath}`;
+}
+
+/**
+ * Refuse to build when the block sources package resolves to a directory that
+ * is not there.
+ *
+ * `@kitn.ai/blocks` lives in its own workspace package (see packages/blocks):
+ * one source for the block registry and forms shared by the `kai dev`
+ * gallery and this CLI, behind a package boundary instead of a relative
+ * reach across packages. `cp` throws its own ENOENT on a missing source, so this
+ * rule buys the same thing missingStarterProblem buys for a starter: the
+ * message names the resolved directory instead of leaving a stack trace to
+ * explain that a workspace resolve came back wrong.
+ *
+ * The existence check has to run before the `cp` it explains, not after: `cp`
+ * on a missing source throws before this rule's sibling, zeroBlocksCopiedProblem,
+ * ever gets a `count` to look at.
+ */
+export function blocksSourceRootProblem(
+  blocksDir: string,
+  exists: (absolutePath: string) => boolean,
+): string | null {
+  if (exists(blocksDir)) return null;
+  return `create-kai build: no blocks directory at ${blocksDir} - @kitn.ai/blocks resolved, but its blocks/ directory is not there`;
+}
+
+/**
+ * Refuse to build a tarball that copied zero block directories.
+ *
+ * A silent zero-block copy is the failure shape `add` would otherwise hit at
+ * a user's first run: the CLI installs cleanly and then finds nothing to
+ * write. blocksSourceRootProblem above catches a missing directory; this
+ * catches the source directory existing but being empty, which `cp` does not
+ * treat as an error at all.
+ */
+export function zeroBlocksCopiedProblem(count: number): string | null {
+  if (count > 0) return null;
+  return 'create-kai build: copied zero block directories from @kitn.ai/blocks - a zero-block copy is a broken resolve, not an empty catalog';
 }
 
 /**
@@ -616,7 +654,7 @@ export function sharedDevDepsProblem(mine: Manifest, kit: Manifest): string | nu
  *
  * THE FAILURE THIS EXISTS FOR HAS ALREADY HAPPENED, and it was invisible at
  * every seam that was being watched. One import — three symbols out of
- * `agent-tooling/mcp/tools/scaffold.ts` — took `dist/index.js` from 203 kB to
+ * `mcp/mcp/tools/scaffold.ts` — took `dist/index.js` from 203 kB to
  * 904 kB, of which 505 kB was zod this CLI never executes, and pushed `npx` cold
  * start from 30 ms to 45 ms. Nothing failed. Every test passed, the emitted
  * output was byte-identical, and the build printed the new size as a fact rather
@@ -637,12 +675,16 @@ export function sharedDevDepsProblem(mine: Manifest, kit: Manifest): string | nu
  *   · `zod` — the 505 kB. Named directly because it is the cost, and because a
  *     future route into it that does not pass through `mcp/` would still be a
  *     bug this CLI should not pay for.
- *   · anything under `agent-tooling/mcp/` — the CAUSE. `create-kai` is not the
+ *   · anything under `mcp/mcp/` — the CAUSE. `create-kai` is not the
  *     `kai` MCP; the reuse boundary `src/catalog.ts` describes is the catalog,
  *     and the three modules that serve it (`registry.ts`, `types.ts`,
- *     `route-emit.ts`) all sit at the root of `agent-tooling/`. This half fires
+ *     `route-emit.ts`) all sit at the root of `mcp/`. This half fires
  *     even in the case where the offending module happens to shake clean today,
  *     which is the version of this bug that comes back.
+ *
+ *     The blocks registry and the form renderer are the same kind of leaf and
+ *     now live in their own package, `@kitn.ai/blocks`; `missingReuseInputsProblem`
+ *     below asserts the bundle really reaches it rather than a local copy.
  *
  * ONE KNOWN FUTURE COLLISION, stated so it is not a surprise: `renderSurface`
  * lives in `tools/scaffold.ts`, and `generate()` will need it the day the
@@ -663,7 +705,7 @@ export function bundleGraphProblem(inputs: readonly string[]): string | null {
       why: 'zod — 505 kB the CLI never executes, on every `npx create-kai`',
     },
     {
-      what: /(?:^|\/)agent-tooling\/mcp\//,
+      what: /(?:^|\/)mcp\/mcp\//,
       why: "the kai MCP's own modules — they build zod schemas at module scope, which esbuild cannot shake past",
     },
   ];
@@ -688,7 +730,43 @@ export function bundleGraphProblem(inputs: readonly string[]): string | null {
       .join('\n') +
     '\n  The CLI is one bundled zero-dependency file so `npx` cold start is fast, and\n' +
     '  every user downloads all of it. Read what you need from the LEAF modules at the\n' +
-    '  root of agent-tooling/ — registry.ts, types.ts, route-emit.ts. If the fact you\n' +
-    '  need only exists inside mcp/, move it to a leaf rather than importing the tool.'
+    '  root of mcp/ - registry.ts, types.ts, route-emit.ts - or from @kitn.ai/blocks,\n' +
+    '  which is a whole package of them. If the fact you need only exists inside\n' +
+    '  mcp/, move it to a leaf rather than importing the tool.'
+  );
+}
+
+/**
+ * The POSITIVE half of the bundle-graph rule.
+ *
+ * `bundleGraphProblem` says what the CLI may not reach. It cannot say what the
+ * CLI MUST reach, and the difference matters: the reuse boundary this build
+ * asserts is that block logic comes from `@kitn.ai/blocks` and is never copied
+ * here. A vendored copy breaks no ban rule, so the ban half stays green while
+ * the exact drift the boundary exists to prevent has already happened.
+ *
+ * A workspace-linked package's inputs resolve to real paths under
+ * `packages/blocks/`, not to `node_modules/@kitn.ai/blocks/`, which is also why
+ * the ban rules keep working unchanged across this move.
+ */
+export function missingReuseInputsProblem(inputs: readonly string[]): string | null {
+  const normalized = inputs.map((input) => input.replaceAll('\\', '/'));
+  const required: { what: RegExp; why: string }[] = [
+    {
+      what: /(?:^|\/)(?:packages\/)?blocks\/src\//,
+      why: '@kitn.ai/blocks (packages/blocks/src) - the registry and the shared form renderer',
+    },
+  ];
+
+  const missing = required.filter((rule) => !normalized.some((input) => rule.what.test(input)));
+  if (missing.length === 0) return null;
+
+  return (
+    'create-kai build: the CLI bundle does NOT reach a module it must.\n' +
+    missing.map((rule) => `  · ${rule.why}`).join('\n') +
+    '\n  Block logic is the blocks package, never a copy here: one source, a build\n' +
+    '  failure as the drift failure mode. If this fires after an intentional\n' +
+    '  refactor, the fix is to import the package, not to delete this rule - a\n' +
+    '  vendored copy breaks no ban rule, so the ban half cannot see it.'
   );
 }

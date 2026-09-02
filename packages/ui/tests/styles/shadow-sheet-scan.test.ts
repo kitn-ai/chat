@@ -21,8 +21,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
  * extractor Tailwind runs over `@source` paths) is pointed at the shipped
  * SOURCE, selected by the OPPOSITE rule to the one styles.css uses: everything
  * under src/ except the directories that are known not to ship class strings
- * for rendering (agent-tooling's scaffold templates, test-utils, the docs
- * stories) and the test/story files. styles.css lists what IS shipped; this
+ * for rendering (test-utils and the docs stories) and the test/story files.
+ * styles.css lists what IS shipped; this
  * lists what is NOT, so a new directory that starts shipping class strings is
  * scanned here and missed there, and that is the failure. Every candidate the
  * design system can generate a rule for must then have its selector in
@@ -48,7 +48,6 @@ const ELEMENTS = join(SRC, 'elements');
 
 /** Directories under src/ whose class strings are NOT rendered in a shadow root. */
 const NOT_SHIPPED_DIRS = new Set([
-  'agent-tooling', // scaffold + construct templates: emitted into a consumer's app, compiled by THEIR Tailwind
   'test-utils',
   'stories', // docs-only stories
 ]);

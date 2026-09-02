@@ -1,6 +1,7 @@
 // Regression guard for the WebGL shader path in the audio visualizer
 // (components/audio-visualizer/{shader-canvas,wave.glsl,aurora.glsl,
-// variant-wave,variant-aurora,variant-custom}). `vite.config.ts` sets
+// variant-wave,variant-aurora,variant-custom}). `config/vite/elements.ts`
+// (KAI_BUILD=register) sets
 // `treeshake: false` on the register-all bundle by design, so if
 // `SHADER_VARIANTS`'s dynamic `import()` calls in
 // components/audio-visualizer/index.tsx ever become static imports, the

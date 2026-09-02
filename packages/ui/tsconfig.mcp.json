@@ -1,5 +1,5 @@
 {
-  "comment": "Typechecks the Node MCP server under src/agent-tooling/mcp/. Separate from the browser-targeted tsconfig.json — the MCP emits HTML as strings and has no DOM dependencies.",
+  "comment": "Typechecks the Node MCP server under mcp/mcp/. Separate from the browser-targeted tsconfig.json -- the MCP emits HTML as strings and has no DOM dependencies. The rest of mcp/ (construct, catalog, integrations, recipes and the leaf modules at its root) stays in tsconfig.json's browser pass, which is where it was before the 2026-09-02 move: catalog/surfaces.test.ts side-effect-imports nine DOM elements and construct/codegen-cards.render.test.tsx is Solid JSX, so widening this include to mcp/** would go red on files it was never meant to see.",
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
@@ -47,5 +47,5 @@
       "@kitn.ai/ui/schemas": ["./dist/schemas/index", "./src/schemas/index"]
     }
   },
-  "include": ["src/agent-tooling/mcp/**/*.ts"]
+  "include": ["mcp/mcp/**/*.ts"]
 }

@@ -137,26 +137,26 @@ const GENERATED = [
   { file: 'packages/ui/frameworks/react/index.tsx', probe: 'overwrite' },
   { file: 'packages/ui/llms.txt', probe: 'overwrite' },
   { file: 'packages/ui/llms-full.txt', probe: 'overwrite' },
-  { file: 'packages/ui/src/agent-tooling/catalog/derived.json', probe: 'overwrite' },
+  { file: 'packages/ui/mcp/catalog/derived.json', probe: 'overwrite' },
   // The construct format's published JSON Schema (Task 14), two addresses of
   // the same artifact: the checked-in copy scripts/gen-construct-schema.mjs
   // writes beside its Zod source, and the docs-site copy served at
   // https://ui.kitn.ai/schemas/construct/v1.json. Both are written by that one
   // generator, which build:api already runs.
-  { file: 'packages/ui/src/agent-tooling/construct/construct.v1.schema.json', probe: 'overwrite' },
+  { file: 'packages/ui/mcp/construct/construct.v1.schema.json', probe: 'overwrite' },
   { file: 'apps/docs/public/schemas/construct/v1.json', probe: 'overwrite' },
   // The template registry's derived fixture JSONs (B-15) — written by
   // scripts/gen-construct-template-fixtures.mjs in build:api, read by
   // verify-construct.mjs's recursive fixture discovery. One file per
   // buildable starter + variant; a template removed from templates.ts
   // leaves its file's sentinel standing, which is this guard's red.
-  { file: 'packages/ui/src/agent-tooling/construct/fixtures/templates/widget.construct.json', probe: 'overwrite' },
-  { file: 'packages/ui/src/agent-tooling/construct/fixtures/templates/inAppAssistant.construct.json', probe: 'overwrite' },
-  { file: 'packages/ui/src/agent-tooling/construct/fixtures/templates/assistant.construct.json', probe: 'overwrite' },
-  { file: 'packages/ui/src/agent-tooling/construct/fixtures/templates/research.construct.json', probe: 'overwrite' },
-  { file: 'packages/ui/src/agent-tooling/construct/fixtures/templates/workspace.construct.json', probe: 'overwrite' },
-  { file: 'packages/ui/src/agent-tooling/construct/fixtures/templates/workspace.artifactPreview.construct.json', probe: 'overwrite' },
-  { file: 'packages/ui/src/agent-tooling/construct/fixtures/templates/workspace.appPreview.construct.json', probe: 'overwrite' },
+  { file: 'packages/ui/mcp/construct/fixtures/templates/widget.construct.json', probe: 'overwrite' },
+  { file: 'packages/ui/mcp/construct/fixtures/templates/inAppAssistant.construct.json', probe: 'overwrite' },
+  { file: 'packages/ui/mcp/construct/fixtures/templates/assistant.construct.json', probe: 'overwrite' },
+  { file: 'packages/ui/mcp/construct/fixtures/templates/research.construct.json', probe: 'overwrite' },
+  { file: 'packages/ui/mcp/construct/fixtures/templates/workspace.construct.json', probe: 'overwrite' },
+  { file: 'packages/ui/mcp/construct/fixtures/templates/workspace.artifactPreview.construct.json', probe: 'overwrite' },
+  { file: 'packages/ui/mcp/construct/fixtures/templates/workspace.appPreview.construct.json', probe: 'overwrite' },
   { file: 'docs/web-components.md', probe: 'in-block' },
 ];
 
@@ -180,7 +180,7 @@ const REAL = {
   // directory the generator actually writes and fail if anything on disk
   // there isn't one of the paths listed above.
   fixtureDir: {
-    dir: 'packages/ui/src/agent-tooling/construct/fixtures/templates',
+    dir: 'packages/ui/mcp/construct/fixtures/templates',
     suffix: '.construct.json',
   },
 };

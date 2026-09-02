@@ -18,7 +18,7 @@
 // checking them for completeness against the list that IS derived.
 //
 // `BUILTIN_CARD_TAGS` also has a second, independent guard:
-// src/agent-tooling/mcp/reference.test.ts walks `cardSchemaNames` through
+// mcp/mcp/reference.test.ts walks `cardSchemaNames` through
 // `cardTagForType` and requires each to resolve to a REGISTERED element, which the
 // eighth type failed. Nothing covered `BUILTIN_CARD_COMPONENTS` at all.
 import {
