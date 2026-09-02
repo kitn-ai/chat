@@ -50,6 +50,23 @@ function serveRemoteProvider(): Plugin {
   };
 }
 
+// NO ROOT VITE CONFIG, DELIBERATELY.
+//
+// Storybook's Vite builder auto-discovers `vite.config.*` in the project root
+// and merges it in before `viteFinal` runs. Until the config consolidation
+// there WAS a packages/ui/vite.config.ts -- the register-all LIBRARY build --
+// so Storybook was silently inheriting a second `solidPlugin()`, a post-pass
+// esbuild minifier that applied to `storybook build`, `build.lib`,
+// `treeshake: false` and `emptyOutDir: true`. None of that was ever intended
+// for Storybook; it was inherited by accident of filename.
+//
+// That file is now config/vite/elements.ts behind KAI_BUILD, so there is
+// nothing at the root for Storybook to pick up and everything this config
+// needs is set explicitly in `viteFinal` below (the Solid plugin comes from the
+// `storybook-solidjs-vite` framework). Do NOT reintroduce a vite.config.ts at
+// packages/ui/ root: Storybook would start merging it again, silently. Nothing
+// enforces this but the absence of the file -- recorded in docs/coupling-map.md.
+
 const config: StorybookConfig = {
   stories: ['../src/**/*.mdx', '../src/**/*.stories.@(ts|tsx)', '../apps/**/*.stories.@(ts|tsx)'],
   framework: 'storybook-solidjs-vite',

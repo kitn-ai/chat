@@ -7,7 +7,8 @@
 // consumer to get any elements at all:
 //
 //   1. OUR build must keep the reference. (Rollup strips register-impl to an
-//      empty module unless vite.config.ts sets `treeshake: false` for this entry.)
+//      empty module unless the register-all build (KAI_BUILD=register,
+//      config/vite/elements.ts) sets `treeshake: false` for this entry.)
 //   2. The CONSUMER's bundler must keep the chunk's side effects. It decides
 //      that from package.json `sideEffects`. A hashed chunk not covered by one
 //      of those globs is "side-effect free", so an aggressive bundler (Vite 8 /
@@ -112,7 +113,8 @@ function checkTree(root) {
         `  The register-all bundle is missing element registration — it was likely\n` +
         `  tree-shaken away. Consumers of @kitn.ai/ui/elements would get nothing\n` +
         `  registered. See src/elements/register.ts (keep elementsReady exported) and\n` +
-        `  vite.config.ts (build.rollupOptions.treeshake: false for this entry).`,
+        `  config/vite/elements.ts under KAI_BUILD=register\n` +
+        `  (build.rollupOptions.treeshake: false for this entry).`,
     );
   }
 

@@ -228,8 +228,8 @@ export interface ShaderVariantProps extends Omit<VariantProps, 'children'> {
  * GLSL strings (about 25 to 30 KB) never reach a consumer who does not ask for
  * them.
  *
- * This MUST stay dynamic. `vite.config.ts` disables tree-shaking on the
- * register-all bundle by design, so a static import here would put the whole
+ * This MUST stay dynamic. `config/vite/elements.ts` (KAI_BUILD=register) disables
+ * tree-shaking on the register-all bundle by design, so a static import here would put the whole
  * shader path into `kai.es.js` for everyone, including a `<kai-chat>`-only
  * user. A dynamic import splits into its own chunk under `treeshake: false`;
  * a static one does not (verified empirically). Never convert these entries

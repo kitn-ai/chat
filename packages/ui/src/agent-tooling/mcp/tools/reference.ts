@@ -707,8 +707,10 @@ function formatReference(tag: string, provider: ToolProvider): string {
     // entryForTag is undefined exactly when register-impl.ts does not import this
     // element's source file — i.e. it is NOT in the register-all bundle. The only
     // current instance is kai-remote, a deliberate exception (opt-in cross-origin
-    // iframe card) documented at src/elements/element-diagnostics.ts:347-363 and
-    // vite.config.elements.ts:44-50. `import '@kitn.ai/ui/elements'` would NOT
+    // iframe card) documented in the "WHY THE MANIFEST AND NOT element-meta.json"
+    // note in src/elements/element-diagnostics.ts, and at the `remote` entry in
+    // `splitConfig()` in config/vite/elements.ts. `import '@kitn.ai/ui/elements'`
+    // would NOT
     // register a tag in this state, so asserting it here is exactly the false
     // claim this section exists to prevent.
     //

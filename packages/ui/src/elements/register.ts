@@ -18,8 +18,9 @@
  *
  *  NOTE: this MUST stay an exported binding. A bare `void import('./register-impl')`
  *  is a result-unused dynamic import that the single-entry register-all build
- *  (vite.config.ts → dist/kai.es.js) tree-shakes away as dead code, leaving the
- *  bundle with NOTHING registered. Exporting the promise keeps the import live. */
+ *  (KAI_BUILD=register, config/vite/elements.ts → dist/kai.es.js) tree-shakes away
+ *  as dead code, leaving the bundle with NOTHING registered. Exporting the promise
+ *  keeps the import live. */
 export const elementsReady: Promise<unknown> =
   typeof window !== 'undefined' && typeof customElements !== 'undefined'
     ? import('./register-impl')

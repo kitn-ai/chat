@@ -351,8 +351,9 @@ const MANIFEST_TAGS: string[] = Object.keys(MANIFEST_TAG_MAP as Record<string, s
  * from the manifest because `gen-elements-manifest.mjs` reads the import list in
  * `register-impl.ts`, which does not import `remote.tsx`.
  *
- * AND THAT IS DELIBERATE, not a generator bug -- `vite.config.elements.ts:44-50`
- * says so at the site: `<kai-remote>` mounts a sandboxed cross-origin iframe and
+ * AND THAT IS DELIBERATE, not a generator bug -- the `remote` entry in
+ * `splitConfig()`'s `entry` map in `config/vite/elements.ts` says so at the site:
+ * `<kai-remote>` mounts a sandboxed cross-origin iframe and
  * is opt-in, reachable only through `@kitn.ai/ui/elements/remote` or the React
  * `Remote` wrapper, and intentionally kept out of the register-all bundle. So
  * the honest universe for "did the element bundle load" is the 79 that bundle

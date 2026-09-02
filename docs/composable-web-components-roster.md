@@ -41,7 +41,7 @@ Two corrections to the spike-era phrasing, both shipped: events are **`kai-`-pre
   own `ChatConfig` and shadow-root portal mount (`elements/define.tsx`). The audit verified
   this structurally for the whole roster: there is no elements-tier internal glue.
 - **The per-element bundle split is merged and shipped** — not "measured and never merged" as
-  the roadmap once said. `vite.config.elements.ts` builds a self-registering module per tag;
+  the roadmap once said. `config/vite/elements.ts` (KAI_BUILD=split) builds a self-registering module per tag;
   the package exports `"./elements/*"` and `"./autoloader"` alongside the register-all bundle;
   `sideEffects` protects the registration modules; `apps/docs` documents all three loading
   strategies (`guides/loading.mdx`). The live footprint question is no longer the JS split but

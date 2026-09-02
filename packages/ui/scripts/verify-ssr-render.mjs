@@ -37,8 +37,9 @@
 //
 // Entries are derived, not listed: an entry is renderable when its `node`
 // condition resolves to a DIFFERENT file than its default one. That is exactly
-// the set built with Solid's SSR transform (vite.config.barrel.server.ts,
-// vite.config.solid.server.ts), it is the set a server actually loads, and a new
+// the set built with Solid's SSR transform (KAI_BUILD=index.server and
+// KAI_BUILD=solid.server in config/vite/lib.ts), it is the set a server actually
+// loads, and a new
 // Solid entry with a server twin picks up this coverage on the day it is added.
 //
 // THE GUARD PROVES ITSELF ON EVERY RUN
@@ -134,8 +135,8 @@ const targetFor = (node, conditions) => {
  * `./define`: exports `defineWebComponent` (a lowercase registration
  * function that no-ops without `customElements`, per its own guard — see
  * define.tsx) and the `WebComponentContext` type. No Solid component to
- * render. Its server twin (dist/define.server.js, vite.config.define.server.ts)
- * exists solely so the entry is IMPORTABLE under `node` without hitting
+ * render. Its server twin (dist/define.server.js, KAI_BUILD=define.server in
+ * config/vite/lib.ts) exists solely so the entry is IMPORTABLE under `node` without hitting
  * Solid's client-only `notSup` stub at module scope (verify-ssr-imports.mjs)
  * — not so anything in it can be server-rendered.
  */

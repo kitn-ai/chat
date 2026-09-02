@@ -3,8 +3,19 @@ import dts from 'vite-plugin-dts';
 import { existsSync } from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
 
-const distRoot = resolve(__dirname, 'dist');
-const srcRoot = resolve(__dirname, 'src');
+// This file lives two levels below the package root, so distRoot/srcRoot and
+// the lib entry resolve from PKG rather than __dirname. Vite's `root` is
+// process.cwd() (packages/ui, via the npm script), so the dts plugin's
+// tsconfigPath / include / outDir stay relative to the package as before.
+const PKG = resolve(__dirname, '../..');
+
+const distRoot = resolve(PKG, 'dist');
+const srcRoot = resolve(PKG, 'src');
+
+// Note: the comments in this file moved here VERBATIM from vite.config.react.ts,
+// so they still name two files that are gone. `vite.config.barrel.ts` is the
+// `index` target in config/vite/lib.ts. `vite.config.ts`, the main register-all
+// build, is `KAI_BUILD=register vite build --config config/vite/elements.ts`.
 
 /**
  * Rewrite `'../../src/x'` specifiers in the EMITTED declarations to the compiled
@@ -90,7 +101,7 @@ export default defineConfig({
   build: {
     emptyOutDir: false,
     lib: {
-      entry: resolve(__dirname, 'frameworks/react/index.tsx'),
+      entry: resolve(PKG, 'frameworks/react/index.tsx'),
       formats: ['es'],
       fileName: () => 'react.js',
     },

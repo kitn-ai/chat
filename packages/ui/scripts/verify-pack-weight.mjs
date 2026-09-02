@@ -253,7 +253,8 @@ if (SELF_TEST) {
  * delta first, keep the headroom under 0.29 MiB.
  *
  * 13.5 -> 12.96 MiB, LOWERED (2026-08-26, the dist/elements/chunks dedupe):
- * vite.config.elements.ts wrote its shared lazy chunks (the on-demand
+ * the split elements build (now KAI_BUILD=split, config/vite/elements.ts) wrote
+ * its shared lazy chunks (the on-demand
  * highlighter's shiki grammar/theme chunks, among others) to
  * dist/elements/chunks/ under its own outDir, a different path from the
  * dist/ root the other four lib builds share and already dedupe against
