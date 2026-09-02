@@ -496,19 +496,12 @@ const TARGETS: Record<string, Target> = {
         'mcp/construct/public.ts',
         'mcp/construct/schema.ts',
         'mcp/construct/schema-url.ts',
-        // The blocks pure-module layer (registry + the shared form renderer).
-        // Browser-safe by their own discipline headers (no node:*, no zod-free
-        // violation -- registry/forms are plain functions over injected data).
-        // Needed here because apps/gallery/GalleryPage.tsx imports BLOCK_FORMS
-        // types from '../../mcp/blocks/forms', and (the parallel case)
-        // apps/builder/HomeScreen.tsx imports ConstructListing from
-        // '../../mcp/construct/templates' -- neither app lives under src/ or
-        // the dts include anymore, and public.ts re-exports only from
-        // './schema', so these two include entries currently have no in-repo
-        // consumer and are kept only pending a separate removal decision.
-        // forms.d.ts imports './registry', so both are listed.
-        'mcp/blocks/registry.ts',
-        'mcp/blocks/forms.ts',
+        // The blocks registry and form renderer used to be listed here too, and
+        // emitted a dist/agent-tooling/blocks/ declaration directory. No
+        // `exports` key named those files and nothing in the repo resolved
+        // them; the comment that stood here recorded them as kept "pending a
+        // separate removal decision". Moving the blocks to @kitn.ai/blocks made
+        // the decision. Anything wanting those types imports the package.
       ],
       // outDir + entryRoot, not outDir alone. vite-plugin-dts writes each file
       // to resolve(outDir, relative(entryRoot, emittedPath)), so this pair is
