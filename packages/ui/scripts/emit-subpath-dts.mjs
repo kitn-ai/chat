@@ -20,7 +20,7 @@
  * Each bundled subpath is a JS file at the top of dist/ whose declarations live
  * in a DIRECTORY beside it:
  *
- *     dist/state.js          <- the bundle (vite.config.state.ts)
+ *     dist/state.js          <- the bundle (KAI_BUILD=state, config/vite/lib.ts)
  *     dist/state/index.d.ts  <- the declarations (barrel dts, entryRoot: src)
  *
  * package.json "exports" pairs those two by hand, so `@kitn.ai/ui/state` is fine.
