@@ -2,7 +2,7 @@ import { test, type Page } from '@playwright/test';
 
 /** Screenshot artifact: a <kai-prompt-input> pre-populated via `value` as a
  *  ComposerDoc — seeded skill/agent/plugin pills inside the real input chrome.
- *  Run: `npx playwright test --config playwright.shot.config.ts` */
+ *  Run: `npm run test:shot` */
 const STORY = '/iframe.html?id=test-fixtures-prompt-input--prefilled&viewMode=story';
 
 async function shoot(page: Page, scheme: 'light' | 'dark') {

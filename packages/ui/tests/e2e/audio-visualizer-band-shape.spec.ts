@@ -43,12 +43,13 @@ import { fileURLToPath } from 'node:url';
  * fixture, which is the stronger of the two coverages. Every remaining
  * assertion and threshold below is untouched by that removal.
  *
- * Run: `pnpm --filter @kitn.ai/ui exec playwright test --config playwright.audio-visualizer-band-shape.config.ts`
+ * Run: `npm run test:audio-visualizer-band-shape`
  *
- * Requires this worktree's OWN Storybook dev server already running on
- * port 6018 (never 6006 — that belongs to the main checkout). See
- * `playwright.audio-visualizer-band-shape.config.ts`'s header for exactly
- * how to start it.
+ * A worktree's run must not attach to the MAIN checkout's Storybook on 6006.
+ * Set `KAI_SB_PORT` (for example `KAI_SB_PORT=6018`) and every Storybook suite
+ * moves with it; the config starts a server on that port itself if nothing is
+ * listening. See the `KAI_SB_PORT` comment at the top of
+ * `config/playwright/storybook.config.ts` for exactly why.
  */
 
 // Evidence (per-tile JSON + one screenshot) goes here. Defaults to a

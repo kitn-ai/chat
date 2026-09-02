@@ -33,7 +33,7 @@ import { join } from 'node:path';
  * `<html>` class), so it sticks — as long as nothing else appends to `body`
  * afterward in the same test.
  *
- * Run: `pnpm --filter @kitn.ai/ui exec playwright test --config playwright.audio-visualizer.config.ts`
+ * Run: `npm run test:audio-visualizer`
  */
 
 const SHOT_ROOT =

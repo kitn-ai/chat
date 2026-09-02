@@ -9,7 +9,7 @@ import { test, expect, type Page } from '@playwright/test';
  * reliably prove. Also screenshots the result for visual comparison against the
  * design reference (icon + label pill rendered inline with typed text).
  *
- * Run: `npx playwright test --config playwright.composer.config.ts`
+ * Run: `npm run test:composer-ivp`
  * (Storybook must be serving on :6006.)
  */
 

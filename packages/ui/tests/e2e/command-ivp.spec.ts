@@ -9,7 +9,7 @@ import { test, expect, type Page } from '@playwright/test';
  * navigation (ArrowDown/Up + Enter), and `kai-select` / `kai-query-change`
  * CustomEvent emission that jsdom cannot simulate inside a Shadow DOM.
  *
- * Run: `npx playwright test --config playwright.command.config.ts`
+ * Run: `npm run test:command-ivp`
  */
 
 const STORY = '/iframe.html?id=labs-command--mention-picker&viewMode=story';
