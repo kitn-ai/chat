@@ -37,8 +37,8 @@ const good = { name: 'acme-support', layout: 'widget', provider: { mode: 'mock' 
  */
 const PINNED_UI = 'file:./kitn.ai-ui-0.0.0-test.tgz';
 
-// packages/ui, three levels up from this file.
-const PKG_ROOT = resolve(import.meta.dirname, '../../..');
+// packages/ui, two levels up from this file.
+const PKG_ROOT = resolve(import.meta.dirname, '../..');
 // Gitignored (`.kai-test-cache/` — see .gitignore), derived, never committed.
 const PACK_CACHE_DIR = join(PKG_ROOT, '.kai-test-cache');
 

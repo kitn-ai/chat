@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import themeCss from '../../../../theme.css?raw';
+import themeCss from '../../../theme.css?raw';
 import type { Tool } from './types';
 
 /**

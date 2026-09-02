@@ -43,7 +43,7 @@ describe('authored surface layer', () => {
     // stripper then replaced that bug with a worse one (an unbalanced
     // apostrophe in JSX text left it stuck in string state), so this reads the
     // real parser: comments are trivia and are never nodes.
-    const elDir = join(__dirname, '..', '..', 'elements');
+    const elDir = join(__dirname, '..', '..', 'src', 'elements');
     const appFiles = readdirSync(elDir).filter(
       (f) =>
         f.endsWith('.stories.tsx') &&

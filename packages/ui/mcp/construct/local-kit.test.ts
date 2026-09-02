@@ -12,8 +12,8 @@ import {
   unbuiltMessage,
 } from './local-kit';
 
-// packages/ui, three levels up from this file.
-const PKG_ROOT = resolve(import.meta.dirname, '../../..');
+// packages/ui, two levels up from this file.
+const PKG_ROOT = resolve(import.meta.dirname, '../..');
 
 function write(path: string, body: string, mtimeSeconds?: number): void {
   mkdirSync(dirname(path), { recursive: true });

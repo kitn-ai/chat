@@ -11,7 +11,7 @@ import { createServer } from './server';
  * `@kitn.ai/ui/package.json` specifier the code under test uses, so the two sides are
  * independent reads rather than one read compared with itself.
  */
-const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const pkg = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf-8')) as {
   name?: string;
   version?: string;
@@ -55,7 +55,7 @@ describe('createServer', () => {
   it('derives that version instead of holding a literal in the source', () => {
     // Comments stripped first: the note in server.ts quotes the 0.15.0 literal this
     // replaced, and a record of the bug must not read as the bug.
-    const source = readFileSync(join(packageRoot, 'src/agent-tooling/mcp/server.ts'), 'utf-8')
+    const source = readFileSync(join(packageRoot, 'mcp/mcp/server.ts'), 'utf-8')
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\/\/[^\n]*/g, '');
     const literals = source.match(/['"`]\d+\.\d+\.\d+[^'"`]*['"`]/g) ?? [];

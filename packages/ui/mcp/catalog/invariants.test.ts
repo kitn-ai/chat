@@ -7,7 +7,7 @@ import { invariants, listInvariants } from './invariants';
 // Paths convention, fixed here: `test`/`structural` paths are REPO-relative (they
 // may point outside packages/ui, e.g. at a root doc), `lint` scripts are script
 // names in packages/ui/package.json.
-const PKG = join(__dirname, '..', '..', '..');
+const PKG = join(__dirname, '..', '..');
 const REPO = join(PKG, '..', '..');
 
 describe('invariant records', () => {

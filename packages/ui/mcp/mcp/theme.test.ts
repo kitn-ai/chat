@@ -127,10 +127,9 @@ describe('theme', () => {
  * from under a hardcoded literal, or a literal creeping back in.
  */
 describe('theme token names agree with theme.css', () => {
-  // src/agent-tooling/mcp/ -> packages/ui/ (same walk as manifest.test.ts).
+  // mcp/mcp/ -> packages/ui/ (same walk as manifest.test.ts).
   const THEME_CSS_PATH = resolve(
     dirname(fileURLToPath(import.meta.url)),
-    '..',
     '..',
     '..',
     'theme.css',

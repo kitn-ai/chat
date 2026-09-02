@@ -6,7 +6,7 @@
  * search. See `resolveManifestPath` for why that distinction is the whole point:
  *  1. Bundled bin: dist/mcp.es.js lives in dist/, so custom-elements.json is
  *     a sibling → ./custom-elements.json relative to import.meta.url.
- *  2. Vitest (source): manifest.ts lives at <package>/src/agent-tooling/mcp/, so
+ *  2. Vitest (source): manifest.ts lives at <package>/mcp/mcp/, so
  *     the manifest is <package>/dist/custom-elements.json and nowhere else.
  *
  * It also answers "which of these 80 elements has anything to do with cards", for
@@ -139,12 +139,12 @@ const PACKAGE_NAME = '@kitn.ai/ui';
 const MANIFEST_FILE = 'custom-elements.json';
 
 /**
- * `<package>/src/agent-tooling/mcp` -> `<package>`. A fixed, exact hop, and it is
+ * `<package>/mcp/mcp` -> `<package>`. A fixed, exact hop, and it is
  * CHECKED below rather than trusted: if this module is ever moved to a different
  * depth the derived root stops being this package and resolution throws, instead of
- * silently addressing whatever directory happens to sit three levels up.
+ * silently addressing whatever directory happens to sit two levels up.
  */
-const SOURCE_TO_PACKAGE_ROOT = ['..', '..', '..'] as const;
+const SOURCE_TO_PACKAGE_ROOT = ['..', '..'] as const;
 
 /** Is `root` the root of THIS package — not merely *a* directory holding a dist/? */
 function isThisPackage(root: string): boolean {
@@ -184,7 +184,7 @@ export function resolveManifestPath(
         `the ${PACKAGE_NAME} package root, so ${expected} would not be this package's ` +
         `manifest even if it existed.\n` +
         `Resolved from: ${fromDir}\n` +
-        `This module must live at <package>/src/agent-tooling/mcp/ (or be bundled beside ` +
+        `This module must live at <package>/mcp/mcp/ (or be bundled beside ` +
         `${MANIFEST_FILE} in dist/). Resolution deliberately does NOT search parent ` +
         `directories — finding some other checkout's manifest is worse than failing.`,
     );

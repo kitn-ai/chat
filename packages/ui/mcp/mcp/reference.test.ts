@@ -174,7 +174,7 @@ describe('component_reference', () => {
   it('names the entry point for an opt-in element instead of telling the reader to go find it', async () => {
     const distElements = resolve(
       dirname(fileURLToPath(import.meta.url)),
-      '../../../dist/elements',
+      '../../dist/elements',
     );
     const optedOut = listElements().filter((t) => entryForTag(t) === undefined);
     expect(optedOut.length).toBeGreaterThan(0);

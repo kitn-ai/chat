@@ -22,7 +22,7 @@ describe('construct.v1.schema.json', () => {
   it('docs-site copy is byte-identical (same artifact, second address)', () => {
     const a = readFileSync(resolve(__dirname, 'construct.v1.schema.json'), 'utf8');
     const b = readFileSync(
-      resolve(__dirname, '../../../../../apps/docs/public/schemas/construct/v1.json'),
+      resolve(__dirname, '../../../../apps/docs/public/schemas/construct/v1.json'),
       'utf8',
     );
     expect(b).toBe(a);

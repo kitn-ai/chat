@@ -36,7 +36,7 @@ import { resolveManifestPath } from './manifest';
  * rather than assumed. If the `package.json` here is not ours the anchor assertion
  * below fails first, so a comparison against it always means something.
  */
-const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** Build `<tmp>/<...segments>` and write `content` there, creating parents. */
 function writeAt(root: string, relative: string, content: string): string {

@@ -20,7 +20,7 @@ import { chatRoutePreamble, defaultModelFor } from '../../route-emit';
 // for is the reason: `wire/media-types.ts` is pure (no I/O, no DOM, no solid-js),
 // so the Node MCP pass typechecks and bundles it unchanged. See
 // `ATTACHMENT_ACCEPT`.
-import { encodableMediaTypes } from '../../../wire/media-types';
+import { encodableMediaTypes } from '../../../src/wire/media-types';
 // The composition catalog, read for one fact: where a companion element GOES.
 // The RAW literal rather than `listSurfaceRecipes()`, matching `reference.ts` —
 // the accessor re-runs a zod parse over the whole catalog on every call, and
