@@ -534,7 +534,7 @@ describe('element coverage', () => {
   it('rejects tags inside REGEX LITERALS — the hole that hid kai-tool', () => {
     // NOT hypothetical, and not a near miss: this analyzer reported `kai-tool` — a
     // core agentic element rendering model-controlled arguments — as COVERED, on the
-    // strength of `src/agent-tooling/mcp/scaffold.test.ts` asserting that the
+    // strength of `mcp/mcp/scaffold.test.ts` asserting that the
     // scaffolder does NOT emit the tag:
     //
     //     expect(text).not.toMatch(/<kai-tool\s*>/);

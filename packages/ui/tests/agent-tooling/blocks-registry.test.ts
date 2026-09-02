@@ -35,8 +35,8 @@ import {
   CDN_IMPORT_ENTRIES,
   type Block,
   type RawBlockSource,
-} from '../../src/agent-tooling/blocks/registry';
-import { listIntegrations } from '../../src/agent-tooling/registry';
+} from '../../mcp/blocks/registry';
+import { listIntegrations } from '../../mcp/registry';
 
 const ROOT = resolve(__dirname, '../..');
 const BLOCKS_DIR = join(ROOT, 'blocks');

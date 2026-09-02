@@ -443,7 +443,7 @@ describe('component_reference — exposed methods', () => {
   // file runs from source under vitest and from nowhere else.
   const elementMeta: ElementMeta[] = JSON.parse(
     readFileSync(
-      resolve(dirname(fileURLToPath(import.meta.url)), '../../elements/element-meta.json'),
+      resolve(dirname(fileURLToPath(import.meta.url)), '../../src/elements/element-meta.json'),
       'utf8',
     ),
   );

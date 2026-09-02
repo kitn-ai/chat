@@ -25,9 +25,9 @@ import { z } from 'zod';
 // card-routing.ts: this file compiles under tsconfig.mcp.json's Node-only, no-
 // DOM-lib pass (transitively, via mcp/tools/construct.ts), and card-routing.ts
 // pulls in HTMLElement/window/CustomEvent that pass can't see.
-import { isSafeUrl } from '../../primitives/url-scheme-policy';
-import { CHAT_MESSAGE_ACTIONS } from '../../elements/chat-actions';
-import { BUTTON_VARIANT_NAMES } from '../../ui/button-variant-names';
+import { isSafeUrl } from '../../src/primitives/url-scheme-policy';
+import { CHAT_MESSAGE_ACTIONS } from '../../src/elements/chat-actions';
+import { BUTTON_VARIANT_NAMES } from '../../src/ui/button-variant-names';
 import { KNOWN_THEME_TOKENS, themeTokenValueProblem } from './theme-token-policy';
 
 export { CONSTRUCT_SCHEMA_URL } from './schema-url';

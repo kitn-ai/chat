@@ -378,10 +378,10 @@ describe('the bundle-graph guard', () => {
     'src/index.ts',
     'src/catalog.ts',
     'src/routes.ts',
-    '../ui/src/agent-tooling/registry.ts',
-    '../ui/src/agent-tooling/types.ts',
-    '../ui/src/agent-tooling/route-emit.ts',
-    '../ui/src/agent-tooling/integrations/anthropic.ts',
+    '../ui/mcp/registry.ts',
+    '../ui/mcp/types.ts',
+    '../ui/mcp/route-emit.ts',
+    '../ui/mcp/integrations/anthropic.ts',
     '../../node_modules/.pnpm/@clack+prompts@0.11.0/node_modules/@clack/prompts/dist/index.mjs',
   ];
 
@@ -407,7 +407,7 @@ describe('the bundle-graph guard', () => {
    */
   it('rejects reaching into the MCP even when zod itself shook clean', () => {
     expectRejected(
-      bundleGraphProblem([...legitimateGraph, '../ui/src/agent-tooling/mcp/tools/scaffold.ts']),
+      bundleGraphProblem([...legitimateGraph, '../ui/mcp/mcp/tools/scaffold.ts']),
       'agent-tooling/mcp/tools/scaffold.ts',
       'move it to a leaf',
     );

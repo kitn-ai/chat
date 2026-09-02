@@ -79,11 +79,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { scaffold } from '../../src/agent-tooling/mcp/tools/scaffold';
-import { listIntegrations } from '../../src/agent-tooling/registry';
-import { defaultModelFor } from '../../src/agent-tooling/route-emit';
+import { scaffold } from '../../mcp/mcp/tools/scaffold';
+import { listIntegrations } from '../../mcp/registry';
+import { defaultModelFor } from '../../mcp/route-emit';
 import { toOpenAIMessages } from '../../src/wire';
-import type { Integration } from '../../src/agent-tooling/types';
+import type { Integration } from '../../mcp/types';
 import type { ChatMessage } from '../../src/elements/chat-types';
 import type { OpenAIWireMessage } from '../../src/wire';
 

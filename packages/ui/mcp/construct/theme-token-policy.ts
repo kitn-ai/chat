@@ -34,7 +34,7 @@
  * values — `hsl(240 5.9% 10%)`, `color-mix(in srgb, …)`, `0.6rem`,
  * `"SF Mono", Menlo, monospace` — all pass.
  */
-import { studioTokens } from '../../themes/theme-tokens';
+import { studioTokens } from '../../src/themes/theme-tokens';
 
 /** Every `--kai-*` knob name `theme.tokens` may carry. */
 export const KNOWN_THEME_TOKENS: ReadonlySet<string> = studioTokens();

@@ -41,10 +41,10 @@ import { describe, it, expect } from 'vitest';
 import { writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { scaffold } from '../../src/agent-tooling/mcp/tools/scaffold';
+import { scaffold } from '../../mcp/mcp/tools/scaffold';
 // The expected thread is DERIVED from the same script the scaffolder emits,
 // not restated: a re-authored script moves these assertions on its own.
-import { scaffoldMockScript } from '../../src/agent-tooling/construct/mock-script';
+import { scaffoldMockScript } from '../../mcp/construct/mock-script';
 import type { MockTurn } from '../../src/state/mock';
 
 const PKG = resolve(dirname(fileURLToPath(import.meta.url)), '../..');

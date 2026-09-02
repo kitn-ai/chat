@@ -40,7 +40,7 @@ import { describe, it, expect } from 'vitest';
 import { writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { scaffold } from '../../src/agent-tooling/mcp/tools/scaffold';
+import { scaffold } from '../../mcp/mcp/tools/scaffold';
 
 const PKG = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 /**

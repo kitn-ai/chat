@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest';
 import { mockScriptFor, scaffoldMockScript } from './mock-script';
 import { buildableTemplates } from './templates';
 import type { Construct } from './schema';
-import type { MockTurn } from '../../state/mock';
+import type { MockTurn } from '../../src/state/mock';
 
 /** Every starter across all buildable templates and their variants. */
 const starterCases: { name: string; starter: Construct }[] = buildableTemplates().flatMap((t) => [

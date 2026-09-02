@@ -17,11 +17,11 @@ import { Framework } from '../types';
 import type { Integration } from '../types';
 // The real encoders, used to prove WHY the fabricated sample seed had to go:
 // one of them throws on it, the other quietly sends it.
-import { toAnthropicMessages, toOpenAIMessages, WireEncodeError } from '../../wire/encode';
-import type { ChatMessage } from '../../elements/chat-types';
+import { toAnthropicMessages, toOpenAIMessages, WireEncodeError } from '../../src/wire/encode';
+import type { ChatMessage } from '../../src/elements/chat-types';
 // The declaration itself, so the accept guard below compares the emitted
 // attribute against the source of truth rather than against a copy of it.
-import { encodableMediaTypes } from '../../wire/media-types';
+import { encodableMediaTypes } from '../../src/wire/media-types';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';

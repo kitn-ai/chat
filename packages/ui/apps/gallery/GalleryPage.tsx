@@ -43,7 +43,7 @@ import { Button } from '../../src/ui/button';
 import { WorkSurface } from '../../src/components/work-surface';
 import { FileTree, type FileTreeFile } from '../../src/components/file-tree';
 import { CodeBlock, CodeBlockCode, CodeBlockGroup } from '../../src/components/code-block';
-import { BLOCK_FORMS, type BlockFormId, type FormFile } from '../../src/agent-tooling/blocks/forms';
+import { BLOCK_FORMS, type BlockFormId, type FormFile } from '../../mcp/blocks/forms';
 
 /** One gallery entry: the registry item's browse fields plus the rendered
  *  DELIVERY FORMS (from the server's /gallery/api/form/ route — the shared

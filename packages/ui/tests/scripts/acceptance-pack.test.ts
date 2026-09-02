@@ -3,14 +3,14 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFil
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { listInvariants } from '../../src/agent-tooling/catalog/invariants';
-import { listScenarios } from '../../src/agent-tooling/catalog/scenarios';
-import { listSurfaceRecipes } from '../../src/agent-tooling/catalog/surfaces';
+import { listInvariants } from '../../mcp/catalog/invariants';
+import { listScenarios } from '../../mcp/catalog/scenarios';
+import { listSurfaceRecipes } from '../../mcp/catalog/surfaces';
 import { NEEDLES, variantsOf } from '../../scripts/lib/audit-needles.mjs';
 
 const PKG = join(__dirname, '..', '..');
 const SCRIPT = join(PKG, 'scripts/acceptance-pack.mjs');
-const derived = JSON.parse(readFileSync(join(PKG, 'src/agent-tooling/catalog/derived.json'), 'utf8')) as {
+const derived = JSON.parse(readFileSync(join(PKG, 'mcp/catalog/derived.json'), 'utf8')) as {
   elements: { tag: string; props: { name: string; scalar: boolean }[]; tokens: string[]; composedFrom: string[] }[];
   partVariants: string[];
   themeTokens: string[];

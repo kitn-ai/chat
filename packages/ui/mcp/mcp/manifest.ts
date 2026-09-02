@@ -246,7 +246,7 @@ export function listElements(): string[] {
 // data with no runtime file dependency. NAMED import (not the whole module), matching
 // the same tradeoff element-diagnostics.ts already made for this file: a default
 // import would pull `files` in too for 0 benefit here.
-import { tags as ELEMENT_ENTRY_TAGS } from '../../elements/element-manifest.json';
+import { tags as ELEMENT_ENTRY_TAGS } from '../../src/elements/element-manifest.json';
 
 /**
  * The per-element entry basename for a tag, e.g. 'kai-chat' -> 'chat'.

@@ -3,9 +3,9 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { listInvariants } from '../../src/agent-tooling/catalog/invariants';
-import { listScenarios } from '../../src/agent-tooling/catalog/scenarios';
-import { listSurfaceRecipes } from '../../src/agent-tooling/catalog/surfaces';
+import { listInvariants } from '../../mcp/catalog/invariants';
+import { listScenarios } from '../../mcp/catalog/scenarios';
+import { listSurfaceRecipes } from '../../mcp/catalog/surfaces';
 import {
   DIMENSIONS,
   SEVERITIES,
@@ -27,7 +27,7 @@ import { proposedFabricationRow, renderFabricatedPage } from '../../scripts/lib/
 
 const PKG = join(__dirname, '..', '..');
 const EVAL = join(PKG, 'scripts/acceptance-eval.mjs');
-const derived = JSON.parse(readFileSync(join(PKG, 'src/agent-tooling/catalog/derived.json'), 'utf8')) as {
+const derived = JSON.parse(readFileSync(join(PKG, 'mcp/catalog/derived.json'), 'utf8')) as {
   elements: { tag: string }[];
 };
 const knownTags = derived.elements.map((e) => e.tag);

@@ -20,7 +20,7 @@
  * optional/default wrappers unwrap via `def.innerType`.
  */
 import { z } from 'zod';
-import { ConstructSchema, type Construct } from '../agent-tooling/construct/schema';
+import { ConstructSchema, type Construct } from '../../mcp/construct/schema';
 
 // ── path get/set/delete ─────────────────────────────────────────────────────
 

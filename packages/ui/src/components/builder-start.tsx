@@ -1,7 +1,7 @@
 import { type JSX, For } from 'solid-js';
 import { cn } from '../utils/cn';
 import { Card } from '../ui/card';
-import { TEMPLATES, type TemplateId } from '../agent-tooling/construct/templates';
+import { TEMPLATES, type TemplateId } from '../../mcp/construct/templates';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The template picker's data — T-3/T-4 (docs/superpowers/specs/

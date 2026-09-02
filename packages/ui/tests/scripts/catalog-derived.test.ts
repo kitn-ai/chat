@@ -3,12 +3,12 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DerivedCatalog, DerivedElement } from '../../src/agent-tooling/catalog/catalog-types';
-import { listCapabilityGroups, listIntegrations } from '../../src/agent-tooling/registry';
+import { DerivedCatalog, DerivedElement } from '../../mcp/catalog/catalog-types';
+import { listCapabilityGroups, listIntegrations } from '../../mcp/registry';
 import { ELEMENT_META_KEYS } from '../../scripts/lib/element-meta-keys.mjs';
 
 const PKG = join(__dirname, '..', '..');
-const ARTIFACT = join(PKG, 'src/agent-tooling/catalog/derived.json');
+const ARTIFACT = join(PKG, 'mcp/catalog/derived.json');
 
 const read = () => DerivedCatalog.parse(JSON.parse(readFileSync(ARTIFACT, 'utf8')));
 const meta = (): { tag: string; [k: string]: unknown }[] =>

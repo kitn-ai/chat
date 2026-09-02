@@ -45,7 +45,7 @@
  * first conversation from ONE module instead of two drifting copies.
  */
 import type { Construct } from './schema';
-import type { MockReply, MockSource, MockToolCall, MockTurn } from '../../state/mock';
+import type { MockReply, MockSource, MockToolCall, MockTurn } from '../../src/state/mock';
 import { inferTemplateId } from './templates';
 
 export interface MockScript {
