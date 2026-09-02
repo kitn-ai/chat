@@ -413,12 +413,22 @@ jobs:
       # says `path: packages/ui`, and why the guard above refuses a glob outside
       # that directory: one would move the root and land every download's files
       # somewhere else.
+      #
+      # `if-no-files-found: error` is what holds that premise up, and the default
+      # is `warn`. The root is the LCA of the files actually MATCHED, not of the
+      # globs declared: if compiled.css and the block-driver pages are both
+      # missing, the root collapses to `packages/ui/dist` and every `path:
+      # packages/ui` download below unpacks dist's CONTENTS straight into
+      # packages/ui/, with no error anywhere. verify:artifact-glob cannot see
+      # this -- it asks whether the globs cover what the build wrote, not whether
+      # the upload matched anything.
       - name: Upload the kit build for the downstream legs
         uses: actions/upload-artifact@v4
         with:
           name: kit-dist
           retention-days: 1
           include-hidden-files: true
+          if-no-files-found: error
           path: |
             packages/ui/dist/**
             packages/ui/src/elements/compiled.css
@@ -1208,8 +1218,9 @@ jobs:
   # files-per-process: each job's `test:storybook:ci` wrapper splits its slice
   # into ~20-total fresh-chromium sub-shards of ~5-6 files each (and retries each
   # sub-shard to absorb a rare crash). The stable `storybook-gate` job (below)
-  # aggregates all shards into one advisory status context. A real, repeatable
-  # regression still fails every retry and shows red here.
+  # aggregates all shards into one REQUIRED status context -- ruleset 18328421
+  # requires `test` and `storybook-gate`. A real, repeatable regression still
+  # fails every retry and shows red here.
   storybook:
     runs-on: ubuntu-latest
     timeout-minutes: 30
