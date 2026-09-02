@@ -85,20 +85,37 @@ const MIN_CONFIGS = 3;
 
 class GuardError extends Error {}
 
-/** Every playwright config in config/playwright/, scanned rather than listed. */
-function scanConfigs() {
-  if (!existsSync(CONFIG_DIR)) {
+/** Playwright's output, indented so it reads as quoted rather than as ours. */
+function indent(text) {
+  return (text ?? '')
+    .trimEnd()
+    .split('\n')
+    .map((l) => `    | ${l}`)
+    .join('\n');
+}
+
+/**
+ * Every playwright config in a directory, scanned rather than listed.
+ *
+ * Takes the directory as a parameter so the self-test can point it at an EMPTY
+ * one and exercise the floor for real. An earlier version of the self-test built
+ * an empty array inline and threw its own GuardError, which detected nothing and
+ * made "4/4 planted faults detected" an overclaim.
+ */
+function scanConfigs(dir = CONFIG_DIR) {
+  const rel = dir === CONFIG_DIR ? CONFIG_REL : dir;
+  if (!existsSync(dir)) {
     throw new GuardError(
-      `${CONFIG_REL}/ does not exist. The playwright configs live there since the ` +
+      `${rel}/ does not exist. The playwright configs live there since the ` +
         `2026-09-01 consolidation; if they moved again, move this guard's CONFIG_DIR with them.`,
     );
   }
-  const names = readdirSync(CONFIG_DIR)
+  const names = readdirSync(dir)
     .filter((n) => n.endsWith('.config.ts') && !n.startsWith('.'))
     .sort();
   if (names.length < MIN_CONFIGS) {
     throw new GuardError(
-      `scanned ${CONFIG_REL}/ and found ${names.length} config(s) (${names.join(', ') || 'none'}), ` +
+      `scanned ${rel}/ and found ${names.length} config(s) (${names.join(', ') || 'none'}), ` +
         `under this guard's floor of ${MIN_CONFIGS}. Either a config was deleted without its ` +
         `projects going anywhere, or this scan has stopped seeing files - which would make every ` +
         `assertion below pass over nothing.`,
@@ -118,7 +135,8 @@ function scanConfigs() {
 function listProjects(configRel) {
   const dir = mkdtempSync(join(tmpdir(), 'pw-projects-'));
   const out = join(dir, 'list.json');
-  let stderr = '';
+  let listExit = 0;
+  let listOutput = '';
   try {
     try {
       execFileSync(
@@ -134,13 +152,20 @@ function listProjects(configRel) {
       );
     } catch (err) {
       // A config whose projects ALL match nothing exits non-zero ("no tests
-      // found"), which is the loud half of this hazard. Keep going if the report
-      // was still written, so the message below can name the projects.
-      stderr = `${err?.stdout ?? ''}${err?.stderr ?? ''}`;
+      // found"), which is the loud half of this hazard, so keep going if a
+      // report was still written. But CARRY THE OUTPUT: the first real CI
+      // failure of this guard was a spec throwing EACCES at module load, which
+      // aborts collection for the entire config, and discarding this text made
+      // the guard report "nine projects match ZERO spec files" while the actual
+      // `mkdir` error sat in a variable nobody read. The symptom is not the
+      // cause; print both.
+      listExit = err?.status ?? -1;
+      listOutput = `${err?.stdout ?? ''}${err?.stderr ?? ''}`;
     }
     if (!existsSync(out)) {
       throw new GuardError(
-        `\`playwright test --config ${configRel} --list\` produced no report.\n${stderr.trim()}`,
+        `\`playwright test --config ${configRel} --list\` produced no report ` +
+          `(exit ${listExit}).\n${indent(listOutput)}`,
       );
     }
     const data = JSON.parse(readFileSync(out, 'utf-8'));
@@ -155,7 +180,7 @@ function listProjects(configRel) {
       for (const sub of suite.suites ?? []) walk(sub);
     };
     for (const suite of data?.suites ?? []) walk(suite);
-    return { declared, counts };
+    return { declared, counts, listExit, listOutput };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -166,11 +191,26 @@ function listProjects(configRel) {
  * project that declares itself and then matches nothing.
  */
 function checkConfig(configRel) {
-  const { declared, counts } = listProjects(configRel);
+  const { declared, counts, listExit, listOutput } = listProjects(configRel);
+
+  /**
+   * Whatever playwright itself said when the listing exited non-zero. This is
+   * appended to EVERY failure below rather than to one of them, because the
+   * guard cannot tell from the counts alone whether a project matches nothing
+   * or the whole collection aborted: both arrive as zeros.
+   */
+  const listing =
+    listExit === 0
+      ? ''
+      : `\n\n  THE LISTING ITSELF EXITED ${listExit}. That is very likely the real cause and the ` +
+        `zeros above are the symptom: one spec that THROWS at module load aborts collection for ` +
+        `the whole config, so every project in it reports zero. Playwright's own output:\n` +
+        indent(listOutput);
+
   if (declared.length === 0) {
     throw new GuardError(
       `${configRel} declares NO projects. Every suite in it is unreachable, and Playwright ` +
-        `will not say so - a config with no projects has nothing to report as missing.`,
+        `will not say so - a config with no projects has nothing to report as missing.${listing}`,
     );
   }
   const empty = declared.filter((n) => (counts.get(n) ?? 0) === 0);
@@ -182,8 +222,14 @@ function checkConfig(configRel) {
         `projects are invoked by no CI step at all, so for those nothing notices ever.\n` +
         `  Check the project's \`testMatch\` against the filenames in tests/e2e/. This usually ` +
         `means a spec was renamed, or a regex was edited on one side of the pair only.\n` +
-        `  Counts in this config: ${declared.map((n) => `${n}=${counts.get(n) ?? 0}`).join(' ')}`,
+        `  Counts in this config: ${declared.map((n) => `${n}=${counts.get(n) ?? 0}`).join(' ')}` +
+        listing,
     );
+  }
+  if (listExit !== 0) {
+    // Every project has tests and the command still failed. Nothing above would
+    // have fired, and exiting 0 here would swallow a real error.
+    throw new GuardError(`${configRel}: every project matched specs, but the listing failed.${listing}`);
   }
   return counts;
 }
@@ -352,13 +398,19 @@ function selfTest() {
     ),
   );
 
-  // The scan's own vacuity floor.
-  expectFires('a scan that finds fewer configs than the floor', () => {
-    const names = [];
-    if (names.length < MIN_CONFIGS) {
-      throw new GuardError(`scanned and found ${names.length} config(s), under the floor of ${MIN_CONFIGS}`);
-    }
-  });
+  // The scan's own vacuity floor, exercised through the REAL scanConfigs against
+  // a real empty directory. An earlier version of this case built an empty array
+  // inline and threw its own GuardError, which tested nothing at all and made the
+  // "faults detected" line an overclaim.
+  const emptyDir = mkdtempSync(join(tmpdir(), 'pw-projects-empty-'));
+  try {
+    expectFires('a scan that finds fewer configs than the floor', () => scanConfigs(emptyDir));
+    expectFires('a scan pointed at a directory that does not exist', () =>
+      scanConfigs(join(emptyDir, 'gone')),
+    );
+  } finally {
+    rmSync(emptyDir, { recursive: true, force: true });
+  }
 
   // CONTROL. An unmodified copy must PASS, so a check that had degraded into
   // always-throwing cannot report a green self-test.
@@ -369,7 +421,7 @@ function selfTest() {
     );
   });
 
-  console.log('verify-playwright-projects self-test: 4/4 planted faults detected, control passed.');
+  console.log('verify-playwright-projects self-test: 5/5 planted faults detected, control passed.');
 }
 
 const args = process.argv.slice(2);

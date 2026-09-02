@@ -19,6 +19,19 @@ import { fileURLToPath } from 'node:url';
 // config-wide: set KAI_SB_PORT once and every suite here moves together,
 // instead of one suite having an escape hatch the other eight lack.
 //
+// THE PRICE OF NINE-IN-ONE, learned on this config's first CI run: one spec
+// that THROWS AT MODULE LOAD aborts collection for the entire config, so all
+// nine projects report zero tests and exit 1 together. It happened because
+// audio-visualizer-ivp.spec.ts called mkdirSync at module scope on a path that
+// existed on one developer's mac and not on a Linux runner. A `--project=` run
+// is unaffected, because it loads only the files that project matches, which is
+// why every existing suite stayed green and nothing else could see it;
+// `verify:playwright-projects` is the only thing that lists the whole config,
+// so it is the only place that sees this failure or can diagnose it. Its
+// message now carries playwright's own output for exactly that reason. Keep
+// module scope in these specs free of anything that can fail: derive paths
+// there, do the I/O in `beforeAll`.
+//
 // The webServer command spells storybook out rather than reusing the
 // `storybook` npm script, which hardcodes `-p 6006`. Relying on a trailing
 // `-p` to override an earlier one is undocumented last-flag-wins behaviour
