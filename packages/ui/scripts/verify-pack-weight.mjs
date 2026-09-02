@@ -191,8 +191,9 @@ if (SELF_TEST) {
  * chunks, Solid components, their d.ts, manifest/meta/llms rows), the
  * `@kitn.ai/ui/state` thread/persistence helpers (threads.ts + persistence.ts
  * + dist), and the workspace BLOCK emission inside dist/mcp.es.js +
- * mcp/ (which ships by design). No tests, stories, probe scripts
- * or scripts/ entries are in the tarball (checked explicitly).
+ * src/agent-tooling/ (which shipped by design at the time; that path moved
+ * to mcp/ in the 2026-09-02 move). No tests, stories, probe scripts or
+ * scripts/ entries are in the tarball (checked explicitly).
  *
  * 13.0 → 13.5 MiB (2026-08-25, the rung-6 fix waves): tripped at 13.23 MiB,
  * audited against the pack listing after removing the one piece of dead
@@ -206,7 +207,8 @@ if (SELF_TEST) {
  * tables, dist/mcp.es.js; (2) wave 2's F-46 fix — the programmatic-layer
  * section in llms-full.txt (~50 KB × the two copies `files` deliberately
  * ships), derived verbatim from the dist/state + dist/wire declarations, plus
- * the composed-thread code recipe in mcp/ + dist/mcp.es.js.
+ * the composed-thread code recipe in src/agent-tooling/ (now mcp/) +
+ * dist/mcp.es.js.
  * Trimming the embedded declarations was considered and declined: the largest
  * blocks (AssistantStream, the encoder docs, MockTurn) are exactly the
  * measured hard core rung 6 filed as its one S1, and the whole section gone

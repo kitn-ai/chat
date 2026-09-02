@@ -117,12 +117,13 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text-summary', 'json', 'html'],
       reportsDirectory: './coverage',
-      include: ['src/**/*.{ts,tsx}'],
+      include: ['src/**/*.{ts,tsx}', 'mcp/**/*.{ts,tsx}'],
       exclude: [
         'src/**/*.stories.{ts,tsx}',
         'src/**/*.d.ts',
         'src/test-utils/**',
         'src/stories/**',
+        'mcp/tests/**',
       ],
       // Report every project's files against the same source list, so a module
       // covered only by the storybook project is visibly attributed to it.

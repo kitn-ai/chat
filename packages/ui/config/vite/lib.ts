@@ -4,6 +4,12 @@ import solidPlugin from 'vite-plugin-solid';
 import dts from 'vite-plugin-dts';
 import { relative, resolve } from 'node:path';
 
+// Matches an actual import specifier crossing the mcp/ boundary
+// ('../../mcp/...' or import('../../mcp/...')), not any mention of "/mcp/"
+// -- a TSDoc comment that merely names the mcp/ directory must not trip the
+// rewrite/throw below.
+const MCP_SPECIFIER = /(?:from|import\()\s*['"]\.\.\/\.\.\/mcp\//;
+
 // One config for every library subpath bundle. Selected by KAI_BUILD, one value
 // per emitted file, named after the output stem so the mapping needs no lookup.
 //
@@ -164,7 +170,7 @@ const TARGETS: Record<string, Target> = {
       // future importer at another depth must fail loudly here instead of
       // silently emitting a path that resolves to nothing.
       beforeWriteFile(filePath: string, content: string) {
-        if (!content.includes("/mcp/")) return;
+        if (!MCP_SPECIFIER.test(content)) return;
         const rel = relative(resolve(PKG, 'dist'), filePath);
         const depth = rel.split(/[\\/]/).length - 1;
         if (depth !== 1) {
