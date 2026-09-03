@@ -12,13 +12,12 @@
 // One throwaway Vite app is installed once and reused per block, because the
 // install is the expensive part and the component is the cheap part.
 //
-// THE HOST IS A CHECKED-IN FIXTURE, AND ITS VERSIONS ARE PINNED RANGES.
-// scripts/block-driver/react-host/ is a stock create-vite react-ts app; the
-// install here passes the tarball and NO package list, so what the cell gets
-// is what that package.json pins. An unpinned host would make the verdict
-// depend on what npm published this morning, which is the difference between
-// a gate and a weather report. The resolved versions are printed on every run
-// so a future red can be read against them.
+// THE HOST IS A CHECKED-IN FIXTURE, AND ITS VERSIONS ARE THE RANGES A REAL
+// create-vite APP DECLARES. scripts/block-driver/react-host/ is a stock
+// create-vite react-ts app; the install here passes the tarball and NO
+// package list, so what the cell gets is whatever that package.json's ranges
+// resolve to. The resolved versions are printed on every run so a future red
+// can be read against them.
 //
 // WHAT IT DOES NOT COVER, stated so nobody reads its green as more than it is.
 // Every OTHER framework form is compile-only (the cells inside verify:scaffold),

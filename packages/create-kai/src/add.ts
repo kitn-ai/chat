@@ -157,6 +157,9 @@ export async function decideForm(
     // repo names most often. The sentence states the framework, the form and
     // the reason; the trees for the remaining frameworks arrive with the rest
     // of the renderers (spec 3.5).
+    // COUPLED: scripts/verify-add.mjs's otherFrameworkLeg matches on the
+    // literal fragment "generates no vue tree yet" below. Change that check
+    // too if you reword this sentence.
     note:
       detection.fallback.length === 0
         ? undefined
