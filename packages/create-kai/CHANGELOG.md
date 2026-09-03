@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.6.0](https://github.com/kitn-ai/ui/compare/create-kai-v0.5.0...create-kai-v0.6.0) (2026-09-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **create-kai:** `create-kai add <block>` writes the react form to `src/components/<id>/` instead of `src/blocks/<id>/`.
+
+### Features
+
+* **create-kai:** add writes at the blocks targets table, and detects the host framework ([1528bb7](https://github.com/kitn-ai/ui/commit/1528bb71684948547a2e8490c81c750e1a807b22))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @kitn.ai/ui bumped to 0.33.0
+
 ## [0.5.0](https://github.com/kitn-ai/ui/compare/create-kai-v0.4.0...create-kai-v0.5.0) (2026-09-03)
 
 

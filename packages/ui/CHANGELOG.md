@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.33.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.32.0...@kitn.ai/ui-v0.33.0) (2026-09-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **create-kai:** `create-kai add <block>` writes the react form to `src/components/<id>/` instead of `src/blocks/<id>/`.
+* **blocks:** `kai dev --builder` no longer serves /gallery/ or the /kit/ mount its previews imported from, and dist/gallery leaves the published tarball. Browse blocks at https://ui.kitn.ai/blocks.
+
+### Features
+
+* **blocks:** the /blocks section, and the gallery retired ([#375](https://github.com/kitn-ai/ui/issues/375)) ([94f8989](https://github.com/kitn-ai/ui/commit/94f89894969b33c5ee40ae32ff6be071e27407c0))
+* **create-kai:** add writes at the blocks targets table, and detects the host framework ([1528bb7](https://github.com/kitn-ai/ui/commit/1528bb71684948547a2e8490c81c750e1a807b22))
+
 ## [0.32.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.31.0...@kitn.ai/ui-v0.32.0) (2026-09-03)
 
 
