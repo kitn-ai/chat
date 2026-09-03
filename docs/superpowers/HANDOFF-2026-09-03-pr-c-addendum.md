@@ -318,21 +318,23 @@ no loss of ledger state; noted in section 1 as informational, not a defect in th
 worktree `.claude/worktrees/blocks-c` should be removed if still present.
 
 **PR D is next**, the CLI (`create-kai add`), per night run 3.3 (the 2026-08-31 spec's Part 3 plus
-spec section 3.4). Its plan draft and review were in flight in the session scratchpad, under
-`pr-d/2026-09-03-create-kai-add-targets.md` and `pr-d/plan-review.md`; check first whether
-`docs/superpowers/plans/2026-09-03-create-kai-add-targets.md` is on `main`. If it is not, and the
-scratchpad draft is also gone (a cleared session can lose scratch state), re-plan PR D from night
-run section 3.3 plus the 2026-08-31 spec's Part 3 rather than guessing at what the draft said.
+spec section 3.4). Its plan draft, the adversarial review of it and the banked create-kai patch are ON MAIN under
+`docs/superpowers/research/2026-09-03-pr-d-draft/` (commit aa973c14): the API outage at the end of
+this run killed the agent applying the review three times, so the draft was banked with its review
+NOT yet applied. Check first whether `docs/superpowers/plans/2026-09-03-create-kai-add-targets.md`
+is on `main`; if it is, the research directory has been folded into it and deleted. If it is not,
+apply `plan-review.md` to `plan-DRAFT-review-not-yet-applied.md`, write the plan to that path, and
+delete the research directory in the same commit.
 
 The worktree `.claude/worktrees/blocks-d` on branch `feat/create-kai-add-targets` is already
 prepared: installed and built (kit `dist/`, `compiled.css`, `dist/blocks`, `create-kai`'s own
 `dist`).
 
 **PR D must carry the banked create-kai gallery-word sweep as its own `chore(create-kai)` Task 0.**
-The patch is at the session scratchpad, `pr-d/create-kai-gallery-sweep.patch` (a `git diff
-origin/main..HEAD -- packages/create-kai` taken from PR C's branch at the tip that had the four
-comment edits; it applies cleanly on PR D's branch). Apply it first, as its own commit, before PR
-D's real task sequence.
+The patch is on `main` at `docs/superpowers/research/2026-09-03-pr-d-draft/create-kai-gallery-sweep.patch`
+(a `git diff origin/main..HEAD -- packages/create-kai` taken from PR C's branch at the tip that had
+the four comment edits; it applies cleanly on PR D's branch). Apply it first, as its own commit,
+before PR D's real task sequence, and delete the patch file in that commit.
 
 After D: PR B2 (vue/svelte/angular/solid renderers), the pages move to `apps/`, the small-tickets PR
 (section 4 above plus the PR B addendum's own list), then the new-blocks round. Night run section 5
@@ -358,9 +360,8 @@ is still the only list of reasons to stop.
 > fresh implementer and a separate reviewer per task, a whole-branch review on the most capable
 > model, one fix wave, push, watch CI, squash-merge, delete the remote branch, remove the worktree,
 > update memory, then a handoff addendum through a temporary worktree, the same shape as this one. The
-> plan's first task must apply the banked patch at the session scratchpad,
-> `pr-d/create-kai-gallery-sweep.patch`, as its own `chore(create-kai)` commit before the real task
-> sequence starts.
+> plan's first task must apply the banked patch that is on `main` (the plan names its path) as
+> its own `chore(create-kai)` commit before the real task sequence starts.
 >
 > If the plan is not on `main`, write it first, per night run section 3.2 step 1 ("write the plan
 > first"), from section 3.3 of the night run and the 2026-08-31 spec's Part 3, then get it
