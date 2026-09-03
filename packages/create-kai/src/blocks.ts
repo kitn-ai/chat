@@ -41,11 +41,11 @@ import type {
 import {
   adaptRegistrationForBundler,
   componentName,
-  renderCdnFormFiles,
-  renderReactForm,
-  renderHtmlForm,
+  renderBlockForm,
   type BlockFormId,
+  type FormFile,
 } from '@kitn.ai/blocks/forms';
+import { fileTarget, installRoot, isTargetFramework } from '@kitn.ai/blocks/targets';
 
 import { getIntegration, listIntegrations } from './catalog';
 import type { Integration } from './catalog';
@@ -282,9 +282,6 @@ export interface PlanOptions {
   kitVersion: string;
 }
 
-const blockDir = (form: BlockForm, name: string) =>
-  form === 'react' ? path.posix.join('src/blocks', name) : path.posix.join('blocks', name);
-
 /**
  * Plan every write for a resolved add. Pure: the caller owns collision
  * checking and the filesystem. Throws when a block cannot be rendered in the
@@ -294,13 +291,7 @@ export function planAdd(resolved: ResolvedAdd, opts: PlanOptions): AddPlan {
   const plan: AddPlan = { files: [], dependencies: {}, docs: [], notes: [] };
 
   for (const block of resolved.blocks) {
-    if (opts.form === 'cdn') {
-      planCdnBlock(block, opts, plan);
-    } else if (opts.form === 'react') {
-      planReactBlock(block, plan);
-    } else {
-      planHtmlBlock(block, plan);
-    }
+    planFormBlock(block, opts, plan);
     for (const dep of block.manifest.dependencies ?? []) {
       // The kit rides the CLI's own pin; anything else a block declares is
       // installed at latest, and the note says so out loud.
@@ -319,37 +310,71 @@ export function planAdd(resolved: ResolvedAdd, opts: PlanOptions): AddPlan {
   return plan;
 }
 
-// The three per-form file sets come from the ONE shared renderer
-// (`@kitn.ai/blocks/forms`, which is what /blocks shows too);
-// what stays here is what only the CLI knows: where the files land in the
-// consumer's project, and the note printed about them.
+// The rendered files come from the ONE shared dispatch, `renderBlockForm`
+// (`@kitn.ai/blocks/forms`, which is what /blocks shows too) - never a
+// specific renderer called by hand. What stays here is what only the CLI
+// knows: where the files land (through `target`, already computed) and the
+// note printed about them.
 
-function planHtmlBlock(block: Block, plan: AddPlan): void {
-  const dir = blockDir('html', block.name);
-  for (const file of renderHtmlForm(block)) {
-    plan.files.push({ path: path.posix.join(dir, file.path), contents: file.content });
+/**
+ * The ONE place a rendered file becomes a planned write.
+ *
+ * `target` is the project-relative path the renderer already derived from
+ * `@kitn.ai/blocks/targets`, and it is the same string the /blocks page
+ * displays and the compile cells check. Joining a directory on here again is
+ * what `blockDir()` did, and the two joins disagreed about react for a whole
+ * release cycle: the table said `src/components/<id>/`, the CLI wrote
+ * `src/blocks/<id>/`, and only a test asserting the mismatch knew.
+ */
+function planFiles(files: readonly FormFile[], plan: AddPlan): void {
+  for (const file of files) plan.files.push({ path: file.target, contents: file.content });
+}
+
+/**
+ * Render one block into `opts.form` and plan its files and its note.
+ *
+ * THE FILES ROUTE THROUGH `renderBlockForm`, NEVER A SPECIFIC RENDERER
+ * (ruling R13). `@kitn.ai/blocks` keeps that dispatch's `switch` exhaustive
+ * over every id in `BLOCK_FORMS` on its own side (no `default`, so a form
+ * added there with no case fails ITS OWN `tsc --noEmit`); at runtime under a
+ * partially-patched tree it returns `undefined`, and `planFiles`'s `for`
+ * throws immediately - before a note is printed, before a file is written.
+ * That is what stands between "a --form value BLOCK_FORMS accepts" and "add
+ * silently writes the html tree for it", the failure a form id with no
+ * renderer produces if the caller decides by hand instead of asking
+ * `@kitn.ai/blocks`.
+ */
+function planFormBlock(block: Block, opts: PlanOptions, plan: AddPlan): void {
+  const files = renderBlockForm(block, opts.form, { cdn: { version: opts.kitVersion } });
+  planFiles(files, plan);
+
+  if (opts.form === 'cdn') {
+    plan.notes.push(
+      `${block.name}: no project here, so this is the self-contained CDN paste form - open ${block.name}.html directly, or paste it into any page. To scaffold a project around it, run \`npm create kai@latest\`.`,
+    );
+    return;
   }
+  if (opts.form === 'react') {
+    const dir = installRoot('react', block.name);
+    plan.notes.push(
+      `${block.name}: react form under ${dir}/ (render <${componentName(block.name)} /> from ${fileTarget('react', block.name, `${componentName(block.name)}.tsx`)})`,
+    );
+    return;
+  }
+  // Every other project-shaped form, html included: the html-shaped note,
+  // naming its own install root. `isTargetFramework` gates the cast the same
+  // way it does everywhere else in this file; for 'html' this reproduces the
+  // note byte for byte, and for a future framework with no bespoke note of
+  // its own (PR B2's business, not this one) it is still a true sentence
+  // rather than a missing one.
+  const framework = isTargetFramework(opts.form) ? opts.form : 'html';
+  const dir = installRoot(framework, block.name);
   const page = block.manifest.files.find((f) => f.type === 'registry:page');
   // `.pop()` is `string | undefined` to tsc even on a non-empty split, so the
   // fallback is spelled out rather than asserted away.
   const pageFile = page ? (page.target ?? page.path.split('/').pop() ?? page.path) : '';
-  plan.notes.push(`${block.name}: web-component form under ${dir}/ (open ${path.posix.join(dir, pageFile)} through your dev server)`);
-}
-
-function planReactBlock(block: Block, plan: AddPlan): void {
-  const dir = blockDir('react', block.name);
-  for (const file of renderReactForm(block)) {
-    plan.files.push({ path: path.posix.join(dir, file.path), contents: file.content });
-  }
-  plan.notes.push(`${block.name}: react form under ${dir}/ (render <${componentName(block.name)} /> from ${dir}/${componentName(block.name)}.tsx)`);
-}
-
-function planCdnBlock(block: Block, opts: PlanOptions, plan: AddPlan): void {
-  for (const file of renderCdnFormFiles(block, { version: opts.kitVersion })) {
-    plan.files.push({ path: file.path, contents: file.content });
-  }
   plan.notes.push(
-    `${block.name}: no project here, so this is the self-contained CDN paste form - open ${block.name}.html directly, or paste it into any page. To scaffold a project around it, run \`npm create kai@latest\`.`,
+    `${block.name}: web-component form under ${dir}/ (open ${fileTarget(framework, block.name, pageFile)} through your dev server)`,
   );
 }
 
