@@ -2169,8 +2169,10 @@ In `.github/workflows/test.yml`, in the `unit` job, immediately after the `creat
 ```yaml
       # Cache the npm side of the react-host leg. verify:add's own react
       # install is the one expensive thing in this leg (network + a cold
-      # install of react, react-dom, vite, the react plugin and typescript),
-      # same shape as the `browser` job's cache ahead of verify:blocks:react.
+      # install of react, react-dom, vite, the react plugin and typescript).
+      # This is the workflow's first `~/.npm` cache; the `browser` job's
+      # verify:blocks:react step does the same kind of install today with
+      # no cache ahead of it.
       # Keyed on the fixture's own package.json plus create-kai's, so a pin
       # bump on either side busts it.
       - name: Cache npm (create-kai add smoke, react leg)
@@ -2195,8 +2197,8 @@ In `.github/workflows/test.yml`, in the `unit` job, immediately after the `creat
       # would double the only expensive thing it does.
       #
       # NETWORK-DEPENDENT: the react leg's `npm install` reaches the registry
-      # for react, react-dom, vite, the react plugin and typescript, same as
-      # the `browser` job's verify:blocks:react step.
+      # for react, react-dom, vite, the react plugin and typescript, the same
+      # packages the `browser` job's verify:blocks:react step installs.
       #
       # Needs the `build` leg's artifact for dist/blocks and for packing the kit.
       - name: create-kai add smoke (packed tarball, one project per detected form)
