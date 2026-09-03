@@ -133,7 +133,7 @@ export async function decideForm(
   hasProject: boolean,
   interactive: boolean,
   io: AxisIo,
-): Promise<{ form?: BlockForm; error?: string }> {
+): Promise<{ form?: BlockForm; error?: string; note?: string }> {
   if (override !== undefined) return { form: override as BlockForm };
   if (!hasProject) return { form: 'cdn' };
   const detection = detectForm(packageJson);
@@ -142,14 +142,28 @@ export async function decideForm(
       return {
         error:
           `this project depends on ${detection.found.join(' AND ')}, so the block form is ambiguous. ` +
-          'Pass --form react or --form html.',
+          `Pass ${detection.forms.map((form) => `--form ${form}`).join(' or ')}.`,
       };
     }
-    const answer = await io.ask(blockFormAxis(detection.found), 'react');
+    const axis = blockFormAxis(detection.found, detection.forms);
+    const answer = await io.ask(axis, axis.options[0].id);
     return { form: answer as BlockForm };
   }
   if (detection.kind === 'none') return { form: 'html' };
-  return { form: detection.form };
+  return {
+    form: detection.form,
+    // DECIDED LOUDLY. Landing a vue project on the framework-neutral form is a
+    // decision, and a decision made without saying so is the failure mode this
+    // repo names most often. The sentence states the framework, the form and
+    // the reason; the trees for the remaining frameworks arrive with the rest
+    // of the renderers (spec 3.5).
+    note:
+      detection.fallback.length === 0
+        ? undefined
+        : `this project uses ${detection.fallback.join(' and ')}, and this release generates no ${detection.fallback.join('/')} tree yet, ` +
+          `so the block lands in the framework-neutral html form (the kai- elements work in every framework). ` +
+          `The generated ${detection.fallback.join(' and ')} trees arrive with the remaining renderers.`,
+  };
 }
 
 /** Merge the plan's dependencies into package.json text; existing entries win. */
@@ -221,6 +235,7 @@ export async function runAdd(argv: readonly string[], env: AddEnv): Promise<numb
     return 1;
   }
   const form = decided.form;
+  if (decided.note) env.out(`create-kai add: ${decided.note}`);
   // Where files land: the project root that owns the detected package.json,
   // so `add` from a subdirectory does not scatter blocks/ trees; the cdn form
   // lands where the command ran.
