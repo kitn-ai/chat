@@ -25,7 +25,7 @@ Every path below was checked to exist at the time of writing.
 | PR A | `packages/blocks` (`@kitn.ai/blocks`) | merged, #372 |
 | PR B0 | four kit fixes, breaking ref type | merged, #373, `fix(react)!:` with a BREAKING CHANGE footer |
 | #367 | landing-page mobile topics menu | merged |
-| PR B plan | `docs/superpowers/plans/2026-09-02-blocks-pr-b-authored-contract.md` | 14 tasks, 19 rulings |
+| PR B plan | `docs/superpowers/plans/2026-09-02-blocks-pr-b-authored-contract.md` | 13 tasks, 22 rulings |
 | Older spec still in play | `docs/superpowers/specs/2026-08-31-blocks-and-parts-design.md` | Part 2 (block candidates) and Part 3 (the CLI) |
 | Restructure spec | `docs/superpowers/specs/2026-09-01-repo-restructure-design.md` | "Owner eval of Step 1" is the pages-move ruling |
 
