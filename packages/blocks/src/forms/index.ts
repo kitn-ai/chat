@@ -61,6 +61,18 @@ export const BLOCK_FORMS = [
 
 export type BlockFormId = (typeof BLOCK_FORMS)[number]['id'];
 
+/**
+ * The forms that are a PROJECT SHAPE: a tree of files a consumer drops into a
+ * build and compiles. THE list, and the only place `cdn` is named as the
+ * exception, so a fourth form joins by being added to `BLOCK_FORMS` alone.
+ *
+ * `cdn` is out because it is one pasted file with no build step, no tsc
+ * project and no install root. What would be checked about it is checked
+ * where it lives instead: `verify:blocks [pins]` on the emitted artifact and
+ * the block driver on the page it produces.
+ */
+export const FRAMEWORK_BLOCK_FORMS = BLOCK_FORMS.filter((form) => form.id !== 'cdn');
+
 export function isBlockFormId(id: string): id is BlockFormId {
   return BLOCK_FORMS.some((form) => form.id === id);
 }

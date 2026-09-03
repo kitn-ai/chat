@@ -3,7 +3,7 @@
 // that makes every block provably work per release. The block LIST is derived
 // from the packages/blocks/blocks/ directory scan every run (a block IS a
 // directory with a registry-item.json; adding one adds its cells with no list
-// to edit), and each discovered block must pass FOUR checks:
+// to edit), and each discovered block must pass every check in CHECK_NAMES:
 //
 //   [contracts]  its manifest validates and the kai- contract checks pass
 //                (discoverBlocks + checkBlockContracts from
@@ -24,6 +24,20 @@
 //                scripts/block-driver/README.md: the block's own states.mjs,
 //                the GENERATED page under pages/generated/<name>/, light +
 //                dark, zero console errors, screenshots to a scratch dir).
+//   [html-binder] what tsc cannot see about the form that has no tsc: the
+//                emitted binder exists, carries no TypeScript, awaits
+//                customElements.whenDefined, and no file in the form
+//                hand-rolls an SSE reader.
+//   [react-tree] the three things spec 5.2 says tsc cannot see: no raw
+//                <kai-*> JSX (the intrinsic escape hatch compiles, and it is
+//                exactly what the typed wrappers exist to replace), no
+//                element import outside the controller, and every emitted
+//                target equal to what src/targets.ts derives.
+//
+// Those two read dist/blocks/f/<name>.<form>.json, the per-form trees
+// gen-blocks emits and the blocks site displays, so what is checked is what a
+// reader copies. A block still on the pre-contract page shape renders no
+// framework form and is skipped by name (PR B Task 12 converts the rest).
 //
 // A discovered block MISSING its states.mjs or its committed baseline is a
 // HARD FAILURE -- a block cannot ship unverified -- and the message says how
@@ -43,9 +57,11 @@
 // contract violation (legacy kitn- prefix + a kai-* listener on document), a
 // doctored pin, a STALE emitted file (dist/blocks/registry.json is doctored
 // on disk, gen-blocks --check must go red, then it is restored), a missing
-// baseline, and a BASELINE MISMATCH (a doctored copy of a real committed
+// baseline, a BASELINE MISMATCH (a doctored copy of a real committed
 // baseline, one driver leg, light only -- the one class only a real browser
-// run can prove caught). Guards that were never watched failing prove
+// run can prove caught), a binder carrying an `export interface` line, a
+// react .tsx carrying a raw <kai-dock>, and a rendered file whose target
+// disagrees with src/targets.ts. Guards that were never watched failing prove
 // nothing ([[checks-that-prove-nothing]]).
 import { readFileSync, readdirSync, existsSync, writeFileSync, mkdtempSync, rmSync, mkdirSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
@@ -84,13 +100,18 @@ async function importTs(entry) {
   return mod;
 }
 
-// The entry, read out of the package's exports map (the gen-blocks.mjs pattern).
-const blocksEntry = JSON.parse(readFileSync(BLOCKS_PKG_JSON, 'utf8')).exports?.['.']?.default;
-if (typeof blocksEntry !== 'string') {
-  console.error('verify-blocks: @kitn.ai/blocks has no exports["."].default -- cannot locate the registry entry');
+// The entries, read out of the package's exports map (the gen-blocks.mjs
+// pattern). `./targets` comes along because [react-tree] re-derives the
+// install target of every emitted file rather than restating "src/components".
+const blocksMap = JSON.parse(readFileSync(BLOCKS_PKG_JSON, 'utf8')).exports ?? {};
+const blocksEntry = blocksMap['.']?.default;
+const targetsEntry = blocksMap['./targets']?.default;
+if (typeof blocksEntry !== 'string' || typeof targetsEntry !== 'string') {
+  console.error('verify-blocks: @kitn.ai/blocks has no exports["."].default / exports["./targets"].default -- cannot locate the registry entry');
   process.exit(1);
 }
 const registry = await importTs(join(BLOCKS_PKG_ROOT, blocksEntry));
+const targets = await importTs(join(BLOCKS_PKG_ROOT, targetsEntry));
 const scaffolder = await importTs(join(ROOT, 'mcp/registry.ts'));
 const routeIntegrations = scaffolder.listIntegrations().map((i) => i.id);
 const nonscalarByTag = JSON.parse(readFileSync(join(ROOT, 'src/elements/element-nonscalar.json'), 'utf8'));
@@ -158,6 +179,52 @@ function runDriver(name, { baseline, schemes, port, shots }) {
     '--shots', shots,
   ];
   return spawnSync(process.execPath, args, { cwd: ROOT, encoding: 'utf8' });
+}
+
+// The per-form trees gen-blocks emitted, or null when the block renders none
+// (transitional: a page still on the pre-contract shape has no template to
+// render from, and PR B Task 12 converts the rest).
+function readFormFiles(name, form) {
+  const path = join(OUT_DIR, 'f', `${name}.${form}.json`);
+  if (!existsSync(path)) return null;
+  return JSON.parse(readFileSync(path, 'utf8')).files;
+}
+
+// [html-binder] -- what tsc cannot see about the form that has no tsc.
+function htmlBinderErrors(name, files) {
+  const errors = [];
+  const binder = files.find((f) => f.path === `${name}.js`);
+  if (!binder) return [`${name}: the html form emitted no ${name}.js binder`];
+  if (/^\s*(?:export\s+)?(?:interface|type)\s/m.test(binder.content)) {
+    errors.push(`${name}: the emitted binder carries TypeScript; the strip did not run (gen-blocks writes the .js twin with esbuild)`);
+  }
+  for (const file of files) {
+    if (/new\s+EventSource\(|text\/event-stream|\.getReader\(/.test(file.content)) {
+      errors.push(`${name}/${file.path}: hand-rolls a stream reader; use the @kitn.ai/ui/wire readers`);
+    }
+  }
+  if (!/customElements\.whenDefined/.test(binder.content)) {
+    errors.push(`${name}: the binder does not await customElements.whenDefined. An element created before its definition lands DISCARDS a property set on it, and the upgrade does not put it back (spec 8b, amendment 7).`);
+  }
+  return errors;
+}
+
+// [react-tree] -- the three things spec 5.2 says tsc cannot see.
+function reactTreeErrors(name, files) {
+  const errors = [];
+  for (const file of files) {
+    if (file.path.endsWith('.tsx') && /<kai-[\w-]+/.test(file.content)) {
+      errors.push(`${name}/${file.path}: renders a raw <kai-*> tag. The react form imports every element from @kitn.ai/ui/react (spec 5.2); the intrinsic-JSX escape hatch is exactly what this check forbids.`);
+    }
+    if (/from '@kitn\.ai\/ui\/elements'/.test(file.content) && !file.path.endsWith('.controller.ts')) {
+      errors.push(`${name}/${file.path}: imports elements from @kitn.ai/ui/elements. Only the controller may name an element INTERFACE; the tree uses the wrappers.`);
+    }
+    const expected = targets.fileTarget('react', name, file.path);
+    if (file.target !== expected) {
+      errors.push(`${name}/${file.path}: target is "${file.target}", but src/targets.ts says "${expected}". The path the page displays is the path add writes.`);
+    }
+  }
+  return errors;
 }
 
 // ------------------------------------------------------------------ self-test
@@ -285,6 +352,36 @@ if (SELF_TEST) {
     }
   }
 
+  // Class 7: a binder that still carries TypeScript must be named. The strip
+  // runs once, in gen-blocks; a twin with types in it throws in the browser at
+  // parse time and every check upstream of the strip stays green.
+  {
+    const errs = htmlBinderErrors('planted', [
+      { path: 'planted.js', content: 'export interface State { open: boolean }\ncustomElements.whenDefined("kai-dock");\n', target: 'blocks/planted/planted.js' },
+    ]);
+    check('binder carrying TypeScript is named', errs.some((e) => /carries TypeScript/.test(e)), errs.join(' | '));
+  }
+
+  // Class 8: a raw <kai-*> tag in the react tree must be named. It COMPILES
+  // (JSX lets any dashed tag through as an intrinsic), which is why tsc can
+  // never be the check for it.
+  {
+    const errs = reactTreeErrors('planted', [
+      { path: 'Planted.tsx', content: 'export const P = () => <kai-dock label="Support" />;\n', target: targets.fileTarget('react', 'planted', 'Planted.tsx') },
+    ]);
+    check('raw <kai-*> JSX in the react tree is named', errs.some((e) => /raw <kai-\*> tag/.test(e)), errs.join(' | '));
+  }
+
+  // Class 9: a rendered target that disagrees with src/targets.ts must be
+  // named. The path the page displays is the path `add` writes, so a drift
+  // between them is a lie the reader finds out about after running it.
+  {
+    const errs = reactTreeErrors('planted', [
+      { path: 'Planted.tsx', content: 'export const P = () => null;\n', target: 'src/widgets/planted/Planted.tsx' },
+    ]);
+    check('rendered target disagreeing with targets.ts is named', errs.some((e) => /src\/targets\.ts says/.test(e)), errs.join(' | '));
+  }
+
   if (fails.length) {
     console.error(`verify-blocks --self-test: ${fails.length} class(es) NOT caught:`);
     for (const f of fails) console.error(`  RED ${f}`);
@@ -295,6 +392,9 @@ if (SELF_TEST) {
 }
 
 // ------------------------------------------------------------------ the gate
+// The checks each block runs, in order. The summary line counts THIS list
+// rather than restating a number that goes stale the next time one is added.
+const CHECK_NAMES = ['contracts', 'fresh', 'pins', 'driver', 'html-binder', 'react-tree'];
 const failures = [];
 const ok = (block, checkName, extra = '') => console.log(`OK  ${block} [${checkName}]${extra ? ` ${extra}` : ''}`);
 const red = (block, checkName, lines) => {
@@ -366,9 +466,41 @@ for (const source of sources) {
 }
 rmSync(shotsRoot, { recursive: true, force: true });
 
+// [html-binder] and [react-tree] -- over the per-form trees the site displays.
+let structuralCells = 0;
+const noForms = [];
+for (const source of sources) {
+  const name = source.dirName;
+  const html = readFormFiles(name, 'html');
+  const react = readFormFiles(name, 'react');
+  if (!html && !react) { noForms.push(name); continue; }
+  for (const [checkName, files, errsOf] of [
+    ['html-binder', html, htmlBinderErrors],
+    ['react-tree', react, reactTreeErrors],
+  ]) {
+    if (!files) { red(name, checkName, `no dist/blocks/f/${name}.${checkName === 'html-binder' ? 'html' : 'react'}.json, but the block emitted its other form -- half a tree is unchecked`); continue; }
+    structuralCells += 1;
+    const errs = errsOf(name, files);
+    if (errs.length) red(name, checkName, errs);
+    else ok(name, checkName, `(${files.length} file(s))`);
+  }
+}
+if (noForms.length) {
+  console.log(`SKIP ${noForms.join(', ')} [html-binder, react-tree] -- not on the authored contract yet, so no framework form is rendered (PR B Task 12 converts them)`);
+}
+// Anti-vacuity: zero structural cells is a broken walk over dist/blocks/f/,
+// not an empty gallery. At least one block is on the authored contract.
+if (structuralCells === 0) {
+  failures.push('(all) [html-binder, react-tree] zero cells ran -- no per-form tree was found under dist/blocks/f/. Build first; a silent zero here reads as green.');
+  console.error('RED (all) [html-binder, react-tree] zero cells ran -- no per-form tree under dist/blocks/f/');
+}
+
 if (failures.length) {
   console.error(`\nverify-blocks: FAIL -- ${failures.length} red check(s) across ${sources.length} block(s):`);
   for (const f of failures) console.error(`  RED ${f}`);
   process.exit(1);
 }
-console.log(`\nverify-blocks: PASS -- ${sources.length} block(s) x 4 checks (contracts, fresh, pins, driver), all green.`);
+console.log(
+  `\nverify-blocks: PASS -- ${sources.length} block(s) over ${CHECK_NAMES.length} checks (${CHECK_NAMES.join(', ')}), ` +
+    `${structuralCells} structural cell(s), all green.`,
+);

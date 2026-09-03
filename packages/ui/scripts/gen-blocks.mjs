@@ -15,6 +15,20 @@
 //                                             file contents - THE public
 //                                             integration surface (CLI,
 //                                             gallery, MCP all resolve it)
+//   dist/blocks/f/<name>.<form>.json          one file per block per FRAMEWORK
+//                                             delivery form (spec 3.5): the
+//                                             rendered tree, contents and
+//                                             install targets. The site's
+//                                             code view reads these, and so
+//                                             do the compile cells inside
+//                                             verify:scaffold, so what the
+//                                             page shows and what compiles
+//                                             are the same bytes. NOT inlined
+//                                             into r/<name>.json: that file
+//                                             is the CLI's integration
+//                                             surface and every `add` would
+//                                             then download the trees it will
+//                                             not use.
 //   dist/blocks/r/<name>.cdn.html             the self-contained CDN-paste
 //                                             form, pins stamped from
 //                                             package.json at build - always
@@ -137,6 +151,8 @@ const outputs = new Map();
 const put = (path, content) => outputs.set(path, content);
 
 put(join(OUT_DIR, 'registry.json'), JSON.stringify(blocksMod.buildRegistryIndex(withTwins), null, 2) + '\n');
+/** Blocks that render no framework form yet - see the transitional note below. */
+const skippedForms = [];
 for (const block of withTwins) {
   put(join(OUT_DIR, 'r', `${block.name}.json`), JSON.stringify(blocksMod.buildRegistryItem(block), null, 2) + '\n');
 
@@ -148,6 +164,48 @@ for (const block of withTwins) {
   // The driver page: the same generated form against the local /kit/ mount
   // (no pins - kit-relative URLs the way serve.mjs mounts dist).
   put(join(DRIVER_PAGES_DIR, block.name, 'index.html'), cdnForm(block, { version: VERSION, base: '/kit/' }, 'driver form'));
+
+  // One form JSON per FRAMEWORK renderer, from the TWINNED block, so the tree
+  // the page displays carries the stripped .js twin the html form installs.
+  // The axis is `FRAMEWORK_BLOCK_FORMS`, read where it lives: `cdn` is a
+  // single pasted file with no project to compile and is covered by
+  // verify:blocks [pins] and the driver instead.
+  //
+  // TRANSITIONAL: a block still on the pre-contract page shape renders no
+  // framework form at all (there is no parsed template to render from), so it
+  // is skipped by name here and its compile cells are skipped with it. PR B
+  // Task 12 converts the rest, and this branch then covers nothing.
+  if (!blocksMod.isAuthoredContractPage(pageHtmlOf(block))) {
+    skippedForms.push(block.name);
+    continue;
+  }
+  for (const form of blocksForms.FRAMEWORK_BLOCK_FORMS) {
+    const files = formFiles(block, form.id);
+    put(
+      join(OUT_DIR, 'f', `${block.name}.${form.id}.json`),
+      JSON.stringify({ block: block.name, form: form.id, files }, null, 2) + '\n',
+    );
+  }
+}
+if (skippedForms.length) {
+  console.log(
+    `gen-blocks: no per-form JSON for ${skippedForms.join(', ')} - not on the authored contract yet (PR B Task 12 converts them), so the form renderers and their compile cells have nothing to run on.`,
+  );
+}
+
+/** The block's `registry:page` source, or '' when it declares none. */
+function pageHtmlOf(block) {
+  const entry = block.manifest.files.find((f) => f.type === 'registry:page');
+  return (entry && block.files.get(entry.path)) ?? '';
+}
+
+function formFiles(block, formId) {
+  try {
+    return blocksForms.renderBlockForm(block, formId, { cdn: { version: VERSION } });
+  } catch (err) {
+    console.error(`gen-blocks: ${block.name} ${formId} form:\n  RED ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
 }
 
 function cdnForm(block, opts, label) {

@@ -223,6 +223,7 @@ import { createRequire } from 'node:module';
 // gate does. A second copy of PROJECTS is exactly the defect class this repo
 // keeps paying for; read that module's header before editing either caller.
 import { EXT, FRAMEWORK_PROJECT as PROJECT, createConsumerTsc, liftScript } from './lib/consumer-tsc-projects.mjs';
+import { loadBlockForms, runBlockCompileCells } from './lib/block-compile-cells.mjs';
 
 // `typescript` is loaded through Node's resolver rather than imported: the
 // checks below use its AST API synchronously, deep inside functions.
@@ -341,7 +342,12 @@ for (const f of FRAMEWORKS) {
 
 // The temp tree, the six tsc projects and the anti-theatre self-test — one
 // definition, shared with scripts/acceptance-gate-compiles.mjs.
-const { tmp, PROJECTS, runTsc, clearSources, selfTest, cleanup } = createConsumerTsc({ keep: KEEP, fail });
+// Kept whole as well as destructured: the blocks phase below hands the WHOLE
+// harness to its cells, which reach for `sandbox` (a subdirectory project with
+// a recursive include), and a second destructured name here would be one more
+// thing to keep in step with that module.
+const consumerTsc = createConsumerTsc({ keep: KEEP, fail });
+const { tmp, PROJECTS, runTsc, clearSources, selfTest, cleanup } = consumerTsc;
 
 /**
  * The angular template, which tsc cannot see.
@@ -1951,7 +1957,44 @@ async function main() {
   // Block (2). Everything above this line is the FRONT END; the routes were
   // sliced off and thrown away until this existed.
   await routeCheck(scaffold);
+
+  // ── The BLOCKS phase ──────────────────────────────────────────────────────
+  // Not "block (4)": blocks-the-product (packages/blocks, the authored pages a
+  // reader copies off the site) are a different thing from this file's "block
+  // (1)" and "block (2)", which are the two halves of one scaffold. This phase
+  // compiles the delivery forms those authored blocks render into, over the
+  // harness main() already stood up. The axis and the cell count come out of
+  // scripts/lib/block-compile-cells.mjs, which prints them.
+  await blockFormCheck(esbuild);
   cleanup();
+}
+
+/** Phase 4: the authored blocks x their framework delivery forms. */
+async function blockFormCheck(esbuild) {
+  const { blocks, forms, noForms, missing } = loadBlockForms(resolve(ROOT, 'dist/blocks'));
+  if (missing) {
+    cleanup();
+    fail(`the block form trees are missing: ${missing}`);
+  }
+  if (noForms.length) {
+    console.log(
+      `  · no per-form tree for ${noForms.join(', ')}: not on the authored contract yet ` +
+        '(PR B Task 12 converts them), so there is nothing to compile for them',
+    );
+  }
+  const { cells, failures } = await runBlockCompileCells({
+    tsc: consumerTsc,
+    blocks,
+    forms,
+    esbuild,
+    log: console.log,
+  });
+  if (failures.length) {
+    for (const f of failures) console.log(`  ✗ ${f}`);
+    cleanup();
+    fail(`${failures.length} block form cell(s) failed. Each one is a tree the blocks site tells a reader to copy.`);
+  }
+  console.log(`  ✓ every emitted block form passes its cell (${cells} cell(s))`);
 }
 
 main().catch((e) => {

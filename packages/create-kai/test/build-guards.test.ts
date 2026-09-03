@@ -457,7 +457,7 @@ describe('missingReuseInputsProblem', () => {
       missingReuseInputsProblem([
         'src/index.ts',
         '../blocks/src/registry.ts',
-        '../blocks/src/forms.ts',
+        '../blocks/src/forms/index.ts',
       ]),
     ).toBeNull();
   });
