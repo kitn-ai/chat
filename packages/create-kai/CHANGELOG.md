@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.5.0](https://github.com/kitn-ai/ui/compare/create-kai-v0.4.0...create-kai-v0.5.0) (2026-09-03)
+
+
+### Features
+
+* **blocks:** the authored contract, and the html / react / cdn renderers ([#374](https://github.com/kitn-ai/ui/issues/374)) ([c785d1a](https://github.com/kitn-ai/ui/commit/c785d1a389449c7582c33fd11a48d7e4cfd68ed7))
+* **create-kai:** add &lt;block&gt; — registry resolution, framework detection, three forms ([8d9353d](https://github.com/kitn-ai/ui/commit/8d9353d81b4bb38cb3f0e737064d04105254a4e0))
+* **gallery:** the framework axis, zip download, and icon buttons (owner round 2) ([497f583](https://github.com/kitn-ai/ui/commit/497f5834cf6de511141a7927ff6cd3853b244586))
+
+
+### Bug Fixes
+
+* **create-kai:** wizard registry catches up to the current construct schema ([3efeed6](https://github.com/kitn-ai/ui/commit/3efeed6f651ff94fbdbe19207ad632184411fc88))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @kitn.ai/ui bumped to 0.32.0
+
 ## [0.4.0](https://github.com/kitn-ai/ui/compare/create-kai-v0.3.1...create-kai-v0.4.0) (2026-08-29)
 
 
