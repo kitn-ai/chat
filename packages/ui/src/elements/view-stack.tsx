@@ -128,6 +128,14 @@ defineWebComponent<Props, Events>('kai-view-stack', {
 
   // Discover the light-DOM `<kai-view>` children, and follow adds, removes
   // and `name`/`tab-root` edits (the conversation-item pattern).
+  //
+  // The cached `entries` refresh on child-list and attribute mutations ONLY, so a
+  // post-mount PROPERTY write (`view.name = 'chat'`, which a framework does
+  // without touching the attribute) does not invalidate them; that is sufficient
+  // today because every place the name actually decides something re-reads the
+  // child live via `readViewEntry` -- the active-view effect below does, and it
+  // re-runs on each navigation -- and the cached entries only ever supply the
+  // controller's set of known views, which a rename does not change the size of.
   onMount(() => {
     const read = () => setEntries(viewChildren().map(readViewEntry));
     read();

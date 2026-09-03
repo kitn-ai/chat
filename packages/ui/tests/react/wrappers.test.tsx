@@ -129,8 +129,11 @@ test('object prop (messages) on Chat reaches the element unstringified', async (
 // F-8) found three holes in one block. `slot` and `hidden` were not declared on
 // WebComponentProps and not forwarded, so composing kai elements into kai SLOTS --
 // which most blocks do -- did not type-check and did not work; and a prop set back
-// to `undefined` was skipped rather than cleared, so a widget that drops its
-// conversation starters after the first turn showed them forever.
+// to `undefined` was skipped rather than applied, so a widget that drops its
+// conversation starters after the first turn showed them forever. `undefined` now
+// restores the element's DECLARED default (absent still leaves the element alone),
+// which clears the starters without destroying defaults like the prompt input's
+// placeholder.
 
 test('slot is forwarded to the element (composing into a kai slot)', async () => {
   const { container } = render(<Panel slot="panel" />);
@@ -154,15 +157,58 @@ test('hidden is forwarded, and toggles back off', async () => {
   expect(el.hasAttribute('hidden')).toBe(false);
 });
 
-test('a prop re-rendered as undefined CLEARS it on the element', async () => {
-  const { container, rerender } = render(<Suggestions suggestions={['a', 'b']} />);
+test('a prop re-rendered as undefined CLEARS what it showed', async () => {
+  // The F-8 case itself: a widget that drops its conversation starters after the
+  // first turn. `undefined` restores kai-suggestions' DECLARED default, which is
+  // an empty list, so the chips go away -- which is what the caller meant. The
+  // expected value is read off an element this runtime never wrote to, so the
+  // test pins the rule rather than that element's current default.
+  const probe = render(<Suggestions />);
+  const probeEl = probe.container.querySelector('kai-suggestions') as unknown as AnyEl;
+  await flush();
+  const declaredDefault = probeEl.suggestions;
+  probe.unmount();
+
+  const { container, rerender } = render(
+    <Suggestions suggestions={['Draft a plan', 'Summarise this']} />,
+  );
   const el = container.querySelector('kai-suggestions') as unknown as AnyEl;
   await flush();
-  expect(el.suggestions).toEqual(['a', 'b']);
+  expect(el.suggestions).toEqual(['Draft a plan', 'Summarise this']);
+  expect(el.shadowRoot?.textContent).toContain('Draft a plan');
 
   rerender(<Suggestions suggestions={undefined} />);
   await flush();
-  expect(el.suggestions).toBeUndefined();
+  expect(el.suggestions).toEqual(declaredDefault);
+  // And the chips are actually gone, not merely a different property value.
+  expect(el.shadowRoot?.textContent).not.toContain('Draft a plan');
+});
+
+test("a prop re-rendered as undefined RESTORES the element's declared default", async () => {
+  // `undefined` means "no value from me", and the element's own default IS the
+  // no-value rendering -- so restoring it is what the caller asked for. Writing
+  // literal `undefined` instead destroyed defaults the element declares and
+  // passes straight through with no `??` guard: kai-prompt-input's placeholder
+  // ('Send a message...') and `attach` (true) both went that way.
+  //
+  // The expected value is READ OFF the element rather than hard-coded, so this
+  // pins the rule and not today's copy.
+  const probe = render(<PromptInput />);
+  const probeEl = probe.container.querySelector('kai-prompt-input') as unknown as AnyEl;
+  await flush();
+  const declaredDefault = probeEl.placeholder;
+  expect(typeof declaredDefault).toBe('string');
+  expect(declaredDefault).not.toBe('');
+  probe.unmount();
+
+  const { container, rerender } = render(<PromptInput placeholder="Ask..." />);
+  const el = container.querySelector('kai-prompt-input') as unknown as AnyEl;
+  await flush();
+  expect(el.placeholder).toBe('Ask...');
+
+  rerender(<PromptInput placeholder={undefined} />);
+  await flush();
+  expect(el.placeholder).toBe(declaredDefault);
 });
 
 test('a prop ABSENT from props is left alone (not cleared)', async () => {

@@ -3,6 +3,9 @@
 // *properties* (via a ref, so arrays/objects pass through unstringified), and
 // `on<Event>` handlers are wired as `addEventListener` for the element's
 // CustomEvents. Layout props (className/style/id) pass straight through.
+//
+// PROP RULE, in one sentence: a prop passed as `undefined` restores the element's
+// declared default, and a prop absent from props leaves the element alone.
 import {
   createElement,
   forwardRef,
@@ -16,6 +19,12 @@ import {
   type RefAttributes,
 } from 'react';
 
+/** Base props every generated wrapper accepts.
+ *
+ *  Prop semantics: passing a prop as `undefined` restores the element's DECLARED
+ *  default (the value the element itself declares, captured off the instance on
+ *  the first post-upgrade apply); omitting the key entirely leaves whatever is on
+ *  the element alone. */
 export interface WebComponentProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: 'light' | 'dark' | 'auto';
@@ -33,6 +42,16 @@ export interface WebComponentProps {
   /** Light-DOM children passed through to the element (slots). */
   children?: ReactNode;
 }
+
+/** Per-INSTANCE snapshot of each managed prop's value as the element declared it,
+ *  taken on the first post-upgrade apply for that element (before this runtime has
+ *  written anything to it). A prop later passed as `undefined` writes the captured
+ *  value back, so `undefined` means "restore the element's declared default" rather
+ *  than "assign literal undefined" -- which used to destroy defaults like
+ *  `kai-prompt-input`'s `placeholder` ('Send a message...') and `attach` (true).
+ *  A WeakMap, so it is per element instance and never global, and so an unmounted
+ *  element's snapshot is collectable with it. */
+const declaredDefaults = new WeakMap<HTMLElement, Record<string, unknown>>();
 
 // Per-element registration fires on the CLIENT, once per tag. The element modules
 // touch `window` at module-eval (Solid's runtime), so the thunk must never run on
@@ -119,18 +138,42 @@ export function createWebComponent<
       const el = elRef.current;
       if (!el) return;
       const applyProps = () => {
+        // Capture the element's DECLARED defaults once, on the first apply that
+        // runs against an upgraded element and before this runtime writes any
+        // prop. Pre-upgrade the properties are meaningless (a plain HTMLElement
+        // has none of them), so the capture waits for the definition; the
+        // whenDefined re-apply below is what performs it in that case.
+        const upgraded = typeof customElements === 'undefined' || !!customElements.get(tagName);
+        let defaults = declaredDefaults.get(el);
+        if (!defaults && upgraded) {
+          defaults = {};
+          for (const name of propNames) {
+            defaults[name] = (el as unknown as Record<string, unknown>)[name];
+          }
+          declaredDefaults.set(el, defaults);
+        }
         for (const name of propNames) {
-          // PRESENT-with-undefined CLEARS. ABSENT is untouched.
+          // PRESENT-with-undefined RESTORES THE DECLARED DEFAULT. ABSENT is untouched.
           //
           // React hands a component a COMPLETE props object every render, so a
           // key the caller stopped passing is the caller saying "no value" --
           // and skipping it left the last value stuck on the element forever
           // (blocks contract spike, F-8: a widget that drops its conversation
-          // starters after the first turn went on showing them). A key that was
-          // never in props at all is not the caller saying anything, and
-          // clearing on it would stomp a value set imperatively on the element.
-          // A React caller who means "leave it alone" omits the key.
-          if (name in p) (el as unknown as Record<string, unknown>)[name] = p[name];
+          // starters after the first turn went on showing them). "No value" is
+          // the element's own default, though, not literal `undefined`: writing
+          // `undefined` destroyed defaults the element declares and passes on
+          // with no `??` guard, so `<PromptInput placeholder={undefined} />`
+          // wiped 'Send a message...' and `attach={undefined}` turned the
+          // paperclip off. Restoring the captured value gives the caller back
+          // exactly the element they would have rendered with no prop at all.
+          //
+          // A key that was never in props at all is not the caller saying
+          // anything, and touching it would stomp a value set imperatively on
+          // the element. A React caller who means "leave it alone" omits the key.
+          if (!(name in p)) continue;
+          const value = p[name];
+          (el as unknown as Record<string, unknown>)[name] =
+            value === undefined ? defaults?.[name] : value;
         }
       };
       applyProps();
@@ -172,7 +215,12 @@ export function createWebComponent<
         style: p.style as CSSProperties | undefined,
         id: p.id as string | undefined,
         slot: p.slot as string | undefined,
-        hidden: p.hidden as boolean | undefined,
+        // Normalised to `true` or undefined, never `false`: React 18 routes a
+        // boolean on a custom element through the ATTRIBUTE path, where `false`
+        // stringifies to hidden="false" -- which is still a present `hidden`
+        // attribute and still hides the element. `undefined` removes it on every
+        // React version, so `false` and absent both mean "not hidden".
+        hidden: p.hidden === true ? true : undefined,
       },
       // Light-DOM children pass straight through to the element (slots).
       (p.children ?? null) as never,
