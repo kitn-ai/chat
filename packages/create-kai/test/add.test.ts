@@ -31,6 +31,7 @@ import {
 import type { Block } from '../src/blocks';
 import { componentName } from '../src/react-form';
 import { BLOCK_FORMS, withStrippedTwins } from '@kitn.ai/blocks/forms';
+import { fileTarget, installRoot } from '@kitn.ai/blocks/targets';
 import { decideForm, mergeDependencies, parseAddArgs, runAdd } from '../src/add';
 import type { AddEnv } from '../src/add';
 import { BLOCKS_ROOT, KIT_RANGE, KIT_VERSION, authoredBlock, loadBundledBlocks } from './helpers';
@@ -169,7 +170,7 @@ describe('web-component form (any non-react project)', () => {
     for (const block of all()) {
       const dir = await project(`binder-${block.name}`, { name: 'host' });
       expect((await runInto(dir, [block.name])).code).toBe(0);
-      const binder = await readFile(path.join(dir, 'blocks', block.name, `${block.name}.js`), 'utf8');
+      const binder = await readFile(path.join(dir, fileTarget('html', block.name, `${block.name}.js`)), 'utf8');
       expect(binder, `${block.name}: no whenDefined await`).toContain('customElements.whenDefined');
       expect(binder, `${block.name}: no controller call`).toContain('createController');
       expect(binder, `${block.name}: no readiness signal`).toContain('window.__blockReady = true;');
@@ -186,7 +187,10 @@ describe('web-component form (any non-react project)', () => {
       const reactDir = await project(`reg-react-${block.name}`, { name: 'host', dependencies: { react: '19' } });
       expect((await runInto(wcDir, [block.name])).code).toBe(0);
       expect((await runInto(reactDir, [block.name])).code).toBe(0);
-      for (const base of [path.join(wcDir, 'blocks', block.name), path.join(reactDir, 'src/blocks', block.name)]) {
+      for (const base of [
+        path.join(wcDir, installRoot('html', block.name)),
+        path.join(reactDir, installRoot('react', block.name)),
+      ]) {
         for (const file of (await readdir(base)).filter((f) => f.endsWith('.js'))) {
           const js = await readFile(path.join(base, file), 'utf8');
           expect(js, `${base}/${file} still imports the autoloader`).not.toContain(`'@kitn.ai/ui/autoloader'`);
@@ -200,12 +204,12 @@ describe('web-component form (any non-react project)', () => {
     const dir = await project('collide', { name: 'host' });
     expect((await runInto(dir, [block.name])).code).toBe(0);
     const page = block.manifest.files.find((f) => f.type === 'registry:page')!;
-    const pagePath = path.join(dir, 'blocks', block.name, page.target ?? path.basename(page.path));
+    const pagePath = path.join(dir, fileTarget('html', block.name, page.target ?? path.basename(page.path)));
     await writeFile(pagePath, 'EDITED BY THE CONSUMER');
     const second = await runInto(dir, [block.name]);
     expect(second.code).toBe(1);
     expect(second.err.join('\n')).toContain('refusing to overwrite');
-    expect(second.err.join('\n')).toContain(path.posix.join('blocks', block.name, page.target ?? path.basename(page.path)));
+    expect(second.err.join('\n')).toContain(fileTarget('html', block.name, page.target ?? path.basename(page.path)));
     expect(await readFile(pagePath, 'utf8')).toBe('EDITED BY THE CONSUMER');
   });
 
@@ -251,7 +255,7 @@ describe('react form (react in the project deps)', () => {
       const dir = await project(`react-${block.name}`, { name: 'host', dependencies: { react: '^19.0.0' } });
       const run = await runInto(dir, [block.name]);
       expect(run.code, `${block.name}: ${run.err.join('\n')}`).toBe(0);
-      const base = path.join(dir, 'src/blocks', block.name);
+      const base = path.join(dir, installRoot('react', block.name));
       const tsx = await readFile(path.join(base, `${componentName(block.name)}.tsx`), 'utf8');
       expect(tsx).toContain("from '@kitn.ai/ui/react'");
       expect(tsx).toContain(`export function ${componentName(block.name)}()`);
@@ -265,6 +269,22 @@ describe('react form (react in the project deps)', () => {
       const page = block.manifest.files.find((f) => f.type === 'registry:page')!;
       expect(existsSync(path.join(base, page.target ?? path.basename(page.path)))).toBe(false);
     }
+  });
+
+  it('refuses a second add at the NEW root too, overwriting nothing', async () => {
+    // The collision refusal is whole-plan and unchanged by this PR, but it had
+    // no react case at all, and the root it guards just moved. A refusal that
+    // silently stopped matching would look exactly like a clean first add.
+    const block = all()[0];
+    const dir = await project('react-collide', { name: 'host', dependencies: { react: '^19.0.0' } });
+    expect((await runInto(dir, [block.name])).code).toBe(0);
+    const component = fileTarget('react', block.name, `${componentName(block.name)}.tsx`);
+    await writeFile(path.join(dir, component), 'EDITED BY THE CONSUMER');
+    const second = await runInto(dir, [block.name]);
+    expect(second.code).toBe(1);
+    expect(second.err.join('\n')).toContain('refusing to overwrite');
+    expect(second.err.join('\n')).toContain(component);
+    expect(await readFile(path.join(dir, component), 'utf8')).toBe('EDITED BY THE CONSUMER');
   });
 });
 
