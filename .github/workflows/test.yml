@@ -1135,6 +1135,21 @@ jobs:
       - name: Block cells (every block vs its committed baseline, built bundle)
         run: pnpm --filter @kitn.ai/ui run verify:blocks
 
+      # The REACT RUNTIME cell (spec 5.3, ruled). The compile cells in
+      # verify:scaffold prove the emitted react tree type-checks; they cannot
+      # see the two defects the contract spike found, because both type-check
+      # perfectly: a prop set back to `undefined` being skipped rather than
+      # clearing, and a literal on a self-managed prop being re-applied after
+      # every render and undoing every navigation. This packs the tarball,
+      # installs it into a throwaway Vite app, compiles the emitted tree with
+      # tsc --strict, greps it for the casts that would let it lie, and drives
+      # the block's own states.mjs through it in a real Chromium. Every other
+      # framework is compile-only at runtime, and the gate's output says so.
+      # Same three needs as the step above (the downloaded kit-dist, the
+      # Playwright browser) plus network, for the install.
+      - name: Block react runtime cell (packed tarball, real Vite app)
+        run: pnpm --filter @kitn.ai/ui run verify:blocks:react
+
       # Does a keyboard focus indicator actually PAINT inside a kai-* shadow
       # root? Asserting classes proves nothing here: `@property` registration is
       # document-global and ignored inside a shadow root, so every `--tw-*` is

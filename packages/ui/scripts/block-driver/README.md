@@ -55,7 +55,22 @@ Green means every behavioral and computed-style value matches the recorded
 pre-refactor facade, both schemes; the `<after-shots-dir>` set pairs with
 `baselines/screenshots/` name-for-name for the owner's eyeball pass.
 
-Port default is 8952; never point it at 4400/4401/8931. This guard has been
-watched failing (a planted wrong expectation and a planted page defect each
-went red with named states before the recorded green) — re-plant one before
-trusting structural changes to the driver itself.
+Port default is 8952; never point it at 4400/4401/8931. `verify-blocks.mjs`
+takes 8954 and 8955, and the react runtime cell (`verify-blocks-react.mjs`,
+which serves its own throwaway Vite app rather than `serve.mjs`) takes 8961
+and 8962. This guard has been watched failing (a planted wrong expectation and
+a planted page defect each went red with named states before the recorded
+green). Re-plant one before trusting structural changes to the driver itself.
+
+Two page-spec keys change what a run asserts, and both exist for a page that
+mounts the same block in a DIFFERENT document. `skipLayout: true` drops every
+probe the state named in `layoutProbes`, the `expect` entries over them, and
+every `styleProbe`: a pixel measurement taken in one document is not a fact
+about another. `consoleIgnore` on a page spec is MERGED with the scenario's,
+so a page can tolerate its own host noise without relaxing the zero-console
+rule everywhere else.
+
+`react-host/` is the checked-in Vite app the react runtime cell copies into a
+temp dir and installs the packed tarball into. Its dependency ranges are the
+repo's own, pinned there rather than resolved fresh each run; the cell prints
+what they resolved to.

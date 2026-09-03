@@ -296,7 +296,9 @@ export function createController(deps: SupportWidgetDeps): SupportWidgetControll
     actions,
     subscribe(listener) {
       listeners.add(listener);
-      return () => listeners.delete(listener) as unknown as void;
+      return () => {
+        listeners.delete(listener);
+      };
     },
   };
 }

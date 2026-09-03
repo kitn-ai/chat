@@ -62,6 +62,36 @@ export default {
         );
       },
     },
+    // The REACT form, mounted at the root of a throwaway Vite app by
+    // scripts/verify-blocks-react.mjs. Same story, same probes, same
+    // page-specific facts: only the URL differs, because the react tree is a
+    // component in an app rather than a page in a directory. The element ids
+    // survive the translation (a literal id is a literal attribute), which is
+    // what lets one set of probes drive both.
+    react: {
+      path: '/',
+      indexKey: 'kai:support-widget:threads',
+      rowScope: 'kai-conversations',
+      messagesElementId: 'thread',
+      expectedFirstTitle: 'Let me pull up that order.',
+      expectRestore: true,
+      // Layout probes are measured in the BLOCK's own page and do not
+      // transfer to a mounted subtree in a Vite index.html. This page asserts
+      // state, navigation and console-cleanliness; geometry stays where it
+      // was measured.
+      skipLayout: true,
+      // No `consoleIgnore` here on purpose. The driver supports a per-page
+      // list (merged with the scenario's, so widening one page never relaxes
+      // another), and a pre-emptive list would be a filter over failures
+      // nobody has seen. Measured instead: this host prints only `debug` and
+      // `info` (vite's HMR connect, React's devtools tip, the kit's mock
+      // banner), and the driver counts neither.
+      closedSend: () => {
+        document.getElementById('prompt').dispatchEvent(
+          new CustomEvent('kai-submit', { detail: { value: 'Request a refund', attachments: [] } }),
+        );
+      },
+    },
     // The kai-chat facade page (Task 2.1's harness, unchanged) — the parity
     // reference where states overlap.
     facade: {
@@ -128,6 +158,12 @@ export default {
           return Math.round(sub.height);
         },
       },
+      // Marked LAYOUT: measured in this page's own document, so a page that
+      // mounts the block somewhere else (the react host) skips them rather
+      // than failing on a number that was never about that document. The
+      // styleProbes go with them: a computed backgroundColor is a paint fact
+      // of the document it was read in.
+      layoutProbes: ['homeCtaClearOfSubtitle', 'homeSubtitleToCtaGap', 'homeTitleToSubtitleGap', 'homeSubtitleLineBox'],
       expect: {
         greeting: true, helpLink: true,
         homeCtaClearOfSubtitle: true,

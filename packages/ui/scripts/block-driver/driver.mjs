@@ -30,6 +30,17 @@
 //     --baseline <file>   diff this run against a recorded verdict
 //     --out <file>        also write the (non-baseline) verdict here
 //
+// PER-PAGE OVERRIDES on the page spec, beside `path` and the page-specific
+// facts a scenario's probes read:
+//   skipLayout: true       skip every probe this state named in `layoutProbes`,
+//                          the `expect` entries over those probes, and every
+//                          styleProbe. For a page that mounts the same block in
+//                          a DIFFERENT document, where a pixel measurement taken
+//                          somewhere else is not a fact about this one.
+//   consoleIgnore: [re]    merged with the scenario's list rather than replacing
+//                          it, so a page can tolerate its own host noise without
+//                          relaxing the zero-console rule on every other page.
+//
 // Interaction ethic (inherited from fine-drive.mjs): actions are user-level —
 // Playwright's shadow-piercing locators click what a person would click. A
 // scenario that needs a programmatic step (e.g. landing a reply while a dock
@@ -109,15 +120,26 @@ async function runStory(pageKey, colorScheme) {
   await page.goto(`${BASE}${spec.path}`, { waitUntil: 'load' });
   if (scenario.ready) await scenario.ready(page, sctx);
 
+  // LAYOUT SKIP (spec 5.3 ruling, amended in execution): a geometry probe is
+  // a measurement of the document it was taken in. A page that mounts the same
+  // block somewhere else (the react host is a Vite index.html with a mounted
+  // subtree, not the block's own page) declares `skipLayout: true` on its
+  // spec, and each state names the probes that are geometry in `layoutProbes`.
+  // Such a page skips those probes, their `expect` entries, and every
+  // styleProbe, and asserts state, navigation and console-cleanliness instead.
+  const skipLayout = spec.skipLayout === true;
+
   for (const state of scenario.states) {
+    const layout = new Set(state.layoutProbes ?? []);
     const rec = { name: state.name, probes: {}, styles: {} };
     try {
       if (state.act) await state.act(page, sctx);
       await page.screenshot({ path: join(SHOTS, `${pageKey}-${colorScheme}-${state.name}.png`) });
       for (const [key, probe] of Object.entries(state.probes ?? {})) {
+        if (skipLayout && layout.has(key)) continue;
         rec.probes[key] = await probe(page, sctx);
       }
-      for (const sp of state.styleProbes ?? []) {
+      for (const sp of skipLayout ? [] : state.styleProbes ?? []) {
         const values = await sp.target(page, sctx).evaluate(
           (el, props) => Object.fromEntries(props.map((p) => [p, getComputedStyle(el)[p]])),
           sp.props,
@@ -125,6 +147,12 @@ async function runStory(pageKey, colorScheme) {
         rec.styles[sp.name] = values;
       }
       for (const [key, want] of Object.entries(state.expect ?? {})) {
+        // An expectation over a probe that was SKIPPED is not an expectation
+        // this run took a measurement for. Comparing it anyway fails on
+        // `undefined`; passing it silently would be worse, which is why the
+        // skip is keyed off the same `layoutProbes` list rather than off the
+        // value being absent.
+        if (skipLayout && layout.has(key)) continue;
         const got = rec.probes[key];
         if (JSON.stringify(got) !== JSON.stringify(want)) {
           run.failures.push(`${pageKey}/${colorScheme}/${state.name}: probe "${key}" expected ${JSON.stringify(want)}, got ${JSON.stringify(got)}`);
@@ -139,7 +167,11 @@ async function runStory(pageKey, colorScheme) {
     run.states.push(rec);
   }
 
-  const ignore = scenario.consoleIgnore ?? [];
+  // MERGED, page patterns first: a page can carry noise the scenario's other
+  // pages must not be allowed to carry. The react host is a different document
+  // with a different dev-time runtime in it, and widening the SCENARIO's list
+  // to cover a host warning would quietly relax the `block` page too.
+  const ignore = [...(spec.consoleIgnore ?? []), ...(scenario.consoleIgnore ?? [])];
   const realErrors = consoleErrors.filter((e) => !ignore.some((re) => re.test(e)));
   if (realErrors.length) run.failures.push(`${pageKey}/${colorScheme}: console not clean — ${realErrors.join(' | ')}`);
 

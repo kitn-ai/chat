@@ -63,13 +63,16 @@
 // react .tsx carrying a raw <kai-dock>, and a rendered file whose target
 // disagrees with src/targets.ts. Guards that were never watched failing prove
 // nothing ([[checks-that-prove-nothing]]).
-import { readFileSync, readdirSync, existsSync, writeFileSync, mkdtempSync, rmSync, mkdirSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync, mkdtempSync, rmSync, mkdirSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import * as esbuild from 'esbuild';
+
+// The directory walk, shared with the react runtime cell (scripts/lib/).
+import { scanBlocks } from './lib/scan-blocks.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // The authored block sources are their own package; the driver, its baselines
@@ -116,22 +119,6 @@ const scaffolder = await importTs(join(ROOT, 'mcp/registry.ts'));
 const routeIntegrations = scaffolder.listIntegrations().map((i) => i.id);
 const nonscalarByTag = JSON.parse(readFileSync(join(ROOT, 'src/elements/element-nonscalar.json'), 'utf8'));
 
-// The directory walk, mirroring gen-blocks.mjs' scan (the one fs-side copy;
-// the registry module itself is fs-free by design, so each fs caller walks).
-function scanBlocks() {
-  const sources = [];
-  for (const entry of readdirSync(BLOCKS_DIR, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const dir = join(BLOCKS_DIR, entry.name);
-    const manifestPath = join(dir, 'registry-item.json');
-    if (!existsSync(manifestPath)) continue;
-    const files = readdirSync(dir, { withFileTypes: true })
-      .filter((f) => f.isFile() && f.name !== 'registry-item.json')
-      .map((f) => ({ name: f.name, content: readFileSync(join(dir, f.name), 'utf8') }));
-    sources.push({ dirName: entry.name, manifestJson: readFileSync(manifestPath, 'utf8'), files });
-  }
-  return sources;
-}
 
 // [pins] on the emitted artifact. Exported-style helper so --self-test can
 // feed it doctored input.
@@ -323,7 +310,7 @@ if (SELF_TEST) {
   // of a real committed baseline, one leg (light only, one block) so the
   // plant proves the browser-run class without doubling the gate's cost.
   {
-    const sources = scanBlocks();
+    const sources = scanBlocks(BLOCKS_DIR);
     const withBaseline = sources.map((s) => s.dirName).find((n) => driverPrereqErrors(n).length === 0);
     if (!withBaseline) {
       check('baseline mismatch detected by the driver', false,
@@ -410,7 +397,7 @@ if (!existsSync(join(ROOT, 'dist', 'kai.es.js')) || !existsSync(OUT_DIR)) {
   process.exit(1);
 }
 
-const sources = scanBlocks();
+const sources = scanBlocks(BLOCKS_DIR);
 if (sources.length === 0) {
   console.error(`verify-blocks: no block directories under ${BLOCKS_DIR} -- a zero-block scan is a broken walk, not an empty gallery.`);
   process.exit(1);
