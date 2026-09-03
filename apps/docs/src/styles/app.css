@@ -51,10 +51,13 @@
    /guides/introduction/ (scrollWidth of the header's children plus its gaps and
    padding, confirmed by walking the viewport down 1px at a time with the nav
    forced visible until the row overflowed) the row needs 1226px, so it
-   collapses below 78rem/1248px, leaving a little room for wider font metrics,
-   and the sidebar's topic switcher becomes the navigation. Re-measure after
-   adding a topic: an overflowing row does not fail loudly, it just crowds the
-   search box. */
+   collapses below 78rem/1248px and the sidebar's topic switcher becomes the
+   navigation. 1226px rounds to 77rem; the extra rem is deliberate headroom for
+   wider font metrics and is not a stale value to correct downward, because the
+   two directions are not symmetric: overshooting drops the nav a few pixels
+   early, which nobody sees, while undershooting crowds the search box. Which is
+   also the rule for re-measuring after adding a topic: an overflowing row does
+   not fail loudly. */
 @theme {
   --breakpoint-chrome: 50rem;
   --breakpoint-nav: 78rem;

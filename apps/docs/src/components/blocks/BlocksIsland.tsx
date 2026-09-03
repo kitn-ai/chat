@@ -8,7 +8,7 @@
  * /blocks/f/<id>.<form>.json. Nothing is generated here; that happens once,
  * in packages/ui/scripts/gen-blocks.mjs, during the kit build.
  */
-import { createResource, Show, type JSX } from 'solid-js';
+import { createResource, Match, Switch, type JSX } from 'solid-js';
 import { loadKit } from '../example/kit';
 import { BlocksPage } from './BlocksPage';
 import {
@@ -36,18 +36,29 @@ const loadForm = (id: string, form: BlockFormId): Promise<FormPayload> =>
 
 export default function BlocksIsland(): JSX.Element {
   const [items] = createResource(boot);
+  /* Read `state` BEFORE `items()`. Solid's resource accessor RETHROWS the
+     rejection when you call it (solid-js 1.9, solid.js:322), so a
+     `when={items()}` gate throws out of the render rather than falling to its
+     fallback, and a client:only island has no ErrorBoundary above it: the page
+     sits on "Loading blocks..." for ever with nothing saying why. The state
+     check is preferred over wrapping this in an ErrorBoundary because the only
+     failure worth catching here is this one fetch, and the boundary would also
+     swallow render errors coming out of BlocksPage, which should surface.
+     Pinned by test/blocks-island.test.tsx. */
   return (
-    <Show
-      when={items()}
+    <Switch
       fallback={
-        <p class="mx-auto w-full max-w-6xl px-4 py-10 text-sm text-ink-2">
-          {items.error
-            ? `Could not load the block registry: ${String(items.error)}`
-            : 'Loading blocks...'}
-        </p>
+        <p class="mx-auto w-full max-w-6xl px-4 py-10 text-sm text-ink-2">Loading blocks...</p>
       }
     >
-      {(list) => <BlocksPage items={list()} loadForm={loadForm} />}
-    </Show>
+      <Match when={items.state === 'errored'}>
+        <p class="mx-auto w-full max-w-6xl px-4 py-10 text-sm text-ink-2">
+          {`Could not load the block registry at ${registryUrl()}: ${String(items.error)}`}
+        </p>
+      </Match>
+      <Match when={items.state === 'ready' ? items() : undefined}>
+        {(list) => <BlocksPage items={list()} loadForm={loadForm} />}
+      </Match>
+    </Switch>
   );
 }
