@@ -25,7 +25,7 @@ export const README_FILE = 'README.md';
 /**
  * "What the block needs" (spec 3.5), derived rather than left to ride on
  * `manifest.docs` alone. The three shipped blocks all carry a `docs` sentence
- * today (verified below), so this is currently invisible in every generated
+ * today, so this is currently invisible in every generated
  * README - but a future block with envVars or a route dependency and NO
  * `docs` would otherwise ship a README that says nothing about what it needs,
  * which is the gap the adversarial review flagged. `null` when the block
