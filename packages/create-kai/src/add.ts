@@ -18,7 +18,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
-import { BLOCK_FORMS } from '@kitn.ai/blocks/forms';
+import { BLOCK_FORMS, README_FILE } from '@kitn.ai/blocks/forms';
 
 import type { AxisIo } from './axes';
 import {
@@ -282,6 +282,23 @@ export async function runAdd(argv: readonly string[], env: AddEnv): Promise<numb
   }
 
   for (const note of plan.notes) env.out(note);
-  for (const docs of plan.docs) env.out(docs);
+
+  // THE README, VERBATIM. Every project-shaped form ships one (spec 3.5): what
+  // the block needs, and the one framework-config line where there is one.
+  // Writing it without printing it ends the command on a file list and leaves
+  // the consumer to go find the thing that explains the files.
+  //
+  // Matched on the renderer's OWN constant rather than the string "README.md",
+  // and on the basename because the path is the project-relative target.
+  const readmes = plan.files.filter((file) => path.posix.basename(file.path) === README_FILE);
+  for (const readme of readmes) {
+    env.out('');
+    for (const line of readme.contents.trimEnd().split('\n')) env.out(line);
+  }
+
+  // `docs` is the LAST line of every README, so printing it again under a form
+  // that shipped one puts the same paragraph on the terminal twice. The cdn
+  // paste form has no README, and this is the only way its docs are seen.
+  if (readmes.length === 0) for (const docs of plan.docs) env.out(docs);
   return 0;
 }

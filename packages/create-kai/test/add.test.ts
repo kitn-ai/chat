@@ -30,7 +30,7 @@ import {
 } from '../src/blocks';
 import type { Block } from '../src/blocks';
 import { componentName } from '../src/react-form';
-import { BLOCK_FORMS, withStrippedTwins } from '@kitn.ai/blocks/forms';
+import { BLOCK_FORMS, README_FILE, withStrippedTwins } from '@kitn.ai/blocks/forms';
 import { fileTarget, installRoot } from '@kitn.ai/blocks/targets';
 import { decideForm, mergeDependencies, parseAddArgs, runAdd } from '../src/add';
 import type { AddEnv } from '../src/add';
@@ -244,6 +244,25 @@ describe('web-component form (any non-react project)', () => {
     expect(run.err.join('\n')).toContain('legacy-block');
     expect(run.err.join('\n')).toContain('controller.ts');
   });
+
+  it('prints the README it just wrote, and prints the docs sentence exactly once', async () => {
+    // The README is what a consumer reads to find out what the block needs.
+    // Writing it and not printing it makes the terminal end on a file list.
+    for (const block of all()) {
+      const dir = await project(`readme-${block.name}`, { name: 'host', dependencies: { vue: '^3.0.0' } });
+      const run = await runInto(dir, [block.name]);
+      expect(run.code, run.err.join('\n')).toBe(0);
+      const written = await readFile(path.join(dir, fileTarget('html', block.name, README_FILE)), 'utf8');
+      const printed = run.out.join('\n');
+      for (const line of written.trimEnd().split('\n').filter((l) => l.trim())) {
+        expect(printed, `${block.name}: the README line "${line}" was written but not printed`).toContain(line);
+      }
+      if (block.manifest.docs) {
+        const hits = printed.split(block.manifest.docs).length - 1;
+        expect(hits, `${block.name}: the docs sentence appears ${hits} times`).toBe(1);
+      }
+    }
+  });
 });
 
 describe('react form (react in the project deps)', () => {
@@ -300,6 +319,15 @@ describe('no project: the CDN paste form (rule 1 of the signals table)', () => {
     expect(html).toContain(`https://cdn.jsdelivr.net/npm/@kitn.ai/ui@${KIT_VERSION}/dist/`);
     expect(html).not.toMatch(/src="\.\//);
     expect(html).not.toMatch(/href="\.\//);
+  });
+
+  it('still prints docs for the paste form, which carries no README', async () => {
+    const block = blocks.find((b) => (b.manifest.registryDependencies ?? []).every((d) => d.startsWith('route:')))!;
+    const dir = await project('cdn-docs', null);
+    const run = await runInto(dir, [block.name]);
+    expect(run.code).toBe(0);
+    expect(existsSync(path.join(dir, 'README.md')), 'the paste form wrote a README').toBe(false);
+    if (block.manifest.docs) expect(run.out.join('\n')).toContain(block.manifest.docs);
   });
 });
 
