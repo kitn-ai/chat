@@ -118,6 +118,36 @@ function proseErrors(field: string, value: string): string[] {
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 
+// ------------------------------------------------------------- path safety
+
+/** The one shape a block name may take. A name becomes a directory segment
+ *  (`INSTALL_ROOTS[framework]/<name>` in src/targets.ts) for BOTH a bundled
+ *  block, whose name is checked against the directory it lives in below, and
+ *  a fetched item JSON (`create-kai add <url>`), whose name arrives from
+ *  wherever the URL points and is checked against nothing else -- so this
+ *  rule, not the dirName match, is what a hostile name has to pass. */
+export const SAFE_BLOCK_NAME = /^[a-z0-9][a-z0-9-]*$/;
+
+/** Reason a block name is unsafe to use as a directory segment, or null. */
+export function unsafeNameReason(name: string): string | null {
+  if (!SAFE_BLOCK_NAME.test(name)) {
+    return `does not match ${SAFE_BLOCK_NAME} (a block name becomes a directory segment under the install root)`;
+  }
+  return null;
+}
+
+/** Reason a files[] path is unsafe to join onto an install root
+ *  (`fileTarget` in src/targets.ts does a raw string join, no `node:path`
+ *  normalization), or null when it is safe. */
+export function unsafeFilePathReason(filePath: string): string | null {
+  if (filePath.length === 0) return 'is empty';
+  if (filePath.includes('\\')) return 'contains a backslash';
+  const segments = filePath.split('/');
+  if (segments.some((s) => s === '..')) return 'contains a ".." segment';
+  if (segments.some((s) => s === '')) return 'contains an empty segment (or a leading "/")';
+  return null;
+}
+
 /** Validate one parsed manifest against the skeleton and its directory.
  *  Returns human-readable errors; empty means valid. */
 export function validateBlockManifest(
@@ -135,8 +165,12 @@ export function validateBlockManifest(
       errors.push(`${dirName}: "${field}" must be a non-empty string`);
     }
   }
-  if (typeof m.name === 'string' && m.name !== dirName) {
-    errors.push(`${dirName}: manifest name "${m.name}" must equal the directory name (one identity, derived)`);
+  if (typeof m.name === 'string') {
+    if (m.name !== dirName) {
+      errors.push(`${dirName}: manifest name "${m.name}" must equal the directory name (one identity, derived)`);
+    }
+    const nameProblem = unsafeNameReason(m.name);
+    if (nameProblem) errors.push(`${dirName}: name "${m.name}" ${nameProblem}`);
   }
   if (m.type !== 'registry:block') {
     errors.push(`${dirName}: "type" must be "registry:block", got ${JSON.stringify(m.type)}`);
@@ -163,6 +197,8 @@ export function validateBlockManifest(
       if (!fileNames.includes(f.path)) {
         errors.push(`${dirName}: files[] lists "${f.path}" but the directory scan found no such file`);
       }
+      const pathProblem = unsafeFilePathReason(f.path);
+      if (pathProblem) errors.push(`${dirName}: files["${f.path}"] ${pathProblem}`);
       if ('target' in f) {
         if (typeof f.target !== 'string') {
           errors.push(`${dirName}: files["${f.path}"].target must be a string when present`);

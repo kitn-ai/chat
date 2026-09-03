@@ -28,7 +28,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 
-import { discoverBlocks } from '@kitn.ai/blocks';
+import { discoverBlocks, unsafeFilePathReason, unsafeNameReason } from '@kitn.ai/blocks';
 import type {
   Block,
   BlockManifest,
@@ -36,16 +36,18 @@ import type {
 } from '@kitn.ai/blocks';
 // The FORM RENDERING is the kit's shared pure module too (same bundle-import
 // precedent as the registry line above): one renderer serves this planner AND
-// the `kai dev` gallery's per-framework code view, so what the gallery shows
-// is byte-for-byte what `add` writes.
+// the per-framework code view on the docs site's /blocks section, so what
+// /blocks shows is byte-for-byte what `add` writes.
 import {
+  BLOCK_FORMS,
+  FRAMEWORK_BLOCK_FORMS,
   adaptRegistrationForBundler,
   componentName,
-  renderCdnFormFiles,
-  renderReactForm,
-  renderHtmlForm,
+  renderBlockForm,
   type BlockFormId,
+  type FormFile,
 } from '@kitn.ai/blocks/forms';
+import { INSTALL_ROOTS, fileTarget, installRoot, isTargetFramework, type TargetFramework } from '@kitn.ai/blocks/targets';
 
 import { getIntegration, listIntegrations } from './catalog';
 import type { Integration } from './catalog';
@@ -102,10 +104,24 @@ export function blockFromItemJson(raw: unknown, sourceUrl: string): { block?: Bl
     return { errors: [`${sourceUrl}: the item JSON has no "name"`] };
   }
   const errors: string[] = [];
+  // PATH TRAVERSAL. A fetched item's "name" and files[].path never pass
+  // through `validateBlockManifest`'s dirName check (there is no directory
+  // scan for a URL), so this is the one place they meet the shared rule in
+  // `@kitn.ai/blocks` before `fileTarget`/`runAdd` join them onto the
+  // install root with a raw string concatenation.
+  const nameProblem = unsafeNameReason(item.name);
+  if (nameProblem) {
+    errors.push(`${sourceUrl}: name "${item.name}" ${nameProblem}`);
+  }
   const files = new Map<string, string>();
   for (const entry of item.files ?? []) {
     if (typeof entry.path !== 'string' || typeof entry.content !== 'string') {
       errors.push(`${sourceUrl}: files["${String(entry.path)}"] carries no inline "content"; a per-block item JSON is self-contained`);
+      continue;
+    }
+    const pathProblem = unsafeFilePathReason(entry.path);
+    if (pathProblem) {
+      errors.push(`${sourceUrl}: files["${entry.path}"] ${pathProblem}`);
       continue;
     }
     files.set(entry.path, entry.content);
@@ -203,30 +219,66 @@ export async function resolveAdd(spec: string, resolvers: BlockResolvers): Promi
   return { blocks, routes: [...routes.values()] };
 }
 
-// ---------------------------------------------------- framework detection
+// ---------------------------------------------------------- framework detection
 
 /**
  * The signals table (spec Part 3, detection ruling). DATA, so a new framework
- * variant is a row, not a branch: `lands` names the delivery form a project
- * with this dependency gets. Only react has its own form today; everything
- * else lands on the plain web-component files, which is the base form every
- * block is authored in.
+ * variant is a row, not a branch.
+ *
+ * A row names the dependency and the FRAMEWORK it means. Where that framework
+ * LANDS is not in the table: it is derived from the renderer list below, so
+ * the day a renderer for it exists the row starts pointing at its own tree
+ * with nothing here to edit. The previous version carried the landing form per
+ * row, which made this file a second copy of "which renderers exist" living in
+ * a package the renderer work has no reason to open.
+ *
+ * `preact` carries `null`: it is a real signal (a preact project is a project)
+ * and it will never have an install root of its own, because a preact host
+ * renders the custom elements like any other. `null` says that; `'html'` would
+ * have read as "preact's own tree is the html one", which is a different and
+ * false claim.
  */
-export const FRAMEWORK_SIGNALS: readonly { dep: string; lands: 'react' | 'html' }[] = [
-  { dep: 'react', lands: 'react' },
-  { dep: 'preact', lands: 'html' },
-  { dep: 'vue', lands: 'html' },
-  { dep: 'svelte', lands: 'html' },
-  { dep: '@angular/core', lands: 'html' },
-  { dep: 'solid-js', lands: 'html' },
+export const FRAMEWORK_SIGNALS: readonly { dep: string; framework: TargetFramework | null }[] = [
+  { dep: 'react', framework: 'react' },
+  { dep: 'preact', framework: null },
+  { dep: 'vue', framework: 'vue' },
+  { dep: 'svelte', framework: 'svelte' },
+  { dep: '@angular/core', framework: 'angular' },
+  { dep: 'solid-js', framework: 'solid' },
 ];
 
 export type BlockForm = BlockFormId;
+/** Every form that is a project tree: the delivery forms minus the paste form. */
+export type ProjectForm = Exclude<BlockForm, 'cdn'>;
+
+/**
+ * Does this release generate a tree for this framework?
+ *
+ * The narrowing is the coupling, spelled in the type system: a form id that is
+ * also a target framework. Today that is `html` and `react`; PR B2 adds four
+ * rows to `BLOCK_FORMS` and this predicate widens with them.
+ */
+function emitsOwnTree(framework: TargetFramework | null): framework is TargetFramework & ProjectForm {
+  return framework !== null && FRAMEWORK_BLOCK_FORMS.some((form) => form.id === framework);
+}
+
+/** Where a signal's framework lands TODAY: its own tree when the generator
+ *  emits one, the framework-neutral html form until then. */
+export function landingForm(framework: TargetFramework | null): ProjectForm {
+  return emitsOwnTree(framework) ? framework : 'html';
+}
 
 export type Detection =
   | { kind: 'none' }
-  | { kind: 'detected'; form: Exclude<BlockForm, 'cdn'>; found: string[] }
-  | { kind: 'ambiguous'; found: string[] };
+  | {
+      kind: 'detected';
+      form: ProjectForm;
+      found: string[];
+      /** frameworks this project uses whose OWN tree this release does not
+       *  generate yet, so the caller can say so instead of deciding quietly */
+      fallback: TargetFramework[];
+    }
+  | { kind: 'ambiguous'; found: string[]; forms: ProjectForm[] };
 
 /** Read the detection off a parsed package.json, or its absence. */
 export function detectForm(packageJson: unknown | null): Detection {
@@ -234,30 +286,50 @@ export function detectForm(packageJson: unknown | null): Detection {
   const pkg = packageJson as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
   const deps = { ...pkg.dependencies, ...pkg.devDependencies };
   const found = FRAMEWORK_SIGNALS.filter((signal) => signal.dep in deps);
-  const lands = new Set(found.map((signal) => signal.lands));
-  if (lands.size > 1) return { kind: 'ambiguous', found: found.map((signal) => signal.dep) };
-  if (lands.has('react')) return { kind: 'detected', form: 'react', found: found.map((s) => s.dep) };
-  
-  // Any other project - one non-react framework, several, or none at all -
-  // gets the base web-component form: elements work everywhere.
-  return { kind: 'detected', form: 'html', found: found.map((s) => s.dep) };
+  const forms = [...new Set(found.map((signal) => landingForm(signal.framework)))];
+
+  // AMBIGUITY IS ABOUT THE ANSWER, NOT THE SIGNAL COUNT. Two signals landing
+  // on the same tree is not a question: today vue and svelte both land on the
+  // html form and asking which of two identical outcomes the user wants is
+  // noise, not loudness. When PR B2 emits both trees they start deciding
+  // different forms and this begins asking on its own.
+  if (forms.length > 1) return { kind: 'ambiguous', found: found.map((s) => s.dep), forms };
+
+  return {
+    kind: 'detected',
+    // Any project with no framework signal at all - or one whose only signal
+    // has no tree of its own - gets the base web-component form: elements work
+    // everywhere.
+    form: forms[0] ?? 'html',
+    found: found.map((s) => s.dep),
+    fallback: found
+      .map((s) => s.framework)
+      .filter((f): f is TargetFramework => f !== null && !emitsOwnTree(f)),
+  };
 }
 
 /**
  * The ambiguous case as an axis, so the ask goes through the same `AxisIo`
  * seam every other create-kai question does and the menu-honesty discipline
  * (spy-driven tests over what was CALLED) applies to it.
+ *
+ * The options are the forms actually IN CONTENTION, derived from the
+ * detection, with labels read off `BLOCK_FORMS`. Hand-listing two of them here
+ * was a menu with a hand list in it, inside the one function whose reason for
+ * existing is the menu-honesty seam.
  */
-export function blockFormAxis(found: readonly string[]): Axis {
+export function blockFormAxis(found: readonly string[], forms: readonly (ProjectForm & TargetFramework)[]): Axis {
+  const label = (id: string): string => BLOCK_FORMS.find((form) => form.id === id)?.label ?? id;
   return {
     id: 'block-form',
     label: 'Block form',
     question: `This project depends on ${found.join(' AND ')}; which form does the block land in?`,
-    options: [
-      { id: 'react', label: 'React', hint: 'a .tsx component plus the block files, registered via @kitn.ai/ui/react' },
-      { id: 'html', label: 'HTML', hint: 'the framework-neutral html + script + css form' },
-    ],
-    because: '',
+    options: forms.map((id) => ({
+      id,
+      label: label(id),
+      hint: `files under ${INSTALL_ROOTS[id]}/<block>/`,
+    })),
+    because: 'the frameworks this project uses land in different forms, so which one you want is a real choice',
   };
 }
 
@@ -282,9 +354,6 @@ export interface PlanOptions {
   kitVersion: string;
 }
 
-const blockDir = (form: BlockForm, name: string) =>
-  form === 'react' ? path.posix.join('src/blocks', name) : path.posix.join('blocks', name);
-
 /**
  * Plan every write for a resolved add. Pure: the caller owns collision
  * checking and the filesystem. Throws when a block cannot be rendered in the
@@ -294,13 +363,7 @@ export function planAdd(resolved: ResolvedAdd, opts: PlanOptions): AddPlan {
   const plan: AddPlan = { files: [], dependencies: {}, docs: [], notes: [] };
 
   for (const block of resolved.blocks) {
-    if (opts.form === 'cdn') {
-      planCdnBlock(block, opts, plan);
-    } else if (opts.form === 'react') {
-      planReactBlock(block, plan);
-    } else {
-      planHtmlBlock(block, plan);
-    }
+    planFormBlock(block, opts, plan);
     for (const dep of block.manifest.dependencies ?? []) {
       // The kit rides the CLI's own pin; anything else a block declares is
       // installed at latest, and the note says so out loud.
@@ -319,37 +382,71 @@ export function planAdd(resolved: ResolvedAdd, opts: PlanOptions): AddPlan {
   return plan;
 }
 
-// The three per-form file sets come from the ONE shared renderer
-// (`@kitn.ai/blocks/forms` — the gallery serves the identical output);
-// what stays here is what only the CLI knows: where the files land in the
-// consumer's project, and the note printed about them.
+// The rendered files come from the ONE shared dispatch, `renderBlockForm`
+// (`@kitn.ai/blocks/forms`, which is what /blocks shows too) - never a
+// specific renderer called by hand. What stays here is what only the CLI
+// knows: where the files land (through `target`, already computed) and the
+// note printed about them.
 
-function planHtmlBlock(block: Block, plan: AddPlan): void {
-  const dir = blockDir('html', block.name);
-  for (const file of renderHtmlForm(block)) {
-    plan.files.push({ path: path.posix.join(dir, file.path), contents: file.content });
+/**
+ * The ONE place a rendered file becomes a planned write.
+ *
+ * `target` is the project-relative path the renderer already derived from
+ * `@kitn.ai/blocks/targets`, and it is the same string the /blocks page
+ * displays and the compile cells check. Joining a directory on here again is
+ * what `blockDir()` did, and the two joins disagreed about react for a whole
+ * release cycle: the table said `src/components/<id>/`, the CLI wrote
+ * `src/blocks/<id>/`, and only a test asserting the mismatch knew.
+ */
+function planFiles(files: readonly FormFile[], plan: AddPlan): void {
+  for (const file of files) plan.files.push({ path: file.target, contents: file.content });
+}
+
+/**
+ * Render one block into `opts.form` and plan its files and its note.
+ *
+ * THE FILES ROUTE THROUGH `renderBlockForm`, NEVER A SPECIFIC RENDERER
+ * (ruling R13). `@kitn.ai/blocks` keeps that dispatch's `switch` exhaustive
+ * over every id in `BLOCK_FORMS` on its own side (no `default`, so a form
+ * added there with no case fails ITS OWN `tsc --noEmit`); at runtime under a
+ * partially-patched tree it returns `undefined`, and `planFiles`'s `for`
+ * throws immediately - before a note is printed, before a file is written.
+ * That is what stands between "a --form value BLOCK_FORMS accepts" and "add
+ * silently writes the html tree for it", the failure a form id with no
+ * renderer produces if the caller decides by hand instead of asking
+ * `@kitn.ai/blocks`.
+ */
+function planFormBlock(block: Block, opts: PlanOptions, plan: AddPlan): void {
+  const files = renderBlockForm(block, opts.form, { cdn: { version: opts.kitVersion } });
+  planFiles(files, plan);
+
+  if (opts.form === 'cdn') {
+    plan.notes.push(
+      `${block.name}: no project here, so this is the self-contained CDN paste form - open ${block.name}.html directly, or paste it into any page. To scaffold a project around it, run \`npm create kai@latest\`.`,
+    );
+    return;
   }
+  if (opts.form === 'react') {
+    const dir = installRoot('react', block.name);
+    plan.notes.push(
+      `${block.name}: react form under ${dir}/ (render <${componentName(block.name)} /> from ${fileTarget('react', block.name, `${componentName(block.name)}.tsx`)})`,
+    );
+    return;
+  }
+  // Every other project-shaped form, html included: the html-shaped note,
+  // naming its own install root. `isTargetFramework` gates the cast the same
+  // way it does everywhere else in this file; for 'html' this reproduces the
+  // note byte for byte, and for a future framework with no bespoke note of
+  // its own (PR B2's business, not this one) it is still a true sentence
+  // rather than a missing one.
+  const framework = isTargetFramework(opts.form) ? opts.form : 'html';
+  const dir = installRoot(framework, block.name);
   const page = block.manifest.files.find((f) => f.type === 'registry:page');
   // `.pop()` is `string | undefined` to tsc even on a non-empty split, so the
   // fallback is spelled out rather than asserted away.
   const pageFile = page ? (page.target ?? page.path.split('/').pop() ?? page.path) : '';
-  plan.notes.push(`${block.name}: web-component form under ${dir}/ (open ${path.posix.join(dir, pageFile)} through your dev server)`);
-}
-
-function planReactBlock(block: Block, plan: AddPlan): void {
-  const dir = blockDir('react', block.name);
-  for (const file of renderReactForm(block)) {
-    plan.files.push({ path: path.posix.join(dir, file.path), contents: file.content });
-  }
-  plan.notes.push(`${block.name}: react form under ${dir}/ (render <${componentName(block.name)} /> from ${dir}/${componentName(block.name)}.tsx)`);
-}
-
-function planCdnBlock(block: Block, opts: PlanOptions, plan: AddPlan): void {
-  for (const file of renderCdnFormFiles(block, { version: opts.kitVersion })) {
-    plan.files.push({ path: file.path, contents: file.content });
-  }
   plan.notes.push(
-    `${block.name}: no project here, so this is the self-contained CDN paste form - open ${block.name}.html directly, or paste it into any page. To scaffold a project around it, run \`npm create kai@latest\`.`,
+    `${block.name}: web-component form under ${dir}/ (open ${fileTarget(framework, block.name, pageFile)} through your dev server)`,
   );
 }
 

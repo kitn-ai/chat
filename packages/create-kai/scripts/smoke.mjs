@@ -197,9 +197,14 @@ async function main() {
       throw new Error('add --list --json reports no blocks; the bundled registry is empty');
     }
     const blockName = addList.blocks[0].name;
+    // The expected write root comes from `@kitn.ai/blocks`'s own install-root
+    // table, not a path restated here -- that table is what the CLI actually
+    // writes through, and a hand-typed `src/blocks/<id>` is exactly what went
+    // stale when the table moved the react tree to `src/components/<id>`.
+    const { installRoot } = await loadTs('../blocks/src/targets.ts');
     const addCases = [
-      { id: 'add-react', pkg: { name: 'add-react', dependencies: { react: '^19.0.0' } }, expect: `src/blocks/${blockName}` },
-      { id: 'add-plain', pkg: { name: 'add-plain' }, expect: `blocks/${blockName}` },
+      { id: 'add-react', pkg: { name: 'add-react', dependencies: { react: '^19.0.0' } }, expect: installRoot('react', blockName) },
+      { id: 'add-plain', pkg: { name: 'add-plain' }, expect: installRoot('html', blockName) },
     ];
     for (const c of addCases) {
       const dir = path.join(work, c.id);

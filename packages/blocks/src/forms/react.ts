@@ -20,6 +20,7 @@ import { parseTemplate, walkElements } from '../contract/parse-template';
 import { analyzeController, crossCheckBindings } from '../contract/analyze-controller';
 import { fileTarget } from '../targets';
 import { pascal, type Block } from '../registry';
+import { README_FILE, renderReadme } from './readme';
 // Never './index': index.ts re-exports this module, so importing the barrel
 // back is a cycle. The shared types live in ../contract/types for exactly
 // this reason.
@@ -277,23 +278,13 @@ export function renderReactForm(block: Block): FormFile[] {
     '',
   ].join('\n');
 
-  const readme = [
-    `# ${block.manifest.title}`,
-    '',
-    `${block.manifest.description}`,
-    '',
-    `Render it: \`import { ${name} } from './${name}';\``,
-    ...(block.manifest.docs ? ['', block.manifest.docs] : []),
-    '',
-  ].join('\n');
-
   const files: FormFile[] = [];
   const put = (path: string, content: string): void => {
     files.push({ path, content, target: fileTarget('react', block.name, path) });
   };
   put(`${name}.tsx`, tsx);
   put(`use${name}.ts`, hook);
-  put('README.md', readme);
+  put(README_FILE, renderReadme(block, [`Render it: \`import { ${name} } from './${name}';\``]));
   for (const entry of block.manifest.files) {
     if (entry.type === 'registry:page') continue;
     if (entry.path.endsWith('.js')) continue; // a generated twin; the react tree keeps the .ts

@@ -19,18 +19,18 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { buildRegistryItem } from '@kitn.ai/blocks';
+import { buildRegistryItem, unsafeFilePathReason, unsafeNameReason } from '@kitn.ai/blocks';
 import type { Axis } from '../src/axes';
 import {
   FRAMEWORK_SIGNALS,
-  blockFormAxis,
   detectForm,
   planAdd,
   resolveAdd,
 } from '../src/blocks';
 import type { Block } from '../src/blocks';
 import { componentName } from '../src/react-form';
-import { BLOCK_FORMS, withStrippedTwins } from '@kitn.ai/blocks/forms';
+import { BLOCK_FORMS, FRAMEWORK_BLOCK_FORMS, README_FILE, withStrippedTwins } from '@kitn.ai/blocks/forms';
+import { fileTarget, installRoot, isTargetFramework } from '@kitn.ai/blocks/targets';
 import { decideForm, mergeDependencies, parseAddArgs, runAdd } from '../src/add';
 import type { AddEnv } from '../src/add';
 import { BLOCKS_ROOT, KIT_RANGE, KIT_VERSION, authoredBlock, loadBundledBlocks } from './helpers';
@@ -169,7 +169,7 @@ describe('web-component form (any non-react project)', () => {
     for (const block of all()) {
       const dir = await project(`binder-${block.name}`, { name: 'host' });
       expect((await runInto(dir, [block.name])).code).toBe(0);
-      const binder = await readFile(path.join(dir, 'blocks', block.name, `${block.name}.js`), 'utf8');
+      const binder = await readFile(path.join(dir, fileTarget('html', block.name, `${block.name}.js`)), 'utf8');
       expect(binder, `${block.name}: no whenDefined await`).toContain('customElements.whenDefined');
       expect(binder, `${block.name}: no controller call`).toContain('createController');
       expect(binder, `${block.name}: no readiness signal`).toContain('window.__blockReady = true;');
@@ -186,7 +186,10 @@ describe('web-component form (any non-react project)', () => {
       const reactDir = await project(`reg-react-${block.name}`, { name: 'host', dependencies: { react: '19' } });
       expect((await runInto(wcDir, [block.name])).code).toBe(0);
       expect((await runInto(reactDir, [block.name])).code).toBe(0);
-      for (const base of [path.join(wcDir, 'blocks', block.name), path.join(reactDir, 'src/blocks', block.name)]) {
+      for (const base of [
+        path.join(wcDir, installRoot('html', block.name)),
+        path.join(reactDir, installRoot('react', block.name)),
+      ]) {
         for (const file of (await readdir(base)).filter((f) => f.endsWith('.js'))) {
           const js = await readFile(path.join(base, file), 'utf8');
           expect(js, `${base}/${file} still imports the autoloader`).not.toContain(`'@kitn.ai/ui/autoloader'`);
@@ -200,12 +203,12 @@ describe('web-component form (any non-react project)', () => {
     const dir = await project('collide', { name: 'host' });
     expect((await runInto(dir, [block.name])).code).toBe(0);
     const page = block.manifest.files.find((f) => f.type === 'registry:page')!;
-    const pagePath = path.join(dir, 'blocks', block.name, page.target ?? path.basename(page.path));
+    const pagePath = path.join(dir, fileTarget('html', block.name, page.target ?? path.basename(page.path)));
     await writeFile(pagePath, 'EDITED BY THE CONSUMER');
     const second = await runInto(dir, [block.name]);
     expect(second.code).toBe(1);
     expect(second.err.join('\n')).toContain('refusing to overwrite');
-    expect(second.err.join('\n')).toContain(path.posix.join('blocks', block.name, page.target ?? path.basename(page.path)));
+    expect(second.err.join('\n')).toContain(fileTarget('html', block.name, page.target ?? path.basename(page.path)));
     expect(await readFile(pagePath, 'utf8')).toBe('EDITED BY THE CONSUMER');
   });
 
@@ -240,6 +243,25 @@ describe('web-component form (any non-react project)', () => {
     expect(run.err.join('\n')).toContain('legacy-block');
     expect(run.err.join('\n')).toContain('controller.ts');
   });
+
+  it('prints the README it just wrote, and prints the docs sentence exactly once', async () => {
+    // The README is what a consumer reads to find out what the block needs.
+    // Writing it and not printing it makes the terminal end on a file list.
+    for (const block of all()) {
+      const dir = await project(`readme-${block.name}`, { name: 'host', dependencies: { vue: '^3.0.0' } });
+      const run = await runInto(dir, [block.name]);
+      expect(run.code, run.err.join('\n')).toBe(0);
+      const written = await readFile(path.join(dir, fileTarget('html', block.name, README_FILE)), 'utf8');
+      const printed = run.out.join('\n');
+      for (const line of written.trimEnd().split('\n').filter((l) => l.trim())) {
+        expect(printed, `${block.name}: the README line "${line}" was written but not printed`).toContain(line);
+      }
+      if (block.manifest.docs) {
+        const hits = printed.split(block.manifest.docs).length - 1;
+        expect(hits, `${block.name}: the docs sentence appears ${hits} times`).toBe(1);
+      }
+    }
+  });
 });
 
 describe('react form (react in the project deps)', () => {
@@ -251,7 +273,7 @@ describe('react form (react in the project deps)', () => {
       const dir = await project(`react-${block.name}`, { name: 'host', dependencies: { react: '^19.0.0' } });
       const run = await runInto(dir, [block.name]);
       expect(run.code, `${block.name}: ${run.err.join('\n')}`).toBe(0);
-      const base = path.join(dir, 'src/blocks', block.name);
+      const base = path.join(dir, installRoot('react', block.name));
       const tsx = await readFile(path.join(base, `${componentName(block.name)}.tsx`), 'utf8');
       expect(tsx).toContain("from '@kitn.ai/ui/react'");
       expect(tsx).toContain(`export function ${componentName(block.name)}()`);
@@ -265,6 +287,22 @@ describe('react form (react in the project deps)', () => {
       const page = block.manifest.files.find((f) => f.type === 'registry:page')!;
       expect(existsSync(path.join(base, page.target ?? path.basename(page.path)))).toBe(false);
     }
+  });
+
+  it('refuses a second add at the NEW root too, overwriting nothing', async () => {
+    // The collision refusal is whole-plan and unchanged by this PR, but it had
+    // no react case at all, and the root it guards just moved. A refusal that
+    // silently stopped matching would look exactly like a clean first add.
+    const block = all()[0];
+    const dir = await project('react-collide', { name: 'host', dependencies: { react: '^19.0.0' } });
+    expect((await runInto(dir, [block.name])).code).toBe(0);
+    const component = fileTarget('react', block.name, `${componentName(block.name)}.tsx`);
+    await writeFile(path.join(dir, component), 'EDITED BY THE CONSUMER');
+    const second = await runInto(dir, [block.name]);
+    expect(second.code).toBe(1);
+    expect(second.err.join('\n')).toContain('refusing to overwrite');
+    expect(second.err.join('\n')).toContain(component);
+    expect(await readFile(path.join(dir, component), 'utf8')).toBe('EDITED BY THE CONSUMER');
   });
 });
 
@@ -281,6 +319,15 @@ describe('no project: the CDN paste form (rule 1 of the signals table)', () => {
     expect(html).not.toMatch(/src="\.\//);
     expect(html).not.toMatch(/href="\.\//);
   });
+
+  it('still prints docs for the paste form, which carries no README', async () => {
+    const block = blocks.find((b) => (b.manifest.registryDependencies ?? []).every((d) => d.startsWith('route:')))!;
+    const dir = await project('cdn-docs', null);
+    const run = await runInto(dir, [block.name]);
+    expect(run.code).toBe(0);
+    expect(existsSync(path.join(dir, 'README.md')), 'the paste form wrote a README').toBe(false);
+    if (block.manifest.docs) expect(run.out.join('\n')).toContain(block.manifest.docs);
+  });
 });
 
 describe('the detection signals table, row by row', () => {
@@ -289,43 +336,89 @@ describe('the detection signals table, row by row', () => {
     expect(decided.form).toBe('cdn');
   });
 
+  it('has signal rows to drive, so the loop below is not vacuous', () => {
+    expect(FRAMEWORK_SIGNALS.length).toBeGreaterThan(0);
+  });
+
   for (const signal of FRAMEWORK_SIGNALS) {
-    it(`${signal.dep} alone lands on ${signal.lands}`, () => {
+    // The EXPECTATION is derived from the same place the code derives it: a
+    // framework lands in its own tree when the generator emits one, and in the
+    // framework-neutral html form until then. PR B2 moves both sides at once.
+    const emits = FRAMEWORK_BLOCK_FORMS.some((form) => form.id === signal.framework);
+    const expected = emits ? signal.framework : 'html';
+
+    it(`${signal.dep} alone lands on ${expected}`, () => {
       const detection = detectForm({ dependencies: { [signal.dep]: '1.0.0' } });
-      expect(detection).toEqual({ kind: 'detected', form: signal.lands, found: [signal.dep] });
+      expect(detection.kind).toBe('detected');
+      expect(detection.kind === 'detected' && detection.form).toBe(expected);
+    });
+
+    it(`${signal.dep}: the fallback is named when this release generates no ${signal.framework ?? 'framework'} tree`, () => {
+      const detection = detectForm({ dependencies: { [signal.dep]: '1.0.0' } });
+      if (detection.kind !== 'detected') throw new Error('expected a detection');
+      // `null` means the framework has no tree of its own and never will
+      // (preact renders web components like any other host), so it is not a
+      // fallback to announce.
+      expect(detection.fallback).toEqual(emits || signal.framework === null ? [] : [signal.framework]);
     });
   }
 
+  it('every framework a signal names has an install root', () => {
+    for (const signal of FRAMEWORK_SIGNALS) {
+      if (signal.framework === null) continue;
+      expect(isTargetFramework(signal.framework), signal.framework).toBe(true);
+    }
+  });
+
   it('a project with no framework signal at all is still a project: web components', () => {
-    expect(detectForm({ dependencies: { express: '^4.0.0' } })).toEqual({ kind: 'detected', form: 'html', found: [] });
+    const detection = detectForm({ dependencies: { express: '^4.0.0' } });
+    expect(detection).toEqual({ kind: 'detected', form: 'html', found: [], fallback: [] });
   });
 
   it('devDependencies count as signals too', () => {
     expect(detectForm({ devDependencies: { react: '^19.0.0' } }).kind).toBe('detected');
   });
 
-  it('react AND svelte is ambiguous, with what was found named', () => {
+  it('two signals that decide DIFFERENT forms are ambiguous, with what was found named', () => {
+    // react always has its own tree; svelte does not until PR B2. Whichever is
+    // true, these two decide different forms, which is what makes it a
+    // question worth asking.
     const detection = detectForm({ dependencies: { react: '1', svelte: '4' } });
-    expect(detection).toEqual({ kind: 'ambiguous', found: ['react', 'svelte'] });
+    expect(detection.kind).toBe('ambiguous');
+    expect(detection.kind === 'ambiguous' && detection.found).toEqual(['react', 'svelte']);
   });
 
-  it('two non-react frameworks agree on the answer, so nothing is ambiguous', () => {
-    expect(detectForm({ dependencies: { vue: '3', svelte: '4' } }).kind).toBe('detected');
+  it('two signals that decide the SAME form are not a question at all', () => {
+    // Today vue and svelte both land on html, so there is nothing to choose
+    // and asking would be noise. When B2 emits both trees they start deciding
+    // different forms and this case flips on its own - which is why the
+    // expectation is derived rather than written.
+    const forms = new Set(['vue', 'svelte'].map((dep) => {
+      const d = detectForm({ dependencies: { [dep]: '1' } });
+      return d.kind === 'detected' ? d.form : 'ambiguous';
+    }));
+    const detection = detectForm({ dependencies: { vue: '3', svelte: '4' } });
+    expect(detection.kind).toBe(forms.size === 1 ? 'detected' : 'ambiguous');
   });
 
-  it('ambiguous + interactive ASKS through the axis seam, naming what was found', async () => {
+  it('ambiguous + interactive ASKS through the axis seam, offering only the forms in contention', async () => {
     const asked: Axis[] = [];
     const decided = await decideForm(
       undefined,
       { dependencies: { react: '1', svelte: '4' } },
       true,
       true,
-      { ask: async (axis) => { asked.push(axis); return 'html'; }, state: () => {} },
+      { ask: async (axis) => { asked.push(axis); return axis.options[axis.options.length - 1].id; }, state: () => {} },
     );
-    expect(decided.form).toBe('html');
     expect(asked).toHaveLength(1);
     expect(asked[0].question).toContain('react AND svelte');
-    expect(asked[0].options.map((o) => o.id).sort()).toEqual(['html', 'react']);
+    expect(asked[0].options.length).toBeGreaterThan(1);
+    // MENU HONESTY: every option offered is a form the generator emits.
+    for (const option of asked[0].options) {
+      expect(BLOCK_FORMS.map((f) => f.id), `offered '${option.id}'`).toContain(option.id);
+    }
+    expect(asked[0].because.length, 'an axis with an empty `because` cannot be stated').toBeGreaterThan(0);
+    expect(decided.form).toBe(asked[0].options[asked[0].options.length - 1].id);
   });
 
   it('ambiguous + non-interactive REFUSES with the flag to pass, never guesses', async () => {
@@ -349,8 +442,27 @@ describe('the detection signals table, row by row', () => {
     expect(decided.form).toBe('html');
   });
 
-  it('the ambiguous axis has a real choice, so the axis rule would ask it', () => {
-    expect(blockFormAxis(['react', 'svelte']).options.length).toBeGreaterThan(1);
+  it('a framework with no generated tree is told so, loudly, in one sentence', async () => {
+    // Decided loudly: landing a vue project on the html form is a decision,
+    // and making it silently is the failure mode this repo names most often.
+    const decided = await decideForm(undefined, { dependencies: { vue: '3' } }, true, false, {
+      ask: async () => { throw new Error('not ambiguous, must not ask'); },
+      state: () => {},
+    });
+    // Cast to a plain string comparison: today's BlockFormId union has no
+    // 'vue' member at all, so a literal comparison against it is a compile
+    // error rather than a false condition. Step 6 plants a real 'vue' row and
+    // this widened check is what lets the SAME line answer true on both sides
+    // of that plant with nothing here to edit.
+    const emitsVue = (FRAMEWORK_BLOCK_FORMS as readonly { id: string }[]).some((form) => form.id === 'vue');
+    if (emitsVue) {
+      expect(decided.form).toBe('vue');
+      expect(decided.note).toBeUndefined();
+    } else {
+      expect(decided.form).toBe('html');
+      expect(decided.note).toContain('vue');
+      expect(decided.note).toContain('html');
+    }
   });
 });
 
@@ -496,5 +608,115 @@ describe('dependency merging never downgrades what the project already chose', (
     expect(merged.kept).toEqual(['@kitn.ai/ui']);
     expect(merged.added).toEqual([]);
     expect(JSON.parse(merged.text).dependencies['@kitn.ai/ui']).toBe('^0.1.0');
+  });
+});
+
+describe('menu honesty: every --form value the flag accepts writes a real tree', () => {
+  // `menu-honesty.test.ts`'s rule applied to the delivery-form flag. The
+  // accepted set is the axis itself, and every value in it is driven through
+  // the REAL runAdd into a real temp project. A form the flag accepts but the
+  // generator cannot emit fails here whether or not anyone remembered a case,
+  // and PR B2's four forms are covered on arrival.
+  it('has forms and blocks to drive, so the loops below are not vacuous', () => {
+    expect(BLOCK_FORMS.length).toBeGreaterThan(1);
+    expect(blocks.length).toBeGreaterThan(0);
+  });
+
+  for (const form of BLOCK_FORMS) {
+    it(`--form ${form.id} writes every file the form renders`, async () => {
+      for (const block of blocks) {
+        // A project with NO framework signal, so the flag is the only thing
+        // deciding: a leg that also matched detection would pass on detection.
+        const dir = await project(`form-${form.id}-${block.name}`, { name: 'host' });
+        const run = await runInto(dir, [block.name, '--form', form.id]);
+        expect(run.code, `${block.name} --form ${form.id}: ${run.err.join('\n')}`).toBe(0);
+        const planned = planAdd(
+          { blocks: [block], routes: [] },
+          { form: form.id, kitRange: KIT_RANGE, kitVersion: KIT_VERSION },
+        ).files;
+        expect(planned.length, `${block.name} --form ${form.id}: planned nothing`).toBeGreaterThan(0);
+        for (const file of planned) {
+          expect(existsSync(path.join(dir, file.path)), `${block.name} --form ${form.id}: ${file.path} not written`).toBe(true);
+        }
+      }
+    });
+  }
+});
+
+describe('SECURITY: a fetched item cannot name a path outside the project', () => {
+  // `fileTarget` (packages/blocks/src/targets.ts) joins a block's name and a
+  // file's path onto the install root with a raw string concatenation, and
+  // `runAdd` writes at `path.join(root, file.path)` -- neither normalizes,
+  // so a hostile "name" or files[].path in a fetched item JSON plans a write
+  // outside the project. `blockFromItemJson` is the one gate a fetched item
+  // passes through (there is no directory scan to check it against, unlike
+  // a bundled block's dirName match), so these two cases exercise it
+  // directly and confirm nothing lands outside the temp project root.
+  it('rejects a hostile "name" (path segments, escapes the project)', async () => {
+    const dir = await project('hostile-name', { name: 'host' });
+    const before = (await readdir(root)).sort();
+    const item = {
+      name: '../../.git/hooks',
+      title: 'Hostile',
+      description: 'a hostile item',
+      type: 'registry:block',
+      files: [{ path: 'pre-commit', type: 'registry:page', content: '#!/bin/sh\necho pwned\n' }],
+    };
+    const run = await runInto(dir, ['https://registry.example/r/hostile.json'], {
+      fetchJson: async () => item,
+    });
+    expect(run.code).not.toBe(0);
+    expect(run.err.join('\n')).toContain('../../.git/hooks');
+    expect(run.err.join('\n')).toMatch(/does not match/);
+    expect(existsSync(path.join(root, '.git'))).toBe(false);
+    expect((await readdir(root)).sort()).toEqual(before);
+  });
+
+  it('rejects a hostile files[].path (".." segment, escapes the project)', async () => {
+    const dir = await project('hostile-path', { name: 'host' });
+    const before = (await readdir(root)).sort();
+    // A REAL block's item (controller, cross-checked bindings, everything
+    // the renderer needs), with ONLY its registry:page file's path corrupted
+    // -- so the traversal is the one thing standing between this item and a
+    // clean write, not one of several reasons it fails. A minimal hand-typed
+    // item (no controller.ts) fails earlier, at the html renderer's own
+    // "needs a controller" check, before the write path is ever reached;
+    // that would leave the filesystem assertions below unable to fail even
+    // with the path rule disabled, which is exactly what the coordinator's
+    // re-review caught.
+    const block = blocks[0];
+    const item = buildRegistryItem(withStrippedTwins(block, (source) => source));
+    const pageEntry = item.files.find((f) => f.type === 'registry:page');
+    if (!pageEntry) throw new Error('fixture block has no registry:page entry');
+    // installRoot('html', block.name) is 'blocks/<name>' (two segments), so
+    // the payload climbs THREE levels -- past the page's own directory, past
+    // 'blocks', and out of the project dir itself -- landing at
+    // <root>/evil.txt, a sibling of the project rather than something inside
+    // it. Two '../'s only reaches back to the project root (still "inside
+    // the project"), which would leave the filesystem assertions below
+    // unable to fail even with the rule disabled.
+    const hostilePath = '../../../evil.txt';
+    pageEntry.path = hostilePath;
+    // item.name stays the block's own (a valid name) -- this case is about
+    // a hostile files[].path in isolation; the hostile-NAME case above
+    // already covers "name" on its own.
+    const run = await runInto(dir, [`https://registry.example/r/${block.name}-hostile-path.json`], {
+      fetchJson: async () => JSON.parse(JSON.stringify(item)),
+    });
+    expect(run.code).not.toBe(0);
+    expect(run.err.join('\n')).toContain(hostilePath);
+    expect(run.err.join('\n')).toContain('".." segment');
+    expect(existsSync(path.join(root, 'evil.txt'))).toBe(false);
+    expect((await readdir(root)).sort()).toEqual(before);
+  });
+
+  it('the three bundled blocks all pass the name-and-path rule (not over-strict)', () => {
+    expect(blocks.length).toBeGreaterThan(0);
+    for (const block of blocks) {
+      expect(unsafeNameReason(block.name), block.name).toBeNull();
+      for (const file of block.manifest.files) {
+        expect(unsafeFilePathReason(file.path), `${block.name}: ${file.path}`).toBeNull();
+      }
+    }
   });
 });

@@ -15,6 +15,7 @@
 import { generateCdnForm, type Block, type CdnFormOptions } from '../registry';
 import type { FormFile } from '../contract/types';
 import { renderHtmlForm } from './html';
+import { README_FILE } from './readme';
 
 /**
  * The CDN single-file form: `generateCdnForm`'s output as one `<name>.html`.
@@ -41,7 +42,13 @@ export function renderCdnFormFiles(block: Block, opts: CdnFormOptions): FormFile
 function renderedPage(block: Block): Block {
   // `autoloader`, not the default: the register-all rewrite exists for
   // bundlers, and this form runs off raw CDN URLs in a plain page.
-  const html = renderHtmlForm(block, { registration: 'autoloader' });
+  //
+  // The README is dropped here rather than never emitted: the html form is a
+  // DIRECTORY and wants one, this form is a single pasted file and has nowhere
+  // to put it. Handing it to the inliner would leave a markdown file in the
+  // synthetic manifest that no `<script>` tag ever references, which is a file
+  // the paste form would carry and no one would read.
+  const html = renderHtmlForm(block, { registration: 'autoloader' }).filter((f) => f.path !== README_FILE);
   return {
     name: block.name,
     manifest: {

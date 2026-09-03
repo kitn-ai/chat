@@ -649,6 +649,46 @@ jobs:
       - name: create-kai packed-tarball shape
         run: pnpm --filter create-kai run verify:pack
 
+      # Cache the npm side of the react-host leg. verify:add's own react
+      # install is the one expensive thing in this leg (network + a cold
+      # install of react, react-dom, vite, the react plugin and typescript,
+      # plus the packed @kitn.ai/ui and ITS transitive runtime dependencies).
+      # Same shape as the `construct` job's `~/.npm` cache; the `browser`
+      # job's verify:blocks:react step does the same kind of install today
+      # with no cache ahead of it.
+      # Keyed on the fixture's own package.json, create-kai's, AND
+      # packages/ui/package.json (the react leg also installs the packed
+      # @kitn.ai/ui tarball, whose declared runtime dependencies come from
+      # there), so a pin bump on any of the three busts it.
+      - name: Cache npm (create-kai add smoke, react leg)
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: verify-add-npm-${{ hashFiles('packages/ui/scripts/block-driver/react-host/package.json', 'packages/create-kai/package.json', 'packages/ui/package.json') }}
+          restore-keys: verify-add-npm-
+
+      # The published `add`, which nothing above can see. The suite drives the
+      # planner in-process and verify:pack reads the tarball's LISTING; neither
+      # runs the binary. This packs the CLI, installs it, and runs `add` into one
+      # throwaway project per detection row -- react (which also installs the
+      # packed kit and compiles the written tree), another framework, and a
+      # directory with no package.json -- comparing every written byte against
+      # the dist/blocks artifacts the /blocks page serves. It is the guard on the
+      # section 3.4 ruling from the CLI's side: the path the page displays is the
+      # path add writes.
+      #
+      # It runs its own plants in the same process (`--self-test` is in the npm
+      # script): the cost here is the one npm install, and a second invocation
+      # would double the only expensive thing it does.
+      #
+      # NETWORK-DEPENDENT: the react leg's `npm install` reaches the registry
+      # for react, react-dom, vite, the react plugin and typescript, the same
+      # packages the `browser` job's verify:blocks:react step installs.
+      #
+      # Needs the `build` leg's artifact for dist/blocks and for packing the kit.
+      - name: create-kai add smoke (packed tarball, one project per detected form)
+        run: pnpm --filter create-kai run verify:add
+
       # AND AGAIN UNDER THE NPM THAT ACTUALLY PUBLISHES, which is not this one.
       #
       # The step above runs node 22's bundled npm (10.9.8). release-please.yml

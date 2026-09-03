@@ -150,6 +150,8 @@ The adversarial review caught this: as drafted, Task 1's three `plan*Block` func
 
 ## File structure
 
+<!-- gate-list: partial -- a file-change table naming created/modified paths, not a gate list; `node packages/ui/scripts/lint-gate-parity.mjs --list` prints the merge gate -->
+
 | File | Created / Modified | Responsibility |
 |---|---|---|
 | `packages/create-kai/src/blocks.ts` | Modify (Task 0 comments, Task 1 substantively) | Task 0: two `gallery` comments reworded by the banked patch. Task 1: `planAdd` writes `file.target` by routing every form through `renderBlockForm`; `blockDir()` deleted; `FRAMEWORK_SIGNALS` rows name a framework; `landingForm`/`emitsOwnTree` derive from `FRAMEWORK_BLOCK_FORMS`; `Detection` carries the fallback frameworks; `blockFormAxis` derives its options. |
@@ -1559,12 +1561,6 @@ describe('menu honesty: every --form value the flag accepts writes a real tree',
   // the REAL runAdd into a real temp project. A form the flag accepts but the
   // generator cannot emit fails here whether or not anyone remembered a case,
   // and PR B2's four forms are covered on arrival.
-  it('the accepted set is exactly the framework forms plus the paste form', () => {
-    expect(BLOCK_FORMS.map((f) => f.id).sort()).toEqual(
-      [...FRAMEWORK_BLOCK_FORMS.map((f) => f.id), 'cdn'].sort(),
-    );
-  });
-
   it('has forms and blocks to drive, so the loops below are not vacuous', () => {
     expect(BLOCK_FORMS.length).toBeGreaterThan(1);
     expect(blocks.length).toBeGreaterThan(0);
@@ -1606,7 +1602,7 @@ fs.writeFileSync(p,s.replace(\"{ id: 'cdn', label: 'CDN single file' },\", \"{ i
 cd "$WT" && pnpm --filter create-kai exec vitest run test/add.test.ts -t 'menu honesty'
 ```
 
-Expected: FAIL twice - `the accepted set is exactly the framework forms plus the paste form` (the planted row is a framework form with no renderer) and `--form angular writes every file the form renders` (`runAdd` exits non-zero: `planFormBlock` calls `renderBlockForm(block, 'angular', ...)`, which returns `undefined` because `@kitn.ai/blocks`'s own switch has no `angular` case, and `planFiles`'s `for (const file of files)` throws on it - ruling R13 is why this reds at all; before Task 1 routed every form through `renderBlockForm`, `planAdd`'s own `else` branch treated any unrecognized form as html and this case passed silently). That second failure is the exact shape of the shipped defect this rule exists for: a flag accepting a value nothing can emit.
+Expected: FAIL once - `--form angular writes every file the form renders` (`runAdd` exits non-zero: `planFormBlock` calls `renderBlockForm(block, 'angular', ...)`, which returns `undefined` because `@kitn.ai/blocks`'s own switch has no `angular` case, and `planFiles`'s `for (const file of files)` throws on it - ruling R13 is why this reds at all; before Task 1 routed every form through `renderBlockForm`, `planAdd`'s own `else` branch treated any unrecognized form as html and this case passed silently). That second failure is the exact shape of the shipped defect this rule exists for: a flag accepting a value nothing can emit.
 
 ```bash
 cd "$WT" && mv packages/blocks/src/forms/index.ts.bak packages/blocks/src/forms/index.ts
@@ -1696,11 +1692,10 @@ Create `packages/create-kai/scripts/verify-add.mjs`:
  * the "No project here" line as proof it did not.
  *
  * THE REACT HOST IS packages/ui/scripts/block-driver/react-host, reused rather
- * than copied: a stock create-vite react-ts app with PINNED dependency ranges,
- * which is the difference between a gate and a weather report. It deliberately
- * overlaps `verify:blocks:react` -- that gate proves the RENDERER's tree
- * compiles, this one proves the PACKED CLI puts those bytes where a project
- * can compile them.
+ * than copied: a stock create-vite react-ts app with the dependency ranges
+ * that scaffold declared. It deliberately overlaps `verify:blocks:react` --
+ * that gate proves the RENDERER's tree compiles, this one proves the PACKED
+ * CLI puts those bytes where a project can compile them.
  *
  *   node scripts/verify-add.mjs              # the legs
  *   node scripts/verify-add.mjs --self-test  # the legs, then four plants
@@ -1764,9 +1759,17 @@ if (EMITTED_FORMS.length === 0) fail(`no <block>.<form>.json under ${FORMS_DIR}`
 // -------------------------------------------------------------------- packing
 
 const tmpRoot = mkdtempSync(path.join(tmpdir(), 'verify-add-'));
+// toolsDir is created below, once the CLI is packed; declared here so cleanup
+// can remove it too, and guarded on being set since it does not exist yet.
+let toolsDir;
 const cleanup = () => {
-  if (KEEP) log(`\n  (--keep) projects left at ${tmpRoot}`);
-  else rmSync(tmpRoot, { recursive: true, force: true });
+  if (KEEP) {
+    log(`\n  (--keep) projects left at ${tmpRoot}`);
+    if (toolsDir) log(`  (--keep) tools install left at ${toolsDir}`);
+    return;
+  }
+  rmSync(tmpRoot, { recursive: true, force: true });
+  if (toolsDir) rmSync(toolsDir, { recursive: true, force: true });
 };
 process.on('exit', cleanup);
 
@@ -1796,9 +1799,13 @@ const KIT_TARBALL = pack(UI_ROOT, '@kitn.ai/ui');
 
 // The CLI, installed ONCE, in its own root so it can never be an ancestor of a
 // leg's project directory.
-const toolsDir = mkdtempSync(path.join(tmpdir(), 'verify-add-tools-'));
+toolsDir = mkdtempSync(path.join(tmpdir(), 'verify-add-tools-'));
 writeFileSync(path.join(toolsDir, 'package.json'), JSON.stringify({ name: 'verify-add-tools', private: true }, null, 2));
-run('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error', CLI_TARBALL], toolsDir);
+try {
+  run(NPM, ['install', '--no-audit', '--no-fund', '--loglevel=error', CLI_TARBALL], toolsDir);
+} catch (err) {
+  fail(`npm install of the packed CLI failed (network?):\n${err.stderr || err.stdout || err.message}`);
+}
 const CLI = path.join(toolsDir, 'node_modules/create-kai/dist/index.js');
 if (!existsSync(CLI)) fail(`the packed CLI installed without a ${path.relative(toolsDir, CLI)} - the tarball is missing its bin`);
 
@@ -1850,9 +1857,14 @@ function add(cwd, block, extra = []) {
 
 const results = [];
 
-/** A project directory with the given package.json, in its own mkdtemp root. */
+/**
+ * A project directory with the given package.json, in its own mkdtemp root
+ * under tmpRoot (not under toolsDir - R12 only forbids toolsDir being an
+ * ancestor of a leg, and nesting here means cleanup()'s single rmSync of
+ * tmpRoot removes every leg directory too, not just the react host).
+ */
 function project(label, pkg) {
-  const dir = mkdtempSync(path.join(tmpdir(), `verify-add-${label}-`));
+  const dir = mkdtempSync(path.join(tmpRoot, `verify-add-${label}-`));
   if (pkg !== null) writeFileSync(path.join(dir, 'package.json'), JSON.stringify(pkg, null, 2));
   return dir;
 }
@@ -1866,7 +1878,11 @@ function reactLeg() {
   // of the tools directory below (R12), never an app-local install, so
   // installing CLI_TARBALL here too would be a copy nothing reads (R10 vs R12,
   // reconciled - see the ruling).
-  run('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error', KIT_TARBALL], app);
+  try {
+    run(NPM, ['install', '--no-audit', '--no-fund', '--loglevel=error', KIT_TARBALL], app);
+  } catch (err) {
+    fail(`npm install of the packed kit into the react host failed (network?):\n${err.stderr || err.stdout || err.message}`);
+  }
   const installed = JSON.parse(readFileSync(path.join(app, 'node_modules/@kitn.ai/ui/package.json'), 'utf8')).version;
   log(`  react     installed @kitn.ai/ui@${installed} from the tarball`);
 
@@ -1920,6 +1936,9 @@ function otherFrameworkLeg() {
     const out = add(dir, block);
     const form = matchForm(dir, block);
     forms.push(form);
+    // Coupled to the note's wording in src/add.ts's `decideForm` ("generates
+    // no ${fallback} tree yet"); if that prose changes, change this fragment
+    // to match rather than deleting the check.
     if (expected === 'html' && !out.includes('generates no vue tree yet')) {
       fail(`${block}: landed on the html form without saying why. A quiet fallback is the decision this gate exists to catch.`);
     }
@@ -1957,7 +1976,7 @@ function noProjectLeg() {
 log('\nverify:add -- the packed CLI, one project per detected form\n');
 const reactApp = reactLeg();
 const vueDir = otherFrameworkLeg();
-const noneDir = noProjectLeg();
+noProjectLeg();
 
 // THE ANTI-VACUITY FLOOR. Three legs that all landed on the same form would be
 // one leg run three times, and every assertion above would still pass.
@@ -2160,15 +2179,20 @@ In `.github/workflows/test.yml`, in the `unit` job, immediately after the `creat
 ```yaml
       # Cache the npm side of the react-host leg. verify:add's own react
       # install is the one expensive thing in this leg (network + a cold
-      # install of react, react-dom, vite, the react plugin and typescript),
-      # same shape as the `browser` job's cache ahead of verify:blocks:react.
-      # Keyed on the fixture's own package.json plus create-kai's, so a pin
-      # bump on either side busts it.
+      # install of react, react-dom, vite, the react plugin and typescript,
+      # plus the packed @kitn.ai/ui and ITS transitive runtime dependencies).
+      # Same shape as the `construct` job's `~/.npm` cache; the `browser`
+      # job's verify:blocks:react step does the same kind of install today
+      # with no cache ahead of it.
+      # Keyed on the fixture's own package.json, create-kai's, AND
+      # packages/ui/package.json (the react leg also installs the packed
+      # @kitn.ai/ui tarball, whose declared runtime dependencies come from
+      # there), so a pin bump on any of the three busts it.
       - name: Cache npm (create-kai add smoke, react leg)
         uses: actions/cache@v4
         with:
           path: ~/.npm
-          key: verify-add-npm-${{ hashFiles('packages/ui/scripts/block-driver/react-host/package.json', 'packages/create-kai/package.json') }}
+          key: verify-add-npm-${{ hashFiles('packages/ui/scripts/block-driver/react-host/package.json', 'packages/create-kai/package.json', 'packages/ui/package.json') }}
           restore-keys: verify-add-npm-
 
       # The published `add`, which nothing above can see. The suite drives the
@@ -2186,8 +2210,8 @@ In `.github/workflows/test.yml`, in the `unit` job, immediately after the `creat
       # would double the only expensive thing it does.
       #
       # NETWORK-DEPENDENT: the react leg's `npm install` reaches the registry
-      # for react, react-dom, vite, the react plugin and typescript, same as
-      # the `browser` job's verify:blocks:react step.
+      # for react, react-dom, vite, the react plugin and typescript, the same
+      # packages the `browser` job's verify:blocks:react step installs.
       #
       # Needs the `build` leg's artifact for dist/blocks and for packing the kit.
       - name: create-kai add smoke (packed tarball, one project per detected form)
