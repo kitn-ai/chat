@@ -191,6 +191,32 @@ if (SELF_TEST) {
     check('contract violation detected (kai-* listener on document)', errs.some((e) => /do not bubble/.test(e)), errs.join(' | '));
   }
 
+  // The prefixed spellings of the same defect. `:messages=` and
+  // `seed:messages=` are a non-scalar in ATTRIBUTE position exactly as a
+  // bare `messages=` is; the scan used to require whitespace immediately
+  // before the name, so both walked past it (spec 8a, amendment 2).
+  for (const spelling of [':messages', 'seed:messages']) {
+    const planted = {
+      name: 'planted',
+      manifest: { name: 'planted', title: 'P', description: 'p', type: 'registry:block', files: [{ path: 'page.html', type: 'registry:page' }] },
+      files: new Map([['page.html', `<!doctype html><html lang="en"><head></head><body><kai-thread ${spelling}="messages"></kai-thread></body></html>`]]),
+    };
+    const errs = registry.checkBlockContracts(planted, nonscalarByTag);
+    check(`contract violation detected (non-scalar in "${spelling}" position)`, errs.some((e) => /non-scalar prop "messages"/.test(e)), errs.join(' | '));
+  }
+
+  // A list binding with no :key. Mandatory, because the kai- reactivity
+  // contract is reference-keyed (spec 8b, amendment 1).
+  {
+    const planted = {
+      name: 'planted',
+      manifest: { name: 'planted', title: 'P', description: 'p', type: 'registry:block', files: [{ path: 'page.html', type: 'registry:page' }] },
+      files: new Map([['page.html', `<!doctype html><html lang="en"><head></head><body><kai-conversations><kai-conversation-item *for="row of rows"></kai-conversation-item></kai-conversations></body></html>`]]),
+    };
+    const errs = registry.checkBlockContracts(planted, nonscalarByTag);
+    check('contract violation detected (*for with no :key)', errs.some((e) => /:key is mandatory/.test(e)), errs.join(' | '));
+  }
+
   // Class 3: a doctored pin, and a pinless form, must both be named.
   {
     const doctored = pinErrors(`import 'https://cdn.jsdelivr.net/npm/@kitn.ai/ui@${VERSION}-doctored/dist/wire.js';`, 'planted', VERSION);

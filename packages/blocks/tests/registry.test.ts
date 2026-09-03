@@ -318,4 +318,65 @@ describe('contract checks (each plant watched being caught)', () => {
       expect(checkBlockContracts(block, NONSCALAR).join()).toMatch(/@kitn\.ai\/ui\/wire/);
     }
   });
+
+  /** A full authored page around `body`, with the block root the contract
+   *  requires. `demo` is the synthetic block's name, so the controller the
+   *  checks look for is `demo.controller.ts` and its types are `Demo*`. */
+  const pageOf = (body: string) =>
+    `<!doctype html>\n<html lang="en"><head></head><body><div data-block-root>${body}</div></body></html>`;
+
+  /** A controller of the contract shape, with the members the case needs. */
+  const controllerOf = (opts: { actions?: string[]; refs?: string[]; state?: string[] }) =>
+    [
+      `export interface DemoState { ${(opts.state ?? ['ready']).map((f) => `${f}: boolean;`).join(' ')} }`,
+      `export interface DemoRefs { ${(opts.refs ?? ['dock']).map((r) => `${r}: unknown;`).join(' ')} }`,
+      `export interface DemoActions { ${[...(opts.actions ?? ['open']), 'boot'].map((a) => `${a}(): void;`).join(' ')} }`,
+      `export function createController(deps: unknown) { return deps as never; }`,
+      '',
+    ].join('\n');
+
+  const contractErrors = (body: string, controller?: string) =>
+    checkBlockContracts(
+      blockWith([
+        { name: 'demo.html', content: pageOf(body) },
+        ...(controller ? [{ name: 'demo.controller.ts', content: controller }] : []),
+      ]),
+      NONSCALAR,
+    );
+
+  it('catches a non-scalar prop in : attribute position (the prefix used to slip past the scan)', () => {
+    expect(contractErrors('<kai-thread :messages="messages"></kai-thread>', controllerOf({})).join(' '))
+      .toContain('non-scalar prop "messages"');
+  });
+
+  it('catches a non-scalar prop in seed: attribute position, for the same reason', () => {
+    expect(contractErrors('<kai-thread seed:messages="[]"></kai-thread>', controllerOf({})).join(' '))
+      .toContain('non-scalar prop "messages"');
+  });
+
+  it('accepts the same prop in .prop position, which is what a rich binding looks like', () => {
+    expect(contractErrors('<kai-thread .messages="messages"></kai-thread>', controllerOf({ state: ['messages'] })))
+      .toEqual([]);
+  });
+
+  it('surfaces a grammar error from the page (one owner for the grammar)', () => {
+    expect(contractErrors('<kai-button :hidden="!drilled"></kai-button>', controllerOf({})).join(' '))
+      .toContain('never an expression');
+  });
+
+  it('catches an @ binding pointing at an action the controller does not export', () => {
+    const errs = contractErrors('<kai-button @kai-click="bak"></kai-button>', controllerOf({ actions: ['back'] }));
+    expect(errs.join(' ')).toContain('@kai-click="bak"');
+    expect(errs.join(' ')).toContain('back');
+  });
+
+  it('catches a #ref the controller does not declare in its Refs', () => {
+    const errs = contractErrors('<kai-dock #ref="dok"></kai-dock>', controllerOf({ refs: ['dock'] }));
+    expect(errs.join(' ')).toContain('#ref="dok"');
+  });
+
+  it('refuses a page with bindings and no controller', () => {
+    expect(contractErrors('<kai-button @kai-click="open"></kai-button>').join(' '))
+      .toContain('demo.controller.ts');
+  });
 });

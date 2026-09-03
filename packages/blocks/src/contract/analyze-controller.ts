@@ -19,7 +19,8 @@
  * runtime. For the react form tsc is the backstop and this is the early,
  * legible failure.
  */
-import type { ControllerShape } from './types';
+import type { ControllerShape, ParsedTemplate } from './types';
+import { walkElements } from './parse-template';
 
 /** Strip line and block comments without touching string contents. */
 function stripComments(source: string): string {
@@ -170,4 +171,23 @@ export function analyzeController(
 
   if (errors.length) return { errors };
   return { shape: { name: componentName, stateFields, actionNames, refNames }, errors: [] };
+}
+
+/** The page's `@` and `#ref` bindings against the controller's declared
+ *  names. Called by `checkBlockContracts` (the gate) AND by every renderer,
+ *  so `create-kai add` and `kai dev` refuse the same page by name instead of
+ *  emitting a tree that calls a function nobody exports. */
+export function crossCheckBindings(template: ParsedTemplate, shape: ControllerShape, where: string): string[] {
+  const errors: string[] = [];
+  for (const el of walkElements(template.body)) {
+    for (const b of el.bindings) {
+      if (b.kind === 'event' && !shape.actionNames.includes(b.value)) {
+        errors.push(`${where}:${b.line}: ${b.raw}="${b.value}" names no action. ${shape.name}Actions declares: ${shape.actionNames.join(', ')}.`);
+      }
+      if (b.kind === 'ref' && !shape.refNames.includes(b.value)) {
+        errors.push(`${where}:${b.line}: #ref="${b.value}" is not in ${shape.name}Refs, so the controller can never reach it. ${shape.name}Refs declares: ${shape.refNames.join(', ')}.`);
+      }
+    }
+  }
+  return errors;
 }

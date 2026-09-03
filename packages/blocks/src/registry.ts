@@ -26,6 +26,15 @@
  * it, not before.
  */
 
+import { parseTemplate } from './contract/parse-template';
+import { analyzeController, crossCheckBindings } from './contract/analyze-controller';
+
+/** kebab-or-plain block name to its component name: support-widget -> SupportWidget.
+ *  ONE definition; `componentName` in src/forms/index.ts re-exports it. */
+export function pascal(blockName: string): string {
+  return blockName.split(/[^a-zA-Z0-9]+/).filter(Boolean).map((p) => p[0].toUpperCase() + p.slice(1)).join('');
+}
+
 // ---------------------------------------------------------------- manifest
 
 /** One file a block ships, per the adopted registry-item skeleton. */
@@ -476,7 +485,13 @@ export function checkBlockContracts(
       for (const tagMatch of content.matchAll(/<(kai-[\w-]+)([^>]*)>/g)) {
         const [, tag, attrs] = tagMatch;
         for (const prop of nonscalarByTag[tag] ?? []) {
-          const attrRe = new RegExp(`\\s(?:${prop}|${kebab(prop)})\\s*=`, 'i');
+          // The prefix is part of the match, not skipped by it. `:messages=`
+          // and `seed:messages=` are a non-scalar in ATTRIBUTE position
+          // exactly as a bare `messages=` is; only `.prop=` and `*for=`
+          // legitimately carry a non-scalar (spec 3.1, amendment 8a.2). The
+          // old form required whitespace immediately before the name, so
+          // every prefixed spelling slipped past it.
+          const attrRe = new RegExp(`(?:^|\\s)(?::|seed:)?(?:${prop}|${kebab(prop)})\\s*=`, 'i');
           if (attrRe.test(attrs)) {
             errors.push(`${where}: <${tag}> sets non-scalar prop "${prop}" as an HTML attribute; array/object props are JS properties only`);
           }
@@ -484,5 +499,30 @@ export function checkBlockContracts(
       }
     }
   }
+
+  // The GRAMMAR has one owner. Rather than restating the binding rules here,
+  // parse the page and surface what the parser says; a block that is not on
+  // the authored contract yet (no binding-prefixed attribute anywhere) is
+  // skipped, which is what carries the unconverted blocks through the
+  // conversion round.
+  const pageEntry = block.manifest.files.find((f) => f.type === 'registry:page');
+  const pageHtml = pageEntry ? block.files.get(pageEntry.path) : undefined;
+  if (pageEntry && pageHtml !== undefined && /\s(?:seed:|[.:@#*])[\w-]+\s*=/.test(pageHtml)) {
+    const where = `${block.name}/${pageEntry.path}`;
+    const parsed = parseTemplate(pageHtml, where);
+    errors.push(...parsed.errors);
+
+    const name = pascal(block.name);
+    const controllerPath = `${block.name}.controller.ts`;
+    const controllerSource = block.files.get(controllerPath);
+    if (controllerSource === undefined) {
+      errors.push(`${block.name}: the page declares bindings, so the block needs ${controllerPath} (spec 3.2). The wiring moved off the script and onto the markup; the logic lives in the controller.`);
+    } else if (parsed.template) {
+      const shape = analyzeController(controllerSource, name, `${block.name}/${controllerPath}`);
+      errors.push(...shape.errors);
+      if (shape.shape) errors.push(...crossCheckBindings(parsed.template, shape.shape, where));
+    }
+  }
+
   return errors;
 }
