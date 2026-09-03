@@ -885,15 +885,31 @@ export const ELEMENT_COMPOSITION: Record<string, ElementComposition> = {
 };
 
 /**
- * Which slots have projected light-DOM content — a DIRECT child of `host`
- * carrying the matching `slot` attribute. Pure and synchronous; safe in jsdom
- * and SSR (returns all-false when `host` has no matching children). The facade
- * calls this on mount and on every childList mutation.
+ * Which slots have VISIBLE projected light-DOM content: a DIRECT child of
+ * `host` carrying the matching `slot` attribute and not `hidden`. Pure and
+ * synchronous; safe in jsdom and SSR (returns all-false when `host` has no
+ * matching children). The facade calls this on mount and on every childList
+ * mutation.
+ *
+ * `:not([hidden])` is the whole of the visibility test, and it is here rather
+ * than at each call site because this function is the ONE definition every
+ * facade reads. A hidden assigned node still fills its slot as far as the
+ * platform is concerned, so a built-in region wrapped around one reserved real
+ * space for nothing anybody can see: measured at 2px on a conversation row
+ * whose optional preview line is authored once and toggled with `hidden`,
+ * against the same row built by adding and removing the node. That difference
+ * is not a corner case under the authored block contract -- declarative markup
+ * toggles VISIBILITY, where imperative markup toggled EXISTENCE -- so the two
+ * shapes have to agree.
+ *
+ * Deliberately narrow: `hidden` only, not `display: none` or `visibility`.
+ * Computed style is neither pure nor available in SSR, and `hidden` is the
+ * channel the contract's `:hidden` binding writes.
  */
 export function readSlots(host: Element, defs: SlotDef[] = CHAT_SLOTS): Record<string, boolean> {
   const out: Record<string, boolean> = {};
   for (const def of defs) {
-    out[def.name] = !!host.querySelector(`:scope > [slot="${def.name}"]`);
+    out[def.name] = !!host.querySelector(`:scope > [slot="${def.name}"]:not([hidden])`);
   }
   return out;
 }
