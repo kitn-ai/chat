@@ -1,5 +1,70 @@
 # Changelog
 
+## [0.32.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.31.0...@kitn.ai/ui-v0.32.0) (2026-09-03)
+
+
+### Features
+
+* **blocks:** assistant + in-app-assistant — tier 1 complete, three blocks on the parts ([ca975d3](https://github.com/kitn-ai/ui/commit/ca975d360ed9e53cfe662b2e5a18d2175cf0f782))
+* **blocks:** the authored contract, and the html / react / cdn renderers ([#374](https://github.com/kitn-ai/ui/issues/374)) ([c785d1a](https://github.com/kitn-ai/ui/commit/c785d1a389449c7582c33fd11a48d7e4cfd68ed7))
+* **blocks:** the registry, the CDN-form generator, and support-widget — the first block (task 3.1) ([06e0425](https://github.com/kitn-ai/ui/commit/06e04253103b39dc8407bc7a8fb4836a437ebe53))
+* **builder:** BuilderHeader story — full-width chrome strip, stub round ([ac55735](https://github.com/kitn-ai/ui/commit/ac55735d0a02e8b19f945a41856c676be120ae3e))
+* **builder:** BuildWait — the template's own blueprint draws itself while the preview boots ([bc14adc](https://github.com/kitn-ai/ui/commit/bc14adc4c16b3c318545e0c70f1de83263a4cb9f))
+* **builder:** home-screen entry flow — scan for existing constructs, open by name, back-to-home ([6473a5d](https://github.com/kitn-ai/ui/commit/6473a5d250bd83b2d6f91e570ef76c7bbf7cb82e))
+* **builder:** starters ship bells-and-whistles-on and brand-neutral; Workspace gets a real work surface ([cf00528](https://github.com/kitn-ai/ui/commit/cf00528edefd9ad1ec2374c4c62c6ce709c588be))
+* **builder:** the panel renders the Work surface section and its off-by-default hints ([0592d50](https://github.com/kitn-ai/ui/commit/0592d507b8438c862644d5faa3314be8a9ee5058))
+* **builder:** the two Workspace variants now differ in what the pane looks like ([c46ee59](https://github.com/kitn-ai/ui/commit/c46ee5986f0a6165b03c9c354210315be39f91bb))
+* **builder:** theme entry moves into the Theme section; apply persists the full palette with a toast ([ab2e294](https://github.com/kitn-ai/ui/commit/ab2e2940b65efc3d46dffe4e8a55decf6d4006f2))
+* **builder:** theme the real app — studio rail beside the live preview ([8c7ff84](https://github.com/kitn-ai/ui/commit/8c7ff841c2687d5b4f10cdba42e19a976d11618e))
+* **builder:** wire BuilderHeader into the builder with the theme-studio takeover ([cb9d4db](https://github.com/kitn-ai/ui/commit/cb9d4dbbdc0fc8f3ea59b3be4be0f1d2036acd72))
+* **components:** kai-panel family — the widget chrome goes public (lane 1A, P-1) ([f525fb5](https://github.com/kitn-ai/ui/commit/f525fb58cd68636c6da193b4a91c0c2043afcbd8))
+* **components:** kai-row + conversation density axis + unread dot (lane 1D, P-4/P-7) ([82f64f6](https://github.com/kitn-ai/ui/commit/82f64f6538e40ddd249ce1e19fe3a176cf165257))
+* **components:** kai-tab-bar + kai-tab-bar-item — WidgetTabBar goes public (lane 1B, P-2) ([c0a76ec](https://github.com/kitn-ai/ui/commit/c0a76ec6e8be611f5c1a28a01b8fa8c1a819cc04))
+* **components:** kai-view-stack — the drill navigation model becomes a part (lane 1C, P-3) ([7bda7eb](https://github.com/kitn-ai/ui/commit/7bda7ebdf584f8e9df30ed3442b4fdb87e36c720))
+* **construct:** emit a rendering work surface for split, and stop reserving an empty column without one ([59467a8](https://github.com/kitn-ai/ui/commit/59467a858d61dced89cc1aabe9199f8885758be3))
+* **construct:** scripted mocks — every starter boots showing the thread it exists for ([e51ba02](https://github.com/kitn-ai/ui/commit/e51ba027868ccebe67021b7cadd646a065053842))
+* **construct:** theme.tokens — full palette persistence with dark emission ([4dc3f59](https://github.com/kitn-ai/ui/commit/4dc3f590c2ec8ea4e2c16867054248893b05e3cc))
+* **construct:** workSurface vocabulary, layout-scoped to split, with its four cross-field rules ([dc27fc6](https://github.com/kitn-ai/ui/commit/dc27fc6e5bf7d5a77ef00f93f50cf66ed0421968))
+* **elements:** kai-chat becomes a thin preset over the parts (task 2.2, P-9 + P-6) ([1764895](https://github.com/kitn-ai/ui/commit/1764895b5dffa8761bad5c67b524cd9129e4ab56))
+* **elements:** kai-conversations gains searchable — the search box becomes optional ([31f49a3](https://github.com/kitn-ai/ui/commit/31f49a310a19fd4aa8fb866d4c92317434574042))
+* **elements:** phase-1 close — seven parts registered, regenerated, gated ([838ec13](https://github.com/kitn-ai/ui/commit/838ec13866ae87c3a4a84fc1ad4aa10f3dc0c4f9))
+* **elements:** the composed-launcher parity gaps close — unread, close, new conversation ([e8d74eb](https://github.com/kitn-ai/ui/commit/e8d74eb2b4f3d5e9bbfa0067289d86c9cd0048c1))
+* **gallery:** the blocks gallery — a route on the dev server, dogfooding the kit (task 5.1) ([a61edf0](https://github.com/kitn-ai/ui/commit/a61edf005e2206964680640617408ec859544c5a))
+* **gallery:** the framework axis, zip download, and icon buttons (owner round 2) ([497f583](https://github.com/kitn-ai/ui/commit/497f5834cf6de511141a7927ff6cd3853b244586))
+* **scaffold:** framework scaffolds boot into the rich mock thread too ([76b9a58](https://github.com/kitn-ai/ui/commit/76b9a585260b5a9ee77702577f58330a84aa3bd2))
+* **scripts:** the block driver — scenario-as-data parity harness + the facade baseline (task 2.1) ([b69006c](https://github.com/kitn-ai/ui/commit/b69006c215a1217da05ef0a2c8c8a65fea488feb))
+* **stores:** [@kitn](https://github.com/kitn).ai/ui/stores — the conversation stores go CDN-loadable ([ad92131](https://github.com/kitn-ai/ui/commit/ad92131ed3b3e9d840e00f651598928dfb26a486))
+* **stores:** the headless conversation controller + a fail-loud icon roster (lane 1E, P-5/P-8) ([a7739fb](https://github.com/kitn-ai/ui/commit/a7739fb95b5e591cfe2f7377e43a9a02b7dcc5dc))
+* **theme-studio:** relocate ThemeStudio into the kit as a standalone app ([5a642f1](https://github.com/kitn-ai/ui/commit/5a642f1f6cb9a4e5543978cd0dd6804e18d944d7))
+* **ui:** promote the Workspace story's app header into a real AppHeader component ([1128698](https://github.com/kitn-ai/ui/commit/11286982acd54413c8caa01f7a884d91136df14f))
+* **ui:** promote the Workspace story's pane chrome into a real WorkSurface component ([ed86cc1](https://github.com/kitn-ai/ui/commit/ed86cc1ba13f2411640b8c5d0e239750127f252d))
+
+
+### Bug Fixes
+
+* **blocks:** support-widget home matches the facade by measurement (owner-caught) ([3cdb5fc](https://github.com/kitn-ai/ui/commit/3cdb5fc87a7cf360136f625085c786801db2dbd1))
+* **builder:** a superseded boot aborts instead of racing the newer one onto the preview port ([0792a9a](https://github.com/kitn-ai/ui/commit/0792a9a3ac749701cae6e421f75526d417a1e6b4))
+* **builder:** a taken builder port steps aside with a readable notice, not an EADDRINUSE stack ([29ee844](https://github.com/kitn-ai/ui/commit/29ee8449616ab34e357563dc414ec899593323ba))
+* **builder:** ConstructListing moves to templates.ts so the page's type import stays inside the dist d.ts boundary ([d004f13](https://github.com/kitn-ai/ui/commit/d004f131786415e212a6f9db7ef326f022c47771))
+* **builder:** create responds the moment the construct file exists, boot announces itself over SSE ([bf1db9d](https://github.com/kitn-ai/ui/commit/bf1db9d9a9fc41292d2401703b6e730c5047337b))
+* **builder:** give the variant and name steps the Start screen's canvas and brand ([f6bfba3](https://github.com/kitn-ai/ui/commit/f6bfba32d9ee61661fb2e29db8719bf244018bd6))
+* **builder:** the theme handshake seeds truly, opens write-free, toasts honestly ([2090efd](https://github.com/kitn-ai/ui/commit/2090efd04aaf9466e1ae0f5a4ff607b504169ddf))
+* **components:** capture the FUNCTION, not the view — window teardown listeners ([3d709e7](https://github.com/kitn-ai/ui/commit/3d709e7e3590ba0df561fad7c0aeb832e61e97f2))
+* **construct:** codeView stands alone — the Code tab shows an honest empty state ([31f9627](https://github.com/kitn-ai/ui/commit/31f96271f56b944e7dff8d4adeeec91b27f0320f))
+* **construct:** derive the form-route fixture's CDN URL instead of a literal pin ([76ae03c](https://github.com/kitn-ai/ui/commit/76ae03c8109a1a8a43ca85c9a11a12bb3cfa27e8))
+* **construct:** five review findings — origin guard, vendored eject, contrast gate, listener leak, win32 spawns ([2a4bcae](https://github.com/kitn-ai/ui/commit/2a4bcaee9ccf1cd6e1366d3821f34b85c51ae8b6))
+* **construct:** running the CLI from a source checkout installs THAT checkout's kit ([c4a3fff](https://github.com/kitn-ai/ui/commit/c4a3ffff890c2e35a3c368c1e0b3cb6cf4b63d3e))
+* **construct:** writeProject skips byte-identical files so regens stop restarting Vite ([170b134](https://github.com/kitn-ai/ui/commit/170b134e1a923ca23148f31f7a7bdbb3f64b9072))
+* **elements:** facade bodies run untracked — the controller-rebuild class dies at the root ([86ef104](https://github.com/kitn-ai/ui/commit/86ef104d91d4949486c6eafc854a561733c6ed7a))
+* **elements:** kai-view-stack facades no longer silently rebuild their controller ([6744a41](https://github.com/kitn-ai/ui/commit/6744a4124eb3783cb26613c4d3cd3aeefdd974a7))
+* **elements:** reword four kai-chat descriptions the style test flagged ([adc171c](https://github.com/kitn-ai/ui/commit/adc171c4af378bc505ef31a6be56d09f1e0d3ae1))
+* **elements:** third em-dash slip rewrites, and the test now tells agents to run it ([d473f8e](https://github.com/kitn-ai/ui/commit/d473f8eeeadc75d5bceb494294eec9e3dc564a03))
+* **gate:** gallery-app joins NOT_SHIPPED_DIRS; pack ceiling covers the shipped gallery ([f9b2d81](https://github.com/kitn-ai/ui/commit/f9b2d81baa56283c442f2e17c4ed52ebe1569390))
+* **solid:** the phase-1 parts reach the public Solid surface; kai-view gets a reviewed equivalence ([a2a1003](https://github.com/kitn-ai/ui/commit/a2a10034a9e370bff2916e17ff1c84f39c71aabd))
+* the storybook shards red on main since Aug 28 were real a11y defects ([#359](https://github.com/kitn-ai/ui/issues/359)) ([20cefe1](https://github.com/kitn-ai/ui/commit/20cefe1aa6c5f89d87600ecd0a4a83b666b8cd9d))
+* **theme-studio:** Solid JSX typing for kai-chat + a dts probe for ./stores ([3832240](https://github.com/kitn-ai/ui/commit/3832240f81298e7b13a6350a57a1f802b9636f8c))
+* **theme-studio:** the docs editor page survives astro dev SSR evaluation ([6f1e4ae](https://github.com/kitn-ai/ui/commit/6f1e4ae5808e7a49663f7a224ba89e0f37f96482))
+
 ## [0.31.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.30.0...@kitn.ai/ui-v0.31.0) (2026-08-29)
 
 
