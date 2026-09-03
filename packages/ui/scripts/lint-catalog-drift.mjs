@@ -608,10 +608,10 @@ export function check({
  * `Labs/Audio Visualizers` under src/components/, so a scan scoped to
  * src/elements/ false-fails on both. Measured, not assumed.
  *
- * Also walks apps/: `.storybook/main.ts` indexes an apps stories glob
- * alongside the src one (both quoted verbatim in story-roots.mjs, which this
- * mirrors), so a Labs story can live outside src/ under one of the dev-tool
- * apps.
+ * Walks whatever `storyRoots` returns rather than `src/` alone: a Labs story
+ * can live outside src/, and that function derives its roots from
+ * `.storybook/main.ts`'s `stories:` globs, the same array `storyExtensions()`
+ * below reads for the extensions.
  */
 function deriveLabsTitles() {
   const exts = storyExtensions();

@@ -68,7 +68,7 @@ function serveRemoteProvider(): Plugin {
 // enforces this but the absence of the file -- recorded in docs/coupling-map.md.
 
 const config: StorybookConfig = {
-  stories: ['../src/**/*.mdx', '../src/**/*.stories.@(ts|tsx)', '../apps/**/*.stories.@(ts|tsx)'],
+  stories: ['../src/**/*.mdx', '../src/**/*.stories.@(ts|tsx)'],
   framework: 'storybook-solidjs-vite',
   // Serve the generated agent files so the docs can link to them directly.
   staticDirs: [

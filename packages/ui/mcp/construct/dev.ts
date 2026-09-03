@@ -595,23 +595,6 @@ export function themeStudioDir(): string | undefined {
   return 'dir' in out ? out.dir : undefined;
 }
 
-/** dist/blocks (registry.json + r/<name>.json + r/<name>.cdn.html, emitted by
- *  gen-blocks.mjs in postbuild) — the walk probes for registry.json rather
- *  than index.html, so `resolveBuilderPageDir`'s index.html probe cannot be
- *  reused here. Bounded the same way. */
-export function blocksDistDir(): string | undefined {
-  let dir = dirname(fileURLToPath(import.meta.url));
-  for (let i = 0; i < 6; i++) {
-    const candidate = join(dir, 'blocks');
-    if (existsSync(join(candidate, 'registry.json'))) return candidate;
-    const atPackageRoot = existsSync(join(dir, 'package.json'));
-    const parent = dirname(dir);
-    if (atPackageRoot || parent === dir) return undefined;
-    dir = parent;
-  }
-  return undefined;
-}
-
 // ── the manifest-of-constructs entry flow (owner ask, 2026-08-31) ───────────
 // The builder used to start from scratch every time. Now the session's cwd is
 // scanned for existing `*.construct.json` files (they live at the PROJECT
