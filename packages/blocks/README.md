@@ -16,10 +16,22 @@ future consumer, not a current one.
 - `src/forms.ts` -- the one renderer every delivery form goes through, so what
   the gallery shows is byte-for-byte what `create-kai add` writes.
 
-## This package depends on nothing
+## What this package may depend on
 
-Not on `@kitn.ai/ui`, not on `zod`, not on `node:*`. The two facts the registry
-needs from the kit arrive by injection, from callers that have a filesystem:
+`src/registry.ts` depends on NOTHING -- not on `@kitn.ai/ui`, not on `zod`,
+not on `node:*`. It is what `create-kai` bundle-imports for validation and
+what `bundleGraphProblem` grades, and it stays a leaf.
+
+`src/contract/**` and `src/forms/**` depend on `parse5`, and on nothing else.
+The binding grammar is attributes on a tree with a scope in it, and a regex
+cannot see a tree; the predecessor (`bodyToJsx`) refused everything it could
+not translate, which was honest and does not scale to a grammar. parse5 ships
+its own types, imports no `node:*` module, and compiles under this package's
+`"types": []` / DOM-free `lib` (measured, both with and without
+`skipLibCheck`), so neither tsconfig option relaxes for it.
+
+The two facts the registry needs from the kit still arrive by injection, from
+callers that have a filesystem:
 
 | Injected input | Read from |
 |---|---|
