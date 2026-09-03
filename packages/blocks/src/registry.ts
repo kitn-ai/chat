@@ -153,8 +153,14 @@ export function validateBlockManifest(
       if (!fileNames.includes(f.path)) {
         errors.push(`${dirName}: files[] lists "${f.path}" but the directory scan found no such file`);
       }
-      if ('target' in f && typeof f.target !== 'string') {
-        errors.push(`${dirName}: files["${f.path}"].target must be a string when present`);
+      if ('target' in f) {
+        if (typeof f.target !== 'string') {
+          errors.push(`${dirName}: files["${f.path}"].target must be a string when present`);
+        } else if (f.target !== f.path.split('/').pop()) {
+          errors.push(
+            `${dirName}: files["${f.path}"].target is "${f.target}", but "target" is derived: the file name comes from the path and the DIRECTORY comes from src/targets.ts (one table, read by the renderers, the CLI and the site). Delete the line, or write "${f.path.split('/').pop()}".`,
+          );
+        }
       }
     }
     if (pages !== 1) errors.push(`${dirName}: exactly one files[] entry must be type "registry:page" (the CDN form's source), found ${pages}`);

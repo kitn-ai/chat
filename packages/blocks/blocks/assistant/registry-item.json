@@ -5,10 +5,10 @@
   "type": "registry:block",
   "categories": ["assistant", "full-page"],
   "files": [
-    { "path": "assistant.html", "type": "registry:page", "target": "assistant.html" },
-    { "path": "assistant.js", "type": "registry:file", "target": "assistant.js" },
-    { "path": "assistant.css", "type": "registry:file", "target": "assistant.css" },
-    { "path": "mock.js", "type": "registry:file", "target": "mock.js" }
+    { "path": "assistant.html", "type": "registry:page" },
+    { "path": "assistant.js", "type": "registry:file" },
+    { "path": "assistant.css", "type": "registry:file" },
+    { "path": "mock.js", "type": "registry:file" }
   ],
   "dependencies": ["@kitn.ai/ui"],
   "registryDependencies": [],

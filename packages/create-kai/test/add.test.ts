@@ -25,7 +25,6 @@ import {
   FRAMEWORK_SIGNALS,
   blockFormAxis,
   detectForm,
-  loadBlocks,
   planAdd,
   resolveAdd,
 } from '../src/blocks';
@@ -33,20 +32,14 @@ import type { Block } from '../src/blocks';
 import { bodyToJsx, componentName, wrapEntryScript } from '../src/react-form';
 import { decideForm, mergeDependencies, parseAddArgs, runAdd } from '../src/add';
 import type { AddEnv } from '../src/add';
-
-const BLOCKS_ROOT = path.resolve(__dirname, '../dist/blocks');
-const KIT_RANGE = '^9.9.9';
-const KIT_VERSION = '9.9.9';
+import { BLOCKS_ROOT, KIT_RANGE, KIT_VERSION, loadBundledBlocks } from './helpers';
 
 let root: string;
 let blocks: Block[];
 
 beforeAll(async () => {
-  if (!existsSync(BLOCKS_ROOT)) {
-    throw new Error(`no blocks at ${BLOCKS_ROOT} - run \`pnpm --filter create-kai run build\` first`);
-  }
   root = await mkdtemp(path.join(tmpdir(), 'create-kai-add-'));
-  blocks = await loadBlocks(BLOCKS_ROOT);
+  blocks = await loadBundledBlocks();
 });
 
 afterAll(async () => {

@@ -26,6 +26,7 @@
  * (the gallery page imports `BLOCK_FORMS` directly) and bundles into the CLI.
  */
 import { generateCdnForm, type Block, type CdnFormOptions } from './registry';
+import { fileTarget } from './targets';
 
 // ------------------------------------------------------------- the form axis
 
@@ -46,11 +47,17 @@ export function isBlockFormId(id: string): id is BlockFormId {
   return BLOCK_FORMS.some((form) => form.id === id);
 }
 
-/** One rendered file of a form — path relative to wherever the caller mounts
- *  the form (the CLI prefixes its block dir; the gallery shows it as-is). */
+/** One rendered file of a form.
+ *
+ *  `path` is the file's name relative to wherever the caller mounts the form
+ *  -- unchanged, and what `create-kai` joins its own directory onto today.
+ *  `target` is the PROJECT-RELATIVE path from `src/targets.ts`: what the
+ *  /blocks page displays and what `add` will write once PR D reads the table.
+ *  They disagree for react until then, deliberately and with a test on it. */
 export interface FormFile {
   path: string;
   content: string;
+  target: string;
 }
 
 const posixBasename = (p: string): string => p.split('/').pop() as string;
@@ -319,7 +326,8 @@ export function renderHtmlForm(block: Block): FormFile[] {
       }
       contents = adaptRegistrationForBundler(contents);
     }
-    files.push({ path: entry.target ?? posixBasename(entry.path), content: contents });
+    const name = entry.target ?? posixBasename(entry.path);
+    files.push({ path: name, content: contents, target: fileTarget('html', block.name, name) });
   }
   return files;
 }
@@ -349,21 +357,36 @@ export function renderReactForm(block: Block): FormFile[] {
   const files: FormFile[] = [];
   for (const entry of block.manifest.files) {
     if (entry.type === 'registry:page') continue; // the tsx component IS the page here
-    const target = entry.target ?? posixBasename(entry.path);
+    const name = entry.target ?? posixBasename(entry.path);
     const raw =
       entry.path === entryScript ? (wrapped.code as string) : (block.files.get(entry.path) as string);
-    files.push({ path: target, content: entry.path.endsWith('.js') ? adaptRegistrationForBundler(raw) : raw });
+    files.push({
+      path: name,
+      content: entry.path.endsWith('.js') ? adaptRegistrationForBundler(raw) : raw,
+      target: fileTarget('react', block.name, name),
+    });
   }
   // PascalCase on purpose, and not only as react convention: the component
   // must NOT share a basename with the entry script, or `bundler` resolution
   // maps the tsx's own `import('./<entry>.js')` back onto the tsx itself
   // (js -> tsx substitution) instead of the script's .d.ts.
+  const componentFileName = `${componentName(block.name)}.tsx`;
   files.push({
-    path: `${componentName(block.name)}.tsx`,
+    path: componentFileName,
     content: renderComponent({ blockName: block.name, jsx: jsx.jsx as string, entryScript, stylesheets }),
+    target: fileTarget('react', block.name, componentFileName),
   });
-  files.push({ path: 'kai-elements.d.ts', content: renderJsxTypings(kaiTagsIn(pageHtml)) });
-  files.push({ path: entryScript.replace(/\.js$/, '.d.ts'), content: renderEntryTypings(entryScript) });
+  files.push({
+    path: 'kai-elements.d.ts',
+    content: renderJsxTypings(kaiTagsIn(pageHtml)),
+    target: fileTarget('react', block.name, 'kai-elements.d.ts'),
+  });
+  const entryTypesName = entryScript.replace(/\.js$/, '.d.ts');
+  files.push({
+    path: entryTypesName,
+    content: renderEntryTypings(entryScript),
+    target: fileTarget('react', block.name, entryTypesName),
+  });
   return files;
 }
 
@@ -380,7 +403,7 @@ export function renderCdnFormFiles(block: Block, opts: CdnFormOptions): FormFile
   }
   const form = generateCdnForm(block, opts);
   if (!form.html) throw new Error(`${block.name}: the paste form cannot be generated: ${form.errors.join('; ')}`);
-  return [{ path: `${block.name}.html`, content: form.html }];
+  return [{ path: `${block.name}.html`, content: form.html, target: `${block.name}.html` }];
 }
 
 /** ONE dispatch over the form axis — the gallery route and the CLI planner

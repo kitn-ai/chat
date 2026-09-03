@@ -888,8 +888,8 @@ describe('storeZip', () => {
 
   it('emits a parseable store-only archive whose entries are byte-equal to the input files', () => {
     const files = [
-      { path: 'a/deep/file.html', content: '<p>hello</p>' },
-      { path: 'b.js', content: "console.log('x');\n" },
+      { path: 'a/deep/file.html', content: '<p>hello</p>', target: 'a/deep/file.html' },
+      { path: 'b.js', content: "console.log('x');\n", target: 'b.js' },
     ];
     const entries = readZip(storeZip(files));
     expect(entries.map((e) => e.name)).toEqual(files.map((f) => f.path));
@@ -899,7 +899,7 @@ describe('storeZip', () => {
   });
 
   it('is deterministic — the same files always produce the same bytes', () => {
-    const files = [{ path: 'x.css', content: 'body{}' }];
+    const files = [{ path: 'x.css', content: 'body{}', target: 'x.css' }];
     expect(storeZip(files).equals(storeZip(files))).toBe(true);
   });
 });

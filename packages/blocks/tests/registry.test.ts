@@ -193,6 +193,21 @@ describe('manifest validation (each rule watched failing)', () => {
   it('meta.iframeHeight must be a CSS length', () => {
     expect(bad((m) => { m.meta = { iframeHeight: 'tall' }; }).join()).toMatch(/not a CSS length/);
   });
+  it('refuses a files[].target that is not the file basename (targets.ts owns the directory)', () => {
+    const errs = bad((m) => {
+      m.files = [{ path: 'demo.html', type: 'registry:page', target: 'src/blocks/x/demo.html' }];
+    });
+    expect(errs.join(' ')).toContain('targets.ts');
+    expect(errs.join(' ')).toContain('"target" is derived');
+  });
+  it('accepts a target that equals the basename, and its absence', () => {
+    expect(bad((m) => {
+      m.files = [{ path: 'demo.html', type: 'registry:page', target: 'demo.html' }];
+    })).toEqual([]);
+    expect(bad((m) => {
+      m.files = [{ path: 'demo.html', type: 'registry:page' }];
+    })).toEqual([]);
+  });
 });
 
 describe('the CDN-form generator', () => {

@@ -5,10 +5,10 @@
   "type": "registry:block",
   "categories": ["assistant", "aside"],
   "files": [
-    { "path": "in-app-assistant.html", "type": "registry:page", "target": "in-app-assistant.html" },
-    { "path": "in-app-assistant.js", "type": "registry:file", "target": "in-app-assistant.js" },
-    { "path": "in-app-assistant.css", "type": "registry:file", "target": "in-app-assistant.css" },
-    { "path": "mock.js", "type": "registry:file", "target": "mock.js" }
+    { "path": "in-app-assistant.html", "type": "registry:page" },
+    { "path": "in-app-assistant.js", "type": "registry:file" },
+    { "path": "in-app-assistant.css", "type": "registry:file" },
+    { "path": "mock.js", "type": "registry:file" }
   ],
   "dependencies": ["@kitn.ai/ui"],
   "registryDependencies": [],

@@ -330,7 +330,8 @@ function planHtmlBlock(block: Block, plan: AddPlan): void {
     plan.files.push({ path: path.posix.join(dir, file.path), contents: file.content });
   }
   const page = block.manifest.files.find((f) => f.type === 'registry:page');
-  plan.notes.push(`${block.name}: web-component form under ${dir}/ (open ${path.posix.join(dir, page?.target ?? '')} through your dev server)`);
+  const pageFile = page ? (page.target ?? page.path.split('/').pop()) : '';
+  plan.notes.push(`${block.name}: web-component form under ${dir}/ (open ${path.posix.join(dir, pageFile)} through your dev server)`);
 }
 
 function planReactBlock(block: Block, plan: AddPlan): void {

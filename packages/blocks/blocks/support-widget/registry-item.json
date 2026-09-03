@@ -5,10 +5,10 @@
   "type": "registry:block",
   "categories": ["widget", "support"],
   "files": [
-    { "path": "support-widget.html", "type": "registry:page", "target": "support-widget.html" },
-    { "path": "support-widget.js", "type": "registry:file", "target": "support-widget.js" },
-    { "path": "support-widget.css", "type": "registry:file", "target": "support-widget.css" },
-    { "path": "mock.js", "type": "registry:file", "target": "mock.js" }
+    { "path": "support-widget.html", "type": "registry:page" },
+    { "path": "support-widget.js", "type": "registry:file" },
+    { "path": "support-widget.css", "type": "registry:file" },
+    { "path": "mock.js", "type": "registry:file" }
   ],
   "dependencies": ["@kitn.ai/ui"],
   "registryDependencies": [],

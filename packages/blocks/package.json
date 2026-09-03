@@ -22,6 +22,10 @@
       "types": "./src/forms.ts",
       "default": "./src/forms.ts"
     },
+    "./targets": {
+      "types": "./src/targets.ts",
+      "default": "./src/targets.ts"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

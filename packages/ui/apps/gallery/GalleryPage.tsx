@@ -176,7 +176,7 @@ export function GalleryPage(props: GalleryPageProps): JSX.Element {
   const activeFile = (block: GalleryBlock): FormFile => {
     const files = formFiles(block);
     const wanted = activeFiles()[`${block.name}:${activeForm(block)}`];
-    return files.find((f) => f.path === wanted) ?? files[0] ?? { path: '', content: '' };
+    return files.find((f) => f.path === wanted) ?? files[0] ?? { path: '', content: '', target: '' };
   };
 
   const treeFiles = (block: GalleryBlock): FileTreeFile[] =>

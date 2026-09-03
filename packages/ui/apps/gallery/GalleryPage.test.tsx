@@ -12,14 +12,14 @@ const block = (name: string, title: string, categories: string[], extra: Partial
   categories,
   forms: {
     html: [
-      { path: `${name}.html`, content: `<p>${name} page</p>` },
-      { path: `${name}.js`, content: `console.log('${name}');` },
+      { path: `${name}.html`, content: `<p>${name} page</p>`, target: `blocks/${name}/${name}.html` },
+      { path: `${name}.js`, content: `console.log('${name}');`, target: `blocks/${name}/${name}.js` },
     ],
     react: [
-      { path: 'SupportWidget.tsx', content: `export default function SupportWidget() {}` },
-      { path: `${name}.js`, content: `export async function initBlock() {}` },
+      { path: 'SupportWidget.tsx', content: `export default function SupportWidget() {}`, target: `src/components/${name}/SupportWidget.tsx` },
+      { path: `${name}.js`, content: `export async function initBlock() {}`, target: `src/components/${name}/${name}.js` },
     ],
-    cdn: [{ path: `${name}.html`, content: `<!doctype html><p>${name} cdn</p>` }],
+    cdn: [{ path: `${name}.html`, content: `<!doctype html><p>${name} cdn</p>`, target: `${name}.html` }],
   },
   preview: <p>{title} stub preview</p>,
   ...extra,
@@ -65,7 +65,7 @@ describe('GalleryPage', () => {
   });
 
   it('a form the block does not carry is not offered (menu honesty)', () => {
-    const htmlOnly = { ...block('assistant', 'Assistant', ['assistant']), forms: { html: [{ path: 'assistant.html', content: '<p>a</p>' }] } };
+    const htmlOnly = { ...block('assistant', 'Assistant', ['assistant']), forms: { html: [{ path: 'assistant.html', content: '<p>a</p>', target: 'blocks/assistant/assistant.html' }] } };
     expect(formsAvailable(htmlOnly).map((f) => f.id)).toEqual(['html']);
     render(() => <GalleryPage blocks={[htmlOnly]} defaultTab="code" />);
     expect(screen.queryByRole('button', { name: 'React' })).not.toBeInTheDocument();
