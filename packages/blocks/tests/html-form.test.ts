@@ -95,9 +95,11 @@ describe('the html form', () => {
     expect(() => renderHtmlForm(block())).toThrow(/gen-blocks/);
   });
 
-  it('emits the page, the binder, the stripped controller and the css', () => {
+  it('emits the page, the binder, the stripped controller, the css and the README', () => {
     const files = byPath(renderHtmlForm(stripped()));
-    expect([...files.keys()].sort()).toEqual(['fixture.controller.js', 'fixture.css', 'fixture.html', 'fixture.js']);
+    expect([...files.keys()].sort()).toEqual([
+      'README.md', 'fixture.controller.js', 'fixture.css', 'fixture.html', 'fixture.js',
+    ]);
   });
 
   it('targets every file at blocks/<id>/', () => {
@@ -232,5 +234,25 @@ describe('the html form', () => {
     const page = byPath(renderHtmlForm(withStrippedTwins(b, (s) => s))).get('fixture.html')!;
     expect(page).toContain('&#x1f44b;');
     expect(/[\u{10000}-\u{10FFFF}]/u.test(page)).toBe(false);
+  });
+
+  it('emits a README that says what the block needs and where it runs', () => {
+    const files = renderHtmlForm(stripped());
+    const readme = files.find((f) => f.path === 'README.md');
+    expect(readme, 'the html form emitted no README').toBeDefined();
+    expect(readme!.target).toBe('blocks/fixture/README.md');
+    // Two or three lines saying what the block needs (spec 3.5), which for
+    // this form is the one config fact a consumer cannot guess: the scripts
+    // import a bare specifier, so the folder goes through a bundler.
+    expect(readme!.content).toContain('fixture.html');
+    expect(readme!.content).toContain('@kitn.ai/ui/elements');
+  });
+
+  it('the README carries none of the tokens the stream-reader scan bans', () => {
+    // `verify:blocks [html-binder]` scans EVERY file of the form for a
+    // hand-rolled SSE reader. A README that quoted one would red the block on
+    // its own documentation, which is a red nobody would read correctly.
+    const readme = renderHtmlForm(stripped()).find((f) => f.path === 'README.md')!;
+    expect(readme.content).not.toMatch(/new\s+EventSource\(|text\/event-stream|\.getReader\(/);
   });
 });
