@@ -6,7 +6,7 @@ const src = readFileSync(resolve(__dirname, '../../frameworks/react/index.tsx'),
 
 describe('generated React wrappers', () => {
   it('exports bare friendly names, not Kc-prefixed', () => {
-    expect(src).toContain('export const Artifact = /*#__PURE__*/ createWebComponent<ArtifactProps>(');
+    expect(src).toContain('export const Artifact = /*#__PURE__*/ createWebComponent<ArtifactProps, KaiArtifactElement>(');
     expect(src).not.toContain('export const KaiArtifact ');
   });
   it('still binds to the kai- custom element tag', () => {

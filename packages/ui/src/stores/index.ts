@@ -42,3 +42,10 @@ export type {
   ConversationControllerHooks,
   ConversationControllerOp,
 } from './conversation-controller';
+// The type `ConversationStore.list()` returns and `onSummariesChange` hands
+// you. It shipped only through the package ROOT, whose bundle bare-imports
+// solid-js, so a framework-neutral controller consuming this self-contained
+// entry had to import @kitn.ai/ui for a type its own dependency already gives
+// it (blocks contract spike, F-10). Type-only, so dist/stores.js is byte-equal
+// and the entry stays solid-free.
+export type { ConversationSummary } from '../types';

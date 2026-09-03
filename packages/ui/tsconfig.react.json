@@ -12,7 +12,7 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@kitn.ai/ui/elements": ["./tests/react/elements-stub.d.ts"],
+      "@kitn.ai/ui/elements": ["./src/elements/element-types.d.ts"],
       "@kitn.ai/ui/elements/*": ["./tests/react/elements-stub.d.ts"]
     }
   },

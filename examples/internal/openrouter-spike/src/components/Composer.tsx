@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { PromptInput } from '@kitn.ai/ui/react';
+import type { KaiPromptInputElement } from '@kitn.ai/ui/elements';
 import type { Theme } from '../App';
 
 interface ComposerProps {
@@ -18,11 +19,11 @@ interface ComposerProps {
  * selection, so clear-on-submit goes through the element's `clear()` method.
  */
 export function Composer({ theme, loading, suggestions, onSubmit, onStop }: ComposerProps) {
-  const promptRef = useRef<HTMLElement>(null);
+  const promptRef = useRef<KaiPromptInputElement>(null);
 
   const handleSubmit = useCallback(
     (value: string) => {
-      (promptRef.current as (HTMLElement & { clear?: () => void }) | null)?.clear?.();
+      promptRef.current?.clear();
       onSubmit(value);
     },
     [onSubmit],

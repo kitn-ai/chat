@@ -14,7 +14,7 @@
     "baseUrl": ".",
     "paths": {
       "@kitn.ai/ui/react": ["./frameworks/react/index.tsx"],
-      "@kitn.ai/ui/elements": ["./tests/react/elements-stub.d.ts"],
+      "@kitn.ai/ui/elements": ["./src/elements/element-types.d.ts"],
       "@kitn.ai/ui/elements/*": ["./tests/react/elements-stub.d.ts"]
     }
   },

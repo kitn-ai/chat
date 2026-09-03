@@ -198,6 +198,32 @@ export const stream = createAssistantStream;
 export const append = appendTextPart;
 export const read: typeof readModelStream = readModelStream;
 export type Turn = ModelTurn;
+
+// F-9: a wrapper's ref hands back the ELEMENT INTERFACE, not a bare HTMLElement.
+// Asserted HERE, on the installed tarball, because it is a promise made to a
+// consumer and nothing else checks the shipped declaration: verify:dts only asks
+// whether the specifier resolves, and the kit's own react tests compile against
+// frameworks/, not dist/. Types only, no JSX, so every tsc mode can compile it.
+import type { ComponentProps } from 'react';
+import { ViewStack } from '@kitn.ai/ui/react';
+import type { KaiViewStackElement } from '@kitn.ai/ui/elements';
+
+// A callback ref whose parameter is the element interface: the shape a consumer
+// writes. A PIN, not the red. It compiles against a wrapper typed
+// RefAttributes<HTMLElement> too, because React types RefCallback through the
+// bivarianceHack (see @types/react), which makes the parameter bivariant and
+// defeats the contravariance you would otherwise get here. Measured, not assumed.
+export const stackRef: ComponentProps<typeof ViewStack>['ref'] = (el: KaiViewStackElement | null) => {
+  el?.push('chat');
+};
+
+// THIS is the line that fires. A ref object holding only an HTMLElement: its
+// current property is mutable, so it is checked covariantly and no hack softens
+// it. Widen the wrapper back to HTMLElement and this compiles, tsc reports the
+// directive as unused, and the fixture fails. Watched failing in BOTH modes by
+// reverting the generator's second type argument (blocks contract spike, F-9).
+// @ts-expect-error a bare-HTMLElement ref object is not enough for a kai wrapper
+export const wrongRef: ComponentProps<typeof ViewStack>['ref'] = { current: null as HTMLElement | null };
 `;
 
 // Temp dir deliberately OUTSIDE the repo: a consumer resolves @kitn.ai/ui from its
@@ -238,7 +264,9 @@ try {
   writeFileSync(join(app, 'src/positive.ts'), POSITIVE);
 
   step('npm install (tarball + typescript)');
-  run('npm', ['install', '--no-audit', '--no-fund', tarball, 'typescript@5'], app);
+  // @types/react: the POSITIVE fixture asserts the React wrappers' ref type, so the
+  // consumer program needs React's types the way a real React consumer has them.
+  run('npm', ['install', '--no-audit', '--no-fund', tarball, 'typescript@5', '@types/react@19'], app);
 
   // Prove the INSTALLED package is the one we just built, not a cached tarball.
   const installedWire = join(app, 'node_modules/@kitn.ai/ui/dist/wire/index.d.ts');

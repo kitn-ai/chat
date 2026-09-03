@@ -88,6 +88,12 @@ export default defineConfig({
   plugins: [
     dts({
       tsconfigPath: 'tsconfig.react.json',
+      // The wrappers type each ref as its element interface and import those from
+      // '@kitn.ai/ui/elements', the public subpath. Without this exclusion the plugin's
+      // pathsToAliases turns that tsconfig paths key into '../../src/elements/element-types.d.ts',
+      // an escaping specifier srcSpecifiersToDist below cannot repair (its target is a .d.ts,
+      // which the probe for a .ts/.tsx source misses) and verify:dts fails on.
+      aliasesExclude: [/^@kitn\.ai\/ui\/elements$/],
       include: ['frameworks/react/**'],
       outDir: 'dist/react',
       entryRoot: 'frameworks/react',
