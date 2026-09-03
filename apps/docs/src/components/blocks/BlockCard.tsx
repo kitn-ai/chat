@@ -28,6 +28,7 @@
 import { createSignal, createEffect, createMemo, Show, type JSX } from 'solid-js';
 import {
   addCommandFor,
+  formUrl,
   frameworkOptions,
   languageFor,
   previewUrl,
@@ -93,23 +94,37 @@ export function BlockCard(props: BlockCardProps): JSX.Element {
   // Load the selected framework's tree when the card first enters code mode
   // and whenever the framework changes. Nothing is fetched for a card the
   // reader never opens.
+  // A plain counter, deliberately NOT a signal: nothing renders from it and no
+  // effect should re-run when it moves. It exists only to answer "is this
+  // result still the one the reader is waiting for". Switching framework twice
+  // on a slow connection can land the FIRST response last, and applying it
+  // would show a framework the reader moved away from while the dropdown reads
+  // the newer one.
+  let latestLoad = 0;
+
   createEffect(() => {
     if (mode() !== 'code') return;
     const form = props.framework;
     const id = props.item.name;
+    const token = ++latestLoad;
     setError(undefined);
     void props
       .loadForm(id, form)
       .then((next) => {
+        if (token !== latestLoad) return;
         setPayload(next);
         setActivePath(next.files[0]?.target);
       })
       .catch((err: unknown) => {
+        if (token !== latestLoad) return;
         setPayload(undefined);
-        // Decide loudly. A form that will not load is a broken copy, not a
-        // reason to quietly drop a framework the renderers do emit.
+        // Decide loudly, and locally. A form that will not load is a broken
+        // copy, not a reason to quietly drop a framework the renderers do
+        // emit. The PATH comes from formUrl() here rather than from the
+        // rejection: a fetch failure carries no URL, so the card is the only
+        // place that still knows which file it asked for.
         setError(
-          `Could not load the ${form} files for ${id}: ${err instanceof Error ? err.message : String(err)}`,
+          `Could not load ${formUrl(id, form)}: ${err instanceof Error ? err.message : String(err)}`,
         );
       });
   });
@@ -226,11 +241,15 @@ export function BlockCard(props: BlockCardProps): JSX.Element {
           />
           {/* Visible text is the default slot; `label` would be the accessible
               name only and this button would render icon-only. */}
+          {/* Disabled until there is something to zip. A live button that
+              silently does nothing is a decision made quietly; the disabled
+              state says which it is. */}
           <kai-button
             data-testid="download-zip"
             variant="ghost"
             size="sm"
             icon="download"
+            disabled={!payload()}
             on:kai-click={download}
           >
             Download .zip

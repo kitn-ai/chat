@@ -18,6 +18,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@solidjs/testing-library';
 import { FRAMEWORK_BLOCK_FORMS } from '@kitn.ai/blocks/forms';
 import { BlocksPage } from '../src/components/blocks/BlocksPage';
+import { formUrl } from '../src/lib/blocks-source';
 import type { FormPayload, RegistryItem } from '../src/lib/blocks-source';
 
 const items: RegistryItem[] = [
@@ -312,5 +313,96 @@ describe('a form that will not load', () => {
     const card = screen.getByTestId('block-card-support-widget');
     setMode(card, 'code');
     await waitFor(() => expect(within(card).getByTestId('form-error')).toBeTruthy());
+  });
+
+  it('names the PATH that did not load, not just the rejection message', async () => {
+    // R4, decide loudly: the card knows the URL it asked for, and a fetch
+    // rejection does not carry one. The message says which file is missing so
+    // a reader can check it, whatever the loader threw.
+    const failing = vi.fn(async () => {
+      throw new Error('404');
+    });
+    render(() => <BlocksPage items={[items[0]]} loadForm={failing} />);
+    const card = screen.getByTestId('block-card-support-widget');
+    setMode(card, 'code');
+    await waitFor(() => {
+      const message = within(card).getByTestId('form-error').textContent ?? '';
+      expect(message).toContain(formUrl('support-widget', FRAMEWORK_BLOCK_FORMS[0].id));
+    });
+  });
+
+  it('disables Download, because there is nothing to zip', async () => {
+    // Read as a PROPERTY, because that is what the card sets. Solid renders a
+    // boolean on a custom element as a property, never an attribute (a string
+    // like `label` becomes an attribute; `disabled={true}` does not), and the
+    // kit rescues properties set before upgrade, so the property is what the
+    // real element reads.
+    const failing = vi.fn(async () => {
+      throw new Error('404');
+    });
+    render(() => <BlocksPage items={[items[0]]} loadForm={failing} />);
+    const card = screen.getByTestId('block-card-support-widget');
+    setMode(card, 'code');
+    await waitFor(() => expect(within(card).getByTestId('form-error')).toBeTruthy());
+    const button = within(card).getByTestId('download-zip') as HTMLElement & {
+      disabled?: boolean;
+    };
+    expect(button.disabled).toBe(true);
+  });
+
+  it('leaves Download enabled once a payload IS loaded, so the case above is not vacuous', async () => {
+    render(() => <BlocksPage items={[items[0]]} loadForm={loadForm} />);
+    const card = screen.getByTestId('block-card-support-widget');
+    setMode(card, 'code');
+    await waitFor(() => expect(within(card).queryByTestId('file-tree')).not.toBeNull());
+    await waitFor(() => {
+      const button = within(card).getByTestId('download-zip') as HTMLElement & {
+        disabled?: boolean;
+      };
+      expect(button.disabled).toBe(false);
+    });
+  });
+});
+
+describe('two loads in flight', () => {
+  it('ignores a stale load that resolves after a newer one', async () => {
+    // Switching framework twice on a slow connection: the first request can
+    // land LAST. Without a guard the card would show the framework the reader
+    // moved away from, with the dropdown still reading the newer one.
+    const release: Record<string, () => void> = {};
+    const slow = vi.fn(
+      (id: string, form: string) =>
+        new Promise<FormPayload>((resolve) => {
+          release[form] = () => resolve(forms[`${id}:${form}`]);
+        }),
+    );
+    render(() => <BlocksPage items={[items[0]]} loadForm={slow} />);
+    const card = screen.getByTestId('block-card-support-widget');
+    const first = FRAMEWORK_BLOCK_FORMS[0].id;
+
+    setMode(card, 'code');
+    await waitFor(() => expect(release[first]).toBeTypeOf('function'));
+    setFramework(card, 'react');
+    await waitFor(() => expect(release.react).toBeTypeOf('function'));
+
+    // The NEWER load lands first.
+    release.react();
+    await waitFor(() => {
+      const tree = within(card).getByTestId('file-tree') as HTMLElement & {
+        files?: { path: string }[];
+      };
+      expect(tree.files?.[0]?.path).toBe(forms['support-widget:react'].files[0].target);
+    });
+
+    // Then the stale one arrives and must be dropped on the floor.
+    release[first]();
+    await new Promise((r) => setTimeout(r, 0));
+    const tree = within(card).getByTestId('file-tree') as HTMLElement & {
+      files?: { path: string }[];
+    };
+    expect(tree.files?.[0]?.path).toBe(forms['support-widget:react'].files[0].target);
+    expect(within(card).getByTestId('active-path').textContent?.trim()).toBe(
+      forms['support-widget:react'].files[0].target,
+    );
   });
 });
