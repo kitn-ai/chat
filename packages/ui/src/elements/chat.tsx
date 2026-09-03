@@ -236,7 +236,14 @@ defineWebComponent<Props, Events>('kai-chat', {
     const read = () => setSlots(readSlots(element, CHAT_SLOTS));
     read();
     const observer = new MutationObserver(read);
-    observer.observe(element, { childList: true });
+    // `attributes` and `subtree`, matching the four other readSlots callers.
+    // The read is a function of an ATTRIBUTE as well as of the child list:
+    // readSlots reports a `hidden` assigned node as filling nothing, so a
+    // child authored hidden and later un-hidden would otherwise never
+    // re-trigger it and the region would stay collapsed for good. `subtree`
+    // is required for the same reason -- an attribute mutation on a CHILD is
+    // not delivered by observing the host alone.
+    observer.observe(element, { childList: true, attributes: true, subtree: true });
     onCleanup(() => observer.disconnect());
   });
 

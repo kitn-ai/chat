@@ -17,6 +17,7 @@
 // equal the tag, and some modules register more than one tag), and modules are
 // fetched relative to THIS module's URL.
 import manifest from './element-manifest.json';
+import { undefinedAutoloadableTags } from './autoloader-walk';
 
 const tagToModule: Record<string, string> = manifest.tags;
 const inFlight = new Set<string>();
@@ -62,15 +63,10 @@ function warnOnce(tag: string, err: unknown): void {
   );
 }
 
+// Two lines over the walk, which lives in its own INTERNAL module so it can
+// have a unit test without becoming a public export of this subpath.
 function discover(root: ParentNode | Element): void {
-  const tags = new Set<string>();
-  const self = (root as Element).tagName?.toLowerCase?.();
-  if (self && self in tagToModule && !customElements.get(self)) tags.add(self);
-  root.querySelectorAll?.(':not(:defined)').forEach((el) => {
-    const t = el.tagName.toLowerCase();
-    if (t in tagToModule) tags.add(t);
-  });
-  tags.forEach(register);
+  undefinedAutoloadableTags(root).forEach(register);
 }
 
 /** Start watching `root` (default: the whole document) for undefined kai-* elements. */

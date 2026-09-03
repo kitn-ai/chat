@@ -11,15 +11,15 @@ const block = (name: string, title: string, categories: string[], extra: Partial
   description: `${title} description`,
   categories,
   forms: {
-    wc: [
-      { path: `${name}.html`, content: `<p>${name} page</p>` },
-      { path: `${name}.js`, content: `console.log('${name}');` },
+    html: [
+      { path: `${name}.html`, content: `<p>${name} page</p>`, target: `blocks/${name}/${name}.html` },
+      { path: `${name}.js`, content: `console.log('${name}');`, target: `blocks/${name}/${name}.js` },
     ],
     react: [
-      { path: 'SupportWidget.tsx', content: `export default function SupportWidget() {}` },
-      { path: `${name}.js`, content: `export async function initBlock() {}` },
+      { path: 'SupportWidget.tsx', content: `export default function SupportWidget() {}`, target: `src/components/${name}/SupportWidget.tsx` },
+      { path: `${name}.js`, content: `export async function initBlock() {}`, target: `src/components/${name}/${name}.js` },
     ],
-    cdn: [{ path: `${name}.html`, content: `<!doctype html><p>${name} cdn</p>` }],
+    cdn: [{ path: `${name}.html`, content: `<!doctype html><p>${name} cdn</p>`, target: `${name}.html` }],
   },
   preview: <p>{title} stub preview</p>,
   ...extra,
@@ -50,31 +50,31 @@ describe('GalleryPage', () => {
     expect(container.textContent).toContain("console.log('support-widget');");
   });
 
-  it('the framework selector (derived from the shared form axis) re-renders the tree for the selected form, defaulting to web components', () => {
+  it('the framework selector (derived from the shared form axis) re-renders the tree for the selected form, defaulting to html', () => {
     const { container } = render(() => <GalleryPage blocks={BLOCKS} defaultTab="code" />);
     const group = screen.getByRole('group', { name: 'Framework' });
     // The authored truth is the default tab.
-    expect(screen.getByRole('button', { name: 'Web components' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'HTML' })).toHaveAttribute('aria-pressed', 'true');
     expect(group).toHaveTextContent('React');
     expect(group).toHaveTextContent('CDN single file');
     fireEvent.click(screen.getByRole('button', { name: 'React' }));
-    // The react form's tree and contents replace the wc ones.
+    // The react form's tree and contents replace the html ones.
     expect(screen.getByRole('treeitem', { name: /SupportWidget\.tsx/ })).toBeInTheDocument();
     expect(screen.queryByRole('treeitem', { name: /support-widget\.html/ })).not.toBeInTheDocument();
     expect(container.textContent).toContain('export default function SupportWidget()');
   });
 
   it('a form the block does not carry is not offered (menu honesty)', () => {
-    const wcOnly = { ...block('assistant', 'Assistant', ['assistant']), forms: { wc: [{ path: 'assistant.html', content: '<p>a</p>' }] } };
-    expect(formsAvailable(wcOnly).map((f) => f.id)).toEqual(['wc']);
-    render(() => <GalleryPage blocks={[wcOnly]} defaultTab="code" />);
+    const htmlOnly = { ...block('assistant', 'Assistant', ['assistant']), forms: { html: [{ path: 'assistant.html', content: '<p>a</p>', target: 'blocks/assistant/assistant.html' }] } };
+    expect(formsAvailable(htmlOnly).map((f) => f.id)).toEqual(['html']);
+    render(() => <GalleryPage blocks={[htmlOnly]} defaultTab="code" />);
     expect(screen.queryByRole('button', { name: 'React' })).not.toBeInTheDocument();
   });
 
   it('the code header carries the per-file Copy (icon, accessible label) and the Download zip for the selected form', () => {
     render(() => <GalleryPage blocks={BLOCKS} defaultTab="code" />);
     expect(screen.getByRole('button', { name: 'Copy file' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Download the Web components files as a zip/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Download the HTML files as a zip/ })).toBeInTheDocument();
     // One derivation for the zip URL, shared with the server's route shape.
     expect(zipHrefFor('support-widget', 'react')).toBe('/gallery/api/zip/support-widget/react');
   });

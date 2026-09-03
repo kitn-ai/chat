@@ -16,8 +16,8 @@
  * `BLOCK_FORMS`, never hand-listed) — the file tree, per-file contents and
  * every copy/download affordance re-render for the SELECTED form, so what a
  * react consumer copies is the react form `add` would write, byte for byte
- * (one renderer: `@kitn.ai/blocks/forms`). Web components — the
- * authored truth — is the default form. Download (a zip of the selected
+ * (one renderer: `@kitn.ai/blocks/forms`). HTML - the
+ * authored truth - is the default form. Download (a zip of the selected
  * form, served by the gallery's GET zip route) sits in the code header
  * beside the per-file Copy, which is an icon button with an accessible
  * label; the install one-liner stays primary and says out loud that `add`
@@ -58,7 +58,7 @@ export interface GalleryBlock {
   /** `meta.iframeHeight` from the manifest — sizes the preview surface. */
   iframeHeight?: string;
   /** Rendered files per delivery form. Only the forms present are offered
-   *  (menu honesty); `wc` — the authored truth — is the default tab. */
+   *  (menu honesty); `html` - the authored truth - is the default tab. */
   forms: Partial<Record<BlockFormId, FormFile[]>>;
   /** The manifest's `docs` string — printed under the block, the same text
    *  the CLI prints on install. */
@@ -168,7 +168,7 @@ export function GalleryPage(props: GalleryPageProps): JSX.Element {
   const activeForm = (block: GalleryBlock): BlockFormId => {
     const offered = formsAvailable(block);
     const wanted = activeForms()[block.name];
-    return offered.find((f) => f.id === wanted)?.id ?? offered[0]?.id ?? 'wc';
+    return offered.find((f) => f.id === wanted)?.id ?? offered[0]?.id ?? 'html';
   };
 
   const formFiles = (block: GalleryBlock): FormFile[] => block.forms[activeForm(block)] ?? [];
@@ -176,7 +176,7 @@ export function GalleryPage(props: GalleryPageProps): JSX.Element {
   const activeFile = (block: GalleryBlock): FormFile => {
     const files = formFiles(block);
     const wanted = activeFiles()[`${block.name}:${activeForm(block)}`];
-    return files.find((f) => f.path === wanted) ?? files[0] ?? { path: '', content: '' };
+    return files.find((f) => f.path === wanted) ?? files[0] ?? { path: '', content: '', target: '' };
   };
 
   const treeFiles = (block: GalleryBlock): FileTreeFile[] =>

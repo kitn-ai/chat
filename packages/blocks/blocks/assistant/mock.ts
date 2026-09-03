@@ -33,16 +33,29 @@ export const MOCK_SCRIPT = [
   },
 ];
 
-export const MOCK_TOOL_OUTPUTS = {
+/** Settled outputs the mock hands back, keyed by tool type. Annotated rather
+ *  than inferred: the controller looks one up by the type the stream reports,
+ *  which is a string, and an inferred object literal has no index signature to
+ *  read it with. */
+export const MOCK_TOOL_OUTPUTS: Record<string, Record<string, unknown>> = {
   read_document: { pages: 14, headline: 'Revenue up 12% QoQ; retention flat.' },
 };
 
 export const SUGGESTIONS = ['Summarize a document', 'Draft the Q3 board update', 'Compare two options'];
 
+/** One entry of the model switcher's `models` property. Named here because
+ *  the controller carries the list as a State field and the generated react
+ *  tree types that field. */
+export interface ModelOption {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 // The model switcher recipe's data. Both entries are the same scripted mock
 // (the honest option: no provider is contacted either way); a real backend
 // reads the selected id off the submit handler and routes accordingly.
-export const MODELS = [
+export const MODELS: ModelOption[] = [
   { id: 'kai-mock', name: 'Mock Standard', description: 'The scripted local responder' },
   { id: 'kai-mock-thinking', name: 'Mock Thinking', description: 'Same script, same mock' },
 ];

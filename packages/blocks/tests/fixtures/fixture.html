@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="./fixture.css" />
+  </head>
+  <body>
+    <p class="host-stand-in">stand-in</p>
+    <kai-dock data-block-root #ref="dock" seed:position="bottom-end" .unread="hidden" @kai-click="open">
+      <span .textContent="title"></span>
+      <kai-conversations>
+        <kai-conversation-item *for="row of rows" :key="row.id" :unread="row.unread">
+          <span .textContent="row.title"></span>
+        </kai-conversation-item>
+      </kai-conversations>
+    </kai-dock>
+  </body>
+</html>

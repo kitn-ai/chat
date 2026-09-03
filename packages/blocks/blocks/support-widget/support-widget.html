@@ -9,33 +9,67 @@
   <body>
     <p class="host-stand-in">This blank page stands in for your site. The chat widget is in the bottom-right corner.</p>
 
-    <!-- The launcher shell. The widget interior is the kit's own parts:
-         kai-panel chrome, kai-panel-header (back/close are slotted content),
-         kai-view-stack routing (drilled hides the tab bar, per the stack's
-         one rule), kai-tab-bar navigation, kai-row home rows. -->
-    <kai-dock id="dock" label="Support" position="bottom-end" hide-close>
+    <!-- The wiring is DECLARED here and applied by the generated binder (spec
+         3.1): .prop sets a JS property, :attr a runtime scalar attribute,
+         @event an action on THIS element (kai-* events do not bubble), #ref
+         names a handle the controller calls methods on, *for repeats with a
+         mandatory :key, and seed: writes a literal once. A binding holds a
+         field name, never an expression: every derivation is a field of
+         State. The ids are for the block driver's state script, which is
+         authored rather than generated. -->
+    <kai-dock
+      id="dock"
+      data-block-root
+      #ref="dock"
+      label="Support"
+      position="bottom-end"
+      hide-close
+      .unread="unread"
+      @kai-open-change="openChange"
+    >
       <kai-panel slot="panel">
         <kai-panel-header slot="header">
-          <kai-button id="back" slot="start" variant="ghost" size="icon-sm" icon="arrow-left" label="Back" hidden></kai-button>
+          <kai-button
+            id="back"
+            slot="start"
+            variant="ghost"
+            size="icon-sm"
+            icon="arrow-left"
+            label="Back"
+            hidden
+            :hidden="backHidden"
+            @kai-click="back"
+          ></kai-button>
           Support
-          <kai-button id="close" slot="end" variant="ghost" size="icon-sm" icon="x" label="Close Support"></kai-button>
+          <kai-button
+            id="close"
+            slot="end"
+            variant="ghost"
+            size="icon-sm"
+            icon="x"
+            label="Close Support"
+            @kai-click="close"
+          ></kai-button>
         </kai-panel-header>
 
-        <kai-view-stack id="stack" view="home">
-          <!-- Home tab -->
+        <!-- The stack OWNS navigation. `view` is a SEED: the element
+             self-manages it afterwards, and driving it from the same state
+             kai-view-change writes is a controlled loop that undoes every
+             navigation in React (spec 8b, amendment 5). -->
+        <kai-view-stack id="stack" #ref="stack" seed:view="home" @kai-view-change="viewChange">
           <kai-view name="home" tab-root>
             <div class="home">
               <div class="greeting">
                 <h2>How can we help? &#x1F44B;</h2>
                 <p class="subtitle">Orders, refunds, anything.</p>
               </div>
-              <kai-row id="recent" class="recent-card" interactive hidden>
-                <span id="recent-title"></span>
-                <span slot="subtitle" id="recent-preview"></span>
-                <span slot="trailing" class="unread-dot" id="recent-dot" hidden></span>
-                <span slot="trailing" id="recent-time"></span>
+              <kai-row id="recent" class="recent-card" interactive hidden :hidden="recentHidden" @kai-click="openRecent">
+                <span .textContent="recentTitle"></span>
+                <span slot="subtitle" .textContent="recentPreview" :hidden="recentPreviewHidden"></span>
+                <span slot="trailing" class="unread-dot" hidden :hidden="recentDotHidden"></span>
+                <span slot="trailing" .textContent="recentTime"></span>
               </kai-row>
-              <kai-button id="cta" full align="start" icon-trailing="arrow-right">Send us a message</kai-button>
+              <kai-button id="cta" full align="start" icon-trailing="arrow-right" @kai-click="startNew">Send us a message</kai-button>
               <div class="home-links">
                 <kai-row href="https://ui.kitn.ai" chevron>
                   <kai-icon slot="leading" name="book-open" size="sm"></kai-icon>
@@ -46,37 +80,63 @@
             </div>
           </kai-view>
 
-          <!-- Messages tab: the conversation list in its widget-panel
-               presentation - item mode, rows built by support-widget.js with
-               the public density="panel" (P-7), no group sections, and the
-               built-in rail header replaced by an empty slot. -->
+          <!-- Messages tab: ITEM mode. The data-driven prop renders a group
+               header this block deliberately avoids, so the rows are the
+               block's own and the list binding is what builds them. -->
           <kai-view name="messages" tab-root>
-            <kai-conversations id="conversations" searchable="false">
+            <kai-conversations
+              id="conversations"
+              searchable="false"
+              .activeId="activeId"
+              @kai-conversation-select="openConversation"
+            >
               <span slot="header"></span>
+              <kai-conversation-item
+                *for="row of conversationRows"
+                :key="row.id"
+                :conversation-id="row.id"
+                density="panel"
+                :unread="row.unread"
+              >
+                <span .textContent="row.title"></span>
+                <span slot="meta" .textContent="row.preview" :hidden="row.previewHidden"></span>
+                <span slot="menu" class="row-time" .textContent="row.time"></span>
+              </kai-conversation-item>
             </kai-conversations>
-            <kai-button id="new-conversation" class="new-pill" variant="outline" size="sm">New conversation</kai-button>
+            <kai-button id="new-conversation" class="new-pill" variant="outline" size="sm" @kai-click="startNew">New conversation</kai-button>
           </kai-view>
 
-          <!-- Drilled chat -->
           <kai-view name="chat">
-            <kai-thread id="thread">
+            <kai-thread id="thread" .messages="messages" .loading="loading">
               <kai-empty
                 slot="empty"
                 empty-title="Hi, we're here to help"
                 description="Ask us about orders, refunds, and more."
               ></kai-empty>
             </kai-thread>
-            <kai-prompt-input id="prompt" placeholder="Ask anything"></kai-prompt-input>
+            <kai-prompt-input
+              id="prompt"
+              placeholder="Ask anything"
+              .suggestions="suggestions"
+              .loading="loading"
+              @kai-submit="submit"
+            ></kai-prompt-input>
           </kai-view>
         </kai-view-stack>
 
-        <kai-tab-bar id="tabbar" slot="footer" value="home" label="Widget navigation">
+        <kai-tab-bar
+          id="tabbar"
+          slot="footer"
+          label="Widget navigation"
+          seed:value="home"
+          .value="tab"
+          :hidden="tabBarHidden"
+          @kai-tab-change="tabChange"
+        >
           <kai-tab-bar-item value="home" icon="home">Home</kai-tab-bar-item>
-          <kai-tab-bar-item id="tab-messages" value="messages" icon="message-square">Messages</kai-tab-bar-item>
+          <kai-tab-bar-item id="tab-messages" value="messages" icon="message-square" .dot="unread">Messages</kai-tab-bar-item>
         </kai-tab-bar>
       </kai-panel>
     </kai-dock>
-
-    <script type="module" src="./support-widget.js"></script>
   </body>
 </html>

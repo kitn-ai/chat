@@ -26,6 +26,16 @@
  * it, not before.
  */
 
+import { parseTemplate } from './contract/parse-template';
+
+import { analyzeController, crossCheckBindings } from './contract/analyze-controller';
+
+/** kebab-or-plain block name to its component name: support-widget -> SupportWidget.
+ *  ONE definition; `componentName` in src/forms/index.ts re-exports it. */
+export function pascal(blockName: string): string {
+  return blockName.split(/[^a-zA-Z0-9]+/).filter(Boolean).map((p) => p[0].toUpperCase() + p.slice(1)).join('');
+}
+
 // ---------------------------------------------------------------- manifest
 
 /** One file a block ships, per the adopted registry-item skeleton. */
@@ -153,8 +163,14 @@ export function validateBlockManifest(
       if (!fileNames.includes(f.path)) {
         errors.push(`${dirName}: files[] lists "${f.path}" but the directory scan found no such file`);
       }
-      if ('target' in f && typeof f.target !== 'string') {
-        errors.push(`${dirName}: files["${f.path}"].target must be a string when present`);
+      if ('target' in f) {
+        if (typeof f.target !== 'string') {
+          errors.push(`${dirName}: files["${f.path}"].target must be a string when present`);
+        } else if (f.target !== f.path.split('/').pop()) {
+          errors.push(
+            `${dirName}: files["${f.path}"].target is "${f.target}", but "target" is derived: the file name comes from the path and the DIRECTORY comes from src/targets.ts (one table, read by the renderers, the CLI and the site). Delete the line, or write "${f.path.split('/').pop()}".`,
+          );
+        }
       }
     }
     if (pages !== 1) errors.push(`${dirName}: exactly one files[] entry must be type "registry:page" (the CDN form's source), found ${pages}`);
@@ -327,15 +343,145 @@ export interface CdnFormOptions {
 const IMPORT_RE =
   /^import\s+(?:([\w${},*\s]+)\s+from\s+)?['"]([^'"]+)['"];?\s*$/;
 
-/** Inline a relative module (the scripted mock, say) into the entry script:
- *  its `export ` prefixes are stripped and its text is hoisted above the
- *  importer's code. Constrained by design: an inlined module may not itself
- *  import anything — it is data (the mock script), not a module graph. */
-function inlineRelativeModule(name: string, content: string): { text?: string; error?: string } {
-  if (/^\s*import\s/m.test(content)) {
-    return { error: `"${name}" has imports of its own; inlined block modules must be leaf modules (constants only)` };
+/**
+ * Walk a module's lines, handing each IMPORT STATEMENT to `onImport` and every
+ * other line to `onLine`.
+ *
+ * MULTI-LINE IMPORTS ARE WHY THIS EXISTS. `IMPORT_RE` is anchored to a whole
+ * line, and esbuild emits a wide import list across several of them:
+ *
+ *   import {
+ *     localStorageStore,
+ *     isConversationUnread
+ *   } from "@kitn.ai/ui/stores";
+ *
+ * A line-by-line scan matched none of that, copied all four lines through
+ * verbatim, and shipped a bare specifier no browser resolves -- silently,
+ * because nothing downstream looked. So a line that OPENS an import
+ * accumulates following lines until the statement parses. A run that never
+ * parses is handed to `onLine` unchanged and caught by `unresolvedImports`
+ * below, which is the loud half of the same fix.
+ */
+function scanImports(
+  source: string,
+  onImport: (clause: string | undefined, spec: string) => void,
+  onLine: (line: string) => void,
+): void {
+  const lines = source.split('\n');
+  for (let i = 0; i < lines.length; i += 1) {
+    const trimmed = lines[i].trim();
+    if (!/^import\s|^import\{/.test(trimmed)) { onLine(lines[i]); continue; }
+    let text = trimmed;
+    let end = i;
+    let m = IMPORT_RE.exec(text);
+    // Bounded: an unterminated `import {` must not swallow the whole module.
+    while (!m && end + 1 < lines.length && end - i < 40) {
+      end += 1;
+      text = `${text} ${lines[end].trim()}`;
+      m = IMPORT_RE.exec(text);
+    }
+    if (!m) { onLine(lines[i]); continue; }
+    i = end;
+    onImport(m[1], m[2]);
   }
-  return { text: `// ---- inlined from ./${name} ----\n${content.replace(/^export\s+/gm, '')}` };
+}
+
+/**
+ * Every import specifier left in the emitted code that a browser could not
+ * resolve: anything that is not an absolute URL or a root-relative path.
+ *
+ * The rewrite handles the shapes it models and copies through the ones it
+ * does not, and "copies through" is exactly how a bare specifier reached a
+ * generated form with nothing said. The form's whole claim is that it is
+ * self-contained, so this is the claim being checked on the output rather
+ * than assumed from the transformation.
+ */
+function unresolvedImports(code: string): string[] {
+  const bad: string[] = [];
+  scanImports(
+    code,
+    (_clause, spec) => {
+      if (/^https?:\/\//.test(spec) || spec.startsWith('/')) return;
+      bad.push(spec);
+    },
+    () => {},
+  );
+  // The shapes `scanImports` cannot parse at all reach `onLine`, so they are
+  // caught here by their text rather than by their specifier.
+  for (const line of code.split('\n')) {
+    const m = /^\s*import\b.*?['"]([^'"]+)['"]/.exec(line);
+    if (m && !/^https?:\/\//.test(m[1]) && !m[1].startsWith('/') && !bad.includes(m[1])) bad.push(m[1]);
+  }
+  return bad;
+}
+
+/**
+ * Inline a relative module into the entry script.
+ *
+ * ONE LEVEL DEEP, deliberately. The generated binder imports the controller,
+ * and the controller imports its mock plus the `@kitn.ai/ui` entries it
+ * parses through: that is the shape the authored contract produces, and it is
+ * exactly two levels. A third is a module graph, and a single pasted file that
+ * reconstructs a module graph by concatenation is a thing that works until it
+ * does not (order, cycles, name collisions). So the third level is a loud
+ * refusal naming the file, not a deeper inliner.
+ *
+ * Bare `@kitn.ai/ui/*` imports inside an inlined module are rewritten onto the
+ * pinned CDN entries and hoisted exactly like the entry's own, through the
+ * same closed `CDN_IMPORT_ENTRIES` set.
+ *
+ * ORDER is load-bearing and the caller depends on it: a child's text is pushed
+ * into `hoistedBodies` BEFORE its importer's, so the deepest module reads
+ * first in the pasted file.
+ */
+function inlineRelativeModule(
+  name: string,
+  content: string,
+  files: ReadonlyMap<string, string>,
+  base: string,
+  depth: number,
+  hoistedBodies: string[],
+  hoistedImports: string[],
+  errors: string[],
+): string {
+  const body: string[] = [];
+  scanImports(content, (clause, spec) => {
+    if (spec.startsWith('./') || spec.startsWith('../')) {
+      if (depth >= 1) {
+        errors.push(`"${name}" imports "${spec}": the single-file paste form inlines two levels (the entry and what it imports), not a module graph. Flatten the block, or use \`create-kai add\` inside a project.`);
+        return;
+      }
+      const child = resolveRelative(spec, files);
+      if (child === undefined) { errors.push(`import "${spec}" does not resolve to a file in the block directory`); return; }
+      hoistedBodies.push(
+        inlineRelativeModule(child.name, child.content, files, base, depth + 1, hoistedBodies, hoistedImports, errors),
+      );
+      return;
+    }
+    const resolved = rewriteBareImport(spec, base);
+    if (resolved.error) { errors.push(resolved.error); return; }
+    const importOf = clause ? `import ${clause} from` : 'import';
+    const annotate = base.includes('@kitn.ai/ui@');
+    hoistedImports.push(`${importOf} '${resolved.url}';${annotate ? ' // x-release-please-version' : ''}`);
+  }, (line) => body.push(line));
+  return `// ---- inlined from ./${name} ----\n${body.join('\n').replace(/^export\s+/gm, '')}`;
+}
+
+/** A relative specifier to the block file it names. The extensionless form
+ *  (`./mock`, which is what a TypeScript source writes so both the `.ts` and
+ *  its emitted `.js` twin resolve) falls back to the `.js` twin, and the
+ *  RESOLVED name is what travels, so the inlined-from comment names a real
+ *  file rather than the specifier. */
+function resolveRelative(
+  spec: string,
+  files: ReadonlyMap<string, string>,
+): { name: string; content: string } | undefined {
+  const asked = spec.replace(/^\.\//, '');
+  for (const name of [asked, `${asked}.js`]) {
+    const content = files.get(name);
+    if (content !== undefined) return { name, content };
+  }
+  return undefined;
 }
 
 /** Rewrite one authored block script for the CDN form: bare `@kitn.ai/ui/*`
@@ -346,33 +492,49 @@ export function rewriteBlockScript(
   opts: CdnFormOptions,
 ): { code?: string; errors: string[] } {
   const base = opts.base ?? `https://cdn.jsdelivr.net/npm/@kitn.ai/ui@${opts.version}/dist/`;
-  const annotate = base.includes(`@kitn.ai/ui@${opts.version}/`);
+  // The annotate predicate sits beside the base so the entry's own imports and
+  // an inlined module's agree about it: `inlineRelativeModule` computes the
+  // same test from the same string.
+  const annotate = base.includes('@kitn.ai/ui@');
   const errors: string[] = [];
   const hoisted: string[] = [];
   const out: string[] = [];
-  for (const line of js.split('\n')) {
-    const m = IMPORT_RE.exec(line.trim());
-    if (!m) { out.push(line); continue; }
-    const [, clause, spec] = m;
+  scanImports(js, (clause, spec) => {
     if (spec.startsWith('./') || spec.startsWith('../')) {
-      const name = spec.replace(/^\.\//, '');
-      const content = files.get(name);
-      if (content === undefined) { errors.push(`import "${spec}" does not resolve to a file in the block directory`); continue; }
-      const inlined = inlineRelativeModule(name, content);
-      if (inlined.error) errors.push(inlined.error);
-      else hoisted.push(inlined.text as string);
-      continue;
+      const child = resolveRelative(spec, files);
+      if (child === undefined) { errors.push(`import "${spec}" does not resolve to a file in the block directory`); return; }
+      hoisted.push(inlineRelativeModule(child.name, child.content, files, base, 0, hoisted, out, errors));
+      return;
     }
     const resolved = rewriteBareImport(spec, base);
-    if (resolved.error) { errors.push(resolved.error); continue; }
+    if (resolved.error) { errors.push(resolved.error); return; }
     const importOf = clause ? `import ${clause} from` : 'import';
     // The pin's semver is the FIRST version token on the line, and the inline
     // annotation makes release-please's generic updater rewrite it on a bump
     // (lint:cdn-pins --check-release-wiring pins both facts).
     out.push(`${importOf} '${resolved.url}';${annotate ? ' // x-release-please-version' : ''}`);
-  }
+  }, (line) => out.push(line));
   if (errors.length) return { errors };
-  return { code: [...hoisted, ...out].join('\n'), errors };
+  // Deduped in order: two inlined modules importing the same kit entry would
+  // otherwise emit the identical line twice.
+  const seen = new Set<string>();
+  const lines = [...hoisted, ...out].filter((line) => {
+    if (!line.startsWith('import ')) return true;
+    if (seen.has(line)) return false;
+    seen.add(line);
+    return true;
+  });
+  const code = lines.join('\n');
+  const leftovers = unresolvedImports(code);
+  if (leftovers.length) {
+    return {
+      errors: leftovers.map(
+        (spec) =>
+          `the emitted script still imports "${spec}", which no browser can resolve: the CDN form must be self-contained. Blocks import only @kitn.ai/ui entries (${Object.keys(CDN_IMPORT_ENTRIES).join(', ')}) and their own relative files, in a form the rewrite recognises.`,
+      ),
+    };
+  }
+  return { code, errors };
 }
 
 /** The two `kai-` contract points every emitted CDN snippet bakes in, stated
@@ -470,7 +632,13 @@ export function checkBlockContracts(
       for (const tagMatch of content.matchAll(/<(kai-[\w-]+)([^>]*)>/g)) {
         const [, tag, attrs] = tagMatch;
         for (const prop of nonscalarByTag[tag] ?? []) {
-          const attrRe = new RegExp(`\\s(?:${prop}|${kebab(prop)})\\s*=`, 'i');
+          // The prefix is part of the match, not skipped by it. `:messages=`
+          // and `seed:messages=` are a non-scalar in ATTRIBUTE position
+          // exactly as a bare `messages=` is; only `.prop=` and `*for=`
+          // legitimately carry a non-scalar (spec 3.1, amendment 8a.2). The
+          // old form required whitespace immediately before the name, so
+          // every prefixed spelling slipped past it.
+          const attrRe = new RegExp(`(?:^|\\s)(?::|seed:)?(?:${prop}|${kebab(prop)})\\s*=`, 'i');
           if (attrRe.test(attrs)) {
             errors.push(`${where}: <${tag}> sets non-scalar prop "${prop}" as an HTML attribute; array/object props are JS properties only`);
           }
@@ -478,5 +646,31 @@ export function checkBlockContracts(
       }
     }
   }
+
+  // The GRAMMAR has one owner. Rather than restating the binding rules here,
+  // parse the page and surface what the parser says.
+  //
+  // Every block is an authored-contract block now (PR B). A page with no
+  // bindings and no controller is not a simpler block, it is an unconverted
+  // one, and the forms cannot be generated from it.
+  const pageEntry = block.manifest.files.find((f) => f.type === 'registry:page');
+  const pageHtml = pageEntry ? block.files.get(pageEntry.path) : undefined;
+  if (pageEntry && pageHtml !== undefined) {
+    const where = `${block.name}/${pageEntry.path}`;
+    const parsed = parseTemplate(pageHtml, where);
+    errors.push(...parsed.errors);
+
+    const name = pascal(block.name);
+    const controllerPath = `${block.name}.controller.ts`;
+    const controllerSource = block.files.get(controllerPath);
+    if (controllerSource === undefined) {
+      errors.push(`${block.name}: every block needs ${controllerPath} (spec 3.2). The wiring belongs on the markup and the logic in the controller; a page with neither is an unconverted block, not a simpler one.`);
+    } else if (parsed.template) {
+      const shape = analyzeController(controllerSource, name, `${block.name}/${controllerPath}`);
+      errors.push(...shape.errors);
+      if (shape.shape) errors.push(...crossCheckBindings(parsed.template, shape.shape, where));
+    }
+  }
+
   return errors;
 }

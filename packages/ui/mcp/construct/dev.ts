@@ -18,8 +18,8 @@ import { fileURLToPath } from 'node:url';
 import { generateProject, writeProject, type GeneratedFile, type GenerateOptions } from './codegen';
 import { npmArgs, npmInvocation } from './local-kit';
 import { validateConstruct, type Construct, type ConstructProblem } from './schema';
-import { generateCdnForm, type Block, type BlockManifest } from '@kitn.ai/blocks';
-import { BLOCK_FORMS, isBlockFormId, renderBlockForm, type FormFile } from '@kitn.ai/blocks/forms';
+import type { Block, BlockManifest } from '@kitn.ai/blocks';
+import { BLOCK_FORMS, isBlockFormId, renderBlockForm, renderCdnFormFiles, type FormFile } from '@kitn.ai/blocks/forms';
 import { buildableTemplates, inferTemplateId, templateById, type ConstructListing } from './templates';
 
 export type { ConstructListing } from './templates';
@@ -628,8 +628,8 @@ export function blocksDistDir(): string | undefined {
 // server is KEPT infrastructure and becomes the gallery's front door). It
 // serves the prebuilt page (dist/gallery), the derived registry artifacts
 // (dist/blocks — the public integration surface the CLI and MCP also
-// resolve), and a LIVE per-block preview: the same `generateCdnForm`
-// serializer gen-blocks.mjs uses, rendered at request time against the
+// resolve), and a LIVE per-block preview: the same `renderCdnFormFiles`
+// renderer gen-blocks.mjs uses, rendered at request time against the
 // server's own /kit/ mount of the package dist. That choice over iframing
 // the pinned-CDN form is deliberate and honest: the CDN form pins the
 // CURRENT package.json version, which during development is usually not
@@ -640,8 +640,8 @@ export function blocksDistDir(): string | undefined {
 // No origin guard needed: every gallery route is a GET and writes nothing.
 
 /** A registry ITEM (r/<name>.json — manifest + inlined file contents),
- *  reconstructed into the `Block` shape `generateCdnForm` takes. One
- *  serializer, two callers (gen-blocks at build, this route at serve). */
+ *  reconstructed into the `Block` shape the cdn renderer takes. One
+ *  renderer, two callers (gen-blocks at build, this route at serve). */
 export function blockFromRegistryItem(item: Omit<BlockManifest, 'files'> & { files: (BlockManifest['files'][number] & { content: string })[] }): Block {
   return {
     name: item.name,
@@ -651,7 +651,15 @@ export function blockFromRegistryItem(item: Omit<BlockManifest, 'files'> & { fil
 }
 
 /** The live-preview HTML for one block: its item JSON rendered through the
- *  one CDN-form serializer with the local `/kit/` base (no pins). */
+ *  one CDN-form renderer with the local `/kit/` base (no pins).
+ *
+ *  `renderCdnFormFiles`, not `generateCdnForm`: under the authored contract
+ *  the entry script is GENERATED, so the paste form renders the html form
+ *  first and inlines that. Handing the inliner the authored page instead
+ *  produces markup with no JavaScript in it, which still renders as a page
+ *  and so fails silently. It THROWS on a refusal where the serializer
+ *  answered `{ errors }`, and this function's contract is the answer shape,
+ *  so the throw is caught and reported through the path it already had. */
 export function galleryPreviewHtml(itemJsonText: string, version: string): { html?: string; errors: string[] } {
   let item: unknown;
   try {
@@ -659,10 +667,12 @@ export function galleryPreviewHtml(itemJsonText: string, version: string): { htm
   } catch (err) {
     return { errors: [`item JSON unreadable: ${err instanceof Error ? err.message : String(err)}`] };
   }
-  return generateCdnForm(blockFromRegistryItem(item as Parameters<typeof blockFromRegistryItem>[0]), {
-    version,
-    base: '/kit/',
-  });
+  try {
+    const block = blockFromRegistryItem(item as Parameters<typeof blockFromRegistryItem>[0]);
+    return { html: renderCdnFormFiles(block, { version, base: '/kit/' })[0].content, errors: [] };
+  } catch (err) {
+    return { errors: [err instanceof Error ? err.message : String(err)] };
+  }
 }
 
 /** Block names come from URLs here; the registry constrains real names to
@@ -753,7 +763,18 @@ export interface GalleryDirs {
 }
 
 export type GalleryResponse =
-  | { kind: 'file'; type: string; body: string | Buffer; cors?: boolean; /** save-as filename: the server adds a content-disposition attachment header */ download?: string }
+  | {
+      kind: 'file';
+      type: string;
+      body: string | Buffer;
+      cors?: boolean;
+      /** The status to write. Absent means 200, which every route but the
+       *  render-refusal one below wants. A refusal is a 5xx and NOT a
+       *  `missing`: 404 would say the block is not there when it plainly is. */
+      status?: number;
+      /** save-as filename: the server adds a content-disposition attachment header */
+      download?: string;
+    }
   | { kind: 'redirect'; location: string }
   | { kind: 'missing'; message: string };
 
@@ -832,7 +853,20 @@ export function handleGalleryRequest(url: string, dirs: GalleryDirs): GalleryRes
           cdn: { version: dirs.version },
         });
       } catch (err) {
-        return { kind: 'missing', message: `the ${form} form cannot be rendered: ${err instanceof Error ? err.message : String(err)}` };
+        // A render REFUSAL is not a missing route. The block is there and the
+        // renderer will not emit it, which is a fact the reader needs in
+        // words: an unconverted block (no <id>.controller.ts, or a page still
+        // carrying its own <script type="module">) cannot be rendered under
+        // the authored contract. Loud, and never a crashed dev server.
+        return {
+          kind: 'file',
+          status: 500,
+          type: 'text/plain; charset=utf-8',
+          body: Buffer.from(
+            `the ${form} form of "${name}" cannot be rendered:\n${err instanceof Error ? err.message : String(err)}\n`,
+            'utf8',
+          ),
+        };
       }
       if (route === 'form') {
         return { kind: 'file', type: 'application/json', body: JSON.stringify({ form, files }) };
@@ -1304,7 +1338,7 @@ export async function devBuilder(
           if (galleryOut.kind === 'missing') {
             return send(404, { problems: [{ path: '', message: galleryOut.message }] });
           }
-          res.writeHead(200, {
+          res.writeHead(galleryOut.status ?? 200, {
             'content-type': galleryOut.type,
             ...(galleryOut.cors ? { 'access-control-allow-origin': '*' } : {}),
             ...(galleryOut.download ? { 'content-disposition': `attachment; filename="${galleryOut.download}"` } : {}),

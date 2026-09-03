@@ -143,4 +143,4 @@ chat.addEventListener('kai-submit', async (e) => {
 });
 
 // Signal readiness for the Playwright driver.
-window.__widgetReady = true;
+window.__blockReady = true;

@@ -65,6 +65,26 @@ describe('readSlots', () => {
     const slots = readSlots(host('<div><span slot="sidebar"></span></div>'));
     expect(slots.sidebar).toBe(false);
   });
+
+  it('ignores a HIDDEN slotted child: an invisible node fills no region', () => {
+    // A hidden assigned node still occupies its slot as far as the platform is
+    // concerned, so the built-in region wrapped around it reserved real space
+    // for nothing you can see. Measured on a conversation row whose optional
+    // preview line is authored once and toggled with `hidden`: the row grew
+    // 2px taller than the same row built by adding and removing the node.
+    // Declarative markup toggles visibility rather than existence, so this is
+    // the shape the authored block contract produces every time.
+    const slots = readSlots(host('<nav slot="sidebar" hidden></nav><footer slot="footer"></footer>'));
+    expect(slots.sidebar).toBe(false);
+    expect(slots.footer).toBe(true);
+  });
+
+  it('sees the node again the moment it is un-hidden', () => {
+    const el = host('<nav slot="sidebar" hidden></nav>');
+    expect(readSlots(el).sidebar).toBe(false);
+    (el.firstElementChild as HTMLElement).hidden = false;
+    expect(readSlots(el).sidebar).toBe(true);
+  });
 });
 
 describe('PROMPT_INPUT_SLOTS registry', () => {

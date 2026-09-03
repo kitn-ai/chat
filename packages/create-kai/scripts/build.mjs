@@ -175,6 +175,29 @@ async function main() {
   failIf(guards.zeroBlocksCopiedProblem(blockCount));
   console.log(`  blocks    ${blockCount} copied from ${path.relative(repoRoot, blocksPkgRoot)}/blocks`);
 
+  // The .js twin beside every .ts block source, written AFTER the recursive
+  // copy because that copy has no per-file hook. Same esbuild options as
+  // packages/ui/scripts/gen-blocks.mjs - the two are a COPY, registered in
+  // docs/coupling-map.md section 4, and test/block-twins.test.ts asserts they
+  // produce the same bytes. `add` renders the html form at RUNTIME with no
+  // stripper of its own, so the twin has to be in the tarball.
+  const blocksDist = path.join(dist, 'blocks');
+  let twins = 0;
+  for (const dirent of await readdir(blocksDist, { withFileTypes: true })) {
+    if (!dirent.isDirectory()) continue;
+    const dir = path.join(blocksDist, dirent.name);
+    for (const file of await readdir(dir)) {
+      if (!file.endsWith('.ts')) continue;
+      const js = esbuild.transformSync(await readFile(path.join(dir, file), 'utf8'), {
+        loader: 'ts', format: 'esm', target: 'es2022', sourcefile: file,
+      }).code;
+      await writeFile(path.join(dir, file.replace(/\.ts$/, '.js')), js);
+      twins += 1;
+    }
+  }
+  failIf(guards.zeroBlockTwinsProblem(twins));
+  console.log(`  blocks    ${twins} .js twin(s) written beside their .ts sources`);
+
   const { FRAMEWORKS } = await loadTs('src/frameworks.ts');
   const { patchesFor, gatewayPatchesFor } = await loadTs('src/patches.ts');
   const { emitRoute, emittedPreambleSymbols } = await loadTs('src/routes.ts');

@@ -25,28 +25,22 @@ import {
   FRAMEWORK_SIGNALS,
   blockFormAxis,
   detectForm,
-  loadBlocks,
   planAdd,
   resolveAdd,
 } from '../src/blocks';
 import type { Block } from '../src/blocks';
-import { bodyToJsx, componentName, wrapEntryScript } from '../src/react-form';
-import { decideForm, mergeDependencies, runAdd } from '../src/add';
+import { componentName } from '../src/react-form';
+import { BLOCK_FORMS, withStrippedTwins } from '@kitn.ai/blocks/forms';
+import { decideForm, mergeDependencies, parseAddArgs, runAdd } from '../src/add';
 import type { AddEnv } from '../src/add';
-
-const BLOCKS_ROOT = path.resolve(__dirname, '../dist/blocks');
-const KIT_RANGE = '^9.9.9';
-const KIT_VERSION = '9.9.9';
+import { BLOCKS_ROOT, KIT_RANGE, KIT_VERSION, authoredBlock, loadBundledBlocks } from './helpers';
 
 let root: string;
 let blocks: Block[];
 
 beforeAll(async () => {
-  if (!existsSync(BLOCKS_ROOT)) {
-    throw new Error(`no blocks at ${BLOCKS_ROOT} - run \`pnpm --filter create-kai run build\` first`);
-  }
   root = await mkdtemp(path.join(tmpdir(), 'create-kai-add-'));
-  blocks = await loadBlocks(BLOCKS_ROOT);
+  blocks = await loadBundledBlocks();
 });
 
 afterAll(async () => {
@@ -123,23 +117,39 @@ describe('every listed block writes through the real add path, in every form', (
   });
 
   for (const name of ['support-widget', 'assistant', 'in-app-assistant']) {
-    // The roster above is NOT the subject (the derived loop below is); it only
-    // pins that the reference block stays enrolled by name.
+    // The roster is NOT the subject (the derived loops below are); it pins
+    // that each named block stays enrolled. It asserted only `support-widget`
+    // while the other two were unconverted, so it read as three checks and was
+    // one; the contract is mandatory now and all three are real.
     it(`still ships ${name} or this file's assumptions moved`, () => {
-      if (name === 'support-widget') expect(blocks.map((b) => b.name)).toContain(name);
+      expect(blocks.map((b) => b.name)).toContain(name);
     });
   }
 });
 
 describe('web-component form (any non-react project)', () => {
+  // EVERY bundled block, with no predicate in front of it: the contract is
+  // mandatory, so a block that resolves is a block the html form renders. The
+  // refusal a consumer meets with an unconverted block has its own case at the
+  // end of this describe, driven by a fetched item.
+  const all = () => blocks;
+
+  it('has blocks to drive, so the loops below are not vacuous', () => {
+    expect(all().length).toBeGreaterThan(0);
+  });
+
   it('writes every manifest file and pins the kit', async () => {
-    for (const block of blocks) {
+    for (const block of all()) {
       const dir = await project(`wc-${block.name}`, { name: 'host', dependencies: { vue: '^3.0.0' } });
       const run = await runInto(dir, [block.name]);
       expect(run.code, run.err.join('\n')).toBe(0);
-      for (const entry of block.manifest.files) {
-        const target = path.join(dir, 'blocks', block.name, entry.target ?? path.basename(entry.path));
-        expect(existsSync(target), `${block.name}: ${entry.path} not written`).toBe(true);
+      // The html form's OWN file list, not the manifest's: the authored
+      // `.ts` sources are shipped as their stripped `.js` twins and the entry
+      // script is generated, so the manifest is no longer the write list.
+      const planned = planAdd({ blocks: [block], routes: [] }, { form: 'html', kitRange: KIT_RANGE, kitVersion: KIT_VERSION }).files;
+      expect(planned.length, `${block.name}: the html form planned nothing`).toBeGreaterThan(0);
+      for (const file of planned) {
+        expect(existsSync(path.join(dir, file.path)), `${block.name}: ${file.path} not written`).toBe(true);
       }
       const pkg = JSON.parse(await readFile(path.join(dir, 'package.json'), 'utf8'));
       expect(pkg.dependencies['@kitn.ai/ui']).toBe(KIT_RANGE);
@@ -149,21 +159,20 @@ describe('web-component form (any non-react project)', () => {
     }
   });
 
-  it('wraps the wc entry script so nothing top-level awaits through a bundler', async () => {
-    // Top-level await in the entry deadlocks against element registration when
-    // a consumer bundler puts shared modules in the entry chunk - the built
-    // page rendered NOTHING with no error before this wrap existed.
-    for (const block of blocks) {
-      const dir = await project(`tla-${block.name}`, { name: 'host' });
+  it('the emitted binder signals readiness and awaits registration, at module scope', async () => {
+    // This case used to assert an IIFE wrap (`(async () => {`) around the
+    // AUTHORED entry script, so that nothing awaited at module scope through
+    // a consumer bundler. The authored entry script is gone: the binder is
+    // GENERATED, and it awaits registration and boot() at module scope
+    // deliberately, ending with the driver's one readiness constant. So the
+    // subject moves to what the generated file must actually contain.
+    for (const block of all()) {
+      const dir = await project(`binder-${block.name}`, { name: 'host' });
       expect((await runInto(dir, [block.name])).code).toBe(0);
-      const page = block.manifest.files.find((f) => f.type === 'registry:page')!;
-      const html = block.files.get(page.path) as string;
-      for (const [, script] of html.matchAll(/<script\s+type="module"\s+src="\.\/([^"]+)"\s*><\/script>/g)) {
-        const emitted = await readFile(path.join(dir, 'blocks', block.name, script), 'utf8');
-        expect(emitted, `${block.name}/${script} not IIFE-wrapped`).toContain('(async () => {');
-        const beforeIife = emitted.slice(0, emitted.indexOf('(async () => {'));
-        expect(beforeIife, `${block.name}/${script} still awaits at module scope`).not.toMatch(/^\s*await\s/m);
-      }
+      const binder = await readFile(path.join(dir, 'blocks', block.name, `${block.name}.js`), 'utf8');
+      expect(binder, `${block.name}: no whenDefined await`).toContain('customElements.whenDefined');
+      expect(binder, `${block.name}: no controller call`).toContain('createController');
+      expect(binder, `${block.name}: no readiness signal`).toContain('window.__blockReady = true;');
     }
   });
 
@@ -172,7 +181,7 @@ describe('web-component form (any non-react project)', () => {
     // bundled project 404s every element and renders nothing - observed live
     // before this rewrite existed. The CDN paste form keeps it (its native
     // pattern); both add forms must not.
-    for (const block of blocks) {
+    for (const block of all()) {
       const wcDir = await project(`reg-wc-${block.name}`, { name: 'host' });
       const reactDir = await project(`reg-react-${block.name}`, { name: 'host', dependencies: { react: '19' } });
       expect((await runInto(wcDir, [block.name])).code).toBe(0);
@@ -187,7 +196,7 @@ describe('web-component form (any non-react project)', () => {
   });
 
   it('refuses a second add loudly, listing the collisions, overwriting nothing', async () => {
-    const block = blocks[0];
+    const block = all()[0];
     const dir = await project('collide', { name: 'host' });
     expect((await runInto(dir, [block.name])).code).toBe(0);
     const page = block.manifest.files.find((f) => f.type === 'registry:page')!;
@@ -199,31 +208,62 @@ describe('web-component form (any non-react project)', () => {
     expect(second.err.join('\n')).toContain(path.posix.join('blocks', block.name, page.target ?? path.basename(page.path)));
     expect(await readFile(pagePath, 'utf8')).toBe('EDITED BY THE CONSUMER');
   });
+
+  it('refuses a block that is not on the authored contract, by name', async () => {
+    // NOT transitional. Every bundled block is converted now, so this drives
+    // the door a consumer would actually meet an old block through: a fetched
+    // item JSON whose page still carries its own entry script. The refusal has
+    // to name the file the wiring belongs in, or the consumer is told only
+    // that something is wrong. (`dev.test.ts` keeps a synthetic fixture for
+    // the same reason.)
+    const item = {
+      name: 'legacy-block',
+      title: 'Legacy block',
+      description: 'a block authored before the contract, as a consumer might still fetch one',
+      type: 'registry:block',
+      files: [
+        {
+          path: 'legacy-block.html',
+          type: 'registry:page',
+          content:
+            '<!doctype html>\n<html lang="en"><head></head><body><kai-thread id="t"></kai-thread>'
+            + '<script type="module" src="./legacy-block.js"></scr' + 'ipt></body></html>\n',
+        },
+        { path: 'legacy-block.js', type: 'registry:file', content: "document.getElementById('t').messages = [];\n" },
+      ],
+    };
+    const dir = await project('html-legacy', { name: 'host', dependencies: { vue: '^3.0.0' } });
+    const run = await runInto(dir, ['https://registry.example/r/legacy-block.json', '--form', 'html'], {
+      fetchJson: async () => JSON.parse(JSON.stringify(item)),
+    });
+    expect(run.code, 'expected a refusal').toBe(1);
+    expect(run.err.join('\n')).toContain('legacy-block');
+    expect(run.err.join('\n')).toContain('controller.ts');
+  });
 });
 
 describe('react form (react in the project deps)', () => {
-  it('writes the component, typings and wrapped script for every block; never the page html', async () => {
-    for (const block of blocks) {
+  const all = () => blocks;
+
+  it('writes the component, the hook and the controller for every block; never the page html', async () => {
+    expect(all().length).toBeGreaterThan(0);
+    for (const block of all()) {
       const dir = await project(`react-${block.name}`, { name: 'host', dependencies: { react: '^19.0.0' } });
       const run = await runInto(dir, [block.name]);
       expect(run.code, `${block.name}: ${run.err.join('\n')}`).toBe(0);
       const base = path.join(dir, 'src/blocks', block.name);
       const tsx = await readFile(path.join(base, `${componentName(block.name)}.tsx`), 'utf8');
-      expect(tsx).toContain(`import { registerAll } from '@kitn.ai/ui/react';`);
-      expect(tsx).toContain(`export default function ${componentName(block.name)}()`);
+      expect(tsx).toContain("from '@kitn.ai/ui/react'");
+      expect(tsx).toContain(`export function ${componentName(block.name)}()`);
+      expect(tsx).toContain(`from './use${componentName(block.name)}'`);
       expect(tsx).toContain('className=');
       expect(tsx).not.toMatch(/<script\b/);
       expect(tsx).not.toContain(' class="');
-      expect(existsSync(path.join(base, 'kai-elements.d.ts'))).toBe(true);
+      expect(existsSync(path.join(base, 'kai-elements.d.ts'))).toBe(false);
+      expect(existsSync(path.join(base, `use${componentName(block.name)}.ts`))).toBe(true);
+      expect(existsSync(path.join(base, `${block.name}.controller.ts`))).toBe(true);
       const page = block.manifest.files.find((f) => f.type === 'registry:page')!;
       expect(existsSync(path.join(base, page.target ?? path.basename(page.path)))).toBe(false);
-      // The wrapped entry script exports initBlock and keeps its imports hoisted.
-      const scripts = (await readdir(base)).filter((f) => f.endsWith('.js'));
-      const entry = scripts.find((f) => tsx.includes(`'./${f}'`));
-      expect(entry, `${block.name}: the tsx imports no emitted script`).toBeDefined();
-      const wrapped = await readFile(path.join(base, entry as string), 'utf8');
-      expect(wrapped).toContain('export async function initBlock()');
-      expect(wrapped.indexOf('import'), 'imports must stay module-level').toBeLessThan(wrapped.indexOf('initBlock'));
     }
   });
 });
@@ -257,7 +297,7 @@ describe('the detection signals table, row by row', () => {
   }
 
   it('a project with no framework signal at all is still a project: web components', () => {
-    expect(detectForm({ dependencies: { express: '^4.0.0' } })).toEqual({ kind: 'detected', form: 'wc', found: [] });
+    expect(detectForm({ dependencies: { express: '^4.0.0' } })).toEqual({ kind: 'detected', form: 'html', found: [] });
   });
 
   it('devDependencies count as signals too', () => {
@@ -280,12 +320,12 @@ describe('the detection signals table, row by row', () => {
       { dependencies: { react: '1', svelte: '4' } },
       true,
       true,
-      { ask: async (axis) => { asked.push(axis); return 'wc'; }, state: () => {} },
+      { ask: async (axis) => { asked.push(axis); return 'html'; }, state: () => {} },
     );
-    expect(decided.form).toBe('wc');
+    expect(decided.form).toBe('html');
     expect(asked).toHaveLength(1);
     expect(asked[0].question).toContain('react AND svelte');
-    expect(asked[0].options.map((o) => o.id).sort()).toEqual(['react', 'wc']);
+    expect(asked[0].options.map((o) => o.id).sort()).toEqual(['html', 'react']);
   });
 
   it('ambiguous + non-interactive REFUSES with the flag to pass, never guesses', async () => {
@@ -302,11 +342,11 @@ describe('the detection signals table, row by row', () => {
   });
 
   it('a --form flag answers the axis without asking, like every other flag', async () => {
-    const decided = await decideForm('wc', { dependencies: { react: '1' } }, true, true, {
+    const decided = await decideForm('html', { dependencies: { react: '1' } }, true, true, {
       ask: async () => { throw new Error('flag given, must not ask'); },
       state: () => {},
     });
-    expect(decided.form).toBe('wc');
+    expect(decided.form).toBe('html');
   });
 
   it('the ambiguous axis has a real choice, so the axis rule would ask it', () => {
@@ -317,17 +357,28 @@ describe('the detection signals table, row by row', () => {
 describe('per-block item JSON URLs resolve through the same path (the integration surface)', () => {
   it('a fetched item writes the same files the bundled block does', async () => {
     const block = blocks[0];
-    const item = buildRegistryItem(block);
+    // The item as the REGISTRY publishes it: gen-blocks.mjs runs
+    // withStrippedTwins before buildRegistryItem, so the twins are listed in
+    // the manifest a consumer fetches. The bundled copy already has them on
+    // disk, so nothing is re-stripped here.
+    const item = buildRegistryItem(withStrippedTwins(block, (source) => source));
     const dir = await project('url-case', { name: 'host', dependencies: { vue: '3' } });
+    let fetched: string | undefined;
     const run = await runInto(dir, [`https://registry.example/r/${block.name}.json`], {
       fetchJson: async (url) => {
-        expect(url).toBe(`https://registry.example/r/${block.name}.json`);
+        fetched = url;
         return JSON.parse(JSON.stringify(item));
       },
     });
+    expect(fetched).toBe(`https://registry.example/r/${block.name}.json`);
     expect(run.code, run.err.join('\n')).toBe(0);
-    for (const entry of block.manifest.files) {
-      expect(existsSync(path.join(dir, 'blocks', block.name, entry.target ?? path.basename(entry.path)))).toBe(true);
+    // The SAME renderer, so the same files: an item JSON carries the stripped
+    // twins gen-blocks wrote into it, which is why the fetched door does not
+    // need a stripper of its own.
+    const planned = planAdd({ blocks: [block], routes: [] }, { form: 'html', kitRange: KIT_RANGE, kitVersion: KIT_VERSION }).files;
+    expect(planned.length).toBeGreaterThan(0);
+    for (const file of planned) {
+      expect(existsSync(path.join(dir, file.path)), `${file.path} not written through the URL door`).toBe(true);
     }
   });
 
@@ -369,21 +420,11 @@ describe('per-block item JSON URLs resolve through the same path (the integratio
 });
 
 describe('route:<integration> dependencies, resolved against the scaffolder catalog', () => {
-  const routed = (): Block => ({
-    name: 'routed-block',
-    manifest: {
-      name: 'routed-block',
-      title: 'Routed',
-      description: 'streams through a keyed gateway',
-      type: 'registry:block',
-      registryDependencies: ['route:openrouter'],
-      files: [{ path: 'routed-block.html', type: 'registry:page' }],
-    },
-    files: new Map([
-      ['routed-block.html', '<!doctype html>\n<html><body><kai-thread id="t"></kai-thread><script type="module" src="./routed-block.js"></script></body></html>'],
-      ['routed-block.js', "import '@kitn.ai/ui/autoloader';\nconst t = document.getElementById('t');\nvoid t;\n"],
-    ]),
-  });
+  // A synthetic block (the shared fixture) rather than a real one, because
+  // this describe's subject is route resolution: no authored block declares a
+  // `route:` dependency, and a case about routes should not also be a case
+  // about whichever block happens to have one.
+  const routed = (): Block => authoredBlock('routed-block', { registryDependencies: ['route:openrouter'] });
 
   it('the react form emits the route the way the scaffolder does', async () => {
     const resolved = await resolveAdd('routed-block', {
@@ -405,7 +446,7 @@ describe('route:<integration> dependencies, resolved against the scaffolder cata
       local: (name) => (name === 'routed-block' ? routed() : undefined),
       fetchItem: async () => { throw new Error('no fetch expected'); },
     });
-    const plan = planAdd(resolved, { form: 'wc', kitRange: KIT_RANGE, kitVersion: KIT_VERSION });
+    const plan = planAdd(resolved, { form: 'html', kitRange: KIT_RANGE, kitVersion: KIT_VERSION });
     expect(plan.files.map((f) => f.path)).not.toContain('server/chat.ts');
     const notes = plan.notes.join('\n');
     expect(notes).toContain('openrouter');
@@ -427,19 +468,23 @@ describe('refusals name the way out', () => {
     expect(run.err.join('\n')).toContain('create-kai add --list');
   });
 
-  it('wrapEntryScript refuses a script with exports of its own', () => {
-    expect(wrapEntryScript('export const x = 1;\n').errors.join(' ')).toContain('exports of its own');
+  it('every delivery form is accepted and --form wc is refused by name', () => {
+    // The accepted set is the form axis itself, DERIVED here as `add.ts`
+    // derives it: a fourth delivery form is accepted and named in the refusal
+    // with nothing on either side to hand-edit. Hand-typing the list is how
+    // the flag came to accept a form the axis had dropped.
+    for (const { id } of BLOCK_FORMS) expect(parseAddArgs(['support-widget', '--form', id]).errors, id).toEqual([]);
+    const legacy = parseAddArgs(['support-widget', '--form', 'wc']);
+    const message = legacy.errors.join(' ');
+    expect(message).toContain('--form must be');
+    for (const { id } of BLOCK_FORMS) expect(message, id).toContain(id);
+    expect(message).toContain("got 'wc'");
   });
 
-  it('bodyToJsx refuses literal braces rather than emitting broken JSX', () => {
-    const page = '<html><body><p>a { b }</p></body></html>';
-    expect(bodyToJsx(page).errors.join(' ')).toContain('{ or }');
-  });
-
-  it('bodyToJsx refuses string style attributes rather than emitting broken JSX', () => {
-    const page = '<html><body><p style="color: red">a</p></body></html>';
-    expect(bodyToJsx(page).errors.join(' ')).toContain('style=');
-  });
+  // The three cases that stood here pinned `wrapEntryScript` and `bodyToJsx`,
+  // the regex JSX translation the parsed template replaced. They are deleted
+  // with the functions: the grammar's refusals have their own cases in
+  // packages/blocks/tests/parse-template.test.ts.
 });
 
 describe('dependency merging never downgrades what the project already chose', () => {

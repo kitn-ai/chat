@@ -52,3 +52,40 @@ test('slot="home" content replaces the built-in home screen; removing it restore
 
   el.remove();
 });
+
+/**
+ * A slotted child authored `hidden` and later un-hidden.
+ *
+ * `readSlots` reports a hidden assigned node as NOT filling its slot (an
+ * invisible node fills no region), so the region it feeds is now a function of
+ * an ATTRIBUTE as well as of the child list. An observer watching childList
+ * alone never re-reads, and the region stays collapsed for good. This is the
+ * shape the authored block contract produces every time: declarative markup
+ * toggles visibility, where imperative markup added and removed the node.
+ */
+test('a slotted child that starts hidden brings its region back when un-hidden', async () => {
+  const el = document.createElement('kai-chat') as HTMLElement & { messages?: unknown[] };
+  el.messages = [];
+  const nav = document.createElement('nav');
+  nav.setAttribute('slot', 'sidebar');
+  nav.hidden = true;
+  nav.textContent = 'My conversations';
+  el.appendChild(nav);
+  document.body.appendChild(el);
+  await flush();
+
+  // Hidden on arrival: the region is not rendered, so nothing reserves space.
+  expect(el.shadowRoot!.querySelector('slot[name="sidebar"]')).toBeNull();
+
+  nav.hidden = false;
+  await flush();
+  expect(el.shadowRoot!.querySelector('slot[name="sidebar"]')).toBeTruthy();
+
+  // And back again, so the read is live in both directions rather than a
+  // one-way latch that happens to end up right.
+  nav.hidden = true;
+  await flush();
+  expect(el.shadowRoot!.querySelector('slot[name="sidebar"]')).toBeNull();
+
+  el.remove();
+});

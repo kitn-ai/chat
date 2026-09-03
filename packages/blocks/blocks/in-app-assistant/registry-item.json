@@ -5,15 +5,15 @@
   "type": "registry:block",
   "categories": ["assistant", "aside"],
   "files": [
-    { "path": "in-app-assistant.html", "type": "registry:page", "target": "in-app-assistant.html" },
-    { "path": "in-app-assistant.js", "type": "registry:file", "target": "in-app-assistant.js" },
-    { "path": "in-app-assistant.css", "type": "registry:file", "target": "in-app-assistant.css" },
-    { "path": "mock.js", "type": "registry:file", "target": "mock.js" }
+    { "path": "in-app-assistant.html", "type": "registry:page" },
+    { "path": "in-app-assistant.controller.ts", "type": "registry:file" },
+    { "path": "in-app-assistant.css", "type": "registry:file" },
+    { "path": "mock.ts", "type": "registry:file" }
   ],
   "dependencies": ["@kitn.ai/ui"],
   "registryDependencies": [],
   "cssVars": { "light": {}, "dark": {} },
   "envVars": {},
-  "docs": "Runs against a scripted local mock out of the box - no endpoint, no key. The host page content is a stand-in: keep the aside, replace the main region with your app. To go live, replace the mock responder in in-app-assistant.js with a fetch to your chat endpoint and keep parsing through the @kitn.ai/ui/wire readers.",
+  "docs": "Runs against a scripted local mock out of the box - no endpoint, no key. The host page content is a stand-in: keep the aside, replace the main region with your app. To go live, replace the mock responder in in-app-assistant.controller.ts with a fetch to your chat endpoint and keep parsing through the @kitn.ai/ui/wire readers.",
   "meta": { "iframeHeight": "720px" }
 }

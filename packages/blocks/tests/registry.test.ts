@@ -26,6 +26,8 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { transformSync } from 'esbuild';
+import { renderCdnFormFiles, withStrippedTwins } from '../src/forms';
 import {
   discoverBlocks,
   validateBlockManifest,
@@ -114,7 +116,7 @@ describe('the package exports map', () => {
 
   it('points both entries at their real source files', () => {
     expect(pkg.exports['.'].default).toBe('./src/registry.ts');
-    expect(pkg.exports['./forms'].default).toBe('./src/forms.ts');
+    expect(pkg.exports['./forms'].default).toBe('./src/forms/index.ts');
   });
 
   it('resolves `types` and `default` to the SAME file for every entry', () => {
@@ -193,40 +195,78 @@ describe('manifest validation (each rule watched failing)', () => {
   it('meta.iframeHeight must be a CSS length', () => {
     expect(bad((m) => { m.meta = { iframeHeight: 'tall' }; }).join()).toMatch(/not a CSS length/);
   });
+  it('refuses a files[].target that is not the file basename (targets.ts owns the directory)', () => {
+    const errs = bad((m) => {
+      m.files = [{ path: 'demo.html', type: 'registry:page', target: 'src/blocks/x/demo.html' }];
+    });
+    expect(errs.join(' ')).toContain('targets.ts');
+    expect(errs.join(' ')).toContain('"target" is derived');
+  });
+  it('accepts a target that equals the basename, and its absence', () => {
+    expect(bad((m) => {
+      m.files = [{ path: 'demo.html', type: 'registry:page', target: 'demo.html' }];
+    })).toEqual([]);
+    expect(bad((m) => {
+      m.files = [{ path: 'demo.html', type: 'registry:page' }];
+    })).toEqual([]);
+  });
 });
 
 describe('the CDN-form generator', () => {
   const { blocks } = discoverBlocks(scanRealBlocks(), ROUTES);
   const widget = blocks.find((b) => b.name === 'support-widget') as Block;
 
+  // The paste form is rendered from the HTML FORM, never from the authored
+  // files: an authored page carries no script for the inliner to inline, and
+  // the twin is what the html form ships in place of the .ts source. This is
+  // the same two-call sequence gen-blocks.mjs and the kai dev route run.
+  const twinned = (block: Block): Block =>
+    withStrippedTwins(block, (source, fileName) =>
+      transformSync(source, { loader: 'ts', format: 'esm', target: 'es2022', sourcefile: fileName }).code,
+    );
+  const cdnHtml = (block: Block, opts: { version: string; base?: string }): string =>
+    renderCdnFormFiles(twinned(block), opts)[0].content;
+
   it('pins are generated from the injected version, never baked in', () => {
-    const a = generateCdnForm(widget, { version: '1.2.3-fixture' });
-    const b = generateCdnForm(widget, { version: '4.5.6-fixture' });
-    expect(a.errors).toEqual([]);
-    expect(b.errors).toEqual([]);
+    const a = cdnHtml(widget, { version: '1.2.3-fixture' });
+    const b = cdnHtml(widget, { version: '4.5.6-fixture' });
     const pins = (html: string) =>
       new Set([...html.matchAll(/@kitn\.ai\/ui@([\d.]+(?:-[\w.-]+)?)/g)].map((m) => m[1]));
-    expect(pins(a.html as string)).toEqual(new Set(['1.2.3-fixture']));
-    expect(pins(b.html as string)).toEqual(new Set(['4.5.6-fixture']));
+    expect(pins(a)).toEqual(new Set(['1.2.3-fixture']));
+    expect(pins(b)).toEqual(new Set(['4.5.6-fixture']));
     // Every pinned line stays release-wired (inline annotation, pin first on line).
-    for (const line of (a.html as string).split('\n')) {
+    for (const line of a.split('\n')) {
       if (/@kitn\.ai\/ui@\d/.test(line)) expect(line).toMatch(/x-release-please-version/);
     }
   });
 
   it('the form is self-contained: no relative links/scripts survive, mock and css are inlined', () => {
-    const { html } = generateCdnForm(widget, { version: VERSION });
+    const html = cdnHtml(widget, { version: VERSION });
     expect(html).not.toMatch(/src="\.\//);
     expect(html).not.toMatch(/href="\.\/(?!.*#)/);
     expect(html).toContain('inlined from ./support-widget.css');
+    // Two levels: the generated binder imports the controller, the controller
+    // imports the mock, and both bodies land in the one file.
+    expect(html).toContain('inlined from ./support-widget.controller.js');
     expect(html).toContain('inlined from ./mock.js');
     expect(html).toContain('JS PROPERTIES'); // the baked-in contract banner
     expect(html).toContain('kai-* events do not bubble');
   });
 
+  it('carries the binder and the controller, not just markup', () => {
+    // The failure this catches is silent by construction: a form whose script
+    // never got inlined is still valid HTML and still renders a page.
+    const html = cdnHtml(widget, { version: VERSION });
+    expect(html).toContain('createController');
+    expect(html).toContain('window.__blockReady = true;');
+    expect(html).toContain('customElements.whenDefined');
+    // The autoloader, not the register-all bundle: the paste form runs off
+    // raw CDN URLs in a plain page, which is the autoloader's own pattern.
+    expect(html).toContain('elements/autoloader.js');
+  });
+
   it('the /kit/ rendering (the driver form) carries no pins at all', () => {
-    const { html, errors } = generateCdnForm(widget, { version: VERSION, base: '/kit/' });
-    expect(errors).toEqual([]);
+    const html = cdnHtml(widget, { version: VERSION, base: '/kit/' });
     expect(html).not.toMatch(/@kitn\.ai\/ui@\d/);
     expect(html).toContain("from '/kit/state.js'");
     expect(html).not.toMatch(/x-release-please/);
@@ -258,13 +298,84 @@ describe('the CDN-form generator', () => {
     expect(errors.join()).toMatch(/root "@kitn\.ai\/ui" export is not loadable/);
   });
 
-  it('an inlined relative module may not have imports of its own', () => {
-    const out = rewriteBlockScript(
-      "import { X } from './leaf.js';\n",
-      new Map([['leaf.js', "import 'other';\nexport const X = 1;\n"]]),
-      { version: VERSION },
-    );
-    expect(out.errors.join()).toMatch(/leaf modules/);
+  // The inliner used to refuse ANY import inside an inlined module ("leaf
+  // modules, constants only"). The authored contract makes that shape
+  // impossible: the generated binder imports the controller, and the
+  // controller imports its mock plus the @kitn.ai/ui entries it parses
+  // through. That is exactly two levels, so two levels is what the inliner
+  // does, and the third is a loud refusal naming the file.
+  it("inlines one level: the entry, the controller it imports, and the controller's own leaf import", () => {
+    const files = new Map([
+      ['b.js', "import '@kitn.ai/ui/autoloader';\nimport { createController } from './b.controller.js';\ncreateController({});\n"],
+      ['b.controller.js', "import { readOpenAIStream } from '@kitn.ai/ui/wire';\nimport { MOCK } from './mock.js';\nexport function createController() { return [readOpenAIStream, MOCK]; }\n"],
+      ['mock.js', 'export const MOCK = [];\n'],
+    ]);
+    const out = rewriteBlockScript(files.get('b.js') as string, files, { version: VERSION });
+    expect(out.errors).toEqual([]);
+    const code = out.code as string;
+    expect(code).toContain(`@kitn.ai/ui@${VERSION}/dist/elements/autoloader.js`);
+    expect(code).toContain(`@kitn.ai/ui@${VERSION}/dist/wire.js`);
+    expect(code).toContain('const MOCK = [];');
+    expect(code).not.toContain("from './b.controller.js'");
+    expect(code).not.toContain("from './mock.js'");
+    // ORDER is load-bearing: a module's body sits above the code that reads
+    // it, deepest first. Nothing else in this suite would notice if the two
+    // were swapped, and the pasted file would throw at load.
+    expect(code.indexOf('const MOCK = [];')).toBeLessThan(code.indexOf('function createController()'));
+    expect(code.indexOf('function createController()')).toBeLessThan(code.indexOf('createController({});'));
+  });
+
+  it('rewrites a MULTI-LINE import, which is what esbuild emits for a wide one', () => {
+    // The scan was line-anchored, so `import {\n  a,\n  b\n} from "x";` matched
+    // nothing and was copied through VERBATIM: the pasted file kept a bare
+    // specifier no browser resolves, and nothing said a word. The block's own
+    // stripped controller is exactly this shape.
+    const files = new Map([
+      ['b.js', "import { createController } from './b.controller.js';\ncreateController();\n"],
+      [
+        'b.controller.js',
+        'import {\n  localStorageStore,\n  isConversationUnread\n} from "@kitn.ai/ui/stores";\nexport function createController() { return [localStorageStore, isConversationUnread]; }\n',
+      ],
+    ]);
+    const out = rewriteBlockScript(files.get('b.js') as string, files, { version: VERSION });
+    expect(out.errors).toEqual([]);
+    expect(out.code as string).toContain(`@kitn.ai/ui@${VERSION}/dist/stores.js`);
+    expect(out.code as string).not.toContain('"@kitn.ai/ui/stores"');
+  });
+
+  it('refuses a bare specifier that survived the rewrite, rather than emitting it', () => {
+    // The BACKSTOP, and the reason the case above was ever able to ship: the
+    // rewrite recognises the import shapes it models, and one it does not
+    // model is copied through verbatim with nothing said. The form claims to
+    // be self-contained, so a bare specifier left in the emitted script makes
+    // that claim false in a way only a browser would report. An import with a
+    // trailing comment is one such shape (the pattern ends the statement at
+    // the quote), and it stands here for all of them.
+    const files = new Map([['b.js', "import { x } from 'unknown-pkg'; // why\nx();\n"]]);
+    const errors = rewriteBlockScript(files.get('b.js') as string, files, { version: VERSION }).errors.join(' ');
+    expect(errors).toContain('unknown-pkg');
+    expect(errors).toContain('self-contained');
+  });
+
+  it('refuses a THIRD level rather than inlining a module graph', () => {
+    const files = new Map([
+      ['b.js', "import { a } from './a.js';\na();\n"],
+      ['a.js', "import { b } from './b2.js';\nexport const a = () => b;\n"],
+      ['b2.js', "import { c } from './c.js';\nexport const b = c;\n"],
+      ['c.js', 'export const c = 1;\n'],
+    ]);
+    const out = rewriteBlockScript(files.get('b.js') as string, files, { version: VERSION });
+    expect(out.errors.join(' ')).toContain('two levels');
+    expect(out.errors.join(' ')).toContain('b2.js');
+  });
+
+  it('still refuses a bare import that is not a proven @kitn.ai/ui entry, at any level', () => {
+    const files = new Map([
+      ['b.js', "import { x } from './a.js';\nx();\n"],
+      ['a.js', "import lodash from 'lodash';\nexport const x = lodash;\n"],
+    ]);
+    expect(rewriteBlockScript(files.get('b.js') as string, files, { version: VERSION }).errors.join(' '))
+      .toContain('lodash');
   });
 });
 
@@ -302,5 +413,74 @@ describe('contract checks (each plant watched being caught)', () => {
       ]);
       expect(checkBlockContracts(block, NONSCALAR).join()).toMatch(/@kitn\.ai\/ui\/wire/);
     }
+  });
+
+  /** A full authored page around `body`, with the block root the contract
+   *  requires. `demo` is the synthetic block's name, so the controller the
+   *  checks look for is `demo.controller.ts` and its types are `Demo*`. */
+  const pageOf = (body: string) =>
+    `<!doctype html>\n<html lang="en"><head></head><body><div data-block-root>${body}</div></body></html>`;
+
+  /** A controller of the contract shape, with the members the case needs. */
+  const controllerOf = (opts: { actions?: string[]; refs?: string[]; state?: string[] }) =>
+    [
+      `export interface DemoState { ${(opts.state ?? ['ready']).map((f) => `${f}: boolean;`).join(' ')} }`,
+      `export interface DemoRefs { ${(opts.refs ?? ['dock']).map((r) => `${r}: unknown;`).join(' ')} }`,
+      `export interface DemoActions { ${[...(opts.actions ?? ['open']), 'boot'].map((a) => `${a}(): void;`).join(' ')} }`,
+      `export function createController(deps: unknown) { return deps as never; }`,
+      '',
+    ].join('\n');
+
+  const contractErrors = (body: string, controller?: string) =>
+    checkBlockContracts(
+      blockWith([
+        { name: 'demo.html', content: pageOf(body) },
+        ...(controller ? [{ name: 'demo.controller.ts', content: controller }] : []),
+      ]),
+      NONSCALAR,
+    );
+
+  it('catches a non-scalar prop in : attribute position (the prefix used to slip past the scan)', () => {
+    expect(contractErrors('<kai-thread :messages="messages"></kai-thread>', controllerOf({})).join(' '))
+      .toContain('non-scalar prop "messages"');
+  });
+
+  it('catches a non-scalar prop in seed: attribute position, for the same reason', () => {
+    expect(contractErrors('<kai-thread seed:messages="[]"></kai-thread>', controllerOf({})).join(' '))
+      .toContain('non-scalar prop "messages"');
+  });
+
+  it('accepts the same prop in .prop position, which is what a rich binding looks like', () => {
+    expect(contractErrors('<kai-thread .messages="messages"></kai-thread>', controllerOf({ state: ['messages'] })))
+      .toEqual([]);
+  });
+
+  it('surfaces a grammar error from the page (one owner for the grammar)', () => {
+    expect(contractErrors('<kai-button :hidden="!drilled"></kai-button>', controllerOf({})).join(' '))
+      .toContain('never an expression');
+  });
+
+  it('catches an @ binding pointing at an action the controller does not export', () => {
+    const errs = contractErrors('<kai-button @kai-click="bak"></kai-button>', controllerOf({ actions: ['back'] }));
+    expect(errs.join(' ')).toContain('@kai-click="bak"');
+    expect(errs.join(' ')).toContain('back');
+  });
+
+  it('catches a #ref the controller does not declare in its Refs', () => {
+    const errs = contractErrors('<kai-dock #ref="dok"></kai-dock>', controllerOf({ refs: ['dock'] }));
+    expect(errs.join(' ')).toContain('#ref="dok"');
+  });
+
+  it('refuses a page with bindings and no controller', () => {
+    expect(contractErrors('<kai-button @kai-click="open"></kai-button>').join(' '))
+      .toContain('demo.controller.ts');
+  });
+
+  it('refuses a block with no controller, now that the contract is mandatory', () => {
+    // The case above is a page that DECLARES bindings. This one declares
+    // none, which used to be how an unconverted block travelled through the
+    // conversion round: the checks were skipped for it entirely and this
+    // assertion passed vacuously on an empty error list.
+    expect(contractErrors('<kai-thread></kai-thread>').join(' ')).toContain('.controller.ts');
   });
 });

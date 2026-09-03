@@ -36,6 +36,7 @@ import {
   sharedDevDepsProblem,
   templateIgnoreProblem,
   templateSkips,
+  zeroBlockTwinsProblem,
   zeroBlocksCopiedProblem,
 } from '../src/build-guards';
 import type { TemplateReader } from '../src/build-guards';
@@ -456,7 +457,7 @@ describe('missingReuseInputsProblem', () => {
       missingReuseInputsProblem([
         'src/index.ts',
         '../blocks/src/registry.ts',
-        '../blocks/src/forms.ts',
+        '../blocks/src/forms/index.ts',
       ]),
     ).toBeNull();
   });
@@ -548,6 +549,28 @@ describe('the zero-blocks guard', () => {
 
   it('accepts a copy that landed at least one block directory', () => {
     expect(zeroBlocksCopiedProblem(3)).toBeNull();
+  });
+});
+
+describe('the zero-twins guard', () => {
+  it('rejects a build whose post-copy walk wrote no .js twin', () => {
+    // The same anti-vacuity shape as the rule above, on the other half of what
+    // the copy owes: a block controller is TypeScript and `add` strips no
+    // types at runtime, so a tarball with the sources and none of the twins
+    // installs cleanly and refuses at a user's first `add`.
+    expectRejected(zeroBlockTwinsProblem(0), 'wrote zero .js twins', 'broken walk');
+  });
+
+  it('accepts a build that wrote at least one', () => {
+    expect(zeroBlockTwinsProblem(2)).toBeNull();
+  });
+
+  it('says something different from the zero-blocks rule beside it', () => {
+    // A CI log has to tell the two apart: one means the resolve found no block
+    // directories, the other means it found them and the walk over their
+    // sources produced nothing.
+    expect(zeroBlockTwinsProblem(0)).not.toContain('copied zero');
+    expect(zeroBlocksCopiedProblem(0)).not.toContain('.js twin');
   });
 });
 

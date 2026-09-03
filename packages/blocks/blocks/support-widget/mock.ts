@@ -17,7 +17,11 @@ export const MOCK_SCRIPT = [
   },
 ];
 
-export const MOCK_TOOL_OUTPUTS = {
+/** Settled outputs the mock hands back, keyed by tool type. Annotated rather
+ *  than inferred: the controller looks one up by the type the stream reports,
+ *  which is a string, and an inferred object literal has no index signature to
+ *  read it with. */
+export const MOCK_TOOL_OUTPUTS: Record<string, Record<string, string>> = {
   lookup_order: { order: 'KAI-1042', status: 'shipped', carrier: 'DHL', eta: 'Thursday' },
 };
 

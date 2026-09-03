@@ -10,31 +10,71 @@
     <!-- The full-page assistant on the kit's own parts: a kai-conversations
          rail (its built-in header, search and New chat), a top bar carrying
          the kai-model-switcher recipe, and the thread + composer column.
-         The rail rows are built by assistant.js (item mode, the documented
-         consumer-owned loop); the conversation lifecycle is the headless
-         controller from @kitn.ai/ui/stores. -->
-    <div class="app">
-      <kai-conversations id="conversations" class="rail"></kai-conversations>
+         The whole page IS the block here, so data-block-root sits on the app
+         grid; there is no host stand-in to leave behind.
+
+         The wiring is DECLARED here and applied by the generated binder (spec
+         3.1): .prop sets a JS property, :attr a runtime scalar attribute,
+         @event an action on THIS element (kai-* events do not bubble), #ref
+         names a handle the controller calls methods on, and *for repeats with
+         a mandatory :key. A binding holds a field name, never an expression:
+         every derivation, the rail's search filter included, is a field of
+         State. The ids are for the block driver's state script, which is
+         authored rather than generated. -->
+    <div class="app" data-block-root>
+      <!-- The rail in ITEM mode (the documented consumer-owned loop): the
+           rows are the block's own, so the built-in search box filters
+           nothing by itself and the block does the filtering in State. -->
+      <kai-conversations
+        id="conversations"
+        class="rail"
+        .activeId="activeId"
+        @kai-conversation-select="openConversation"
+        @kai-new-chat="newChat"
+        @kai-search="search"
+      >
+        <kai-conversation-item
+          *for="row of conversationRows"
+          :key="row.id"
+          :conversation-id="row.id"
+          :unread="row.unread"
+        >
+          <span .textContent="row.title"></span>
+          <span slot="meta" .textContent="row.preview" :hidden="row.previewHidden"></span>
+          <span slot="menu" class="row-time" .textContent="row.time"></span>
+        </kai-conversation-item>
+      </kai-conversations>
 
       <main class="main">
         <header class="topbar">
           <h1>Assistant</h1>
-          <!-- The model switcher recipe: a standalone leaf element. Models in
-               as a JS property, selection out via kai-model-change. -->
-          <kai-model-switcher id="models"></kai-model-switcher>
+          <!-- The model switcher recipe: a standalone leaf element with no
+               navigation anywhere near it. Models in as a JS property,
+               selection out via kai-model-change. -->
+          <kai-model-switcher
+            id="models"
+            .models="models"
+            .currentModel="currentModel"
+            @kai-model-change="modelChange"
+          ></kai-model-switcher>
         </header>
 
-        <kai-thread id="thread">
+        <kai-thread id="thread" .messages="messages" .loading="loading">
           <kai-empty
             slot="empty"
             empty-title="What can I help with?"
             description="Ask anything, or start from a suggestion below."
           ></kai-empty>
         </kai-thread>
-        <kai-prompt-input id="prompt" placeholder="Ask anything"></kai-prompt-input>
+        <kai-prompt-input
+          id="prompt"
+          #ref="prompt"
+          placeholder="Ask anything"
+          .suggestions="suggestions"
+          .loading="loading"
+          @kai-submit="submit"
+        ></kai-prompt-input>
       </main>
     </div>
-
-    <script type="module" src="./assistant.js"></script>
   </body>
 </html>

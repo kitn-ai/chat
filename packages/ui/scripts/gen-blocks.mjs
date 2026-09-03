@@ -15,6 +15,20 @@
 //                                             file contents - THE public
 //                                             integration surface (CLI,
 //                                             gallery, MCP all resolve it)
+//   dist/blocks/f/<name>.<form>.json          one file per block per FRAMEWORK
+//                                             delivery form (spec 3.5): the
+//                                             rendered tree, contents and
+//                                             install targets. The site's
+//                                             code view reads these, and so
+//                                             do the compile cells inside
+//                                             verify:scaffold, so what the
+//                                             page shows and what compiles
+//                                             are the same bytes. NOT inlined
+//                                             into r/<name>.json: that file
+//                                             is the CLI's integration
+//                                             surface and every `add` would
+//                                             then download the trees it will
+//                                             not use.
 //   dist/blocks/r/<name>.cdn.html             the self-contained CDN-paste
 //                                             form, pins stamped from
 //                                             package.json at build - always
@@ -116,24 +130,71 @@ if (errors.length) {
   process.exit(1);
 }
 
+// -------------------------------------------------------- the stripped twins
+// The controller is TypeScript and two delivery forms land in contexts with
+// no build step (a pasted single file, and a tree dropped next to markup), so
+// the types come off HERE, once, and the stripped twin travels with the block
+// inside the emitted item JSON. `packages/blocks` cannot do it: it depends on
+// nothing, and the two RUNTIME renderers (the kai dev gallery route, inside
+// the published CLI, and `create-kai add`, on Node >= 20.19) have no stripper
+// either. Two strippers would emit two different files and break the one
+// claim src/forms/index.ts makes.
+const stripTypes = (source, fileName) =>
+  esbuild.transformSync(source, { loader: 'ts', format: 'esm', target: 'es2022', sourcefile: fileName }).code;
+
+const blocksForms = await importTs(join(BLOCKS_PKG_ROOT, blocksExports['./forms'].default));
+const withTwins = blocks.map((block) => blocksForms.withStrippedTwins(block, stripTypes));
+
 // ------------------------------------------------------------- the outputs
 /** path (repo-absolute) -> content */
 const outputs = new Map();
 const put = (path, content) => outputs.set(path, content);
 
-put(join(OUT_DIR, 'registry.json'), JSON.stringify(blocksMod.buildRegistryIndex(blocks), null, 2) + '\n');
-for (const block of blocks) {
+put(join(OUT_DIR, 'registry.json'), JSON.stringify(blocksMod.buildRegistryIndex(withTwins), null, 2) + '\n');
+for (const block of withTwins) {
   put(join(OUT_DIR, 'r', `${block.name}.json`), JSON.stringify(blocksMod.buildRegistryItem(block), null, 2) + '\n');
 
-  const cdn = blocksMod.generateCdnForm(block, { version: VERSION });
-  if (cdn.errors.length) { console.error(`gen-blocks: ${block.name} CDN form:\n  RED ${cdn.errors.join('\n  RED ')}`); process.exit(1); }
-  put(join(OUT_DIR, 'r', `${block.name}.cdn.html`), cdn.html);
+  // The paste form renders the HTML FORM first and inlines that. Calling
+  // generateCdnForm on the AUTHORED block emits markup with no JavaScript in
+  // it, because under the authored contract the entry script is GENERATED.
+  put(join(OUT_DIR, 'r', `${block.name}.cdn.html`), cdnForm(block, { version: VERSION }, 'CDN form'));
 
   // The driver page: the same generated form against the local /kit/ mount
   // (no pins - kit-relative URLs the way serve.mjs mounts dist).
-  const local = blocksMod.generateCdnForm(block, { version: VERSION, base: '/kit/' });
-  if (local.errors.length) { console.error(`gen-blocks: ${block.name} driver form:\n  RED ${local.errors.join('\n  RED ')}`); process.exit(1); }
-  put(join(DRIVER_PAGES_DIR, block.name, 'index.html'), local.html);
+  put(join(DRIVER_PAGES_DIR, block.name, 'index.html'), cdnForm(block, { version: VERSION, base: '/kit/' }, 'driver form'));
+
+  // One form JSON per FRAMEWORK renderer, from the TWINNED block, so the tree
+  // the page displays carries the stripped .js twin the html form installs.
+  // The axis is `FRAMEWORK_BLOCK_FORMS`, read where it lives: `cdn` is a
+  // single pasted file with no project to compile and is covered by
+  // verify:blocks [pins] and the driver instead. Every discovered block
+  // renders every framework form; a block that cannot is a hard failure in
+  // `formFiles` below, never a skip.
+  for (const form of blocksForms.FRAMEWORK_BLOCK_FORMS) {
+    const files = formFiles(block, form.id);
+    put(
+      join(OUT_DIR, 'f', `${block.name}.${form.id}.json`),
+      JSON.stringify({ block: block.name, form: form.id, files }, null, 2) + '\n',
+    );
+  }
+}
+
+function formFiles(block, formId) {
+  try {
+    return blocksForms.renderBlockForm(block, formId, { cdn: { version: VERSION } });
+  } catch (err) {
+    console.error(`gen-blocks: ${block.name} ${formId} form:\n  RED ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
+}
+
+function cdnForm(block, opts, label) {
+  try {
+    return blocksForms.renderCdnFormFiles(block, opts)[0].content;
+  } catch (err) {
+    console.error(`gen-blocks: ${block.name} ${label}:\n  RED ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
 }
 
 // --------------------------------------------------------- write, or diff

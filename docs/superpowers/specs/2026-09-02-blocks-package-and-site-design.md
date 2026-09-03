@@ -263,6 +263,123 @@ attribute, and a non-scalar in attribute position is wrong however it is spelled
 `--self-test`. `.prop=` and `*for=` are the two prefixes that legitimately carry
 a non-scalar.
 
+**Amendment, 2026-09-02 (PR B, converting `in-app-assistant`):** the binding
+kinds are ELEMENT-AGNOSTIC. Every example above is a `kai-*` element, and
+nothing in the table depends on one: `:hidden="historyDotHidden"` on a plain
+`<span>` and `.textContent="row.title"` on a plain `<span>` are the same two
+kinds doing the same two things, because the binder writes an attribute and a
+property and any element takes both. The one place the distinction survives is
+naming, in the renderers: a `kai-*` tag's literal attributes and `:attr`
+bindings are camelCased onto the generated wrapper's props, and a plain tag's
+are emitted verbatim, because that is what the host framework accepts. Say it
+out loud, because a block reaching for a plain element is not exotic: the kit
+has no dot affordance on `kai-button`, so the unread signal beside that
+block's history button is the block's own `<span>`.
+
+**Amendment, 2026-09-02 (PR B, whole-branch review): `@event` is the one
+exception.** It binds on a `kai-*` element and nowhere else. The html binder
+would happily `addEventListener('keydown')` on a plain `<input>`, but React's
+handler names are not derivable from `on<Name>` for a native event: `keydown`
+is `onKeyDown`, and `change` does not even mean the same event there, so the
+react form has no translation and the two renderers would disagree about one
+authored page. The refusal is at the grammar rather than in the react renderer,
+by the same rule as the nested `*for`: the grammar is where the shape is
+decided. Its message names the element that owns the interaction (`kai-button`
+for a click, `kai-input` for typing), because "not here" without "there" leaves
+the author guessing. The other four kinds stay element-agnostic.
+
+**Amendment, 2026-09-02 (PR B).** The parser recovers the AUTHORED case of an
+attribute from parse5's source locations. parse5 is the WHATWG tokenizer and it
+LOWERCASES attribute names, so `.textContent` arrives as `.textcontent` and
+`.activeId` as `.activeid`; without the recovery those two would be
+unauthorable. The recovery runs before anything is classified, so every rule and
+every error message sees what the author wrote. A `.prop` binding then accepts
+either spelling, because its target is camelCased (`.conversation-id` and
+`.conversationId` name one property); an `:attr` binding keeps what was written,
+because an attribute name is a string the element reads.
+
+**Amendment, 2026-09-02 (PR B).** The page marks exactly one element
+`data-block-root`. The `html` and `cdn` forms render the WHOLE page, because
+they are a page and the host chrome around the block is what makes them
+runnable; every component-framework renderer emits that subtree and nothing
+else. Zero roots and two roots are both validation errors, and the zero case
+names the attribute in its message.
+
+**Amendment, 2026-09-02 (PR B).** The refusals this section implied and did not
+state. `*for` needs a parent element, because a repeated top-level child of
+`<body>` has nothing to rebuild its rows into. `*for` and `#ref` are exclusive
+on one element, and `#ref` and `seed:` are refused anywhere inside a `*for`
+subtree, because each names ONE element and a repeat has none. A `#ref` name is
+a plain identifier and is declared once. `:key` is mandatory on a `*for`, is
+dotted from the loop item, and is illegal anywhere else. A `*for` nested inside
+another `*for` is refused at the grammar rather than in a renderer, because the
+binder clones one template per repeat from document scope and has no answer for
+a template inside a template. A hand-authored `<template>` is refused for the
+same reason plus a worse one: its children live on `.content` and would be
+parsed by nothing at all. An authored `<script>` is an error wherever it sits,
+`<head>` included, because the head is copied into the emitted page verbatim and
+a script there would survive without ever being looked at; the entry script is
+generated now. Every one of these names the fix in its message.
+
+**Amendment, 2026-09-02 (PR B).** A literal attribute and a binding of the same
+name on one element are both legal, and they are different channels: the literal
+is the value the element reads before registration, and the binding takes over
+at the first apply. `<kai-button hidden :hidden="backHidden">` is the shape that
+keeps an authored-hidden element hidden from parse instead of flashing visible
+until the binder runs. The component-framework renderers drop the literal and
+keep the binding, because a framework applies both in one pass and a duplicate
+attribute is a compile error in JSX.
+
+**Correction, 2026-09-02 (PR B).** This section said the wc renderer "removes
+the attribute when the field is falsy". Falsy is the wrong test: `0` and `''`
+are falsy and are legitimate attribute values. The rule the binder implements is
+remove on `false`, `null` and `undefined` and nothing else; everything else is
+written through `String(value)`, with `true` writing the empty string.
+
+**Amendment, 2026-09-02 (PR B).** What `seed:` guarantees is "written once,
+after registration, before the first apply". An element that captures a prop at
+upgrade has already captured by then: `kai-view-stack` untracks `view` into
+`initialView`, which is a capture-once value by contract
+(`packages/ui/src/elements/view-stack.tsx`). So a seed on such a prop acts as
+the first navigation rather than as a deep link. The blocks in this round all
+land on the same view either way, so nothing depends on the difference; it is
+stated here so nobody debugs it twice.
+
+**Amendment, 2026-09-02 (PR B, whole-branch review): the sinks a binding may
+not name.** A `.prop` or `:attr` binding is refused, by name, when its target
+is one of:
+
+- `.innerHTML`, `.outerHTML`, `.srcdoc`, `.insertAdjacentHTML`, and `:srcdoc`.
+  The message is "bind `.textContent`; markup is not a binding".
+- `:href`, `:src`, `:action`, `:formaction` and their property twins `.href`,
+  `.src`, `.action`, `.formAction`. The message says a navigable URL from State
+  has no scheme guard in a generated form yet, and to use a literal attribute
+  for a URL the block author wrote.
+
+The reason is the repo's threat model, not a hypothetical: everything the model
+produced is untrusted input, and the attacker only has to influence the model's
+OUTPUT. A State field fed from a message IS the model-controlled path, so a
+binding onto one of those sinks is a model-controlled string reaching
+`innerHTML` or an `href`, which is exactly the shape of the two Critical
+findings this repo has already shipped fixes for. The kit owns guards for both
+(`isSafeUrl` in `src/primitives/url-scheme-policy.ts` for anything navigable,
+and the markdown pipeline for anything that renders as markup), and no
+generated form puts either on a bound value; until one does, the honest answer
+is a refusal that names the fix rather than an emitted line that looks safe.
+Neither list is a filter to widen case by case: a block that needs one of these
+needs a kit element that owns the guard. Targets are matched the way the DOM
+reads them, so `.inner-html` and `.innerHTML` are one rule.
+
+`seed:` is deliberately NOT covered. Its value is a literal the block author
+typed into the page, never a State field, so it is the same trust level as the
+literal attribute the amendment above points authors at.
+
+**Amendment, 2026-09-02 (PR B, whole-branch review): an empty binding target is
+refused by name.** `.="x"`, `:="x"`, `@="x"` and `seed:="x"` classify as a kind
+and name nothing. Without the refusal the binding lands with an empty name and
+a renderer writes `setAttr(el, '', ...)` or a nameless JSX prop: a page that
+renders wrong instead of a page that was refused.
+
 ### 3.2 The controller: `<id>.controller.ts`
 
 TypeScript now, not `.js`. The framework-neutral logic, exported as:
@@ -282,6 +399,18 @@ export function createController(deps: ControllerDeps): {
   subscribe(listener: () => void): () => void;
 };
 ```
+
+**Amendment, 2026-09-02 (PR B).** `Actions` carries a `boot()`. It is the mount
+hook every host calls once after wiring: React's adapter fires it in an effect,
+the html binder awaits it before signalling readiness, and the html form has
+nowhere else to hydrate from storage. `analyzeController` refuses an `Actions`
+block without it.
+
+**Amendment, 2026-09-02 (PR B).** The three exported interfaces are NAMED after
+the block: `<Component>State`, `<Component>Actions`, `<Component>Refs`, where
+`<Component>` is the block id in PascalCase. Fixing the names is what lets the
+react adapter be generated at all, and the analyzer names the identifier it
+wanted when one is missing.
 
 A getter plus `subscribe` is the whole store contract, chosen because it is what
 every framework can adapt cheaply: React's `useSyncExternalStore` takes exactly
@@ -306,6 +435,19 @@ is the deliberate trade. Dumb bindings are what six renderers can agree about,
 and the cost is that the field list is shaped by the layout, so a controller is
 not portable to a different arrangement of the same block.
 
+**Amendment, 2026-09-02 (PR B, converting `assistant`):** the corollary, which
+the rule above reads as denying and does not. `State` is a view model, so it
+carries what a BINDING reads and nothing else; a controller is free to hold
+other state beside it, in its own closure, and should. `assistant`'s rail filter
+is the case: the old script read `item.textContent` off every rendered row and
+set `item.hidden`, which is the DOM query the contract forbids. The conversion
+is a `query` field plus a `conversationRows` field that is already filtered --
+and an unfiltered projection of the same rows that lives outside `State`,
+because nothing binds it and re-filtering on the next keystroke needs it. Adding
+it to `State` would inflate the view model with a field no renderer will ever
+read and no host will ever diff. The test is the same one that decides every
+other field: does a binding name it?
+
 ### 3.3 The rest of the authored directory
 
 `<id>.css`, `mock.ts`, `states.mjs` (the V-1 driver's state script),
@@ -314,6 +456,18 @@ difference: `files[].target` is **derived from `targets.ts`**, not typed. Today
 every entry in `packages/ui/blocks/support-widget/registry-item.json` restates
 its own basename as `target`, which is a hand-typed copy of a value the layout
 already determines.
+
+**Amendment, 2026-09-02 (PR B, converting `in-app-assistant`):** a driver probe
+that reads the HOST CHROME is not a fact about the block, and the block root is
+why. The `html` and `cdn` forms render the whole page; every component-framework
+form emits the `data-block-root` subtree alone, so the stand-in app around the
+block is present on one page and deliberately absent on the other. A probe
+asserting it is visible passes on the first page and fails on the second while
+nothing is wrong. The fix is the one the driver already has for the same shape
+elsewhere: the page spec declares the fact (`hostChrome`) and the probe reports
+whether what is on screen matches what that page declared, so its recorded value
+is page-neutral. Scenario authors: a probe over anything outside the block root
+needs this, and there is no way to tell from the probe alone.
 
 ### 3.4 Install roots: `src/targets.ts`
 

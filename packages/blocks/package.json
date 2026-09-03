@@ -19,8 +19,12 @@
       "default": "./src/registry.ts"
     },
     "./forms": {
-      "types": "./src/forms.ts",
-      "default": "./src/forms.ts"
+      "types": "./src/forms/index.ts",
+      "default": "./src/forms/index.ts"
+    },
+    "./targets": {
+      "types": "./src/targets.ts",
+      "default": "./src/targets.ts"
     },
     "./package.json": "./package.json"
   },
@@ -30,7 +34,11 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
+    "esbuild": "^0.28.0",
     "typescript": "^5.5.0",
     "vitest": "^4.1.0"
+  },
+  "dependencies": {
+    "parse5": "^7.3.0"
   }
 }

@@ -37,6 +37,30 @@ export default {
       // the assistant's first reply (a recorded spike observation about the
       // store, not this block).
       expectedFirstTitle: 'Checking the docs for that.',
+      // The host page around the aside. The block IS the aside (it carries
+      // data-block-root), so a page that mounts only the block has no host
+      // chrome, and the probe below compares against what each page declares
+      // rather than against one document's arrangement.
+      hostChrome: true,
+    },
+    // The REACT form, mounted at the root of a throwaway Vite app by
+    // scripts/verify-blocks-react.mjs. Same story, same probes, same
+    // page-specific facts: only the URL differs, because the react tree is a
+    // component in an app rather than a page in a directory. The element ids
+    // survive the translation (a literal id is a literal attribute), which is
+    // what lets one set of probes drive both.
+    react: {
+      path: '/',
+      indexKey: 'kai:in-app-assistant:threads',
+      expectedFirstTitle: 'Checking the docs for that.',
+      // The component-framework forms emit the data-block-root subtree only,
+      // so the stand-in app around the aside is deliberately absent here.
+      hostChrome: false,
+      // Computed style is a measurement of the document it was taken in, and
+      // the react host is a Vite index.html with a mounted subtree rather
+      // than this block's own page. This page asserts state, navigation and
+      // console-cleanliness; the style probes stay where they were measured.
+      skipLayout: true,
     },
   },
 
@@ -44,7 +68,15 @@ export default {
     {
       name: '1-empty',
       probes: {
-        hostHeading: (page) => page.getByRole('heading', { name: 'Acme Deploys' }).isVisible().catch(() => false),
+        // Page-neutral, the way support-widget's restoreAsPolicied is: each
+        // page declares whether it HAS the host stand-in around the block
+        // (`hostChrome`), and the probe reports whether what is on screen
+        // matches. The recorded value stays true on the block page, where the
+        // stand-in is present, and it is true on the react page for the
+        // opposite reason.
+        hostHeading: (page, { spec }) => page.getByRole('heading', { name: 'Acme Deploys' })
+          .isVisible().catch(() => false)
+          .then((seen) => seen === (spec.hostChrome !== false)),
         emptyTitle: (page) => page.getByText('What can I help with?').count().then((n) => n > 0),
         starter: (page) => page.getByRole('button', { name: 'Check the canary status' }).isVisible().catch(() => false),
         historyButton: (page) => page.getByRole('button', { name: 'Conversation history' }).isVisible().catch(() => false),
