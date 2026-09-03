@@ -15,6 +15,7 @@ import { analyzeController, crossCheckBindings } from '../contract/analyze-contr
 import type { ControllerShape, FormFile, ParsedTemplate, TemplateNode } from '../contract/types';
 import { fileTarget } from '../targets';
 import { pascal, type Block } from '../registry';
+import { README_FILE, renderReadme } from './readme';
 
 // NO import from './index': index.ts re-exports this module, so a renderer
 // importing the barrel is a cycle. `adaptRegistrationForBundler` therefore
@@ -300,6 +301,14 @@ export function renderHtmlForm(block: Block, opts: HtmlFormOptions = {}): FormFi
 
   put(pageEntry.path, serializeTemplate(parsed.template, { entryScript }));
   put(entryScript, adaptRegistration(renderBinder({ blockName: block.name, template: parsed.template, shape: analysis.shape })));
+  put(
+    README_FILE,
+    renderReadme(block, [
+      `Open \`${pageEntry.path}\` through your dev server.`,
+      '',
+      'The scripts import `@kitn.ai/ui/elements` by bare specifier, so serve this folder through your bundler rather than opening the file from disk.',
+    ]),
+  );
 
   for (const entry of block.manifest.files) {
     if (entry.type === 'registry:page') continue;

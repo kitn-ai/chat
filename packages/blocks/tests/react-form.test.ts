@@ -298,4 +298,25 @@ describe('the react form', () => {
     (b.files as Map<string, string>).delete('fixture.controller.ts');
     expect(() => renderReactForm(b)).toThrow(/fixture\.controller\.ts/);
   });
+
+  it('the README is byte-identical to what this form emitted before the shared renderer (regression control)', () => {
+    const readme = renderReactForm(block()).find((f) => f.path === 'README.md');
+    expect(readme, 'the react form emitted no README').toBeDefined();
+    expect(readme!.content).toBe(
+      ['# F', '', 'f', '', "Render it: `import { Fixture } from './Fixture';`", ''].join('\n'),
+    );
+  });
+
+  it('the README names what the block needs when the manifest says so', () => {
+    const withEnv: Block = { ...block(), manifest: { ...block().manifest, envVars: { OPENAI_API_KEY: 'a key' } } };
+    const readme = renderReactForm(withEnv).find((f) => f.path === 'README.md')!;
+    expect(readme.content).toContain('Needs OPENAI_API_KEY set.');
+
+    const withRoute: Block = {
+      ...block(),
+      manifest: { ...block().manifest, registryDependencies: ['route:/api/chat'] },
+    };
+    const readmeRoute = renderReactForm(withRoute).find((f) => f.path === 'README.md')!;
+    expect(readmeRoute.content).toContain('Needs a server route: /api/chat.');
+  });
 });

@@ -41,6 +41,7 @@ export { renderHtmlForm, renderBinder, serializeTemplate, adaptRegistrationForBu
 export type { HtmlFormOptions } from './html';
 export { renderReactForm, handlerName } from './react';
 export { renderCdnFormFiles } from './cdn';
+export { README_FILE, renderReadme } from './readme';
 export type { FormFile };
 
 /** kebab-or-plain block name to a react component name: support-widget -> SupportWidget.
