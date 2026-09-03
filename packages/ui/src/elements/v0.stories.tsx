@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { createSignal, For, Show } from 'solid-js';
 import { RotateCcw } from 'lucide-solid';
 import './register'; // every kai-* element used below
+import type { KaiArtifactElement } from './element-types';
 
 // Labs/Apps: a third dogfood — "v0", an AI app-builder UI (inspired by v0.app)
 // that stress-tests the artifact/preview pattern. It is the SPLIT shell every
@@ -56,7 +57,6 @@ declare module 'solid-js' {
 const meta = { title: 'Labs/Apps', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj;
-type El = HTMLElement & Record<string, unknown>;
 
 // ── The generated app, framed for real ──────────────────────────────────────
 // <kai-artifact> frames whatever URL is in `src`. With no hosted server in
@@ -429,13 +429,13 @@ export const V0: Story = {
   render: () => {
     // The artifact element — captured in its ref so Restore can drive its
     // imperative navigate(). The active version is whichever URL is framed.
-    let art: El | undefined;
+    let art: KaiArtifactElement | undefined;
     const [activeVersion, setActiveVersion] = createSignal('v3');
     const restore = (id: string) => {
       setActiveVersion(id);
       // REAL kai-artifact API: push + load the version's URL in the preview. The
       // "version" framing is ours; the kit has only this URL history primitive.
-      (art?.navigate as ((url: string) => void) | undefined)?.(VURL[id]);
+      art?.navigate(VURL[id]);
     };
 
     return (
@@ -468,7 +468,7 @@ export const V0: Story = {
                       <div class="flex flex-col gap-2">
                         <kai-message
                           ref={(el) => {
-                            const m = el as El;
+                            const m = el;
                             m.message = { id: `v0-turn-${i()}`, role: turn.role, parts: [{ type: 'text', text: turn.md }] };
                             m.avatar = 'none';
                           }}
@@ -504,12 +504,12 @@ export const V0: Story = {
               <div class="shrink-0 border-t border-border p-3">
                 <div class="mx-auto max-w-2xl">
                   <kai-prompt-input
-                    ref={(el) => { (el as El).attach = false; }}
+                    ref={(el) => { el.attach = false; }}
                     placeholder="Describe a change, or attach a screenshot..."
                   >
                     <div slot="toolbar-start" class="flex items-center gap-1.5">
                       <kai-menu
-                        ref={(el) => { (el as El).items = [
+                        ref={(el) => { el.items = [
                           { id: 'image', label: 'Attach image', icon: 'paperclip' },
                           { id: 'figma', label: 'Import from Figma' },
                           { id: 'url', label: 'Import from a URL', icon: 'globe' },
@@ -518,13 +518,13 @@ export const V0: Story = {
                         label="Add"
                       ></kai-menu>
                       <kai-model-switcher
-                        ref={(el) => { const m = el as El; m.models = [
+                        ref={(el) => { const m = el; m.models = [
                           { id: 'v0-md', name: 'v0-1.5-md' },
                           { id: 'v0-lg', name: 'v0-1.5-lg' },
                         ]; m.currentModel = 'v0-lg'; }}
                       ></kai-model-switcher>
                       <kai-menu
-                        ref={(el) => { (el as El).items = [
+                        ref={(el) => { el.items = [
                           { heading: true, label: 'Mode' },
                           { id: 'design', label: 'Design', checked: true },
                           { id: 'chat', label: 'Chat' },
@@ -557,7 +557,7 @@ export const V0: Story = {
               <div class="min-h-0 flex-1">
                 <kai-artifact
                   ref={(el) => {
-                    const a = el as El;
+                    const a = el;
                     a.files = FILES;
                     a.src = LATEST_URL;
                     a.defaultTab = 'preview';

@@ -421,6 +421,68 @@ ${jsxTagMap}
   }
 }`;
 
+  // SOLID. `solid-js`'s JSX.IntrinsicElements is CLOSED -- it extends the four
+  // tag interfaces and carries no index signature -- so a raw `<kai-dock>` in
+  // a Solid TSX file is "Property 'kai-dock' does not exist on type
+  // 'JSX.IntrinsicElements'". The blocks package's solid delivery form renders
+  // custom elements rather than the Solid components in `@kitn.ai/ui/solid`
+  // (the shared controller types its refs as ELEMENT interfaces, and the kai-
+  // events are dispatched by the element facade rather than by the Solid
+  // component underneath it), so without this nothing in that form compiles.
+  //
+  // THE TARGET IS `solid-js/jsx-runtime`. `solid-js`'s own index re-exports
+  // JSX as a type; `solid-js/jsx-runtime`'s `types` condition points straight
+  // at types/jsx.d.ts, the file that DECLARES `export namespace JSX`, and that
+  // is the module a declaration merge has to name. Verified by compiling both:
+  // targeting 'solid-js' shadows the namespace instead of merging, and every
+  // standard tag stops resolving.
+  //
+  // GENERIC ON THE ELEMENT TYPE, not on the props: each tag gets its own
+  // `KaiElementSolidProps<KaiXElement>` instantiation, from the SAME
+  // `${el.className}` interfaces the tag map above (`interfaces`) already
+  // declares -- so `ref`'s inferred type is the real element interface, not
+  // the generic `HTMLElement` base, and an EXPLICITLY annotated
+  // `ref={(el: KaiDockElement) => ...}` type-checks too (a narrower callback
+  // is no longer being assigned to a wider one -- both sides now agree).
+  // Only the PROPS stay generic (one shape covers `prop:`, `attr:` and `on:`
+  // for every element): array/object props are set as properties, never as
+  // attributes, so typing them per element would invite the wrong spelling.
+  // A per-element version of the EVENTS would need a type keyed by the RAW
+  // event name (`on:kai-click`), while this generator emits only the
+  // camel-cased `onKaiClick` shape the react and vue blocks use -- deriving
+  // one from the other at the type level is not possible. So the solid
+  // compile cell still does not type a kai prop VALUE, and
+  // scripts/lib/block-framework-cells.mjs says so in the gate's output.
+  const solidTagMap = elements
+    .map((el) => `      '${el.tag}': KaiElementSolidProps<${el.className}>;`)
+    .join('\n');
+
+  const solidIntrinsicBlock = `declare module 'solid-js/jsx-runtime' {
+  /** A kai-* custom element as Solid's JSX checker sees it, parameterized by
+   *  its own element interface (\`KaiDockElement\`, ...) so \`ref\` -- via
+   *  Solid's own \`CustomAttributes<T>\`, which \`HTMLAttributes<T>\` extends --
+   *  infers THAT interface, both unannotated (\`ref={(el) => el.show()}\`) and
+   *  annotated (\`ref={(el: KaiDockElement) => ...}\`, which is what a
+   *  generated tree emits, for readability -- it is no longer required for
+   *  the callback to type-check). Every standard DOM event handler
+   *  (\`onClick\`, \`onPointerDown\`, ...) gets a real contextual type the same
+   *  way. The index signature still covers everything \`HTMLAttributes\`
+   *  doesn't type: \`prop:\`, \`attr:\` and \`on:\` directives, and kai's own
+   *  non-scalar props (set as properties, never attributes -- typing them
+   *  per element would invite the wrong spelling). Widened to \`unknown\`,
+   *  which is compatible with every member \`HTMLAttributes\` declares, so
+   *  the two don't conflict. */
+  interface KaiElementSolidProps<T extends HTMLElement = HTMLElement> extends JSX.HTMLAttributes<T> {
+    [prop: string]: unknown;
+  }
+
+  namespace JSX {
+    interface IntrinsicElements {
+${solidTagMap}
+    }
+  }
+}`;
+
   // Vue resolves a template tag against `GlobalComponents` FIRST and only then
   // falls through to @vue/runtime-dom's JSX IntrinsicElements — which carries a
   // `[name: string]: any` index signature. So an unregistered `<kai-chat>` types
@@ -548,6 +610,8 @@ ${tagMapBlock}
 
 ${jsxIntrinsicBlock}
 
+${solidIntrinsicBlock}
+
 ${vuePropsInterfaces}
 
 ${vueEventInterfaces}
@@ -575,6 +639,8 @@ ${interfaces}
 ${tagMapBlock}
 
 ${jsxIntrinsicBlock}
+
+${solidIntrinsicBlock}
 
 ${vuePropsInterfaces}
 

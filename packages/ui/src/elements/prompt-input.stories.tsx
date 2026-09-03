@@ -18,6 +18,26 @@ declare module 'solid-js' {
   }
 }
 
+// `kai-action` is a descriptor element (created via `document.createElement`
+// below and read by `<kai-prompt-input>` via DOM traversal, not a registered
+// kai-* custom element), so it is not in the generated `KaiElementSolidProps`
+// tag map (element-types.d.ts). The kit's own generated augmentation targets
+// `solid-js/jsx-runtime`, which is what this project's tsc actually resolves
+// `JSX.IntrinsicElements` from once any declaration exists there -- so a
+// tag declared only on bare `solid-js` (the block above) stops being
+// consulted. This block gives `kai-action` the same treatment locally, reusing
+// the generated `KaiElementSolidProps<HTMLElement>` (merges into the same
+// ambient `solid-js/jsx-runtime` augmentation the generator declares -- both
+// are module-file augmentations of the same target) rather than hand-rolling
+// its props shape a second time.
+declare module 'solid-js/jsx-runtime' {
+  namespace JSX {
+    interface IntrinsicElements {
+      'kai-action': KaiElementSolidProps<HTMLElement> & { icon?: string; tooltip?: string };
+    }
+  }
+}
+
 const sampleSuggestions: string[] = [
   'Summarize this thread',
   'Draft a reply',

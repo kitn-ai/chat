@@ -12,6 +12,7 @@ import './radio-group';
 import './slider';
 import './select';
 import { attachKaiActions } from '../stories/docs/story-actions';
+import type { KaiCheckboxGroupElement, KaiRadioGroupElement, KaiSelectElement } from './element-types';
 
 // Wire a kai-* element's declared CustomEvents to the Actions panel from a `ref`.
 const withActions = (e: Element) => onMount(() => onCleanup(attachKaiActions(e as HTMLElement)));
@@ -137,7 +138,7 @@ export const CheckboxGroup: Story = {
     // Array props are assigned from `onMount` with a VARIABLE ref, not from a ref
     // callback: the callback runs before the element is in the document, and the
     // assignment does not survive.
-    let el!: HTMLElement & { options?: readonly unknown[]; values: string[] };
+    let el!: KaiCheckboxGroupElement & { values: string[] };
     onMount(() => {
       el.options = ENVIRONMENTS;
       el.values = ['prod', 'dev'];
@@ -174,8 +175,8 @@ export const CheckboxGroupState: Story = {
   name: 'Checkbox group — host state',
   render: () => {
     const [seen, setSeen] = createSignal('none yet');
-    let group!: HTMLElement & { options?: readonly unknown[]; values: string[] };
-    let locked!: HTMLElement & { options?: readonly unknown[]; values: string[] };
+    let group!: KaiCheckboxGroupElement & { values: string[] };
+    let locked!: KaiCheckboxGroupElement & { values: string[] };
     onMount(() => {
       group.options = ENVIRONMENTS;
       locked.options = ENVIRONMENTS;
@@ -216,7 +217,7 @@ export const RadioGroup: Story = {
     // callback: the callback runs before the element is in the document, and the
     // assignment does not survive. This is the shape `nav.stories.tsx` uses for
     // `kai-nav`'s `items`, for the same reason.
-    let el!: HTMLElement & { options?: readonly unknown[] };
+    let el!: KaiRadioGroupElement;
     onMount(() => { el.options = OPTIONS; });
     return (
       <div class="max-w-md">
@@ -245,8 +246,8 @@ export const RadioGroupState: Story = {
   name: 'Radio group — host state',
   render: () => {
     const [seen, setSeen] = createSignal('none yet');
-    let group!: HTMLElement & { value: string; options?: readonly unknown[] };
-    let locked!: HTMLElement & { options?: readonly unknown[] };
+    let group!: KaiRadioGroupElement;
+    let locked!: KaiRadioGroupElement;
     onMount(() => {
       group.options = OPTIONS;
       locked.options = OPTIONS;
@@ -385,10 +386,10 @@ export const Select: Story = {
     // Array props are assigned from `onMount` with a VARIABLE ref, not from a ref
     // callback: the callback runs before the element is in the document, and the
     // assignment does not survive.
-    let chosen!: HTMLElement & { options?: readonly unknown[] };
-    let empty!: HTMLElement & { options?: readonly unknown[] };
-    let bad!: HTMLElement & { options?: readonly unknown[] };
-    let off!: HTMLElement & { options?: readonly unknown[] };
+    let chosen!: KaiSelectElement;
+    let empty!: KaiSelectElement;
+    let bad!: KaiSelectElement;
+    let off!: KaiSelectElement;
     onMount(() => {
       for (const el of [chosen, empty, bad, off]) el.options = MODELS;
     });
@@ -426,7 +427,7 @@ export const SelectMultiple: Story = {
   name: 'Select — multiple',
   render: () => {
     const [seen, setSeen] = createSignal('—');
-    let el!: HTMLElement & { options?: readonly unknown[]; values: string[] };
+    let el!: KaiSelectElement & { values: string[] };
     onMount(() => {
       el.options = MODELS;
       withActions(el);

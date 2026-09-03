@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { onMount } from 'solid-js';
 import './register'; // registers kai-workspace, kai-nav, kai-notice, kai-prompt-input, kai-suggestions, kai-card
 import type { KaiNavItem } from '../ui/nav';
+import type { KaiNavElement, KaiSuggestionsElement, KaiNoticeElement, KaiPromptInputElement, KaiCardElement } from './element-types';
 
 // Labs: the home/dashboard assembly on the re-cast shell. The workspace is a
 // chat-agnostic layout element now: the consumer composes the rail themselves
@@ -12,8 +13,6 @@ import type { KaiNavItem } from '../ui/nav';
 const meta = { title: 'Labs/Workspace Home', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj;
-
-type El = HTMLElement & Record<string, unknown>;
 
 const NAV: KaiNavItem[] = [
   { id: 'new', label: 'New task', icon: 'plus', trailing: 'pencil' },
@@ -29,9 +28,9 @@ const IDEAS = [
 
 export const Home: Story = {
   render: () => {
-    let nav!: El, sugg!: El, notice!: El, input!: El, card!: El;
+    let nav!: KaiNavElement, sugg!: KaiSuggestionsElement, notice!: KaiNoticeElement, input!: KaiPromptInputElement, card!: KaiCardElement;
     onMount(() => {
-      nav.items = NAV;
+      nav.items = NAV as KaiNavElement['items'];
       nav.defaultValue = 'new';
       sugg.suggestions = IDEAS;
       sugg.layout = 'list';

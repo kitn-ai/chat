@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { onMount } from 'solid-js';
 import './nav';
 import type { KaiNavItem } from '../ui/nav';
+import type { KaiNavElement } from './element-types';
 
 // Declare the custom element tag for SolidJS JSX.
 declare module 'solid-js' {
@@ -31,8 +32,11 @@ const ITEMS: KaiNavItem[] = [
 
 export const Sidebar: StoryObj = {
   render: () => {
-    let el!: HTMLElement & { items?: KaiNavItem[] };
-    onMount(() => { el.items = ITEMS; });
+    let el!: KaiNavElement;
+    // The generated KaiNavElement['items'] type is structurally looser than
+    // KaiNavItem (its nested `children` is `Record<string, unknown>[]`), so
+    // the assignment needs a cast through the element's own property type.
+    onMount(() => { el.items = ITEMS as KaiNavElement['items']; });
     return (
       <div style={{ width: '240px', padding: '1rem' }}>
         <kai-nav ref={el} default-value="new"></kai-nav>

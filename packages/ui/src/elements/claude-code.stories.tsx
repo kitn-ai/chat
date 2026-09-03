@@ -7,6 +7,7 @@ import type { KaiNavItem } from '../ui/nav';
 import type { KaiTabItem } from '../ui/tabs';
 import type { KaiCommandItem } from './command';
 import type { ConversationSummary, ConversationGroup } from '../types';
+import type { KaiWorkspaceElement, KaiNavElement, KaiTasksElement } from './element-types';
 
 // Labs: a working interactive prototype of the Claude desktop app, built on the
 // re-cast kai-workspace SHELL (five layout slots) + the kai-* elements. The rail
@@ -34,7 +35,6 @@ declare module 'solid-js' {
 const meta = { title: 'Labs/Apps', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj;
-type El = HTMLElement & Record<string, unknown>;
 
 const TABS: KaiTabItem[] = [
   { id: 'home', label: 'Home', icon: 'home' },
@@ -103,7 +103,7 @@ const MENU_ITEMS = [
   { separator: true },
   { id: 'logout', label: 'Log out' },
 ];
-const ONBOARDING = {
+const ONBOARDING: KaiTasksElement['data'] = {
   mode: 'progress',
   heading: 'Get started with Claude',
   tasks: [
@@ -146,8 +146,8 @@ export const ClaudeCode: Story = {
     const [railCollapsed, setRailCollapsed] = createSignal(false);
     // Captured in the workspace ref so the rail toggle can drive its exposed
     // imperative API (toggleAside) from a sibling element's ref.
-    let ws: El | undefined;
-    const toggleRail = () => (ws?.toggleAside as ((side: string) => void) | undefined)?.('start');
+    let ws: KaiWorkspaceElement | undefined;
+    const toggleRail = () => ws?.toggleAside('start');
 
     // Array/object props (and event wiring) are applied in each element's ref
     // callback, NOT a one-shot onMount. The Home view lives inside <Show>, so it
@@ -160,7 +160,7 @@ export const ClaudeCode: Story = {
         <style>{`.slot-placeholder-icon::part(icon) { width: 2.25rem; height: 2.25rem }`}</style>
         <kai-workspace
           ref={(el) => {
-            ws = el as El;
+            ws = el;
             ws.compact = true;
             el.style.setProperty('--kai-workspace-start-min-width', '240px');
             el.addEventListener('kai-aside-toggle', (e) => {
@@ -177,7 +177,7 @@ export const ClaudeCode: Story = {
               conversations/groups props. */}
           <kai-conversations
             slot="start"
-            ref={(el) => { const c = el as El; c.groups = GROUPS; c.conversations = RECENTS; }}
+            ref={(el) => { const c = el; c.groups = GROUPS; c.conversations = RECENTS; }}
             style={{ display: 'block', height: '100%' }}
           >
             <div slot="header" class="px-2.5 pt-2 pb-1">
@@ -203,17 +203,17 @@ export const ClaudeCode: Story = {
               </div>
               <kai-tabs
                 ref={(el) => {
-                  const t = el as El;
+                  const t = el;
                   t.items = TABS; t.defaultValue = 'home'; t.block = true;
                   el.addEventListener('kai-tab-change', (e) => setView((e as CustomEvent).detail.value));
                 }}
                 variant="segmented"
               ></kai-tabs>
-              <div class="mt-2"><kai-nav ref={(el) => { const n = el as El; n.items = NAV; n.defaultValue = 'new'; }}></kai-nav></div>
+              <div class="mt-2"><kai-nav ref={(el) => { const n = el; n.items = NAV as KaiNavElement['items']; n.defaultValue = 'new'; }}></kai-nav></div>
             </div>
 
             <div slot="footer">
-              <div class="px-2.5 py-2"><kai-tasks ref={(el) => { (el as El).data = ONBOARDING; }}></kai-tasks></div>
+              <div class="px-2.5 py-2"><kai-tasks ref={(el) => { el.data = ONBOARDING; }}></kai-tasks></div>
               <kai-separator></kai-separator>
               <div class="px-2.5 py-1.5">
                 <kai-button
@@ -227,7 +227,7 @@ export const ClaudeCode: Story = {
               <div class={`${footerRow} flex items-center px-2 py-1.5`}>
                 {/* `full` + flex-1: the account row stretches across the rail (a
                     full-width clickable row) with the sync button at its end. */}
-                <kai-menu ref={(el) => { (el as El).items = MENU_ITEMS; }} label="Account menu" full class="min-w-0 flex-1">
+                <kai-menu ref={(el) => { el.items = MENU_ITEMS; }} label="Account menu" full class="min-w-0 flex-1">
                   {/* The trigger content is NON-interactive: kai-menu wraps it in its
                       own <button>, so a button/kai-button here would double-nest. */}
                   <div slot="trigger" class="flex w-full items-center gap-2 text-left">
@@ -295,9 +295,9 @@ export const ClaudeCode: Story = {
                       </div>
                     }
                   >
-                    <kai-prompt-input ref={(el) => { (el as El).attach = false; }} placeholder="How can I help you today?">
+                    <kai-prompt-input ref={(el) => { el.attach = false; }} placeholder="How can I help you today?">
                       <div slot="toolbar-start" class="flex items-center gap-2">
-                        <kai-menu ref={(el) => { (el as El).items = [{ id: 'attach', label: 'Add files', icon: 'paperclip' }, { id: 'project', label: 'From a project', icon: 'box' }]; }} trigger-icon="plus" label="Add"></kai-menu>
+                        <kai-menu ref={(el) => { el.items = [{ id: 'attach', label: 'Add files', icon: 'paperclip' }, { id: 'project', label: 'From a project', icon: 'box' }]; }} trigger-icon="plus" label="Add"></kai-menu>
                         <kai-coachmark
                           default-open
                           headline="Cowork has a new home"
@@ -309,8 +309,8 @@ export const ClaudeCode: Story = {
                         </kai-coachmark>
                       </div>
                       <div slot="toolbar-end" class="flex items-center gap-1.5">
-                        <kai-model-switcher ref={(el) => { const m = el as El; m.models = MODELS; m.currentModel = 'opus'; }}></kai-model-switcher>
-                        <kai-menu ref={(el) => { (el as El).items = [{ id: 'high', label: 'High', checked: true }, { id: 'med', label: 'Medium' }]; }} trigger-label="High" trigger-icon-trailing="chevron-down"></kai-menu>
+                        <kai-model-switcher ref={(el) => { const m = el; m.models = MODELS; m.currentModel = 'opus'; }}></kai-model-switcher>
+                        <kai-menu ref={(el) => { el.items = [{ id: 'high', label: 'High', checked: true }, { id: 'med', label: 'Medium' }]; }} trigger-label="High" trigger-icon-trailing="chevron-down"></kai-menu>
                         <kai-tooltip content="Voice">
                           <kai-button variant="subtle" size="icon-sm" icon="mic" label="Voice"></kai-button>
                         </kai-tooltip>
@@ -318,7 +318,7 @@ export const ClaudeCode: Story = {
                     </kai-prompt-input>
                   </PromptDock>
                   <div class="mt-2 text-[0.8125rem] text-muted-foreground">Ideas for you</div>
-                  <kai-suggestions ref={(el) => { const s = el as El; s.suggestions = IDEAS; s.layout = 'list'; }} variant="ghost" size="lg"></kai-suggestions>
+                  <kai-suggestions ref={(el) => { const s = el; s.suggestions = IDEAS; s.layout = 'list'; }} variant="ghost" size="lg"></kai-suggestions>
                 </div>
                 <kai-card appearance="filled" dismissible class="absolute right-5 bottom-5 block w-[264px]">
                   <div class="flex flex-col gap-3">
@@ -380,9 +380,9 @@ export const ClaudeCode: Story = {
             >
               <kai-command
                 ref={(el) => {
-                  (el as El).items = COMMANDS;
+                  el.items = COMMANDS;
                   el.addEventListener('kai-select', () => setCmdOpen(false));
-                  queueMicrotask(() => (el as El).focus?.());
+                  queueMicrotask(() => el.focus?.());
                 }}
                 placeholder="Search commands, recents, settings..."
               ></kai-command>

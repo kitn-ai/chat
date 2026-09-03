@@ -5,6 +5,7 @@ import './register'; // every kai-* element used below
 import type { KaiNavItem } from '../ui/nav';
 import type { KaiTabItem } from '../ui/tabs';
 import type { ConversationSummary, ConversationGroup } from '../types';
+import type { KaiNavElement } from './element-types';
 
 // Labs/Apps: a third dogfood — "Perplexity", an answer-engine UI, built on the
 // re-cast kai-workspace SHELL (five layout slots; the rail is a real
@@ -67,7 +68,6 @@ declare module 'solid-js' {
 const meta = { title: 'Labs/Apps', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj;
-type El = HTMLElement & Record<string, unknown>;
 
 // The left rail. kai-nav is a flat list of named-icon rows. NOTE: the named-icon
 // registry (src/ui/icon.tsx) is curated — Perplexity's own glyphs (Compass for
@@ -217,7 +217,7 @@ export const Perplexity: Story = {
         <style>{`.kai-cite { margin: 0 1px; vertical-align: baseline }`}</style>
         <kai-workspace
           ref={(el) => {
-            const w = el as El;
+            const w = el;
             w.compact = true;
             // Rail geometry is CSS custom properties on the shell (the kai-dock
             // rule), not props.
@@ -233,7 +233,7 @@ export const Perplexity: Story = {
               conversations/groups props. */}
           <kai-conversations
             slot="start"
-            ref={(el) => { const c = el as El; c.groups = GROUPS; c.conversations = RECENTS; }}
+            ref={(el) => { const c = el; c.groups = GROUPS; c.conversations = RECENTS; }}
             style={{ display: 'block', height: '100%' }}
           >
             <div slot="header" class="flex flex-col gap-2 px-2.5 pt-2.5 pb-1">
@@ -242,14 +242,14 @@ export const Perplexity: Story = {
                 <span class="text-sm font-semibold tracking-tight">perplexity</span>
               </div>
               <kai-button variant="outline" full align="start" icon="square-pen">New Thread</kai-button>
-              <kai-nav ref={(el) => { const n = el as El; n.items = NAV; n.defaultValue = 'home'; }}></kai-nav>
+              <kai-nav ref={(el) => { const n = el; n.items = NAV as KaiNavElement['items']; n.defaultValue = 'home'; }}></kai-nav>
             </div>
 
             {/* footer: the account menu + settings */}
             <div slot="footer" class="flex items-center px-2 py-1.5">
               {/* `full` + flex-1: the account row stretches across the rail (a
                   full-width clickable row) with the settings button at its end. */}
-              <kai-menu ref={(el) => { (el as El).items = ACCOUNT; }} label="Account menu" full class="min-w-0 flex-1">
+              <kai-menu ref={(el) => { el.items = ACCOUNT; }} label="Account menu" full class="min-w-0 flex-1">
                 {/* Trigger content is NON-interactive: kai-menu supplies its own
                     <button>, so a button/kai-button here would double-nest. */}
                 <div slot="trigger" class="flex w-full items-center gap-2 text-left">
@@ -297,7 +297,7 @@ export const Perplexity: Story = {
                 {/* Answer / Sources / Images */}
                 <kai-tabs
                   ref={(el) => {
-                    const t = el as El;
+                    const t = el;
                     t.items = TABS; t.defaultValue = 'answer';
                     el.addEventListener('kai-tab-change', (e) => setTab((e as CustomEvent).detail.value));
                   }}
@@ -331,7 +331,7 @@ export const Perplexity: Story = {
                         JSX because a markdown string can't host inline citation chips. */}
                     <kai-message
                       ref={(el) => {
-                        const m = el as El;
+                        const m = el;
                         m.message = { id: 'perplexity-pipeline', role: 'assistant', parts: [{ type: 'text', text: PIPELINE_MD }] };
                         m.avatar = 'none';
                       }}
@@ -372,7 +372,7 @@ export const Perplexity: Story = {
                         <kai-icon name="sparkles" class="text-muted-foreground"></kai-icon> Related
                       </div>
                       <kai-suggestions
-                        ref={(el) => { const s = el as El; s.suggestions = RELATED; s.layout = 'list'; }}
+                        ref={(el) => { const s = el; s.suggestions = RELATED; s.layout = 'list'; }}
                         variant="ghost"
                       ></kai-suggestions>
                     </div>
@@ -384,7 +384,7 @@ export const Perplexity: Story = {
                     {/* The full source list via <kai-sources> numbered (REAL): each
                         chip is a citation link with a hover-snippet popover. */}
                     <kai-sources
-                      ref={(el) => { (el as El).sources = SOURCES.map((s) => ({ href: s.href, title: s.title, description: s.snippet })); }}
+                      ref={(el) => { el.sources = SOURCES.map((s) => ({ href: s.href, title: s.title, description: s.snippet })); }}
                       numbered
                       show-favicon
                     ></kai-sources>
@@ -411,10 +411,10 @@ export const Perplexity: Story = {
             {/* the follow-up composer: focus/source-mode menu + Pro switch (both REAL) */}
             <div class="shrink-0 border-t border-border p-3">
               <div class="mx-auto max-w-3xl">
-                <kai-prompt-input ref={(el) => { (el as El).attach = false; }} placeholder="Ask a follow-up">
+                <kai-prompt-input ref={(el) => { el.attach = false; }} placeholder="Ask a follow-up">
                   <div slot="toolbar-start" class="flex items-center gap-1.5">
                     <kai-menu
-                      ref={(el) => { (el as El).items = FOCUS; }}
+                      ref={(el) => { el.items = FOCUS; }}
                       trigger-icon="globe"
                       trigger-label="Web"
                       trigger-icon-trailing="chevron-down"

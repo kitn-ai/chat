@@ -4,6 +4,7 @@ import { Download, Copy, VenetianMask, BatteryMedium, Image as ImageIcon, Layout
 import './register'; // every kai-* element used below
 import type { KaiNavItem } from '../ui/nav';
 import type { KaiTabItem } from '../ui/tabs';
+import type { KaiNavElement, KaiTabsElement } from './element-types';
 
 // Labs/Apps: a fourth dogfood - "Perplexity Pro", the Perplexity DESKTOP app
 // (the Comet-style native shell), distinct from the web "Perplexity" answer-engine
@@ -78,7 +79,6 @@ declare module 'solid-js' {
 const meta = { title: 'Labs/Apps', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj;
-type El = HTMLElement & Record<string, unknown>;
 
 // ── generated visuals ────────────────────────────────────────────────────────
 // kai-image renders base64/bytes (NOT a URL), so these "generated" charts +
@@ -220,13 +220,13 @@ export const PerplexityPro: Story = {
       const needle = q.trim().toLowerCase();
       return needle ? RECENTS.filter((r) => (r.label ?? '').toLowerCase().includes(needle)) : RECENTS;
     };
-    let recentsNavEl: El | undefined;
-    createEffect(() => { const items = filterRecents(sessionQuery()); if (recentsNavEl) recentsNavEl.items = items; });
+    let recentsNavEl: KaiNavElement | undefined;
+    createEffect(() => { const items = filterRecents(sessionQuery()); if (recentsNavEl) recentsNavEl.items = items as KaiNavElement['items']; });
 
     // Keep the answer tab-strip's underline (a controlled kai-tabs) in lock-step
     // with the `tab` signal that drives the panel - including across remounts when
     // the top mode toggles away and back.
-    let answerTabsEl: El | undefined;
+    let answerTabsEl: KaiTabsElement | undefined;
     createEffect(() => { const v = tab(); if (answerTabsEl) answerTabsEl.value = v; });
 
     // Array/object props (and event wiring) are applied in each element's ref
@@ -254,7 +254,7 @@ export const PerplexityPro: Story = {
                 the whole rail + main view, built on kai-tabs variant="segmented". */}
             <kai-tabs
               ref={(el) => {
-                const t = el as El;
+                const t = el;
                 t.items = MODES; t.defaultValue = 'assistant'; t.block = true;
                 el.addEventListener('kai-tab-change', (e) => setMode((e as CustomEvent).detail.value));
               }}
@@ -284,9 +284,9 @@ export const PerplexityPro: Story = {
                 <div class="max-h-[42vh] overflow-y-auto">
                   <kai-nav
                     ref={(el) => {
-                      const n = el as El;
+                      const n = el;
                       recentsNavEl = n;
-                      n.items = filterRecents(sessionQuery()); n.defaultValue = 's1';
+                      n.items = filterRecents(sessionQuery()) as KaiNavElement['items']; n.defaultValue = 's1';
                       el.addEventListener('kai-nav-select', () => setView('answer'));
                     }}
                   ></kai-nav>
@@ -298,7 +298,7 @@ export const PerplexityPro: Story = {
             <Show when={mode() === 'computer'}>
               <div class="flex flex-col gap-2">
                 <kai-button variant="outline" full align="start" icon="plus">New Task</kai-button>
-                <kai-nav ref={(el) => { const n = el as El; n.items = COMPUTER_NAV; n.defaultValue = 'projects'; }}></kai-nav>
+                <kai-nav ref={(el) => { const n = el; n.items = COMPUTER_NAV as KaiNavElement['items']; n.defaultValue = 'projects'; }}></kai-nav>
                 <div class="flex items-center gap-1.5">
                   <kai-search placeholder="Search tasks..." class="min-w-0 flex-1"></kai-search>
                   <kai-tooltip content="Sort">
@@ -345,10 +345,10 @@ export const PerplexityPro: Story = {
                 <div class="flex flex-1 flex-col items-center justify-center gap-7 px-6 pb-24">
                   <div class="text-3xl font-semibold tracking-tight text-foreground">perplexity</div>
                   <div class="flex w-full max-w-2xl flex-col gap-2">
-                    <kai-prompt-input ref={(el) => { (el as El).attach = false; }} placeholder="Ask anything...">
+                    <kai-prompt-input ref={(el) => { el.attach = false; }} placeholder="Ask anything...">
                       <div slot="toolbar-start" class="flex items-center gap-1.5">
                         <kai-menu
-                          ref={(el) => { (el as El).items = [
+                          ref={(el) => { el.items = [
                             { id: 'files', label: 'Add files', icon: 'paperclip' },
                             { id: 'project', label: 'From a project', icon: 'box' },
                           ]; }}
@@ -358,7 +358,7 @@ export const PerplexityPro: Story = {
                       </div>
                       <div slot="toolbar-end" class="flex items-center gap-1.5">
                         <kai-menu
-                          ref={(el) => { (el as El).items = [
+                          ref={(el) => { el.items = [
                             { heading: true, label: 'Model' },
                             { id: 'best', label: 'Best', icon: 'sparkles', checked: true },
                             { id: 'sonnet', label: 'Claude Sonnet 4.6', icon: 'message-square' },
@@ -405,7 +405,7 @@ export const PerplexityPro: Story = {
                     <div class="flex items-center justify-between gap-3">
                       <kai-tabs
                         ref={(el) => {
-                          const t = el as El;
+                          const t = el;
                           answerTabsEl = t;
                           t.items = [
                             { id: 'answer', label: 'Answer' },
@@ -423,7 +423,7 @@ export const PerplexityPro: Story = {
                     {/* the user's query, a real kai-message (role=user, right-aligned bubble) */}
                     <kai-message
                       ref={(el) => {
-                        const m = el as El;
+                        const m = el;
                         m.message = { id: 'pplx-query', role: 'user', parts: [{ type: 'text', text: QUERY }] };
                         m.avatar = 'none';
                       }}
@@ -446,7 +446,7 @@ export const PerplexityPro: Story = {
                               </kai-tooltip>
                             </div>
                             <kai-image
-                              ref={(el) => { const i = el as El; i.base64 = CHART; i.mediaType = 'image/svg+xml'; i.alt = 'Cloud GPU price comparison, $/hr'; }}
+                              ref={(el) => { const i = el; i.base64 = CHART; i.mediaType = 'image/svg+xml'; i.alt = 'Cloud GPU price comparison, $/hr'; }}
                               class="block overflow-hidden rounded-md"
                             ></kai-image>
                           </div>
@@ -455,7 +455,7 @@ export const PerplexityPro: Story = {
                         {/* the "7 steps completed" indicator - a REAL kai-reasoning
                             disclosure (label is the trigger; expands to the steps). */}
                         <kai-reasoning
-                          ref={(el) => { const r = el as El; r.label = '7 steps completed'; r.text = STEPS_MD; }}
+                          ref={(el) => { const r = el; r.label = '7 steps completed'; r.text = STEPS_MD; }}
                         ></kai-reasoning>
 
                         {/* heading + cited prose. The inline [n] chips are real
@@ -482,7 +482,7 @@ export const PerplexityPro: Story = {
                         {/* the comparison table - REAL GFM via kai-message */}
                         <kai-message
                           ref={(el) => {
-                            const m = el as El;
+                            const m = el;
                             m.message = { id: 'pplx-table', role: 'assistant', parts: [{ type: 'text', text: TABLE_MD }] };
                             m.avatar = 'none';
                           }}
@@ -492,7 +492,7 @@ export const PerplexityPro: Story = {
                         {/* an embedded chart image with a caption - a REAL kai-image */}
                         <figure class="flex flex-col gap-1.5">
                           <kai-image
-                            ref={(el) => { const i = el as El; i.base64 = CHART2; i.mediaType = 'image/svg+xml'; i.alt = 'Estimated monthly cost for one A100 at 50% utilization'; }}
+                            ref={(el) => { const i = el; i.base64 = CHART2; i.mediaType = 'image/svg+xml'; i.alt = 'Estimated monthly cost for one A100 at 50% utilization'; }}
                             class="block overflow-hidden rounded-md border border-border"
                           ></kai-image>
                           <figcaption class="text-xs text-muted-foreground">Estimated monthly cost for a single A100 at 50% utilization, by provider.</figcaption>
@@ -501,7 +501,7 @@ export const PerplexityPro: Story = {
                         {/* closing prose - REAL markdown */}
                         <kai-message
                           ref={(el) => {
-                            const m = el as El;
+                            const m = el;
                             m.message = { id: 'pplx-closing', role: 'assistant', parts: [{ type: 'text', text: CLOSING_MD }] };
                             m.avatar = 'none';
                           }}
@@ -515,7 +515,7 @@ export const PerplexityPro: Story = {
                       {/* the numbered source list (number + title + description +
                           favicon/domain) - a REAL kai-sources in numbered mode. */}
                       <kai-sources
-                        ref={(el) => { (el as El).sources = SOURCES.map((s) => ({ href: s.href, title: s.title, description: s.snippet })); }}
+                        ref={(el) => { el.sources = SOURCES.map((s) => ({ href: s.href, title: s.title, description: s.snippet })); }}
                         numbered
                         show-favicon
                       ></kai-sources>
@@ -530,7 +530,7 @@ export const PerplexityPro: Story = {
                           <For each={IMAGES}>
                             {(b64, i) => (
                               <kai-image
-                                ref={(el) => { const im = el as El; im.base64 = b64; im.mediaType = 'image/svg+xml'; im.alt = `Related image ${i() + 1}`; }}
+                                ref={(el) => { const im = el; im.base64 = b64; im.mediaType = 'image/svg+xml'; im.alt = `Related image ${i() + 1}`; }}
                                 class="block overflow-hidden rounded-lg border border-border"
                               ></kai-image>
                             )}
@@ -544,10 +544,10 @@ export const PerplexityPro: Story = {
                 {/* the pinned follow-up composer */}
                 <div class="shrink-0 border-t border-border p-3">
                   <div class="mx-auto max-w-3xl">
-                    <kai-prompt-input ref={(el) => { (el as El).attach = false; }} placeholder="Ask a follow up... (Cmd K)">
+                    <kai-prompt-input ref={(el) => { el.attach = false; }} placeholder="Ask a follow up... (Cmd K)">
                       <div slot="toolbar-start" class="flex items-center gap-1.5">
                         <kai-menu
-                          ref={(el) => { (el as El).items = [
+                          ref={(el) => { el.items = [
                             { id: 'files', label: 'Add files', icon: 'paperclip' },
                             { id: 'project', label: 'From a project', icon: 'box' },
                           ]; }}
@@ -574,7 +574,7 @@ export const PerplexityPro: Story = {
                       group whose child rows carry a letter avatar (icon), the name
                       (label), the relative time (meta) and a Private/Public pill
                       (badge). */}
-                  <kai-nav ref={(el) => { const n = el as El; n.items = PROJECTS; }}></kai-nav>
+                  <kai-nav ref={(el) => { const n = el; n.items = PROJECTS as KaiNavElement['items']; }}></kai-nav>
                 </div>
               </div>
             </Show>

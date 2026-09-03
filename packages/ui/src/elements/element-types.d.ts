@@ -2227,6 +2227,127 @@ declare module 'react' {
   }
 }
 
+declare module 'solid-js/jsx-runtime' {
+  /** A kai-* custom element as Solid's JSX checker sees it, parameterized by
+   *  its own element interface (`KaiDockElement`, ...) so `ref` -- via
+   *  Solid's own `CustomAttributes<T>`, which `HTMLAttributes<T>` extends --
+   *  infers THAT interface, both unannotated (`ref={(el) => el.show()}`) and
+   *  annotated (`ref={(el: KaiDockElement) => ...}`, which is what a
+   *  generated tree emits, for readability -- it is no longer required for
+   *  the callback to type-check). Every standard DOM event handler
+   *  (`onClick`, `onPointerDown`, ...) gets a real contextual type the same
+   *  way. The index signature still covers everything `HTMLAttributes`
+   *  doesn't type: `prop:`, `attr:` and `on:` directives, and kai's own
+   *  non-scalar props (set as properties, never attributes -- typing them
+   *  per element would invite the wrong spelling). Widened to `unknown`,
+   *  which is compatible with every member `HTMLAttributes` declares, so
+   *  the two don't conflict. */
+  interface KaiElementSolidProps<T extends HTMLElement = HTMLElement> extends JSX.HTMLAttributes<T> {
+    [prop: string]: unknown;
+  }
+
+  namespace JSX {
+    interface IntrinsicElements {
+      'kai-agent-card': KaiElementSolidProps<KaiAgentCardElement>;
+      'kai-artifact': KaiElementSolidProps<KaiArtifactElement>;
+      'kai-attachments': KaiElementSolidProps<KaiAttachmentsElement>;
+      'kai-audio-visualizer': KaiElementSolidProps<KaiAudioVisualizerElement>;
+      'kai-avatar': KaiElementSolidProps<KaiAvatarElement>;
+      'kai-badge': KaiElementSolidProps<KaiBadgeElement>;
+      'kai-button': KaiElementSolidProps<KaiButtonElement>;
+      'kai-card': KaiElementSolidProps<KaiCardElement>;
+      'kai-cards': KaiElementSolidProps<KaiCardsElement>;
+      'kai-chain-of-thought': KaiElementSolidProps<KaiChainOfThoughtElement>;
+      'kai-chat': KaiElementSolidProps<KaiChatElement>;
+      'kai-checkbox': KaiElementSolidProps<KaiCheckboxElement>;
+      'kai-checkbox-group': KaiElementSolidProps<KaiCheckboxGroupElement>;
+      'kai-checkpoint': KaiElementSolidProps<KaiCheckpointElement>;
+      'kai-choice': KaiElementSolidProps<KaiChoiceElement>;
+      'kai-coachmark': KaiElementSolidProps<KaiCoachmarkElement>;
+      'kai-code-block': KaiElementSolidProps<KaiCodeBlockElement>;
+      'kai-command': KaiElementSolidProps<KaiCommandElement>;
+      'kai-compare': KaiElementSolidProps<KaiCompareElement>;
+      'kai-composer': KaiElementSolidProps<KaiComposerElement>;
+      'kai-confirm': KaiElementSolidProps<KaiConfirmElement>;
+      'kai-context': KaiElementSolidProps<KaiContextElement>;
+      'kai-conversation-item': KaiElementSolidProps<KaiConversationItemElement>;
+      'kai-conversations': KaiElementSolidProps<KaiConversationsElement>;
+      'kai-dialog': KaiElementSolidProps<KaiDialogElement>;
+      'kai-dock': KaiElementSolidProps<KaiDockElement>;
+      'kai-dropdown': KaiElementSolidProps<KaiDropdownElement>;
+      'kai-editable-label': KaiElementSolidProps<KaiEditableLabelElement>;
+      'kai-embed': KaiElementSolidProps<KaiEmbedElement>;
+      'kai-empty': KaiElementSolidProps<KaiEmptyElement>;
+      'kai-feedback-bar': KaiElementSolidProps<KaiFeedbackBarElement>;
+      'kai-file-tree': KaiElementSolidProps<KaiFileTreeElement>;
+      'kai-file-upload': KaiElementSolidProps<KaiFileUploadElement>;
+      'kai-form': KaiElementSolidProps<KaiFormElement>;
+      'kai-hover-card': KaiElementSolidProps<KaiHoverCardElement>;
+      'kai-icon': KaiElementSolidProps<KaiIconElement>;
+      'kai-image': KaiElementSolidProps<KaiImageElement>;
+      'kai-input': KaiElementSolidProps<KaiInputElement>;
+      'kai-kbd': KaiElementSolidProps<KaiKbdElement>;
+      'kai-link-preview': KaiElementSolidProps<KaiLinkPreviewElement>;
+      'kai-loader': KaiElementSolidProps<KaiLoaderElement>;
+      'kai-markdown': KaiElementSolidProps<KaiMarkdownElement>;
+      'kai-menu': KaiElementSolidProps<KaiMenuElement>;
+      'kai-message': KaiElementSolidProps<KaiMessageElement>;
+      'kai-model-switcher': KaiElementSolidProps<KaiModelSwitcherElement>;
+      'kai-nav': KaiElementSolidProps<KaiNavElement>;
+      'kai-notice': KaiElementSolidProps<KaiNoticeElement>;
+      'kai-pane': KaiElementSolidProps<KaiPaneElement>;
+      'kai-pane-grid': KaiElementSolidProps<KaiPaneGridElement>;
+      'kai-pane-group': KaiElementSolidProps<KaiPaneGroupElement>;
+      'kai-panel': KaiElementSolidProps<KaiPanelElement>;
+      'kai-panel-header': KaiElementSolidProps<KaiPanelHeaderElement>;
+      'kai-popover': KaiElementSolidProps<KaiPopoverElement>;
+      'kai-progress-bar': KaiElementSolidProps<KaiProgressBarElement>;
+      'kai-prompt-dock': KaiElementSolidProps<KaiPromptDockElement>;
+      'kai-prompt-input': KaiElementSolidProps<KaiPromptInputElement>;
+      'kai-radio-group': KaiElementSolidProps<KaiRadioGroupElement>;
+      'kai-reasoning': KaiElementSolidProps<KaiReasoningElement>;
+      'kai-remote': KaiElementSolidProps<KaiRemoteElement>;
+      'kai-resizable': KaiElementSolidProps<KaiResizableElement>;
+      'kai-resizable-item': KaiElementSolidProps<KaiResizableItemElement>;
+      'kai-response-stream': KaiElementSolidProps<KaiResponseStreamElement>;
+      'kai-row': KaiElementSolidProps<KaiRowElement>;
+      'kai-scope-picker': KaiElementSolidProps<KaiScopePickerElement>;
+      'kai-screen': KaiElementSolidProps<KaiScreenElement>;
+      'kai-scroll-area': KaiElementSolidProps<KaiScrollAreaElement>;
+      'kai-scroll-button': KaiElementSolidProps<KaiScrollButtonElement>;
+      'kai-search': KaiElementSolidProps<KaiSearchElement>;
+      'kai-segmented': KaiElementSolidProps<KaiSegmentedElement>;
+      'kai-select': KaiElementSolidProps<KaiSelectElement>;
+      'kai-separator': KaiElementSolidProps<KaiSeparatorElement>;
+      'kai-setting-item': KaiElementSolidProps<KaiSettingItemElement>;
+      'kai-settings-group': KaiElementSolidProps<KaiSettingsGroupElement>;
+      'kai-skeleton': KaiElementSolidProps<KaiSkeletonElement>;
+      'kai-skills': KaiElementSolidProps<KaiSkillsElement>;
+      'kai-slider': KaiElementSolidProps<KaiSliderElement>;
+      'kai-source': KaiElementSolidProps<KaiSourceElement>;
+      'kai-sources': KaiElementSolidProps<KaiSourcesElement>;
+      'kai-status': KaiElementSolidProps<KaiStatusElement>;
+      'kai-suggestions': KaiElementSolidProps<KaiSuggestionsElement>;
+      'kai-switch': KaiElementSolidProps<KaiSwitchElement>;
+      'kai-tab-bar': KaiElementSolidProps<KaiTabBarElement>;
+      'kai-tab-bar-item': KaiElementSolidProps<KaiTabBarItemElement>;
+      'kai-tabs': KaiElementSolidProps<KaiTabsElement>;
+      'kai-tasks': KaiElementSolidProps<KaiTasksElement>;
+      'kai-text-shimmer': KaiElementSolidProps<KaiTextShimmerElement>;
+      'kai-thinking-bar': KaiElementSolidProps<KaiThinkingBarElement>;
+      'kai-thread': KaiElementSolidProps<KaiThreadElement>;
+      'kai-toast-region': KaiElementSolidProps<KaiToastRegionElement>;
+      'kai-tool': KaiElementSolidProps<KaiToolElement>;
+      'kai-tooltip': KaiElementSolidProps<KaiTooltipElement>;
+      'kai-view': KaiElementSolidProps<KaiViewElement>;
+      'kai-view-stack': KaiElementSolidProps<KaiViewStackElement>;
+      'kai-voice-input': KaiElementSolidProps<KaiVoiceInputElement>;
+      'kai-voice-output': KaiElementSolidProps<KaiVoiceOutputElement>;
+      'kai-workspace': KaiElementSolidProps<KaiWorkspaceElement>;
+    }
+  }
+}
+
 export interface KaiAgentCardElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";

@@ -5,6 +5,7 @@ import './register'; // every kai-* element used below
 import t3Favicon from './logos/t3.ico'; // the gathered t3 brand mark, for the real-domain project rows
 import type { KaiNavItem } from '../ui/nav';
 import type { KaiCommandItem } from './command';
+import type { KaiWorkspaceElement, KaiNavElement } from './element-types';
 
 // Labs/Apps: a second dogfood — "T3 Code", a desktop control plane for coding
 // agents (think an Electron shell). Built on the re-cast kai-workspace SHELL
@@ -47,7 +48,6 @@ declare module 'solid-js' {
 const meta = { title: 'Labs/Apps', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj;
-type El = HTMLElement & Record<string, unknown>;
 
 // The sidebar is ONE nested kai-nav: each project is a collapsible group and its
 // threads are `children`. Per thread, `meta` is a right-aligned relative time, and
@@ -172,9 +172,9 @@ export const T3Code: Story = {
     // Captured in the workspace ref so the rail toggle can drive its exposed
     // imperative API (toggleAside); the nav is captured so thread selection can
     // drive its controlled `value` (so the "Show more" row never looks selected).
-    let ws: El | undefined;
-    let projectsNav: El | undefined;
-    const toggleRail = () => (ws?.toggleAside as ((side: string) => void) | undefined)?.('start');
+    let ws: KaiWorkspaceElement | undefined;
+    let projectsNav: KaiNavElement | undefined;
+    const toggleRail = () => ws?.toggleAside('start');
 
     // Array/object props (and event wiring) are applied in each element's ref
     // callback, NOT a one-shot onMount, so they survive remounts.
@@ -182,7 +182,7 @@ export const T3Code: Story = {
       <div class="relative h-screen w-full">
         <kai-workspace
           ref={(el) => {
-            ws = el as El;
+            ws = el;
             // Rail geometry is CSS custom properties on the shell (the kai-dock
             // rule), not props. The re-cast shell has no built-in conversation
             // pane, so nothing needs suppressing: the start slot IS the rail.
@@ -243,9 +243,9 @@ export const T3Code: Story = {
             <div class="-mx-2.5 mt-1 min-h-0 flex-1 overflow-y-auto px-2.5">
               <kai-nav
                 ref={(el) => {
-                  const n = el as El;
+                  const n = el;
                   projectsNav = n;
-                  n.items = PROJECTS;
+                  n.items = PROJECTS as KaiNavElement['items'];
                   n.value = activeThread();
                   n.defaultCollapsed = COLLAPSED_PROJECTS;
                   el.addEventListener('kai-nav-select', (e) => {
@@ -286,7 +286,7 @@ export const T3Code: Story = {
             </div>
             <div class="flex items-center gap-1.5">
               <kai-menu
-                ref={(el) => { (el as El).items = [
+                ref={(el) => { el.items = [
                   { id: 'rule', label: 'Add rule', icon: 'plus' },
                   { id: 'hook', label: 'Add hook', icon: 'workflow' },
                   { id: 'mcp', label: 'Add MCP server', icon: 'box' },
@@ -295,7 +295,7 @@ export const T3Code: Story = {
                 trigger-label="Add action"
               ></kai-menu>
               <kai-menu
-                ref={(el) => { (el as El).items = [
+                ref={(el) => { el.items = [
                   { id: 'editor', label: 'Open in editor', icon: 'code' },
                   { id: 'terminal', label: 'Open in terminal', icon: 'square-pen' },
                   { id: 'finder', label: 'Reveal in Finder', icon: 'folder' },
@@ -310,7 +310,7 @@ export const T3Code: Story = {
                   sits flush; the OUTLINE look keeps it unobtrusive (not a filled
                   primary that pulls focus). */}
               <kai-menu
-                ref={(el) => { (el as El).items = [
+                ref={(el) => { el.items = [
                   { id: 'commit-push', label: 'Commit & push', icon: 'github' },
                   { id: 'commit', label: 'Commit only', icon: 'pencil' },
                   { id: 'amend', label: 'Amend last commit', icon: 'square-pen' },
@@ -340,7 +340,7 @@ export const T3Code: Story = {
               <div class="mx-auto flex max-w-3xl flex-col gap-5 px-6 py-6">
                 <kai-message
                   ref={(el) => {
-                    const m = el as El;
+                    const m = el;
                     m.message = { id: 't3code-overview', role: 'assistant', parts: [{ type: 'text', text: OVERVIEW_MD }] };
                     m.avatar = 'none';
                   }}
@@ -352,7 +352,7 @@ export const T3Code: Story = {
                     keeps a View-diff affordance + the run timestamp. */}
                 <div class="overflow-hidden rounded-lg border border-border">
                   <div class="h-72">
-                    <kai-file-tree ref={(el) => { const t = el as El; t.files = CHANGED_FILES; t.summary = true; }}></kai-file-tree>
+                    <kai-file-tree ref={(el) => { const t = el; t.files = CHANGED_FILES; t.summary = true; }}></kai-file-tree>
                   </div>
                   <div class="flex items-center justify-between gap-2 border-t border-border px-3 py-2">
                     <span class="text-[0.6875rem] text-muted-foreground">2:40:02 PM · 10s</span>
@@ -366,17 +366,17 @@ export const T3Code: Story = {
             <div class="shrink-0 border-t border-border p-3">
               <div class="mx-auto flex max-w-3xl flex-col gap-1.5">
                 <kai-prompt-input
-                  ref={(el) => { (el as El).attach = false; }}
+                  ref={(el) => { el.attach = false; }}
                   placeholder="Ask for follow-up changes or attach images"
                 >
                   <div slot="toolbar-start" class="flex items-center gap-1.5">
-                    <kai-model-switcher ref={(el) => { const m = el as El; m.models = [
+                    <kai-model-switcher ref={(el) => { const m = el; m.models = [
                       { id: 'opus-4-5', name: 'Claude Opus 4.5' },
                       { id: 'sonnet-4-6', name: 'Claude Sonnet 4.6' },
                       { id: 'haiku-4-5', name: 'Claude Haiku 4.5' },
                     ]; m.currentModel = 'opus-4-5'; }}></kai-model-switcher>
                     <kai-menu
-                      ref={(el) => { (el as El).items = [
+                      ref={(el) => { el.items = [
                         { heading: true, label: 'Effort' },
                         { id: 'high', label: 'High', checked: true },
                         { id: 'medium', label: 'Medium' },
@@ -387,7 +387,7 @@ export const T3Code: Story = {
                     ></kai-menu>
                     <kai-button variant="subtle" size="sm" icon="workflow">Build</kai-button>
                     <kai-menu
-                      ref={(el) => { (el as El).items = [
+                      ref={(el) => { el.items = [
                         { id: 'full', label: 'Full access', checked: true },
                         { id: 'read', label: 'Read only' },
                         { id: 'ask', label: 'Ask each time' },
@@ -401,7 +401,7 @@ export const T3Code: Story = {
                 <div class="flex items-center justify-between px-1 text-xs text-muted-foreground">
                   <span>Local checkout</span>
                   <kai-menu
-                    ref={(el) => { (el as El).items = [
+                    ref={(el) => { el.items = [
                       { id: 'main', label: 'main', checked: true },
                       { id: 'develop', label: 'develop' },
                       { id: 'feat', label: 'feat/sitemap' },
@@ -431,9 +431,9 @@ export const T3Code: Story = {
             >
               <kai-command
                 ref={(el) => {
-                  (el as El).items = COMMANDS;
+                  el.items = COMMANDS;
                   el.addEventListener('kai-select', () => setCmdOpen(false));
-                  queueMicrotask(() => (el as El).focus?.());
+                  queueMicrotask(() => el.focus?.());
                 }}
                 placeholder="Search projects, threads, actions..."
               ></kai-command>

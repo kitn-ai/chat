@@ -83,11 +83,11 @@ Every `#ref` in the three blocks sits on a `kai-` tag and every `@event` binds a
 
 The augmentation target is `solid-js/jsx-runtime`, not `solid-js`. `solid-js`'s own index re-exports `JSX` as a type (`node_modules/solid-js/types/index.d.ts:9`), while `solid-js/jsx-runtime`'s `types` condition points straight at `./types/jsx.d.ts`, the file that DECLARES `export namespace JSX`. Verified by compiling both shapes (Facts table): augmenting `solid-js/jsx-runtime` from a file that is itself a module merges cleanly and `<span>` still resolves; the same block in a file with no top-level import or export is an ambient module DECLARATION instead, which replaces solid's module wholesale and breaks every standard tag.
 
-It is generic (one `KaiElementSolidProps` with an index signature) rather than per-element for one reason worth stating: the per-element version needs an Events type keyed by the RAW event name (`on:kai-click`), and the generator emits only the camel-cased `onKaiClick` shape the Vue and React blocks use. Deriving `on:kai-click` from `onKaiClick` at the type level is not possible, so per-element Solid typing is a generator change of its own. It goes on the backlog with that reason, and Task 6's gate output says out loud that the solid cell does not type kai prop values.
+`KaiElementSolidProps<T extends HTMLElement = HTMLElement>` extends `JSX.HTMLAttributes<T>`, generic on the ELEMENT TYPE, not on the props: each tag's `IntrinsicElements` entry is its own instantiation (`'kai-dock': KaiElementSolidProps<KaiDockElement>`, one line per element, derived from the same `${el.className}` interfaces the tag map already declares), so `ref` -- via Solid's own `CustomAttributes<T>`, which `HTMLAttributes<T>` extends -- infers the REAL element interface at every tag, unannotated or annotated. Only the PROPS stay generic (one shape, an index signature, for `prop:`/`attr:`/`on:` and kai's own non-scalar props) rather than per-element, for one reason worth stating: a per-element version of the EVENTS would need a type keyed by the RAW event name (`on:kai-click`), and the generator emits only the camel-cased `onKaiClick` shape the Vue and React blocks use. Deriving `on:kai-click` from `onKaiClick` at the type level is not possible, so per-element Solid EVENT typing is a generator change of its own. It goes on the backlog with that reason, and Task 6's gate output says out loud that the solid cell does not type a kai prop VALUE.
 
 **R3. Every non-react renderer annotates its ref callback with the element interface, derived from the tag by the rule `react.ts` already documents.**
 
-Under R2's generic augmentation an unannotated `ref={(el) => ...}` is `TS7006: Parameter 'el' implicitly has an 'any' type` (verified). The interface name is `Kai<PascalCase of the tag minus kai->Element`, which is the same derivation `packages/blocks/src/forms/react.ts:6-12` states and `packages/ui/mcp/tests/blocks-artifacts.test.ts` asserts for every element the kit declares. A `#ref` on a non-kai tag gets `HTMLElement`.
+Under R2's per-tag augmentation an unannotated ref callback already infers the real element interface (`ref={(el) => el.show()}` on a `kai-dock` types `el` as `KaiDockElement`, no annotation needed), so the annotation this rule asks for is no longer LOAD-BEARING -- it is kept for readability, and because an explicitly annotated `ref={(el: KaiDockElement) => ...}` now type-checks too (it did not under the element-generic `HTMLElement` shape B2-T1-b/c tried first: a narrower callback parameter is not assignable to a wider one under `strictFunctionTypes`, so `ref={(el: KaiDockElement) => ...}` against a fixed `ref?: HTMLElement | ((el: HTMLElement) => void)` was TS2322 for every element with even one interface member of its own -- caught before it reached a story, ruling B2-T1-d). The interface name is `Kai<PascalCase of the tag minus kai->Element`, which is the same derivation `packages/blocks/src/forms/react.ts:6-12` states and `packages/ui/mcp/tests/blocks-artifacts.test.ts` asserts for every element the kit declares. A `#ref` on a non-kai tag gets `HTMLElement`.
 
 This means the four new trees import type-only from `@kitn.ai/ui/elements`. That is correct and is NOT the thing `verify:blocks [react-tree]` forbids: that check (`reactTreeErrors` in `packages/ui/scripts/verify-blocks.mjs`) bans the import for the REACT form, where the typed wrappers already carry the element type on their forwarded ref, and it stays react-only.
 
@@ -283,7 +283,7 @@ Every row was read or run in the tree at plan time. Where the spec and the tree 
 |---|---|---|
 | `packages/ui/scripts/gen-element-types.mjs` | Modify | Emits the third JSX augmentation, `declare module 'solid-js/jsx-runtime'`, from the same element list the React and Vue blocks use. |
 | `packages/ui/src/elements/element-types.d.ts` | Modify (generated) | The regenerated file. Never hand-edited; `verify:generated` is the guard. |
-| `packages/ui/src/elements/solid-jsx-augmentation.test.ts` | Create | Drift guard on the augmentation, in the shape of `vue-global-components.test.ts`. |
+| `packages/ui/src/elements/element-types-solid-augmentation.test.ts` | Create | Drift guard on the augmentation, in the shape of `vue-global-components.test.ts`. |
 | `packages/ui/scripts/lib/consumer-tsc-projects.mjs` | Modify | `sandbox(project, name, opts)` gains `include` / `tsconfigExtra`; three Angular packages join the symlink list. |
 | `packages/ui/scripts/lib/block-framework-cells.mjs` | Create | `vueCell`, `svelteCell`, `angularCell`, `solidCell`, the shim each writes, and `frameworkCellSelfTest()` with one planted defect per cell. |
 | `packages/ui/scripts/lib/block-compile-cells.mjs` | Modify | `STRATEGIES` gains one entry per form as its renderer lands; the printed line per form names its tool and its blind spot. |
@@ -463,7 +463,7 @@ Expected: non-zero exit and `error TS2554` in the output (`poke` takes 0 argumen
 **Files:**
 - Modify: `packages/ui/scripts/gen-element-types.mjs` (the augmentation blocks, beside the React and Vue ones)
 - Modify: `packages/ui/src/elements/element-types.d.ts` (generated output, never hand-edited)
-- Create: `packages/ui/src/elements/solid-jsx-augmentation.test.ts`
+- Create: `packages/ui/src/elements/element-types-solid-augmentation.test.ts`
 
 **Interfaces:**
 - Consumes: the `elements` model `gen-element-types.mjs` already builds for the React `jsxTagMap` and the Vue `vueTagMap`.
@@ -473,7 +473,7 @@ Without this, a Solid tree containing `<kai-dock>` does not compile at all: `sol
 
 - [ ] **Step 1: Write the failing drift guard**
 
-Create `packages/ui/src/elements/solid-jsx-augmentation.test.ts`:
+Create `packages/ui/src/elements/element-types-solid-augmentation.test.ts`:
 
 ```ts
 /**
@@ -483,6 +483,11 @@ Create `packages/ui/src/elements/solid-jsx-augmentation.test.ts`:
  * HTMLElementDeprecatedTags, SVGElementTags and MathMLElementTags and carries
  * no index signature, so a `<kai-dock>` in a Solid TSX file is TS2339 before
  * anything else about the solid delivery form matters.
+ *
+ * A note on this file's own name: a test filename containing the substring
+ * `solid-js` is externalized by vite-plugin-solid's `server.deps.external`
+ * regex and never transformed by vite-node, which is why this file is named
+ * `element-types-solid-augmentation.test.ts` and not `solid-jsx-augmentation.test.ts`.
  *
  * TWO THINGS ARE PINNED HERE and neither is stylistic.
  *
@@ -520,6 +525,25 @@ function moduleBlock(name: string): string {
   throw new Error(`unterminated \`declare module '${name}'\` block`);
 }
 
+/** The body of the given `header` (e.g. `declare module 'react'` or `declare
+ *  global`), to its closing brace -- same brace-depth walk as `moduleBlock`,
+ *  generalized past the `declare module '<name>'` shape for `declare global`,
+ *  which is where `HTMLElementTagNameMap` (the tag-to-className source of
+ *  truth) lives. */
+function blockAfter(header: string): string {
+  const start = SOURCE.indexOf(`${header} {`);
+  expect(start, `no \`${header}\` block in element-types.d.ts`).toBeGreaterThan(-1);
+  let depth = 0;
+  for (let i = SOURCE.indexOf('{', start); i < SOURCE.length; i += 1) {
+    if (SOURCE[i] === '{') depth += 1;
+    if (SOURCE[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return SOURCE.slice(start, i + 1);
+    }
+  }
+  throw new Error(`unterminated \`${header}\` block`);
+}
+
 describe('the solid JSX augmentation', () => {
   it('targets solid-js/jsx-runtime, which is the module that declares the namespace', () => {
     // `declare module 'solid-js'` would create a NEW namespace rather than
@@ -546,6 +570,42 @@ describe('the solid JSX augmentation', () => {
     expect(solid).toContain('KaiElementSolidProps');
   });
 
+  it('is generic on the ELEMENT TYPE, extending JSX.HTMLAttributes<T>', () => {
+    // Under a hand-rolled prop list, a fixed `HTMLElement`, or the index
+    // signature alone, an unannotated `ref={(el) => ...}` or `onClick={(e) =>
+    // ...}` is TS7006 (no contextual type to infer the callback's parameter
+    // from) -- and worse, a FIXED `HTMLElement` makes an explicitly annotated
+    // `ref={(el: KaiDockElement) => ...}` a TS2322 (a narrower callback is not
+    // assignable to a wider one, under strictFunctionTypes). Parameterizing on
+    // T fixes both: `ref` (via Solid's own `CustomAttributes<T>`, which
+    // `HTMLAttributes<T>` extends) infers the REAL element interface at each
+    // tag's own instantiation, unannotated or annotated.
+    const solid = moduleBlock('solid-js/jsx-runtime');
+    expect(solid).toContain(
+      'interface KaiElementSolidProps<T extends HTMLElement = HTMLElement> extends JSX.HTMLAttributes<T>',
+    );
+  });
+
+  it('gives every tag its OWN element interface, not the generic HTMLElement default', () => {
+    // Derived from the SAME `HTMLElementTagNameMap` augmentation this file
+    // already carries (element-types.d.ts's tag-to-interface source of
+    // truth), not re-typed here -- so a new element's className is covered
+    // automatically, and a generator regression that left one tag on the
+    // generic `KaiElementSolidProps` default (instead of its own
+    // `KaiXElement`) fails this test without anyone updating a count.
+    const tagNameMapBody = blockAfter('declare global');
+    const tagToClassName = new Map(
+      [...tagNameMapBody.matchAll(/'(kai-[\w-]+)':\s*(Kai\w+Element);/g)].map((m) => [m[1], m[2]]),
+    );
+    expect(tagToClassName.size).toBeGreaterThan(0);
+    const solid = moduleBlock('solid-js/jsx-runtime');
+    for (const [tag, className] of tagToClassName) {
+      expect(solid, `${tag} should map to KaiElementSolidProps<${className}>`).toContain(
+        `'${tag}': KaiElementSolidProps<${className}>;`,
+      );
+    }
+  });
+
   it('is generated, not hand-written', () => {
     expect(SOURCE.startsWith('// AUTO-GENERATED by scripts/gen-element-api.mjs')).toBe(true);
   });
@@ -555,10 +615,10 @@ describe('the solid JSX augmentation', () => {
 - [ ] **Step 2: Run it and watch it fail**
 
 ```bash
-cd "$WT" && pnpm --filter @kitn.ai/ui exec vitest run --project=unit src/elements/solid-jsx-augmentation.test.ts
+cd "$WT" && pnpm --filter @kitn.ai/ui exec vitest run --project=unit src/elements/element-types-solid-augmentation.test.ts
 ```
 
-Expected: FAIL, three cases. The FIRST fails on a plain containment assertion (`expect(SOURCE).toContain("declare module 'solid-js/jsx-runtime' {")`), with vitest's own diff and no custom text. The custom message `no \`declare module 'solid-js/jsx-runtime'\` block in element-types.d.ts` comes from `moduleBlock`, so it belongs to the SECOND case. The fourth ("is generated") PASSES already, and that pass is the control: it proves the harness is reading the right file, which it does because `element-types.d.ts` begins `// AUTO-GENERATED by scripts/gen-element-api.mjs`.
+Expected: FAIL, five cases. The FIRST fails on a plain containment assertion (`expect(SOURCE).toContain("declare module 'solid-js/jsx-runtime' {")`), with vitest's own diff and no custom text. The custom message `no \`declare module 'solid-js/jsx-runtime'\` block in element-types.d.ts` comes from `moduleBlock`, so it belongs to the SECOND case. The sixth ("is generated") PASSES already, and that pass is the control: it proves the harness is reading the right file, which it does because `element-types.d.ts` begins `// AUTO-GENERATED by scripts/gen-element-api.mjs`.
 
 - [ ] **Step 3: Emit the augmentation**
 
@@ -581,32 +641,45 @@ In `packages/ui/scripts/gen-element-types.mjs`, immediately after the `jsxIntrin
   // targeting 'solid-js' shadows the namespace instead of merging, and every
   // standard tag stops resolving.
   //
-  // GENERIC, like the react block above and for the same reason plus one more.
-  // Array/object props are set as properties, never as attributes, so typing
-  // them per element would invite the wrong spelling. And a per-element version
-  // would need an Events type keyed by the RAW event name (`on:kai-click`),
-  // while this generator emits only the camel-cased `onKaiClick` shape the
-  // react and vue blocks use -- deriving one from the other at the type level
-  // is not possible. So the solid compile cell does not type a kai prop value,
-  // and scripts/lib/block-framework-cells.mjs says so in the gate's output.
-  const solidTagMap = elements.map((el) => `      '${el.tag}': KaiElementSolidProps;`).join('\n');
+  // GENERIC ON THE ELEMENT TYPE, not on the props: each tag gets its own
+  // `KaiElementSolidProps<KaiXElement>` instantiation, from the SAME
+  // `${el.className}` interfaces the tag map above (`interfaces`) already
+  // declares -- so `ref`'s inferred type is the real element interface, not
+  // the generic `HTMLElement` base, and an EXPLICITLY annotated
+  // `ref={(el: KaiDockElement) => ...}` type-checks too (a narrower callback
+  // is no longer being assigned to a wider one -- both sides now agree).
+  // Only the PROPS stay generic (one shape covers `prop:`, `attr:` and `on:`
+  // for every element): array/object props are set as properties, never as
+  // attributes, so typing them per element would invite the wrong spelling.
+  // A per-element version of the EVENTS would need a type keyed by the RAW
+  // event name (`on:kai-click`), while this generator emits only the
+  // camel-cased `onKaiClick` shape the react and vue blocks use -- deriving
+  // one from the other at the type level is not possible. So the solid
+  // compile cell still does not type a kai prop VALUE, and
+  // scripts/lib/block-framework-cells.mjs says so in the gate's output.
+  const solidTagMap = elements
+    .map((el) => `      '${el.tag}': KaiElementSolidProps<${el.className}>;`)
+    .join('\n');
 
-  const solidIntrinsicBlock = `/** A kai-* custom element as Solid's JSX checker sees it. The index signature
- *  is what accepts \`prop:\`, \`attr:\` and \`on:\` without typing them. \`ref\` is
- *  declared so a generated tree annotates its own callback parameter: under the
- *  index signature alone an unannotated \`ref={(el) => ...}\` is TS7006. */
-interface KaiElementSolidProps {
-  id?: string;
-  class?: string;
-  style?: Record<string, string | number> | string;
-  slot?: string;
-  part?: string;
-  children?: unknown;
-  ref?: unknown;
-  [attr: string]: unknown;
-}
+  const solidIntrinsicBlock = `declare module 'solid-js/jsx-runtime' {
+  /** A kai-* custom element as Solid's JSX checker sees it, parameterized by
+   *  its own element interface (\`KaiDockElement\`, ...) so \`ref\` -- via
+   *  Solid's own \`CustomAttributes<T>\`, which \`HTMLAttributes<T>\` extends --
+   *  infers THAT interface, both unannotated (\`ref={(el) => el.show()}\`) and
+   *  annotated (\`ref={(el: KaiDockElement) => ...}\`, which is what a
+   *  generated tree emits, for readability -- it is no longer required for
+   *  the callback to type-check). Every standard DOM event handler
+   *  (\`onClick\`, \`onPointerDown\`, ...) gets a real contextual type the same
+   *  way. The index signature still covers everything \`HTMLAttributes\`
+   *  doesn't type: \`prop:\`, \`attr:\` and \`on:\` directives, and kai's own
+   *  non-scalar props (set as properties, never attributes -- typing them
+   *  per element would invite the wrong spelling). Widened to \`unknown\`,
+   *  which is compatible with every member \`HTMLAttributes\` declares, so
+   *  the two don't conflict. */
+  interface KaiElementSolidProps<T extends HTMLElement = HTMLElement> extends JSX.HTMLAttributes<T> {
+    [prop: string]: unknown;
+  }
 
-declare module 'solid-js/jsx-runtime' {
   namespace JSX {
     interface IntrinsicElements {
 ${solidTagMap}
@@ -621,14 +694,14 @@ Then add `solidIntrinsicBlock` to BOTH emitted copies, immediately after `jsxInt
 
 ```bash
 cd "$WT/packages/ui" && npm run build:api
-cd "$WT" && pnpm --filter @kitn.ai/ui exec vitest run --project=unit src/elements/solid-jsx-augmentation.test.ts
+cd "$WT" && pnpm --filter @kitn.ai/ui exec vitest run --project=unit src/elements/element-types-solid-augmentation.test.ts
 ```
 
-Expected: PASS, all four. `build:api`, never `gen-llms.mjs` standalone: the latter rewrites `llms-full.txt` with less data and the oversized diff is the only tell.
+Expected: PASS, all six. `build:api`, never `gen-llms.mjs` standalone: the latter rewrites `llms-full.txt` with less data and the oversized diff is the only tell.
 
 - [ ] **Step 5: Prove the augmentation actually does the job, in a real tsc run**
 
-This is the anti-vacuity control on the whole task: the drift guard above reads a string, and a string is not a compiler.
+This is the anti-vacuity control on the whole task: the drift guard above reads a string, and a string is not a compiler. Four probes, because the per-tag design (ruling B2-T1-d) makes four different claims: the tag resolves at all, an unannotated ref infers the real element interface (not just `HTMLElement`), an EXPLICITLY annotated ref also type-checks (it did not under the element-generic `HTMLElement` shape B2-T1-b/c tried first -- a narrower callback parameter is not assignable to a wider one under `strictFunctionTypes`), and without the augmentation none of it exists.
 
 ```bash
 cd "$WT" && mkdir -p "$SCRATCH/solid-probe/node_modules" \
@@ -639,34 +712,66 @@ cd "$WT" && mkdir -p "$SCRATCH/solid-probe/node_modules" \
 cat > "$SCRATCH/solid-probe/tsconfig.json" <<'JSON'
 {"compilerOptions":{"target":"ES2022","lib":["ES2022","DOM","DOM.Iterable"],"module":"ESNext","moduleResolution":"bundler","strict":true,"noEmit":true,"skipLibCheck":true,"jsx":"preserve","jsxImportSource":"solid-js"},"include":["*.tsx","*.ts","*.d.ts"]}
 JSON
-cat > "$SCRATCH/solid-probe/a.tsx" <<'TSX'
-import '@kitn.ai/ui/elements';
-import type { KaiDockElement } from '@kitn.ai/ui/elements';
-let dock: KaiDockElement | null = null;
-export function A() {
-  return (
-    <kai-dock ref={(el: KaiDockElement) => { dock = el; }} prop:unread={true} on:kai-click={() => {}}>
-      <span>{String(dock)}</span>
-    </kai-dock>
-  );
-}
-TSX
 export TSC="$(cd "$WT" && node -e "console.log(require.resolve('typescript/bin/tsc'))")"
-cd "$SCRATCH/solid-probe" && node "$TSC" -p tsconfig.json; echo "EXIT=$?"
 ```
 
 RESOLVE the compiler, never type its path: `packages/ui/node_modules/typescript` DOES NOT EXIST (`node-linker=hoisted` keeps the only copies at the repo root and under `packages/create-kai`), so a hard-coded path there fails with a module-not-found before the probe can produce either verdict, and the whole anti-vacuity control silently does not run.
 
-Expected: `EXIT=0`. Both `<kai-dock>` AND `<span>` resolve, which is the pair that matters: `<span>` failing would mean the block shadowed solid's module instead of merging.
-
-Now watch it fail without the augmentation, by pointing the probe at solid alone:
+**Probe 1: unannotated ref, a standard `HTMLElement` member.**
 
 ```bash
-cd "$SCRATCH/solid-probe" && sed -i '' -E "1,2d" a.tsx && sed -i '' -E "s/KaiDockElement/HTMLElement/g" a.tsx \
-  && node "$TSC" -p tsconfig.json; echo "EXIT=$?"
+cat > "$SCRATCH/solid-probe/a.tsx" <<'TSX'
+import '@kitn.ai/ui/elements';
+export function TagName() {
+  return <kai-dock ref={(el) => { el.tagName; }} />;
+}
+TSX
+cd "$SCRATCH/solid-probe" && node "$TSC" -p tsconfig.json; echo "EXIT=$?"
 ```
 
-Expected: FAIL with `error TS2339: Property 'kai-dock' does not exist on type 'JSX.IntrinsicElements'`. That red is the whole reason this task exists, and it is what a Solid consumer sees today.
+Expected: `EXIT=0`. `<kai-dock>` resolves and `el.tagName` needs no annotation.
+
+**Probe 2: an explicitly annotated ref, calling an element-specific method.**
+
+```bash
+cat > "$SCRATCH/solid-probe/a.tsx" <<'TSX'
+import '@kitn.ai/ui/elements';
+import type { KaiDockElement } from '@kitn.ai/ui/elements';
+export function Annotated() {
+  return <kai-dock ref={(el: KaiDockElement) => { el.show(); }} />;
+}
+TSX
+cd "$SCRATCH/solid-probe" && node "$TSC" -p tsconfig.json; echo "EXIT=$?"
+```
+
+Expected: `EXIT=0`. This is what a generated tree emits (readability, no longer load-bearing) -- and the one that FAILED with `TS2322` under the element-generic `ref?: HTMLElement | ((el: HTMLElement) => void)` shape (`Type '(el: KaiDockElement) => void' is not assignable to type '(el: HTMLElement) => void'`), caught before it reached this step.
+
+**Probe 3: an UNANNOTATED ref, calling an element-specific method -- the inference proof.**
+
+```bash
+cat > "$SCRATCH/solid-probe/a.tsx" <<'TSX'
+import '@kitn.ai/ui/elements';
+export function Unannotated() {
+  return <kai-dock ref={(el) => { el.show(); }} />;
+}
+TSX
+cd "$SCRATCH/solid-probe" && node "$TSC" -p tsconfig.json; echo "EXIT=$?"
+```
+
+Expected: `EXIT=0`, with NO annotation on `el` at all. `show` is a `KaiDockElement`-only method, absent from plain `HTMLElement`, so this only compiles if `el`'s inferred type is already `KaiDockElement` at the `'kai-dock'` intrinsic entry -- the actual proof that the per-tag design works, not just that the tag resolves.
+
+**Probe 4: without the augmentation.**
+
+```bash
+cat > "$SCRATCH/solid-probe/a.tsx" <<'TSX'
+export function Bare() {
+  return <kai-dock ref={(el) => { el.tagName; }} />;
+}
+TSX
+cd "$SCRATCH/solid-probe" && node "$TSC" -p tsconfig.json; echo "EXIT=$?"
+```
+
+Expected: FAIL with `error TS2339: Property 'kai-dock' does not exist on type 'JSX.IntrinsicElements'` (also `TS7006` on `el`, a consequence of the same missing tag, not a separate finding). That red is the whole reason this task exists, and it is what a Solid consumer sees today.
 
 - [ ] **Step 6: Run the package's gates**
 
@@ -681,7 +786,7 @@ Expected: green. `verify:generated` is the one that would catch a hand-edited `e
 - [ ] **Step 7: Commit**
 
 ```bash
-cd "$WT" && git add packages/ui/scripts/gen-element-types.mjs packages/ui/src/elements/element-types.d.ts packages/ui/src/elements/solid-jsx-augmentation.test.ts
+cd "$WT" && git add packages/ui/scripts/gen-element-types.mjs packages/ui/src/elements/element-types.d.ts packages/ui/src/elements/element-types-solid-augmentation.test.ts
 cd "$WT" && git commit -m "$(cat <<'EOF'
 feat(elements): type kai-* in Solid JSX, the third augmentation
 
@@ -2986,10 +3091,18 @@ describe('the solid form', () => {
     expect(byPath(renderSolidForm(b)).get('Fixture.tsx')).toContain('prop:activeId={state().title}');
   });
 
-  it('annotates the ref callback, because an unannotated one is TS7006', () => {
-    // Under the kit's generic solid-js/jsx-runtime augmentation, `ref` types as
-    // `unknown` and an unannotated parameter has no contextual type. Verified
-    // with a real tsc run before this renderer was written.
+  it('annotates the ref callback, for readability, not because it is required', () => {
+    // Under the kit's per-tag solid-js/jsx-runtime augmentation (Task 1,
+    // ruling B2-T1-d), `ref` at the 'kai-dock' intrinsic entry is already
+    // `KaiDockElement | ((el: KaiDockElement) => void)`, so an UNANNOTATED
+    // `ref={(el) => ...}` infers `el: KaiDockElement` on its own -- the
+    // annotation below is not load-bearing. It stays in the emitted tree
+    // because every OTHER form in this PR names its element type explicitly
+    // at the ref site (readability, and the react tree needs the type for
+    // its own reasons), and consistency across forms beats omitting one
+    // redundant annotation on the one form that does not strictly need it.
+    // Verified with a real tsc run before this renderer was written (Task 1
+    // Step 5, Probe 3: the SAME callback with no annotation at all compiles).
     const tsx = byPath(renderSolidForm(block())).get('Fixture.tsx')!;
     expect(tsx).toContain("import type { KaiDockElement } from '@kitn.ai/ui/elements';");
     expect(tsx).toContain('ref={(el: KaiDockElement) => { dock = el; }}');
@@ -3098,8 +3211,10 @@ import './fixture.css';
 export function Fixture() {
   // A plain `let`, read through the getter below: refs are not reactive, and
   // the controller reads them lazily, so there is nothing here for a signal to
-  // do. The parameter annotation is required: under the kit's generic
-  // solid-js JSX augmentation an unannotated `ref` callback is TS7006.
+  // do. The parameter annotation is kept for readability, not because it is
+  // required: under the kit's per-tag solid-js JSX augmentation (Task 1,
+  // ruling B2-T1-d) an unannotated `ref` callback already infers the real
+  // element interface.
   let dock: KaiDockElement | null = null;
   const { state, actions, ready } = useFixture(() => ({ dock }));
 
@@ -3210,7 +3325,9 @@ function bindingProp(tag: string, b: Binding, scope: string | undefined, refType
       // would not reach it.
       return `on:${b.name}={actions.${b.value}}`;
     case 'ref':
-      // The annotation is not decoration: without it this is TS7006.
+      // The annotation is kept for readability and for consistency with the
+      // other forms: under the kit's per-tag solid-js JSX augmentation, an
+      // unannotated `ref` callback already infers ${refType} on its own.
       return `ref={(el: ${refType}) => { ${b.value} = el; }}`;
     case 'seed':
       return null;
@@ -3309,10 +3426,12 @@ component does not hand back, and the kai- events are dispatched by the element
 facade rather than by the Solid component underneath it, so on:kai-click on a
 Solid component would silently never fire.
 
-The ref callback carries an explicit parameter annotation, because under the
-generic JSX augmentation an unannotated one is TS7006. <For> takes no key, so
-the mandatory :key has no expression to become here and the emitted file says so
-at the site rather than inventing a key prop Solid would ignore.
+The ref callback carries an explicit parameter annotation for readability and
+for consistency with the other forms; under the kit's per-tag JSX augmentation
+an unannotated one already infers the real element interface, so this is no
+longer load-bearing. <For> takes no key, so the mandatory :key has no
+expression to become here and the emitted file says so at the site rather than
+inventing a key prop Solid would ignore.
 
 The compile cell was watched failing with the augmentation disabled: every block
 goes red with the exact TS2339 a Solid consumer sees today.

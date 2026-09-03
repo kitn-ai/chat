@@ -3,6 +3,7 @@ import { createSignal, Show, For } from 'solid-js';
 import './register'; // every kai-* element used below
 import type { FileTreeFile } from '../components/file-tree';
 import type { ToolPart } from '../components/tool-types';
+import type { KaiTasksElement } from './element-types';
 import { PromptDock } from '../ui/prompt-dock';
 import openaiLogo from './logos/openai.svg';
 
@@ -47,7 +48,6 @@ declare module 'solid-js' {
 const meta = { title: 'Labs/Apps', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj;
-type El = HTMLElement & Record<string, unknown>;
 
 // A task's run state and (once it has a branch pushed) its PR state.
 type Run = 'working' | 'queued' | 'done' | 'failed';
@@ -127,7 +127,7 @@ const FILTERS = [
 // --- Opened-task detail fixtures (one coherent set, headed by the active task) ---
 
 // The agent plan - kai-tasks in PROGRESS (checklist) mode.
-const PLAN = {
+const PLAN: KaiTasksElement['data'] = {
   mode: 'progress',
   heading: 'Plan',
   tasks: [
@@ -219,7 +219,7 @@ export const Codex: Story = {
           </div>
           <div class="flex items-center gap-1.5">
             <kai-menu
-              ref={(el) => { (el as El).items = SETTINGS; }}
+              ref={(el) => { el.items = SETTINGS; }}
               trigger-icon="settings"
               label="Environments and settings"
             ></kai-menu>
@@ -252,13 +252,13 @@ export const Codex: Story = {
                     {/* "Work in a project" - repo + branch environment pills (kai-menu). */}
                     <div class="flex items-center gap-1.5">
                       <kai-menu
-                        ref={(el) => { (el as El).items = REPOS; }}
+                        ref={(el) => { el.items = REPOS; }}
                         trigger-icon="box"
                         trigger-label="openai/codex"
                         trigger-icon-trailing="chevron-down"
                       ></kai-menu>
                       <kai-menu
-                        ref={(el) => { (el as El).items = BRANCHES; }}
+                        ref={(el) => { el.items = BRANCHES; }}
                         trigger-icon="git-branch"
                         trigger-label="main"
                         trigger-icon-trailing="chevron-down"
@@ -275,7 +275,7 @@ export const Codex: Story = {
                 }
               >
                 <kai-prompt-input
-                  ref={(el) => { (el as El).attach = false; }}
+                  ref={(el) => { el.attach = false; }}
                   class="codex-composer block"
                   placeholder="Describe a task. Codex runs it in a parallel cloud sandbox."
                 >
@@ -291,7 +291,7 @@ export const Codex: Story = {
                 <div class="mb-1.5 flex items-center justify-between px-1">
                   <span class="text-sm font-medium">Tasks</span>
                   <kai-menu
-                    ref={(el) => { (el as El).items = FILTERS; }}
+                    ref={(el) => { el.items = FILTERS; }}
                     trigger-icon="list-filter"
                     trigger-label="All tasks"
                     trigger-icon-trailing="chevron-down"
@@ -380,7 +380,7 @@ export const Codex: Story = {
                   {/* The agent's summary turn (real markdown). */}
                   <kai-message
                     ref={(el) => {
-                      const m = el as El;
+                      const m = el;
                       m.message = { id: 'codex-summary', role: 'assistant', parts: [{ type: 'text', text: SUMMARY_MD }] };
                       m.avatar = 'none';
                     }}
@@ -388,7 +388,7 @@ export const Codex: Story = {
                   ></kai-message>
 
                   {/* The plan / checklist. */}
-                  <kai-tasks ref={(el) => { (el as El).data = PLAN; }}></kai-tasks>
+                  <kai-tasks ref={(el) => { el.data = PLAN; }}></kai-tasks>
 
                   {/* Logs: each step is a collapsible kai-tool (its disclosure is the
                       per-step "Logs" expander - terminal output / test results). */}
@@ -397,7 +397,7 @@ export const Codex: Story = {
                     <For each={LOGS}>
                       {(entry, i) => (
                         <kai-tool
-                          ref={(el) => { (el as El).tool = entry; }}
+                          ref={(el) => { el.tool = entry; }}
                           default-open={i() === LOGS.length - 1}
                         ></kai-tool>
                       )}
@@ -409,7 +409,7 @@ export const Codex: Story = {
                   <div class="flex flex-col gap-2">
                     <div class="px-0.5 text-sm font-medium">Diff</div>
                     <div class="h-72 overflow-hidden rounded-lg border border-border">
-                      <kai-file-tree ref={(el) => { const f = el as El; f.files = CHANGED_FILES; f.summary = true; }}></kai-file-tree>
+                      <kai-file-tree ref={(el) => { const f = el; f.files = CHANGED_FILES; f.summary = true; }}></kai-file-tree>
                     </div>
                   </div>
 
@@ -419,7 +419,7 @@ export const Codex: Story = {
                     <kai-button variant="outline" size="sm" icon="git-pull-request">Create new PR</kai-button>
                     <kai-button variant="ghost" size="sm" icon="external-link">View pull request</kai-button>
                     <kai-menu
-                      ref={(el) => { (el as El).items = [
+                      ref={(el) => { el.items = [
                         { id: 'copy-branch', label: 'Copy branch name', icon: 'copy' },
                         { id: 'rerun', label: 'Re-run task', icon: 'rotate-cw' },
                         { separator: true },
@@ -433,7 +433,7 @@ export const Codex: Story = {
 
                   {/* Follow-up: iterate on the task. */}
                   <kai-prompt-input
-                    ref={(el) => { (el as El).attach = false; }}
+                    ref={(el) => { el.attach = false; }}
                     class="block"
                     placeholder="Reply to Codex to refine this task..."
                   ></kai-prompt-input>

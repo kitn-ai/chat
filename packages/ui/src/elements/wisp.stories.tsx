@@ -6,6 +6,7 @@ import './register'; // every kai-* element used below
 import type { KaiNavItem } from '../ui/nav';
 import type { KaiCommandItem } from './command';
 import type { KaiMenuItem } from './menu';
+import type { KaiWorkspaceElement, KaiNavElement, KaiMenuElement } from './element-types';
 import { textMessage } from '../state';
 import type { ChatMessage } from './chat-types';
 import { relativeTimeShort } from '../components/conversation-item';
@@ -62,7 +63,6 @@ declare module 'solid-js' {
 const meta = { title: 'Labs/Apps', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj;
-type El = HTMLElement & Record<string, unknown>;
 
 // The flat primary rows above the chat list.
 const PRIMARY: KaiNavItem[] = [
@@ -190,8 +190,8 @@ function WispApp() {
     // The composed rail's state: the consumer owns the records AND the loop.
     const [recents, setRecents] = createSignal<Recent[]>(INITIAL_RECENTS);
     const [activeId, setActiveId] = createSignal('c0');
-    let ws: El | undefined;
-    const toggleRail = () => (ws?.toggleAside as ((side: string) => void) | undefined)?.('start');
+    let ws: KaiWorkspaceElement | undefined;
+    const toggleRail = () => ws?.toggleAside('start');
 
     // The kebab actions really mutate the rows. Reference-keyed <For>: a fresh
     // array notifies, a fresh object per changed row makes the change visible.
@@ -212,7 +212,7 @@ function WispApp() {
       <div class="relative h-screen w-full">
         <kai-workspace
           ref={(el) => {
-            ws = el as El;
+            ws = el;
             ws.compact = true;
             el.style.setProperty('--kai-workspace-start-min-width', '240px');
             el.style.setProperty('--kai-workspace-start-max-width', '420px');
@@ -241,7 +241,7 @@ function WispApp() {
               // un-highlighted was exactly that. The per-row `active` binding
               // below covers the frames before the container's first item sync;
               // both derive from the same signal, so they never disagree.
-              createEffect(() => { (el as El).activeId = activeId(); });
+              createEffect(() => { el.activeId = activeId(); });
               el.addEventListener('kai-conversation-select', (e) => {
                 setActiveId((e as CustomEvent<{ id: string }>).detail.id);
               });
@@ -271,7 +271,7 @@ function WispApp() {
                 Search chats
                 <span class="ml-auto rounded border border-border px-1 text-[0.6875rem] text-muted-foreground">⌘K</span>
               </kai-button>
-              <kai-nav ref={(el) => { (el as El).items = PRIMARY; }}></kai-nav>
+              <kai-nav ref={(el) => { el.items = PRIMARY as KaiNavElement['items']; }}></kai-nav>
             </div>
 
             {/* the consumer-owned loop: one composed row per record */}
@@ -287,7 +287,7 @@ function WispApp() {
                       slot="menu"
                       label={`Actions for ${row.title}`}
                       ref={(el) => {
-                        (el as El).items = ROW_MENU_ITEMS;
+                        el.items = ROW_MENU_ITEMS as KaiMenuElement['items'];
                         el.addEventListener('kai-select', (e) => {
                           applyAction((e as CustomEvent<{ id: string }>).detail.id, row.id);
                         });
@@ -305,7 +305,7 @@ function WispApp() {
             <div slot="footer" class="px-2 py-1.5">
               {/* `full` stretches the trigger row across the rail (a real chat
                   app's footer is one full-width clickable row). */}
-              <kai-menu ref={(el) => { (el as El).items = ACCOUNT_ITEMS; }} label="Account menu" full>
+              <kai-menu ref={(el) => { el.items = ACCOUNT_ITEMS as KaiMenuElement['items']; }} label="Account menu" full>
                 <div slot="trigger" class="flex w-full items-center gap-2 text-left">
                   <kai-avatar fallback="S" size="sm"></kai-avatar>
                   <span class="text-sm font-medium">Sam</span>
@@ -331,7 +331,7 @@ function WispApp() {
               </kai-tooltip>
             </Show>
             <kai-menu
-              ref={(el) => { (el as El).items = [
+              ref={(el) => { el.items = [
                 { id: 'wisp-2', label: 'Wisp 2', checked: true },
                 { id: 'wisp-2-deep', label: 'Wisp 2 Deep' },
                 { id: 'wisp-1', label: 'Wisp 1' },
@@ -355,7 +355,7 @@ function WispApp() {
                 ></kai-button>
               </kai-tooltip>
               <kai-menu
-                ref={(el) => { (el as El).items = [
+                ref={(el) => { el.items = [
                   { id: 'archive', label: 'Archive', icon: 'box' },
                   { id: 'rename', label: 'Rename', icon: 'pencil' },
                   { separator: true },
@@ -377,7 +377,7 @@ function WispApp() {
                       <For each={MESSAGES}>
                         {(m) => (
                           <kai-message
-                            ref={(el) => { const e = el as El; e.message = m; e.avatar = 'none'; }}
+                            ref={(el) => { const e = el; e.message = m; e.avatar = 'none'; }}
                             style={{ display: 'block' }}
                           ></kai-message>
                         )}
@@ -388,10 +388,10 @@ function WispApp() {
                   {/* the composer */}
                   <div class="shrink-0 border-t border-border p-3">
                     <div class="mx-auto flex max-w-3xl flex-col gap-1.5">
-                      <kai-prompt-input ref={(el) => { (el as El).attach = false; }} placeholder="Ask anything">
+                      <kai-prompt-input ref={(el) => { el.attach = false; }} placeholder="Ask anything">
                         <div slot="toolbar-start" class="flex items-center gap-1.5">
                           <kai-menu
-                            ref={(el) => { (el as El).items = [
+                            ref={(el) => { el.items = [
                               { id: 'files', label: 'Add photos & files', icon: 'paperclip' },
                               { id: 'apps', label: 'Add from apps', icon: 'box' },
                             ]; }}
@@ -400,7 +400,7 @@ function WispApp() {
                           ></kai-menu>
                           <kai-menu
                             ref={(el) => {
-                              (el as El).items = [
+                              el.items = [
                                 { id: 'image', label: 'Create an image', icon: 'sparkles' },
                                 { id: 'web', label: 'Search the web', icon: 'globe' },
                                 { id: 'canvas', label: 'Write or code', icon: 'code' },
@@ -414,7 +414,7 @@ function WispApp() {
                           ></kai-menu>
                         </div>
                         <div slot="toolbar-end" class="flex items-center gap-1.5">
-                          <kai-model-switcher ref={(el) => { const s = el as El; s.models = MODELS; s.currentModel = 'auto'; }}></kai-model-switcher>
+                          <kai-model-switcher ref={(el) => { const s = el; s.models = MODELS; s.currentModel = 'auto'; }}></kai-model-switcher>
                           <kai-tooltip content="Dictate">
                             <kai-button variant="subtle" size="icon-sm" icon="mic" label="Dictate"></kai-button>
                           </kai-tooltip>
@@ -444,7 +444,7 @@ function WispApp() {
                   </div>
                   <div class="min-h-0 flex-1">
                     <kai-artifact
-                      ref={(el) => { const a = el as El; a.files = CANVAS_FILES; a.defaultTab = 'code'; a.activeFile = 'debounce.ts'; }}
+                      ref={(el) => { const a = el; a.files = CANVAS_FILES; a.defaultTab = 'code'; a.activeFile = 'debounce.ts'; }}
                       expandable
                     ></kai-artifact>
                   </div>
@@ -468,9 +468,9 @@ function WispApp() {
             >
               <kai-command
                 ref={(el) => {
-                  (el as El).items = COMMANDS;
+                  el.items = COMMANDS;
                   el.addEventListener('kai-select', () => setCmdOpen(false));
-                  queueMicrotask(() => (el as El).focus?.());
+                  queueMicrotask(() => el.focus?.());
                 }}
                 placeholder="Search chats, spaces, settings..."
               ></kai-command>

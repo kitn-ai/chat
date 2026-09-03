@@ -9,6 +9,7 @@ import { attachKaiActions } from '../stories/docs/story-actions';
 import { textMessage } from '../state';
 import type { ChatMessage } from './chat-types';
 import type { ConversationSummary, ConversationGroup } from '../types';
+import type { KaiWorkspaceElement, KaiConversationsElement, KaiChatElement } from './element-types';
 
 // Labs: the re-cast kai-workspace shell slots. Five bounded regions the
 // consumer fills with their own light-DOM markup:
@@ -45,12 +46,10 @@ const meta = {
 export default meta;
 type Story = StoryObj;
 
-type El = HTMLElement & Record<string, unknown>;
-
 function SlotsDemo() {
-  let ws: El | undefined;
-  let rail: El | undefined;
-  let chat: El | undefined;
+  let ws: KaiWorkspaceElement | undefined;
+  let rail: KaiConversationsElement | undefined;
+  let chat: KaiChatElement | undefined;
   onMount(() => {
     if (rail) {
       rail.groups = groups;
@@ -69,17 +68,17 @@ function SlotsDemo() {
     }
   });
   return (
-    <kai-workspace ref={(e) => (ws = e as El)} collapse-below="720" style={{ display: 'block', height: '100vh' }}>
+    <kai-workspace ref={(e) => (ws = e)} collapse-below="720" style={{ display: 'block', height: '100vh' }}>
       {/* header: brand band across the full shell width. */}
       <div slot="header" style="display:flex;align-items:center;gap:8px;padding:10px 16px;font:600 14px system-ui;color:var(--color-foreground)">
         <span style="color:var(--color-primary);display:flex"><Sparkles size={18} /></span> Acme
       </div>
 
       {/* start: the conversation rail is a PART in a slot, driven by its own props. */}
-      <kai-conversations slot="start" ref={(e) => (rail = e as El)} style="display:block;height:100%"></kai-conversations>
+      <kai-conversations slot="start" ref={(e) => (rail = e)} style="display:block;height:100%"></kai-conversations>
 
       {/* main: unnamed children land in the main region. */}
-      <kai-chat ref={(e) => (chat = e as El)} style="display:block;height:100%"></kai-chat>
+      <kai-chat ref={(e) => (chat = e)} style="display:block;height:100%"></kai-chat>
 
       {/* end: an inspector aside; anything goes, the shell never reads it. */}
       <div slot="end" style="padding:14px 16px;font:13px/1.5 system-ui;color:var(--color-muted-foreground)">

@@ -8,6 +8,7 @@ import {
 import './register'; // every kai-* element used below
 import type { FileTreeFile } from '../components/file-tree';
 import type { KaiTabItem } from '../ui/tabs';
+import type { KaiTasksElement } from './element-types';
 
 // Labs/Apps: a faithful replica of Lovable (lovable.dev), the AI app-builder.
 // Lovable's signature is the SPLIT SHELL: a chat/conversation column on the LEFT
@@ -53,14 +54,13 @@ declare module 'solid-js' {
 const meta = { title: 'Labs/Apps', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj;
-type El = HTMLElement & Record<string, unknown>;
 
 type Device = 'desktop' | 'tablet' | 'mobile';
 
 // --- Left chat fixtures -----------------------------------------------------
 
 // The agent's build plan, as kai-tasks in PROGRESS (checklist) mode.
-const PLAN = {
+const PLAN: KaiTasksElement['data'] = {
   mode: 'progress',
   heading: 'Plan',
   tasks: [
@@ -402,7 +402,7 @@ export const Lovable: Story = {
             <span class="text-[0.9375rem] font-semibold tracking-tight">Lovable</span>
             <kai-separator orientation="vertical" class="mx-1 h-5"></kai-separator>
             <kai-menu
-              ref={(el) => { (el as El).items = PROJECTS; }}
+              ref={(el) => { el.items = PROJECTS; }}
               trigger-icon="box"
               trigger-label="helm-analytics"
               trigger-icon-trailing="chevron-down"
@@ -434,7 +434,7 @@ export const Lovable: Story = {
                 <div class="flex flex-col gap-3">
                   <kai-message
                     ref={(el) => {
-                      const m = el as El;
+                      const m = el;
                       m.message = { id: 'lovable-intro', role: 'assistant', parts: [{ type: 'text', text: AGENT_INTRO }] };
                       m.avatar = 'none';
                     }}
@@ -443,7 +443,7 @@ export const Lovable: Story = {
 
                   {/* The plan is display-only here: readonly drops the toggle/pointer
                       affordances so the checklist reads as a status, not a control. */}
-                  <kai-tasks ref={(el) => { const t = el as El; t.data = PLAN; t.readonly = true; }}></kai-tasks>
+                  <kai-tasks ref={(el) => { const t = el; t.data = PLAN; t.readonly = true; }}></kai-tasks>
 
                   {/* the streamed build log (Lovable's "Worked for Ns" disclosure) */}
                   <div class="rounded-xl border border-border bg-muted/30 p-3">
@@ -470,7 +470,7 @@ export const Lovable: Story = {
                 <div class="flex flex-col gap-2.5">
                   <kai-message
                     ref={(el) => {
-                      const m = el as El;
+                      const m = el;
                       m.message = { id: 'lovable-done', role: 'assistant', parts: [{ type: 'text', text: AGENT_DONE }] };
                       m.avatar = 'none';
                     }}
@@ -488,12 +488,12 @@ export const Lovable: Story = {
             {/* composer pinned at the bottom */}
             <div class="shrink-0 border-t border-border p-3">
               <kai-prompt-input
-                ref={(el) => { (el as El).attach = false; }}
+                ref={(el) => { el.attach = false; }}
                 placeholder="Ask Lovable to make changes..."
               >
                 <div slot="toolbar-start" class="flex items-center gap-1.5">
                   <kai-menu
-                    ref={(el) => { (el as El).items = MODES; }}
+                    ref={(el) => { el.items = MODES; }}
                     trigger-icon="sparkles"
                     trigger-label="Agent"
                     trigger-icon-trailing="chevron-down"
@@ -544,7 +544,7 @@ export const Lovable: Story = {
               {/* Preview / Code */}
               <kai-tabs
                 ref={(el) => {
-                  const t = el as El;
+                  const t = el;
                   t.items = TABS; t.defaultValue = 'preview';
                   el.addEventListener('kai-tab-change', (e) => setTab((e as CustomEvent).detail.value));
                 }}
@@ -574,12 +574,12 @@ export const Lovable: Story = {
               <Show when={tab() === 'code'}>
                 <div class="mx-auto flex h-full max-w-4xl gap-3">
                   <div class="w-56 shrink-0 overflow-hidden rounded-xl border border-border bg-background">
-                    <kai-file-tree ref={(el) => { (el as El).files = FILES; }}></kai-file-tree>
+                    <kai-file-tree ref={(el) => { el.files = FILES; }}></kai-file-tree>
                   </div>
                   <div class="min-w-0 flex-1 overflow-auto rounded-xl border border-border bg-background p-4">
                     <kai-message
                       ref={(el) => {
-                        const m = el as El;
+                        const m = el;
                         m.message = { id: 'lovable-code', role: 'assistant', parts: [{ type: 'text', text: CODE_MD }] };
                         m.avatar = 'none';
                       }}

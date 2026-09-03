@@ -6,6 +6,7 @@ import type { KaiCommandItem } from './command';
 import type { ConversationSummary, ConversationGroup } from '../types';
 import { textMessage } from '../state';
 import type { ChatMessage } from './chat-types';
+import type { KaiWorkspaceElement, KaiNavElement } from './element-types';
 
 // Labs/Apps: a fourth dogfood - "ChatGPT", a replica of chatgpt.com, the
 // general-chat flagship. Its whole job is to validate the kit's CORE chat
@@ -55,7 +56,6 @@ declare module 'solid-js' {
 const meta = { title: 'Labs/Apps', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj;
-type El = HTMLElement & Record<string, unknown>;
 
 // The flat primary rows above the chat list (Library, GPTs). kai-nav is a FLAT
 // list, so these are single entry-point rows.
@@ -181,8 +181,8 @@ export const ChatGPT: Story = {
     const [railCollapsed, setRailCollapsed] = createSignal(false);
     // Captured in the workspace ref so the rail toggle can drive the exposed
     // imperative API (toggleAside) from a sibling element's ref.
-    let ws: El | undefined;
-    const toggleRail = () => (ws?.toggleAside as ((side: string) => void) | undefined)?.('start');
+    let ws: KaiWorkspaceElement | undefined;
+    const toggleRail = () => ws?.toggleAside('start');
 
     // Array/object props (and event wiring) are applied in each element's ref
     // callback, NOT a one-shot onMount, so they survive remounts. The rail
@@ -192,7 +192,7 @@ export const ChatGPT: Story = {
       <div class="relative h-screen w-full">
         <kai-workspace
           ref={(el) => {
-            ws = el as El;
+            ws = el;
             ws.compact = true;
             el.style.setProperty('--kai-workspace-start-min-width', '240px');
             el.style.setProperty('--kai-workspace-start-max-width', '420px');
@@ -210,7 +210,7 @@ export const ChatGPT: Story = {
               are its own conversations/groups props. */}
           <kai-conversations
             slot="start"
-            ref={(el) => { const c = el as El; c.groups = GROUPS; c.conversations = RECENTS; }}
+            ref={(el) => { el.groups = GROUPS; el.conversations = RECENTS; }}
             style={{ display: 'block', height: '100%' }}
           >
             <div slot="header" class="flex flex-col gap-2 px-2.5 pt-2.5 pb-1">
@@ -236,13 +236,13 @@ export const ChatGPT: Story = {
                 Search chats
                 <span class="ml-auto rounded border border-border px-1 text-[0.6875rem] text-muted-foreground">⌘K</span>
               </kai-button>
-              <kai-nav ref={(el) => { (el as El).items = PRIMARY; }}></kai-nav>
+              <kai-nav ref={(el) => { el.items = PRIMARY as KaiNavElement['items']; }}></kai-nav>
             </div>
 
             <div slot="footer" class="px-2 py-1.5">
               {/* `full` stretches the trigger row across the rail (the real
                   app's footer is one full-width clickable row). */}
-              <kai-menu ref={(el) => { (el as El).items = ACCOUNT_ITEMS; }} label="Account menu" full>
+              <kai-menu ref={(el) => { el.items = ACCOUNT_ITEMS; }} label="Account menu" full>
                 {/* The trigger content is NON-interactive: kai-menu wraps it in its
                     own <button>, so a button/kai-button here would double-nest. */}
                 <div slot="trigger" class="flex w-full items-center gap-2 text-left">
@@ -273,7 +273,7 @@ export const ChatGPT: Story = {
               </kai-tooltip>
             </Show>
             <kai-menu
-              ref={(el) => { (el as El).items = [
+              ref={(el) => { el.items = [
                 { id: 'gpt5', label: 'ChatGPT 5', checked: true },
                 { id: 'gpt5-think', label: 'ChatGPT 5 Thinking' },
                 { id: 'gpt4o', label: 'ChatGPT 4o' },
@@ -297,7 +297,7 @@ export const ChatGPT: Story = {
                 ></kai-button>
               </kai-tooltip>
               <kai-menu
-                ref={(el) => { (el as El).items = [
+                ref={(el) => { el.items = [
                   { id: 'archive', label: 'Archive', icon: 'box' },
                   { id: 'rename', label: 'Rename', icon: 'pencil' },
                   { separator: true },
@@ -322,7 +322,7 @@ export const ChatGPT: Story = {
                       <For each={MESSAGES}>
                         {(m) => (
                           <kai-message
-                            ref={(el) => { const e = el as El; e.message = m; e.avatar = 'none'; }}
+                            ref={(el) => { const e = el; e.message = m; e.avatar = 'none'; }}
                             style={{ display: 'block' }}
                           ></kai-message>
                         )}
@@ -333,11 +333,11 @@ export const ChatGPT: Story = {
                   {/* the composer */}
                   <div class="shrink-0 border-t border-border p-3">
                     <div class="mx-auto flex max-w-3xl flex-col gap-1.5">
-                      <kai-prompt-input ref={(el) => { (el as El).attach = false; }} placeholder="Ask anything">
+                      <kai-prompt-input ref={(el) => { el.attach = false; }} placeholder="Ask anything">
                         <div slot="toolbar-start" class="flex items-center gap-1.5">
                           {/* the "+" attach/upload menu */}
                           <kai-menu
-                            ref={(el) => { (el as El).items = [
+                            ref={(el) => { el.items = [
                               { id: 'files', label: 'Add photos & files', icon: 'paperclip' },
                               { id: 'apps', label: 'Add from apps', icon: 'box' },
                             ]; }}
@@ -347,7 +347,7 @@ export const ChatGPT: Story = {
                           {/* the Tools menu; "Write or code" opens the canvas */}
                           <kai-menu
                             ref={(el) => {
-                              (el as El).items = [
+                              el.items = [
                                 { id: 'image', label: 'Create an image', icon: 'sparkles' },
                                 { id: 'web', label: 'Search the web', icon: 'globe' },
                                 { id: 'canvas', label: 'Write or code', icon: 'code' },
@@ -363,10 +363,10 @@ export const ChatGPT: Story = {
                         </div>
                         <div slot="toolbar-end" class="flex items-center gap-1.5">
                           {/* the model picker - Auto / Instant / Thinking */}
-                          <kai-model-switcher ref={(el) => { const s = el as El; s.models = MODELS; s.currentModel = 'auto'; }}></kai-model-switcher>
+                          <kai-model-switcher ref={(el) => { const s = el; s.models = MODELS; s.currentModel = 'auto'; }}></kai-model-switcher>
                           {/* the thinking-effort toggle */}
                           <kai-menu
-                            ref={(el) => { (el as El).items = [
+                            ref={(el) => { el.items = [
                               { heading: true, label: 'Thinking effort' },
                               { id: 'standard', label: 'Standard', checked: true },
                               { id: 'extended', label: 'Extended' },
@@ -404,7 +404,7 @@ export const ChatGPT: Story = {
                   </div>
                   <div class="min-h-0 flex-1">
                     <kai-artifact
-                      ref={(el) => { const a = el as El; a.files = CANVAS_FILES; a.defaultTab = 'code'; a.activeFile = 'debounce.ts'; }}
+                      ref={(el) => { const a = el; a.files = CANVAS_FILES; a.defaultTab = 'code'; a.activeFile = 'debounce.ts'; }}
                       expandable
                     ></kai-artifact>
                   </div>
@@ -430,9 +430,9 @@ export const ChatGPT: Story = {
             >
               <kai-command
                 ref={(el) => {
-                  (el as El).items = COMMANDS;
+                  el.items = COMMANDS;
                   el.addEventListener('kai-select', () => setCmdOpen(false));
-                  queueMicrotask(() => (el as El).focus?.());
+                  queueMicrotask(() => el.focus?.());
                 }}
                 placeholder="Search chats, GPTs, settings..."
               ></kai-command>

@@ -13,6 +13,7 @@ import { type AgentStatus, type AgentStatusTone } from '../ui/agent-card';
 import { cn } from '../utils/cn';
 import type { KaiNavItem } from '../ui/nav';
 import type { KaiCommandItem } from './command';
+import type { KaiPromptInputElement } from './element-types';
 import { toast, configureToasts } from '../primitives/toast-store';
 
 // Labs/Apps: AMUX — a full multi-agent workspace. A desktop shell with a LEFT
@@ -105,7 +106,6 @@ declare module 'solid-js' {
 const meta = { title: 'Labs/Apps', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj;
-type El = HTMLElement & Record<string, unknown>;
 
 // ── Left rail: workspaces with counts ───────────────────────────────────────
 // kai-nav is a flat list; `meta` renders the right-aligned muted count. A
@@ -431,7 +431,7 @@ export const SplitWorkspace: Story = {
 
     // Refs captured imperatively: the per-agent prompt input (so ⌥N can focus it) and
     // the columns row (so the dividers can measure it for drag math).
-    const promptRefs = new Map<string, El>();
+    const promptRefs = new Map<string, KaiPromptInputElement>();
     // The columns row (measured by the column dividers for horizontal drag) + each
     // column's group stack (measured by its row dividers for vertical drag).
     let rowEl: HTMLDivElement | undefined;
@@ -1097,7 +1097,7 @@ export const SplitWorkspace: Story = {
       <div class="flex flex-col gap-2 px-3 py-2.5">
         <kai-message
           ref={(el) => {
-            const m = el as El;
+            const m = el;
             m.message = { id: props.agent.id, role: 'assistant', parts: [{ type: 'text', text: props.agent.body }] };
             m.avatar = 'none';
           }}
@@ -1111,7 +1111,7 @@ export const SplitWorkspace: Story = {
     const Composer = (props: { agent: Agent }) => (
       <div class="p-1.5">
         <kai-prompt-input
-          ref={(el) => { const p = el as El; p.attach = false; promptRefs.set(props.agent.id, p); }}
+          ref={(el) => { const p = el; p.attach = false; promptRefs.set(props.agent.id, p); }}
           class="block"
           placeholder={`Message ${props.agent.name}...`}
         ></kai-prompt-input>
@@ -1180,7 +1180,7 @@ export const SplitWorkspace: Story = {
             >
               <kai-editable-label
                 ref={(el) => {
-                  (el as El).value = agentName(props.agent.id);
+                  el.value = agentName(props.agent.id);
                   el.addEventListener('kai-rename', (e) =>
                     commitRename(props.agent.id, (e as CustomEvent<{ value: string }>).detail.value),
                   );
@@ -1759,7 +1759,7 @@ export const SplitWorkspace: Story = {
                   <div class="flex min-h-0 flex-1 flex-col">
                     <div class="shrink-0 px-3 pt-2 pb-1 text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground">Files</div>
                     <div class="min-h-0 flex-1 overflow-hidden px-1 pb-2">
-                      <kai-file-tree ref={(el) => { (el as El).files = SAMPLE_FILES; }}></kai-file-tree>
+                      <kai-file-tree ref={(el) => { el.files = SAMPLE_FILES; }}></kai-file-tree>
                     </div>
                   </div>
                 </Show>
@@ -1878,7 +1878,7 @@ export const SplitWorkspace: Story = {
                         {(tab) => (
                           <kai-artifact
                             ref={(el) => {
-                              const art = el as El;
+                              const art = el;
                               art.src = tab.src;
                               art.displayUrl = tab.url;
                               art.iframeTitle = tab.title;
@@ -1927,9 +1927,9 @@ export const SplitWorkspace: Story = {
             >
               <kai-command
                 ref={(el) => {
-                  (el as El).items = commandItems();
+                  el.items = commandItems();
                   el.addEventListener('kai-select', (e) => onCommandSelect((e as CustomEvent).detail.id));
-                  queueMicrotask(() => (el as El).focus?.());
+                  queueMicrotask(() => el.focus?.());
                 }}
                 placeholder="Search agents, workspaces, actions..."
               ></kai-command>
@@ -1950,7 +1950,7 @@ export const SplitWorkspace: Story = {
             <Megaphone class="size-4 text-primary" /> Message all agents
           </span>
           <kai-prompt-input
-            ref={(el) => { (el as El).attach = false; }}
+            ref={(el) => { el.attach = false; }}
             class="block"
             placeholder={`Message all ${live().length} agents...`}
           ></kai-prompt-input>
@@ -2018,7 +2018,7 @@ export const SplitWorkspace: Story = {
         {/* confirm closing a workspace — dogfoods kai-dialog */}
         <kai-dialog
           ref={(el) => {
-            createEffect(() => { (el as El).open = confirmCloseWs() != null; });
+            createEffect(() => { el.open = confirmCloseWs() != null; });
             el.addEventListener('kai-open-change', (e) => { if (!(e as CustomEvent).detail.open) setConfirmCloseWs(null); });
           }}
         >

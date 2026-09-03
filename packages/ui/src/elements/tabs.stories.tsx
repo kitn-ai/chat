@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { onMount } from 'solid-js';
 import './tabs';
 import type { KaiTabItem } from '../ui/tabs';
+import type { KaiTabsElement } from './element-types';
 
 // Declare the custom element tag for SolidJS JSX.
 declare module 'solid-js' {
@@ -27,7 +28,7 @@ const ITEMS: KaiTabItem[] = [
 ];
 
 function Strip(props: { variant?: 'segmented' | 'underline'; defaultValue?: string }) {
-  let el!: HTMLElement & { items?: KaiTabItem[] };
+  let el!: KaiTabsElement;
   onMount(() => { el.items = ITEMS; });
   return (
     <kai-tabs
