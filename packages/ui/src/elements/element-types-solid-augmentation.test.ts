@@ -104,8 +104,26 @@ describe('the solid JSX augmentation', () => {
     // tag's own instantiation, unannotated or annotated.
     const solid = moduleBlock('solid-js/jsx-runtime');
     expect(solid).toContain(
-      'interface KaiElementSolidProps<T extends HTMLElement = HTMLElement> extends JSX.HTMLAttributes<T>',
+      'interface KaiElementSolidProps<T extends HTMLElement = HTMLElement> extends SolidHtmlAttributes<T>',
     );
+  });
+
+  it('reaches HTMLAttributes through an import type, not the bare name', () => {
+    // A module augmentation merges with the real module only when that module
+    // is in the program; otherwise tsc reads the block as a fresh ambient
+    // declaration, `JSX` means the tiny namespace declared inside it, and the
+    // bare `JSX.HTMLAttributes` is TS2694 under `skipLibCheck: false`. The
+    // shipped dist/elements.d.ts imports nothing (self-contained by design),
+    // and neither does a react or vue consumer's program, so the import type
+    // is what pulls solid's types/jsx.d.ts in and makes the merge happen.
+    // tests/elements/element-types-lib-check.test.ts compiles both copies and
+    // is what catches a regression here; this pins the mechanism by name so it
+    // is not "tidied" back to the bare reference.
+    const solid = moduleBlock('solid-js/jsx-runtime');
+    expect(solid).toContain(
+      "type SolidHtmlAttributes<T extends HTMLElement> = import('solid-js/jsx-runtime').JSX.HTMLAttributes<T>;",
+    );
+    expect(solid).not.toContain('extends JSX.HTMLAttributes<');
   });
 
   it('gives every tag its OWN element interface, not the generic HTMLElement default', () => {

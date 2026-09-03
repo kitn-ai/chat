@@ -2228,6 +2228,16 @@ declare module 'react' {
 }
 
 declare module 'solid-js/jsx-runtime' {
+  /** Solid's own `JSX.HTMLAttributes`, named through an `import(...)` type
+   *  rather than as the bare `JSX.HTMLAttributes` this block would otherwise
+   *  see. The import is what pulls solid's types/jsx.d.ts into the program;
+   *  without it, a copy of this file that imports nothing else (the shipped
+   *  dist/elements.d.ts, and any consumer whose program has no other reason to
+   *  load solid's JSX types) leaves this `declare module` a fresh ambient
+   *  declaration instead of a merge, and the bare name is TS2694 under
+   *  `skipLibCheck: false`. See scripts/gen-element-types.mjs. */
+  type SolidHtmlAttributes<T extends HTMLElement> = import('solid-js/jsx-runtime').JSX.HTMLAttributes<T>;
+
   /** A kai-* custom element as Solid's JSX checker sees it, parameterized by
    *  its own element interface (`KaiDockElement`, ...) so `ref` -- via
    *  Solid's own `CustomAttributes<T>`, which `HTMLAttributes<T>` extends --
@@ -2242,7 +2252,7 @@ declare module 'solid-js/jsx-runtime' {
    *  per element would invite the wrong spelling). Widened to `unknown`,
    *  which is compatible with every member `HTMLAttributes` declares, so
    *  the two don't conflict. */
-  interface KaiElementSolidProps<T extends HTMLElement = HTMLElement> extends JSX.HTMLAttributes<T> {
+  interface KaiElementSolidProps<T extends HTMLElement = HTMLElement> extends SolidHtmlAttributes<T> {
     [prop: string]: unknown;
   }
 

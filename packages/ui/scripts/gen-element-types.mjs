@@ -453,11 +453,48 @@ ${jsxTagMap}
   // one from the other at the type level is not possible. So the solid
   // compile cell still does not type a kai prop VALUE, and
   // scripts/lib/block-framework-cells.mjs says so in the gate's output.
+  //
+  // HTMLAttributes IS REACHED THROUGH AN `import(...)` TYPE, not by the bare
+  // name `JSX.HTMLAttributes<T>`. A module augmentation only MERGES with the
+  // real module when that module is part of the program; when it is not, tsc
+  // treats the block as a fresh ambient declaration, `JSX` resolves to the
+  // little namespace declared right here (IntrinsicElements only), and every
+  // reference to `JSX.HTMLAttributes` is TS2694. The two copies of this file
+  // differed on exactly that: src/elements/element-types.d.ts imports
+  // ../primitives/highlighter and ./chat-types, which reach solid-js, so
+  // types/jsx.d.ts was in the program and the bare name resolved; the shipped
+  // dist/elements.d.ts is deliberately self-contained (no imports at all), so
+  // nothing pulled solid-js in and the SAME text failed. That is not a
+  // test-only artifact: it is what a react or vue consumer type-checking with
+  // `skipLibCheck: false` gets from the shipped file, since their program has
+  // no reason to load solid's JSX types either.
+  //
+  // The `import('solid-js/jsx-runtime')` type both NAMES the type and pulls
+  // that module into the program, which is what makes the augmentation merge.
+  // It names the same specifier the augmentation targets, so the attributes
+  // and the JSX namespace being merged into always come from one module (the
+  // exports map's `types` condition under Bundler/node16; the package-root
+  // jsx-runtime.d.ts re-export under node10). `solid-js` is a hard dependency
+  // of this package, so the specifier resolves in every consumer install --
+  // unlike `react`, an OPTIONAL peer, which is why the react block above must
+  // keep declaring its own local props interface instead.
+  // An interface cannot extend an `import(...)` type expression directly
+  // (TS2499), hence the local alias.
   const solidTagMap = elements
     .map((el) => `      '${el.tag}': KaiElementSolidProps<${el.className}>;`)
     .join('\n');
 
   const solidIntrinsicBlock = `declare module 'solid-js/jsx-runtime' {
+  /** Solid's own \`JSX.HTMLAttributes\`, named through an \`import(...)\` type
+   *  rather than as the bare \`JSX.HTMLAttributes\` this block would otherwise
+   *  see. The import is what pulls solid's types/jsx.d.ts into the program;
+   *  without it, a copy of this file that imports nothing else (the shipped
+   *  dist/elements.d.ts, and any consumer whose program has no other reason to
+   *  load solid's JSX types) leaves this \`declare module\` a fresh ambient
+   *  declaration instead of a merge, and the bare name is TS2694 under
+   *  \`skipLibCheck: false\`. See scripts/gen-element-types.mjs. */
+  type SolidHtmlAttributes<T extends HTMLElement> = import('solid-js/jsx-runtime').JSX.HTMLAttributes<T>;
+
   /** A kai-* custom element as Solid's JSX checker sees it, parameterized by
    *  its own element interface (\`KaiDockElement\`, ...) so \`ref\` -- via
    *  Solid's own \`CustomAttributes<T>\`, which \`HTMLAttributes<T>\` extends --
@@ -472,7 +509,7 @@ ${jsxTagMap}
    *  per element would invite the wrong spelling). Widened to \`unknown\`,
    *  which is compatible with every member \`HTMLAttributes\` declares, so
    *  the two don't conflict. */
-  interface KaiElementSolidProps<T extends HTMLElement = HTMLElement> extends JSX.HTMLAttributes<T> {
+  interface KaiElementSolidProps<T extends HTMLElement = HTMLElement> extends SolidHtmlAttributes<T> {
     [prop: string]: unknown;
   }
 

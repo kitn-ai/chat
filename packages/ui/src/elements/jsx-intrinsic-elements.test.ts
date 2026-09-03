@@ -32,6 +32,23 @@ function readElementTypes(): string {
   return readFileSync(resolve(HERE, 'element-types.d.ts'), 'utf8');
 }
 
+/** The `declare module 'react' { ... }` block ALONE.
+ *
+ * Bounded at the NEXT `declare module` line, not at end-of-file. The file also
+ * carries a `declare module 'solid-js/jsx-runtime'` augmentation after this one,
+ * and that block legitimately names Solid's own `HTMLAttributes` (through an
+ * import type). An unbounded slice ran the react-only-identifier assertion below
+ * over that block too and flagged it, which is a false positive: the identifiers
+ * this guard forbids are forbidden because @types/react may be absent, and say
+ * nothing about solid-js, a hard dependency of this package.
+ */
+function reactBlock(src: string): string {
+  const start = src.indexOf(`declare module 'react'`);
+  expect(start, "no `declare module 'react'` block found").toBeGreaterThan(-1);
+  const next = src.indexOf('declare module ', start + 1);
+  return next === -1 ? src.slice(start) : src.slice(start, next);
+}
+
 function readElementTags(): string[] {
   const meta = JSON.parse(readFileSync(resolve(HERE, 'element-meta.json'), 'utf8')) as { tag: string }[];
   return meta.map((el) => el.tag);
@@ -49,9 +66,9 @@ describe('JSX.IntrinsicElements augmentation for kai-* tags', () => {
     const tags = readElementTags();
     expect(tags.length).toBeGreaterThan(0);
 
-    const reactBlock = src.slice(src.indexOf(`declare module 'react'`));
+    const block = reactBlock(src);
     for (const tag of tags) {
-      expect(reactBlock, `missing IntrinsicElements entry for ${tag}`).toContain(`'${tag}':`);
+      expect(block, `missing IntrinsicElements entry for ${tag}`).toContain(`'${tag}':`);
     }
   });
 
@@ -62,9 +79,9 @@ describe('JSX.IntrinsicElements augmentation for kai-* tags', () => {
     // fully-qualified `import('react').Foo` or a locally-declared type) breaks
     // tsc for consumers who don't have react installed at all.
     const src = readElementTypes();
-    const reactBlock = src.slice(src.indexOf(`declare module 'react'`));
+    const block = reactBlock(src);
     for (const forbidden of ['HTMLAttributes', 'DetailedHTMLProps', 'ReactNode', 'React.']) {
-      expect(reactBlock, `references react-only identifier "${forbidden}"`).not.toContain(forbidden);
+      expect(block, `references react-only identifier "${forbidden}"`).not.toContain(forbidden);
     }
   });
 
