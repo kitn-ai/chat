@@ -12,6 +12,7 @@
     "src/generated/blocks-preview.ts",
     "src/components/blocks/**/*.ts",
     "src/components/blocks/**/*.tsx",
+    "src/components/blocks/kai-jsx.d.ts",
     "test/**/*.ts",
     "test/**/*.tsx"
   ]

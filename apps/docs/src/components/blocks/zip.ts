@@ -31,7 +31,7 @@ export function crc32(bytes: Uint8Array): number {
 
 const enc = new TextEncoder();
 
-function concat(parts: Uint8Array[]): Uint8Array {
+function concat(parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
   const total = parts.reduce((n, p) => n + p.length, 0);
   const out = new Uint8Array(total);
   let at = 0;
@@ -42,8 +42,14 @@ function concat(parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-/** The listed files as one uncompressed (store-only) zip, entries named by `target`. */
-export function storeZip(files: readonly { target: string; content: string }[]): Uint8Array {
+/** The listed files as one uncompressed (store-only) zip, entries named by `target`.
+ *
+ *  The return type is narrowed to `Uint8Array<ArrayBuffer>`, which is what the
+ *  body actually produces. Bare `Uint8Array` means `Uint8Array<ArrayBufferLike>`
+ *  since TypeScript 5.7, and `BlobPart` accepts only `ArrayBufferView<ArrayBuffer>`,
+ *  so the widened annotation made `new Blob([storeZip(files)])` a TS2322 at the
+ *  one call site. Narrowing here is truthful; casting at the sink would not be. */
+export function storeZip(files: readonly { target: string; content: string }[]): Uint8Array<ArrayBuffer> {
   const DOS_DATE = (1 << 5) | 1; // 1980-01-01, the zip epoch
   const locals: Uint8Array[] = [];
   const centrals: Uint8Array[] = [];
