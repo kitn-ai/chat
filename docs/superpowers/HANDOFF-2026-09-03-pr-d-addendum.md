@@ -1,4 +1,26 @@
-# HANDOFF ADDENDUM 2026-09-03: PR D open, stopped before merge on a security finding
+# HANDOFF ADDENDUM 2026-09-03: PR D merged (#381); the security ruling and the merge mishap
+
+## 0. Update, later the same day: merged as #381, and two rulings
+
+**Owner ruling on the security finding (section 1): the fix stays, no advisory, no report.** The
+vector needs the victim to point `create-kai add` at a source an attacker controls, which is the
+same trust decision as installing any package, and the owner's words were that people "have to be
+smart about where they are installing things from". Do not reopen this. `SECURITY.md`'s stale
+supported-versions table is still a small-tickets item.
+
+**#380 closed by mistake; #381 is the merge.** The controller's merge command was piped through
+`tail`, so `set -e` never saw the ruleset refuse it (the head was behind `main` after the addendum
+push), and the cleanup that followed deleted the remote branch, the worktree and the local branch.
+GitHub auto-closed #380 and would not reopen it. The 21 commits were recovered from the dangling
+commit `7d88614a`, rebased onto `main` (`1f5b83c6`), pushed, and opened as
+[#381](https://github.com/kitn-ai/ui/pull/381) with the same title and body. Three rules from it,
+now in memory: never push to `main` between opening a PR and merging it (the ruleset requires an
+up-to-date head); never pipe `gh pr merge` through `tail`; delete a branch only after
+`gh pr view --json state` says `MERGED`. The SDD workspace went with the worktree; this addendum is
+the record of its rulings.
+
+Merged 2026-09-03 as #381, squash `1528bb71`, `feat(create-kai)!:` with the BREAKING CHANGE paragraph from `923d0bb5`; remote branch deleted; worktree `blocks-d` removed. Next: PR B2.
+
 
 Addendum to [`HANDOFF-2026-09-02-night-run.md`](HANDOFF-2026-09-02-night-run.md), section 3.3,
 in the shape of the [PR B](HANDOFF-2026-09-03-pr-b-addendum.md) and
