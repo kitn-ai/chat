@@ -1,0 +1,18 @@
+{
+  "comment": "SCOPED type pass over the /blocks section only. apps/docs has no typecheck today and `astro check` over ~150 existing pages is a new gate of unknown colour, which is not this section's business. vitest transpiles without checking types, so without this the island's types ship unchecked. Extends the site's own config so module resolution and JSX match what Astro builds with.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "types": ["vite/client", "node"]
+  },
+  "include": [
+    "src/lib/blocks-source.ts",
+    "src/generated/blocks-preview.ts",
+    "src/components/blocks/**/*.ts",
+    "src/components/blocks/**/*.tsx",
+    "test/**/*.ts",
+    "test/**/*.tsx"
+  ]
+}
