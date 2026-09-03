@@ -1758,9 +1758,17 @@ if (EMITTED_FORMS.length === 0) fail(`no <block>.<form>.json under ${FORMS_DIR}`
 // -------------------------------------------------------------------- packing
 
 const tmpRoot = mkdtempSync(path.join(tmpdir(), 'verify-add-'));
+// toolsDir is created below, once the CLI is packed; declared here so cleanup
+// can remove it too, and guarded on being set since it does not exist yet.
+let toolsDir;
 const cleanup = () => {
-  if (KEEP) log(`\n  (--keep) projects left at ${tmpRoot}`);
-  else rmSync(tmpRoot, { recursive: true, force: true });
+  if (KEEP) {
+    log(`\n  (--keep) projects left at ${tmpRoot}`);
+    if (toolsDir) log(`  (--keep) tools install left at ${toolsDir}`);
+    return;
+  }
+  rmSync(tmpRoot, { recursive: true, force: true });
+  if (toolsDir) rmSync(toolsDir, { recursive: true, force: true });
 };
 process.on('exit', cleanup);
 
@@ -1790,7 +1798,7 @@ const KIT_TARBALL = pack(UI_ROOT, '@kitn.ai/ui');
 
 // The CLI, installed ONCE, in its own root so it can never be an ancestor of a
 // leg's project directory.
-const toolsDir = mkdtempSync(path.join(tmpdir(), 'verify-add-tools-'));
+toolsDir = mkdtempSync(path.join(tmpdir(), 'verify-add-tools-'));
 writeFileSync(path.join(toolsDir, 'package.json'), JSON.stringify({ name: 'verify-add-tools', private: true }, null, 2));
 run('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error', CLI_TARBALL], toolsDir);
 const CLI = path.join(toolsDir, 'node_modules/create-kai/dist/index.js');
@@ -1951,7 +1959,7 @@ function noProjectLeg() {
 log('\nverify:add -- the packed CLI, one project per detected form\n');
 const reactApp = reactLeg();
 const vueDir = otherFrameworkLeg();
-const noneDir = noProjectLeg();
+noProjectLeg();
 
 // THE ANTI-VACUITY FLOOR. Three legs that all landed on the same form would be
 // one leg run three times, and every assertion above would still pass.
