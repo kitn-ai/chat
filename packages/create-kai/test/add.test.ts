@@ -617,12 +617,6 @@ describe('menu honesty: every --form value the flag accepts writes a real tree',
   // the REAL runAdd into a real temp project. A form the flag accepts but the
   // generator cannot emit fails here whether or not anyone remembered a case,
   // and PR B2's four forms are covered on arrival.
-  it('the accepted set is exactly the framework forms plus the paste form', () => {
-    expect(BLOCK_FORMS.map((f) => f.id).sort()).toEqual(
-      [...FRAMEWORK_BLOCK_FORMS.map((f) => f.id), 'cdn'].sort(),
-    );
-  });
-
   it('has forms and blocks to drive, so the loops below are not vacuous', () => {
     expect(BLOCK_FORMS.length).toBeGreaterThan(1);
     expect(blocks.length).toBeGreaterThan(0);

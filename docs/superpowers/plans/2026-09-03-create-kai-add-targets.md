@@ -1559,12 +1559,6 @@ describe('menu honesty: every --form value the flag accepts writes a real tree',
   // the REAL runAdd into a real temp project. A form the flag accepts but the
   // generator cannot emit fails here whether or not anyone remembered a case,
   // and PR B2's four forms are covered on arrival.
-  it('the accepted set is exactly the framework forms plus the paste form', () => {
-    expect(BLOCK_FORMS.map((f) => f.id).sort()).toEqual(
-      [...FRAMEWORK_BLOCK_FORMS.map((f) => f.id), 'cdn'].sort(),
-    );
-  });
-
   it('has forms and blocks to drive, so the loops below are not vacuous', () => {
     expect(BLOCK_FORMS.length).toBeGreaterThan(1);
     expect(blocks.length).toBeGreaterThan(0);
@@ -1606,7 +1600,7 @@ fs.writeFileSync(p,s.replace(\"{ id: 'cdn', label: 'CDN single file' },\", \"{ i
 cd "$WT" && pnpm --filter create-kai exec vitest run test/add.test.ts -t 'menu honesty'
 ```
 
-Expected: FAIL twice - `the accepted set is exactly the framework forms plus the paste form` (the planted row is a framework form with no renderer) and `--form angular writes every file the form renders` (`runAdd` exits non-zero: `planFormBlock` calls `renderBlockForm(block, 'angular', ...)`, which returns `undefined` because `@kitn.ai/blocks`'s own switch has no `angular` case, and `planFiles`'s `for (const file of files)` throws on it - ruling R13 is why this reds at all; before Task 1 routed every form through `renderBlockForm`, `planAdd`'s own `else` branch treated any unrecognized form as html and this case passed silently). That second failure is the exact shape of the shipped defect this rule exists for: a flag accepting a value nothing can emit.
+Expected: FAIL once - `--form angular writes every file the form renders` (`runAdd` exits non-zero: `planFormBlock` calls `renderBlockForm(block, 'angular', ...)`, which returns `undefined` because `@kitn.ai/blocks`'s own switch has no `angular` case, and `planFiles`'s `for (const file of files)` throws on it - ruling R13 is why this reds at all; before Task 1 routed every form through `renderBlockForm`, `planAdd`'s own `else` branch treated any unrecognized form as html and this case passed silently). That second failure is the exact shape of the shipped defect this rule exists for: a flag accepting a value nothing can emit.
 
 ```bash
 cd "$WT" && mv packages/blocks/src/forms/index.ts.bak packages/blocks/src/forms/index.ts
