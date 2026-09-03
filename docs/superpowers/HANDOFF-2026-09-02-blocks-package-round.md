@@ -42,6 +42,63 @@ matched that same enumerated delta with nothing left over. A second cold build f
 byte-identical to the first. The `create-kai` pack file list was unchanged. Every required gate
 was green, and the PR's CI was green on the first run.
 
+## PR B0 (#373) merged, later the same day
+
+Squash-merged as 3a848c50: `fix(react)!: the four kit gaps the blocks contract spike found
+(F-5, F-8, F-9, F-10)` (#373). The `!` and the BREAKING CHANGE footer are real: an object ref
+typed as `HTMLElement` on a generated React wrapper no longer compiles; a callback ref still
+compiles unchanged. Migration is one line per call site. This means release-please cuts a minor
+version off this merge, not a patch.
+
+Four fixes:
+
+- **F-8** (`packages/ui/frameworks/react/runtime.tsx`): `slot` and `hidden` props are now
+  forwarded. A prop that is PRESENT with value `undefined` RESTORES the element's declared
+  default, captured per-instance on the first post-upgrade apply. A prop that is ABSENT leaves
+  the element alone -- absent and `undefined` are no longer the same thing. `kai-suggestions`
+  declares `[]` as its default, so restore equals clear for that element. `hidden` is normalised
+  to attribute-or-nothing, for React 18 compatibility.
+- **F-5** (`packages/ui/src/elements/view-stack.tsx`): `readViewEntry` is now property-first for
+  `name` and `tabRoot`. `kai-tab-bar`'s reader was already property-first; this brings
+  view-stack in line with it.
+- **F-9**: `createWebComponent<P, E>` gained a generic, and the generator now passes `Kai*Element`
+  types from `@kitn.ai/ui/elements` as the ref type. `aliasesExclude` on the dts plugin in
+  `config/vite/react.ts` keeps the emitted specifier bare, not aliased. A permanent `wrongRef`
+  fixture was added to `scripts/verify-dts-consumer.mjs`. Four in-repo consumers were retyped
+  and shed their casts: the openrouter-spike app plus the react/nextjs/tanstack-start starters.
+- **F-10**: stores re-export. Small, one line -- this fix was smaller than the other three.
+
+Proof of the fix: the spike's React tree, recreated from the report appendices, compiles under
+`tsc --strict` with a no-workaround grep, and passes Playwright against the branch's tarball. It
+fails against main's tarball with exactly the predicted TS2322/TS2305 error classes, and fails
+at the first Playwright assertion.
+
+Plan doc: `docs/superpowers/plans/2026-09-02-blocks-pr-b0-kit-fixes.md`.
+
+Process notes: 5 tasks, one reviewer per task, two fix rounds. Round 1: Task 3's typed ref broke
+four consumers behind required gates, caught by review. Round 2: Task 3's plan test could not go
+red in the useRef form; the callback-ref form is what actually goes red. One final fix wave: the
+undefined-restores-default behavior was a plan defect, addressed by Ruling 6.
+
+Parked residuals and follow-ups, none blocking:
+
+- Capture snapshot on a disconnected first apply -- `el.isConnected` is the close condition to
+  use.
+- `kai-resizable-item` `hidden` seeding the snapshot.
+- The view-stack observer note overstates its claim (the stack actually resolves by name).
+- `runtime.tsx`'s self-registration comment is now stale.
+- `packages/ui/src/elements/resizable.tsx:634`'s `hidden` JSDoc (plus `element-meta.json` and the
+  labs story copy) is now false for React consumers.
+- Docs page `guides/frameworks/react.mdx` lacks a wrapper-ref snippet.
+- The wider F-5 class: eight attribute-only declarative-child readers under `src/elements` still
+  need the same property-first fix for PR B -- conversation-list, chain-of-thought, composer,
+  model-switcher, message, prompt-input, prompt-suggestions, message-skills.
+- Every React consumer's program now loads `dist/elements.d.ts` (about 345 KB per `wc -c`) via
+  its JSX augmentation, so raw kai-* JSX is type-legal -- the spec 5.2 check must stay
+  structural, not rely on this.
+- No single command sweeps every in-repo wrapper consumer; the required test job covers only the
+  four via unit tests + dist-guards.
+
 ## Direction, as ruled by the owner (spec section 9, amendments 8a/8b)
 
 - Blocks are not a gallery. `/blocks` is a section of `ui.kitn.ai`; the block sources live in a
@@ -179,10 +236,15 @@ See the end of this file.
 > written and ruled, the spike found the seam holds but named four kit-side defects (F-5, F-8,
 > F-9, F-10), and PR A (`packages/blocks`, #372) is merged. Nothing past PR A has a plan yet.
 > Before doing anything: `git status` (expect clean but for an untracked
-> `support-widget.construct.json`, leave it), `git checkout main && git pull`. The next step is
-> to brainstorm-lite and then plan **PR B0**: fix the four kit defects from the spike, each with
-> a test, then regenerate the React wrappers off the fixed generator -- keep it small and
-> mechanical, no new design surface. After B0 lands, plan **PR B** (html/react/cdn blocks)
-> against spec sections 3, 8a, and 8b. PR B2 (vue/svelte/angular/solid) comes after B, by the
-> owner's own sequencing ruling -- don't fold it into B's plan. The owner has two open items
-> listed in this handoff (stale worktrees, #367); surface them once, do not nag.
+> `support-widget.construct.json`, leave it), `git checkout main && git pull`. **PR B0 (#373) is
+> now merged** (3a848c50) -- the four kit defects are fixed, each with a test, and the React
+> wrappers are regenerated off the fixed generator. It shipped as `fix(react)!:` with a BREAKING
+> CHANGE footer (object refs on generated wrappers are now typed; callback refs are unaffected),
+> so release-please cuts a minor version off it. **#367** (the landing-page mobile topics menu)
+> is also merged, at fcfda85b. The 178 stale agent worktrees under `.claude/worktrees/` have been
+> removed; the two entries still there are not worktrees -- one is the consumer-harness scratch
+> dir, the other a 20 KB orphan. Eleven older worktrees still live at
+> `/Users/home/Projects/kitn-ai/wt-*`, outside the repo, untouched. The next step is to plan
+> **PR B** (html/react/cdn blocks) against spec sections 3, 8a, and 8b. PR B2
+> (vue/svelte/angular/solid) comes after B, by the owner's own sequencing ruling -- don't fold it
+> into B's plan.
