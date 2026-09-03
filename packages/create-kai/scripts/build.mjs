@@ -155,7 +155,7 @@ async function main() {
   await rm(dist, { recursive: true, force: true });
   await mkdir(templatesOut, { recursive: true });
 
-  // The block gallery rides the CLI the way the templates do: a plain copy of
+  // The block catalog rides the CLI the way the templates do: a plain copy of
   // the kit's authored blocks into dist/, which `add` walks at runtime. The
   // rules over its contents live where a test can drive them - the registry
   // module validates every manifest and `test/add.test.ts` drives every block
