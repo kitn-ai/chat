@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { buildRegistryItem } from '@kitn.ai/blocks';
+import { buildRegistryItem, unsafeFilePathReason, unsafeNameReason } from '@kitn.ai/blocks';
 import type { Axis } from '../src/axes';
 import {
   FRAMEWORK_SIGNALS,
@@ -641,4 +641,64 @@ describe('menu honesty: every --form value the flag accepts writes a real tree',
       }
     });
   }
+});
+
+describe('SECURITY: a fetched item cannot name a path outside the project', () => {
+  // `fileTarget` (packages/blocks/src/targets.ts) joins a block's name and a
+  // file's path onto the install root with a raw string concatenation, and
+  // `runAdd` writes at `path.join(root, file.path)` -- neither normalizes,
+  // so a hostile "name" or files[].path in a fetched item JSON plans a write
+  // outside the project. `blockFromItemJson` is the one gate a fetched item
+  // passes through (there is no directory scan to check it against, unlike
+  // a bundled block's dirName match), so these two cases exercise it
+  // directly and confirm nothing lands outside the temp project root.
+  it('rejects a hostile "name" (path segments, escapes the project)', async () => {
+    const dir = await project('hostile-name', { name: 'host' });
+    const before = (await readdir(root)).sort();
+    const item = {
+      name: '../../.git/hooks',
+      title: 'Hostile',
+      description: 'a hostile item',
+      type: 'registry:block',
+      files: [{ path: 'pre-commit', type: 'registry:page', content: '#!/bin/sh\necho pwned\n' }],
+    };
+    const run = await runInto(dir, ['https://registry.example/r/hostile.json'], {
+      fetchJson: async () => item,
+    });
+    expect(run.code).not.toBe(0);
+    expect(run.err.join('\n')).toContain('../../.git/hooks');
+    expect(run.err.join('\n')).toMatch(/does not match/);
+    expect(existsSync(path.join(root, '.git'))).toBe(false);
+    expect((await readdir(root)).sort()).toEqual(before);
+  });
+
+  it('rejects a hostile files[].path (".." segment, escapes the project)', async () => {
+    const dir = await project('hostile-path', { name: 'host' });
+    const before = (await readdir(root)).sort();
+    const item = {
+      name: 'hostile-path-block',
+      title: 'Hostile',
+      description: 'a hostile item',
+      type: 'registry:block',
+      files: [{ path: '../../evil.txt', type: 'registry:page', content: 'pwned' }],
+    };
+    const run = await runInto(dir, ['https://registry.example/r/hostile-path-block.json'], {
+      fetchJson: async () => item,
+    });
+    expect(run.code).not.toBe(0);
+    expect(run.err.join('\n')).toContain('../../evil.txt');
+    expect(run.err.join('\n')).toContain('".." segment');
+    expect(existsSync(path.join(root, 'evil.txt'))).toBe(false);
+    expect((await readdir(root)).sort()).toEqual(before);
+  });
+
+  it('the three bundled blocks all pass the name-and-path rule (not over-strict)', () => {
+    expect(blocks.length).toBeGreaterThan(0);
+    for (const block of blocks) {
+      expect(unsafeNameReason(block.name), block.name).toBeNull();
+      for (const file of block.manifest.files) {
+        expect(unsafeFilePathReason(file.path), `${block.name}: ${file.path}`).toBeNull();
+      }
+    }
+  });
 });

@@ -28,7 +28,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 
-import { discoverBlocks } from '@kitn.ai/blocks';
+import { discoverBlocks, unsafeFilePathReason, unsafeNameReason } from '@kitn.ai/blocks';
 import type {
   Block,
   BlockManifest,
@@ -104,10 +104,24 @@ export function blockFromItemJson(raw: unknown, sourceUrl: string): { block?: Bl
     return { errors: [`${sourceUrl}: the item JSON has no "name"`] };
   }
   const errors: string[] = [];
+  // PATH TRAVERSAL. A fetched item's "name" and files[].path never pass
+  // through `validateBlockManifest`'s dirName check (there is no directory
+  // scan for a URL), so this is the one place they meet the shared rule in
+  // `@kitn.ai/blocks` before `fileTarget`/`runAdd` join them onto the
+  // install root with a raw string concatenation.
+  const nameProblem = unsafeNameReason(item.name);
+  if (nameProblem) {
+    errors.push(`${sourceUrl}: name "${item.name}" ${nameProblem}`);
+  }
   const files = new Map<string, string>();
   for (const entry of item.files ?? []) {
     if (typeof entry.path !== 'string' || typeof entry.content !== 'string') {
       errors.push(`${sourceUrl}: files["${String(entry.path)}"] carries no inline "content"; a per-block item JSON is self-contained`);
+      continue;
+    }
+    const pathProblem = unsafeFilePathReason(entry.path);
+    if (pathProblem) {
+      errors.push(`${sourceUrl}: files["${entry.path}"] ${pathProblem}`);
       continue;
     }
     files.set(entry.path, entry.content);
