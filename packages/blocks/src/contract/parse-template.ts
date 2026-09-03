@@ -94,46 +94,63 @@ function classify(name: string): { kind: BindingKind | 'for' | 'key'; target: st
   return null;
 }
 
-// `?` is in here and in no branch of `classify` on purpose: `?attr` is the one
-// near-miss spelling an author arrives with (spec 8a.2 rejects it), and taking
-// it for a literal attribute would write `?hidden` into the page.
-const BINDING_PREFIXES = /^[.:@#*?]|^seed:/;
+/** The entry script is GENERATED under the authored contract, so an authored
+ *  one is a page that was never converted. Refused wherever it sits: `<head>`
+ *  is copied into the emitted page VERBATIM, so a script there would survive
+ *  without ever having been looked at. */
+function failScript(ctx: Ctx, el: P5Element): void {
+  const src = el.attrs.find((a) => a.name === 'src')?.value;
+  fail(
+    ctx,
+    lineOf(el),
+    `the page carries ${src ? `<script src="${src}">` : 'an inline <script>'}. Under the authored contract the entry script is GENERATED: put the wiring on the markup (spec 3.1) and the logic in <id>.controller.ts (spec 3.2).`,
+  );
+}
 
 function convertElement(el: P5Element, ctx: Ctx, scope: string | undefined, hasParent: boolean): TemplateNode {
   const line = lineOf(el);
   const attrs: LiteralAttr[] = [];
   const bindings: Binding[] = [];
-  let repeat: Repeat | undefined;
   let keyValue: string | undefined;
   let refName: string | undefined;
+  const authored = authoredAttrs(el, ctx.source);
 
-  for (const { name, value } of authoredAttrs(el, ctx.source)) {
+  // The repeat is resolved BEFORE anything else on this element is classified.
+  // A `*for` opens a scope that belongs to the ELEMENT, not to the attributes
+  // written after it, and a single loop that discovered the repeat midway made
+  // the verdict depend on attribute ORDER: `<li :unread="row.unread" *for="row
+  // of rows">` was refused for lacking the `*for` sitting two attributes along.
+  let repeat: Repeat | undefined;
+  for (const { name, value } of authored) {
+    if (!name.startsWith('*')) continue;
+    if (name !== '*for') {
+      fail(ctx, line, `"${name}" is not a list binding; the only \`*\` form is \`*for="item of list"\`.`);
+      continue;
+    }
+    const m = FOR_VALUE.exec(value.trim());
+    if (!m) {
+      fail(ctx, line, `*for="${value}": a list binding is spelled \`*for="item of list"\`, both identifiers.`);
+      continue;
+    }
+    repeat = { item: m[1], list: m[2], key: '', line };
+  }
+  const inScope = repeat ? repeat.item : scope;
+
+  for (const { name, value } of authored) {
     const kind = classify(name);
     if (!kind) {
+      // `?attr` is the near-miss spelling an author arrives with (spec 8a.2
+      // rejects it), and taking it for a literal would write `?hidden` into
+      // the page. It is the only unknown prefix there is to catch: every other
+      // punctuation the grammar uses has its own `classify` branch.
       if (name.startsWith('?')) {
         fail(ctx, line, `"${name}" is not a binding kind: a boolean attribute is spelled \`:${name.slice(1)}\`, which removes the attribute on false and writes it otherwise (spec 3.1).`);
-        continue;
-      }
-      if (BINDING_PREFIXES.test(name)) {
-        fail(ctx, line, `"${name}" starts with a binding prefix this grammar does not have. The kinds are .prop, :attr, @event, #ref, *for and seed:attr (spec 3.1).`);
         continue;
       }
       attrs.push({ name, value });
       continue;
     }
-    if (kind.kind === 'for') {
-      if (kind.target !== 'for') {
-        fail(ctx, line, `"*${kind.target}" is not a list binding; the only \`*\` form is \`*for="item of list"\`.`);
-        continue;
-      }
-      const m = FOR_VALUE.exec(value.trim());
-      if (!m) {
-        fail(ctx, line, `*for="${value}": a list binding is spelled \`*for="item of list"\`, both identifiers.`);
-        continue;
-      }
-      repeat = { item: m[1], list: m[2], key: '', line };
-      continue;
-    }
+    if (kind.kind === 'for') continue; // resolved above
     if (kind.kind === 'key') {
       keyValue = value;
       continue;
@@ -165,7 +182,6 @@ function convertElement(el: P5Element, ctx: Ctx, scope: string | undefined, hasP
       continue;
     }
     // prop | attr
-    const inScope = repeat ? repeat.item : scope;
     if (!checkValue(ctx, line, name, value, inScope)) continue;
     bindings.push({
       kind: kind.kind,
@@ -246,11 +262,19 @@ function convertChildren(parent: P5Parent, ctx: Ctx, scope: string | undefined, 
   for (const child of childrenOf(parent)) {
     if (isElement(child)) {
       if (child.tagName === 'script') {
-        const src = child.attrs.find((a) => a.name === 'src')?.value ?? '';
+        failScript(ctx, child);
+        continue;
+      }
+      // parse5 puts a template's children on its `.content` fragment, so
+      // `childrenOf` returns NOTHING for one and the whole subtree, bindings
+      // included, would be dropped without a word. The row template is
+      // generated from `*for`, so an authored one is refused rather than
+      // walked.
+      if (child.tagName === 'template') {
         fail(
           ctx,
           lineOf(child),
-          `the page carries <script src="${src}">. Under the authored contract the entry script is GENERATED: put the wiring on the markup (spec 3.1) and the logic in <id>.controller.ts (spec 3.2).`,
+          `the page carries a <template>. Its children live on the element's \`.content\` fragment rather than in the tree, so nothing inside it is parsed at all, and the row template is GENERATED from \`*for\` (spec 3.1): author the row markup as the \`*for\` element itself.`,
         );
         continue;
       }
@@ -298,10 +322,15 @@ export function parseTemplate(html: string, where: string): { template?: ParsedT
   const headInner = html.slice(headStart, headEnd);
 
   const stylesheets: string[] = [];
-  for (const link of childrenOf(head)) {
-    if (!isElement(link) || link.tagName !== 'link') continue;
-    if (link.attrs.find((a) => a.name === 'rel')?.value !== 'stylesheet') continue;
-    const href = link.attrs.find((a) => a.name === 'href')?.value ?? '';
+  for (const child of childrenOf(head)) {
+    if (!isElement(child)) continue;
+    if (child.tagName === 'script') {
+      failScript(ctx, child);
+      continue;
+    }
+    if (child.tagName !== 'link') continue;
+    if (child.attrs.find((a) => a.name === 'rel')?.value !== 'stylesheet') continue;
+    const href = child.attrs.find((a) => a.name === 'href')?.value ?? '';
     if (href.startsWith('./')) stylesheets.push(href.slice(2));
   }
 

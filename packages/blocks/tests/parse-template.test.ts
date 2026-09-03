@@ -85,6 +85,17 @@ describe('the five binding kinds', () => {
     expect(item && item.type === 'element' && item.repeat).toMatchObject({ item: 'row', list: 'rows', key: 'row.id' });
   });
 
+  it('reads *for wherever the author wrote it in the attribute order', () => {
+    // The scope a `*for` opens belongs to the ELEMENT, not to the attributes
+    // after it. An attribute loop that discovered the repeat midway refused
+    // `row.unread` here for lacking the `*for` sitting two attributes along.
+    const t = ok('<ul><li :unread="row.unread" *for="row of rows" :key="row.id"></li></ul>');
+    const list = rootChildren(t)[0];
+    const item = list.type === 'element' ? list.children.find((c) => c.type === 'element') : undefined;
+    expect(item && item.type === 'element' && item.repeat).toMatchObject({ item: 'row', list: 'rows', key: 'row.id' });
+    expect(item && item.type === 'element' && item.bindings[0]).toMatchObject({ kind: 'attr', name: 'unread', value: 'row.unread' });
+  });
+
   it('a plain attribute stays a literal', () => {
     const t = ok('<kai-button variant="ghost" full></kai-button>');
     const el = rootChildren(t)[0];
@@ -119,6 +130,16 @@ describe('every refusal', () => {
     expect(errsFor('<ul><li *for="row of rows"></li></ul>')).toContain(':key is mandatory');
   });
 
+  it('refuses a :key that is not dotted from the loop item', () => {
+    expect(errsFor('<ul><li *for="row of rows" :key="id"></li></ul>'))
+      .toContain(':key="id" must be dotted from the loop item, e.g. :key="row.id".');
+  });
+
+  it('refuses a :key dotted from the wrong loop item', () => {
+    expect(errsFor('<ul><li *for="row of rows" :key="other.id"></li></ul>'))
+      .toContain(':key="other.id" must be dotted from the loop item, e.g. :key="row.id".');
+  });
+
   it('refuses :key without *for', () => {
     expect(errsFor('<li :key="a.id"></li>')).toContain(':key="a.id" is only legal on an element carrying `*for`');
   });
@@ -150,6 +171,24 @@ describe('every refusal', () => {
 
   it('refuses an authored module script: the entry script is GENERATED now', () => {
     expect(errsFor('<script type="module" src="./b.js"></script>')).toContain('GENERATED');
+  });
+
+  it('refuses a hand-authored <template>: parse5 hides its children on .content', () => {
+    const errs = errsFor('<template id="t"><span .textContent="a"></span></template>');
+    expect(errs).toContain('<template>');
+    expect(errs).toContain('GENERATED from `*for`');
+  });
+
+  it('refuses a script in <head> too, not only in <body>', () => {
+    const headScript = (tag: string) =>
+      `<!doctype html>\n<html lang="en">\n<head>\n${tag}\n</head>\n<body>\n<div data-block-root></div>\n</body>\n</html>\n`;
+    expect(parseTemplate(headScript('<script type="module" src="./b.js"></script>'), 'fixture/b.html').errors.join(' | '))
+      .toContain('GENERATED');
+    // An inline script has no src, and the refusal must not invent one: the
+    // message it prints is the only thing the author has to go on.
+    const inline = parseTemplate(headScript('<script>window.x = 1;</script>'), 'fixture/b.html').errors.join(' | ');
+    expect(inline).toContain('GENERATED');
+    expect(inline).not.toContain('src=""');
   });
 
   it('refuses #ref inside a *for subtree', () => {
