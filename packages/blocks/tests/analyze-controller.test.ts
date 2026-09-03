@@ -84,3 +84,37 @@ describe('analyzeController', () => {
     expect(out.shape?.actionNames).toEqual(['boot', 'send', 'cancel']);
   });
 });
+
+describe('analyzeController: parameter-list and object-literal members do not leak', () => {
+  it('does not leak a second parameter or an object-typed parameter as a member (single line)', () => {
+    const body = 'export interface WidgetActions { send(text: string, opts: { silent: boolean }): void; boot(): Promise<void>; }';
+    const source = GOOD.replace(/export interface WidgetActions \{[\s\S]*?\n\}/, body);
+    const out = analyzeController(source, 'Widget', 'w');
+    expect(out.errors).toEqual([]);
+    expect(out.shape?.actionNames).toEqual(['send', 'boot']);
+  });
+
+  it('does not leak parameters from a signature whose parameter list spans lines', () => {
+    const body = [
+      'export interface WidgetActions {',
+      '  send(',
+      '    text: string,',
+      '    opts: { silent: boolean },',
+      '  ): void;',
+      '  boot(): Promise<void>;',
+      '}',
+    ].join('\n');
+    const source = GOOD.replace(/export interface WidgetActions \{[\s\S]*?\n\}/, body);
+    const out = analyzeController(source, 'Widget', 'w');
+    expect(out.errors).toEqual([]);
+    expect(out.shape?.actionNames).toEqual(['send', 'boot']);
+  });
+
+  it('does not leak keys of a one-line object-literal-typed state field', () => {
+    const body = 'export interface WidgetState {\n  filters: { open: boolean, unread: boolean };\n}';
+    const source = GOOD.replace(/export interface WidgetState \{[\s\S]*?\n\}/, body);
+    const out = analyzeController(source, 'Widget', 'w');
+    expect(out.errors).toEqual([]);
+    expect(out.shape?.stateFields).toEqual(['filters']);
+  });
+});

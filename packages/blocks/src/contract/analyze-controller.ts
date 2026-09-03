@@ -75,17 +75,47 @@ function interfaceBody(source: string, name: string): string | null {
 }
 
 /**
- * Member names of an interface body: `name:`, `name?:`, `name(`.
+ * Split an interface body into member tokens at `;`, `,` and newline, but
+ * ONLY when the separator sits at bracket depth zero.
  *
  * P5: a single-line body (`{ boot(): void; send(text: string): void }`) puts
  * every member after the first on the SAME line as the one before it, so a
- * line-anchored match reads only the first member. Tokenize the body on `;`,
- * `,` and newline BEFORE matching, so a single-line or multi-line body reads
- * every member the same way.
+ * line-anchored match reads only the first member -- fixed by tokenizing on
+ * `;`/`,`/newline. But a naive split on those characters ALSO cuts inside a
+ * parameter list: `send(text: string, opts: { silent: boolean }): void`
+ * would split at the `,` between parameters and again inside the object
+ * type, leaking `opts` as if it were its own member. So depth is tracked
+ * across `(`, `{`, `[` and `<` and a separator only ends a token at depth
+ * zero; a multi-line signature whose parameter list spans lines is the same
+ * case (the newline sits at depth > 0) and is handled the same way.
+ *
+ * `<>` depth is tracked for generic type arguments (`Promise<void>`,
+ * `Map<string, number>`) well enough for a parameter list or object type --
+ * it is not a real parser and does not need to disambiguate `<` as
+ * less-than, which cannot occur in this position in a type annotation.
  */
+function splitMembers(body: string): string[] {
+  const tokens: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const ch of body) {
+    if (ch === '(' || ch === '{' || ch === '[' || ch === '<') depth += 1;
+    else if (ch === ')' || ch === '}' || ch === ']' || ch === '>') depth = Math.max(0, depth - 1);
+    if (depth === 0 && (ch === ';' || ch === ',' || ch === '\n')) {
+      tokens.push(current);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  tokens.push(current);
+  return tokens;
+}
+
+/** Member names of an interface body: `name:`, `name?:`, `name(`. */
 function memberNames(body: string): string[] {
   const names: string[] = [];
-  for (const token of body.split(/[;,\n]/)) {
+  for (const token of splitMembers(body)) {
     const m = /^\s*(?:readonly\s+)?([A-Za-z_$][\w$]*)\s*\??\s*[:(]/.exec(token);
     if (m && !names.includes(m[1])) names.push(m[1]);
   }
