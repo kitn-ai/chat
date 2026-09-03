@@ -2,7 +2,7 @@
  * A store-only zip writer, in the browser.
  *
  * MOVED from packages/ui/mcp/construct/dev.ts, whose /gallery/api/zip route
- * PR C retires. The decision it records still holds: node's zlib has DEFLATE
+ * PR C retired. The decision it records still holds: node's zlib has DEFLATE
  * but no zip CONTAINER, nothing in the dependency tree ships one, and the
  * files are a handful of small text sources, so compression buys nothing worth
  * a dependency. Method 0, which every unzip reads. Deterministic on purpose

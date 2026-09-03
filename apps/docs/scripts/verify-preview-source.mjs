@@ -24,7 +24,10 @@
 // the plain form and gets a WARNING table with the exit code untouched, and
 // the deploy workflow (.github/workflows/deploy-docs.yml, wired in Task 9)
 // runs --require-published, where a non-200 is fatal because shipping that
-// deploy would put empty previews on the live page.
+// deploy would put empty previews on the live page. There the probe asks a
+// second time before calling a non-404 a miss, and the epilogue names which
+// of the two causes it found: a 404 waits on a release, anything else means
+// the registry did not answer and the run is worth repeating.
 //
 // The footer wording is IMPORTED from copy-blocks.mjs rather than restated
 // here: that script is where the preview source is decided, so a guard with
@@ -46,21 +49,24 @@ const version = JSON.parse(
 ).version;
 
 const CDN_PIN = `https://cdn.jsdelivr.net/npm/@kitn.ai/ui@${version}/dist/`;
-// The two path markers are scanned across the whole built site: neither string
-// has any innocent reason to appear in a deployed page.
+// The two path markers are scanned across every text file the build emits
+// (.html, .js, .css, .json): neither string has an innocent reason to appear
+// in a deployed page, wherever it turns up.
 const LOCAL_MARKERS = ['/blocks/kit/', '/blocks/local/'];
 // The footer, in the words copy-blocks.mjs writes, for both modes. The local
 // one must not ship; the production one must.
 const LOCAL_FOOTER = previewSource({ KAI_BLOCKS_KIT: 'local' }, version).footer;
 const CDN_FOOTER = previewSource({}, version).footer;
-// `packages/ui/dist` is the FOOTER's words, not a path, and a guide sentence
-// mentioning that directory would otherwise turn a docs edit into a red
-// preview-source gate with a misleading message. So it is scanned only where
-// the footer can be: any chunk carrying the word both footers open with.
-// Taken off the footer rather than typed, so it cannot drift out of scope.
-const FOOTER_SCOPE = LOCAL_FOOTER.split(' ')[0];
+// The footer is rendered by the blocks island, so the only place it can reach
+// is that island's bundle: a built /_astro chunk. Scoping the footer checks
+// there is what keeps a guide sentence about the local mode from turning a
+// docs edit into a red preview-source gate with a misleading message.
+const ASTRO_CHUNK = /^\/_astro\/.*\.js$/;
 // How long one HEAD may take before it counts as a failure to answer.
 const PROBE_TIMEOUT_MS = 15000;
+// How long to wait before asking a second time. Long enough for a rate
+// limiter to let go, short enough that a real outage is not a slow gate.
+const PROBE_RETRY_DELAY_MS = 2000;
 
 /** Every file under a directory, recursively. */
 function walk(dir) {
@@ -75,7 +81,7 @@ function walk(dir) {
 
 /** The checks, as a pure function over a virtual tree, so --self-test can
  *  plant a defect without touching the real build. */
-export function check(files, { cdnPin, localMarkers, localFooter, cdnFooter, footerScope }) {
+export function check(files, { cdnPin, localMarkers, localFooter, cdnFooter }) {
   const problems = [];
   const previews = files.filter((f) => f.path.endsWith('.cdn.html'));
 
@@ -109,21 +115,21 @@ export function check(files, { cdnPin, localMarkers, localFooter, cdnFooter, foo
     }
   }
 
-  // The footer's own words, scanned only where the footer can be rendered
-  // from: any chunk that carries the opening word. A prose page that happens
-  // to mention packages/ui/dist is not this guard's business.
-  const footerCarriers = text.filter((f) => f.content.includes(footerScope));
-  const localFooterHit = footerCarriers.find((f) => f.content.includes(localFooter));
+  // The footer's own words, over the built chunks the island ships in. A
+  // prose page that happens to mention packages/ui/dist is not this guard's
+  // business, and a page cannot render a footer it does not carry the code for.
+  const chunks = text.filter((f) => ASTRO_CHUNK.test(f.path));
+  const localFooterHit = chunks.find((f) => f.content.includes(localFooter));
   if (localFooterHit) {
     problems.push(
       `${localFooterHit.path} carries the LOCAL footer text ("${localFooter}"). The deployed page must say it is previewing the published kit, because that is what it is doing and the claim is the whole point of the production preview.`,
     );
   }
 
-  const footer = text.find((f) => f.content.includes(cdnFooter));
+  const footer = chunks.find((f) => f.content.includes(cdnFooter));
   if (!footer) {
     problems.push(
-      `no built asset carries the production footer ("${cdnFooter}"). The footer states the preview source in words and the deployed one must say the published kit.`,
+      `no built /_astro chunk carries the production footer ("${cdnFooter}"). The footer states the preview source in words and the deployed one must say the published kit.`,
     );
   }
 
@@ -147,23 +153,45 @@ export function collectPublishedEntries(files, cdnPin) {
   return [...urls].sort();
 }
 
+/** One HEAD, with the timeout. */
+async function probeOnce(url, fetchImpl, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetchImpl(url, { method: 'HEAD', signal: controller.signal });
+    return { url, status: res.status, ok: res.status === 200 };
+  } catch (err) {
+    return { url, status: 0, ok: false, error: err?.message ?? String(err) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
- * HEAD each URL once and report what the registry served. `fetchImpl` is
- * injected so --self-test can watch both verdicts without a network.
+ * HEAD each URL and report what the registry served. `fetchImpl` is injected
+ * so --self-test can watch every verdict without a network.
+ *
+ * With `retry`, a miss that is NOT a 404 is asked once more after a pause.
+ * A 404 is the registry answering, and asking twice will not publish the
+ * entry; a 429, a 5xx or no answer at all is the registry failing to answer,
+ * and that is the failure that turns a jsDelivr blip into a red deploy. Only
+ * the strict form retries: the warning form costs nobody a deploy, so making
+ * it slower on a flake buys nothing.
  */
-export async function probePublished(urls, fetchImpl = fetch, timeoutMs = PROBE_TIMEOUT_MS) {
+export async function probePublished(
+  urls,
+  fetchImpl = fetch,
+  timeoutMs = PROBE_TIMEOUT_MS,
+  { retry = false, retryDelayMs = PROBE_RETRY_DELAY_MS } = {},
+) {
   const results = [];
   for (const url of urls) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetchImpl(url, { method: 'HEAD', signal: controller.signal });
-      results.push({ url, status: res.status, ok: res.status === 200 });
-    } catch (err) {
-      results.push({ url, status: 0, ok: false, error: err?.message ?? String(err) });
-    } finally {
-      clearTimeout(timer);
+    let result = await probeOnce(url, fetchImpl, timeoutMs);
+    if (retry && !result.ok && result.status !== 404) {
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      result = await probeOnce(url, fetchImpl, timeoutMs);
     }
+    results.push(result);
   }
   return results;
 }
@@ -175,6 +203,29 @@ export async function probePublished(urls, fetchImpl = fetch, timeoutMs = PROBE_
  */
 export function probeIsFatal(probed, requirePublished) {
   return requirePublished && probed.some((r) => !r.ok);
+}
+
+/**
+ * The advice that follows the probe table. A miss is one of two different
+ * facts and they need opposite instructions: a 404 is the registry ANSWERING
+ * that the entry is not published yet, which the next release fixes and a
+ * re-run never will; anything else (429, a 5xx, no answer at all) is the
+ * registry not answering, which no commit here can fix and a re-run often
+ * does. Pure, so --self-test can read the wording of both branches.
+ */
+export function probeEpilogue(missing, cdnPin) {
+  if (missing.every((r) => r.status === 404)) {
+    return (
+      `  Deploying this build would ship EMPTY previews: every block imports the entries above from\n` +
+      `  ${cdnPin} and the ones marked MISS are not there. They arrive with the next @kitn.ai/ui\n` +
+      `  release. Release the kit, or deploy once it is published.\n`
+    );
+  }
+  return (
+    `  The registry did not answer for the entries marked MISS, and it was asked twice. A status\n` +
+    `  other than 404 means jsDelivr was rate limiting, erroring or unreachable, not that the entry\n` +
+    `  is unpublished, so nothing in this checkout can fix it. Re-run the workflow.\n`
+  );
 }
 
 function printProbeTable(results, cdnPin, heading) {
@@ -205,7 +256,6 @@ const OPTIONS = {
   localMarkers: LOCAL_MARKERS,
   localFooter: LOCAL_FOOTER,
   cdnFooter: CDN_FOOTER,
-  footerScope: FOOTER_SCOPE,
 };
 
 async function selfTest() {
@@ -248,14 +298,25 @@ async function selfTest() {
     process.exit(1);
   }
   const missing = `${CDN_PIN}wire.js`;
-  const stub = async (url) => ({ status: url === missing ? 404 : 200 });
-  const probed = await probePublished(entries, stub, 50);
+  let stubCalls = 0;
+  const stub = async (url) => {
+    stubCalls += 1;
+    return { status: url === missing ? 404 : 200 };
+  };
+  const probed = await probePublished(entries, stub, 50, { retry: true, retryDelayMs: 1 });
   const bad = probed.filter((r) => !r.ok);
   if (bad.length !== 1 || bad[0].url !== missing) {
     console.error('x self-test: the planted missing entry was NOT detected:', probed);
     process.exit(1);
   }
-  console.log(`  self-test 5: detected -- a planted missing published entry (${bad[0].url} -> ${bad[0].status})`);
+  // A 404 is an ANSWER, so it is asked once even in the retrying form, and
+  // the advice it earns is about the release cadence, not about re-running.
+  const missingEpilogue = probeEpilogue(bad, CDN_PIN);
+  if (stubCalls !== entries.length || missingEpilogue.includes('did not answer') || !missingEpilogue.includes('release')) {
+    console.error('x self-test: a 404 was retried, or was not blamed on the release cadence:', stubCalls, missingEpilogue);
+    process.exit(1);
+  }
+  console.log(`  self-test 5: detected -- a planted missing published entry (${bad[0].url} -> ${bad[0].status}), asked once`);
 
   const clean = [{ url: missing, status: 200, ok: true }];
   if (
@@ -278,6 +339,62 @@ async function selfTest() {
     process.exit(1);
   }
   console.log(`  self-test 7: detected -- a network failure counts as a miss (${unreachable[0].error})`);
+
+  // A non-404 is the registry failing to answer rather than a fact about the
+  // release, so the strict probe asks once more after a short pause. A stub
+  // that fails and then serves 200 must come back ok, and must not be fatal.
+  let flakyCalls = 0;
+  const flaky = async () => {
+    flakyCalls += 1;
+    return { status: flakyCalls === 1 ? 429 : 200 };
+  };
+  const retried = await probePublished([missing], flaky, 50, { retry: true, retryDelayMs: 1 });
+  if (!retried[0].ok || flakyCalls !== 2 || probeIsFatal(retried, true)) {
+    console.error('x self-test: a 429 that clears on the retry was NOT recovered:', retried, flakyCalls);
+    process.exit(1);
+  }
+  console.log(`  self-test 8: recovered -- a 429 answering 200 on the retry (${flakyCalls} attempts, not fatal)`);
+
+  // Twice in a row is not a blip. It is still not a 404, so it stays fatal
+  // under --require-published and the epilogue says the registry did not
+  // answer: telling anyone to cut a release would be the wrong instruction.
+  let downCalls = 0;
+  const down = async () => {
+    downCalls += 1;
+    return { status: 503 };
+  };
+  const stillDown = await probePublished([missing], down, 50, { retry: true, retryDelayMs: 1 });
+  const downEpilogue = probeEpilogue(stillDown, CDN_PIN);
+  if (
+    stillDown[0].ok ||
+    downCalls !== 2 ||
+    !probeIsFatal(stillDown, true) ||
+    !downEpilogue.includes('did not answer')
+  ) {
+    console.error(
+      'x self-test: two 503s were not fatal, were not retried, or were blamed on the release cadence:',
+      stillDown,
+      downCalls,
+      downEpilogue,
+    );
+    process.exit(1);
+  }
+  console.log(`  self-test 9: detected -- two 503s stay fatal and name the registry (${downCalls} attempts)`);
+
+  // The footer is rendered by the island, so it can only ever reach an
+  // /_astro chunk. A prose page quoting the local footer sentence is a guide
+  // explaining the local mode, not a build that shipped it, and flagging it
+  // would turn a docs edit into a red gate with a misleading message.
+  const prose = [
+    ...good,
+    { path: '/guides/blocks.html', content: `<p>Set KAI_BLOCKS_KIT=local and the footer says ${LOCAL_FOOTER}.</p>` },
+  ];
+  const proseProblems = check(prose, OPTIONS);
+  if (proseProblems.length !== 0) {
+    console.error('x self-test: a prose page quoting the local footer was flagged:', proseProblems);
+    process.exit(1);
+  }
+  console.log('  self-test 10: a prose page quoting the local footer is not a shipped local build');
 
   console.log('\nok preview source --self-test: every planted defect detected.\n');
   process.exit(0);
@@ -302,16 +419,12 @@ async function main() {
     process.exit(1);
   }
 
-  const probed = await probePublished(entries, fetch);
+  const probed = await probePublished(entries, fetch, PROBE_TIMEOUT_MS, { retry: REQUIRE_PUBLISHED });
   const missing = probed.filter((r) => !r.ok);
   if (missing.length > 0) {
     if (probeIsFatal(probed, REQUIRE_PUBLISHED)) {
       printProbeTable(probed, CDN_PIN, 'x published entries: the registry does not serve every entry the previews import.');
-      console.error(
-        `  Deploying this build would ship EMPTY previews: every block imports the entries above from\n` +
-          `  ${CDN_PIN} and the ones marked MISS are not there. They arrive with the next @kitn.ai/ui\n` +
-          `  release. Release the kit, or deploy once it is published.\n`,
-      );
+      console.error(probeEpilogue(missing, CDN_PIN));
       process.exit(1);
     }
     printProbeTable(

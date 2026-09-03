@@ -36,8 +36,8 @@ import type {
 } from '@kitn.ai/blocks';
 // The FORM RENDERING is the kit's shared pure module too (same bundle-import
 // precedent as the registry line above): one renderer serves this planner AND
-// the per-framework code view on the docs site's /blocks section, so what
-// /blocks shows is byte-for-byte what `add` writes.
+// the `kai dev` gallery's per-framework code view, so what the gallery shows
+// is byte-for-byte what `add` writes.
 import {
   adaptRegistrationForBundler,
   componentName,
@@ -320,7 +320,7 @@ export function planAdd(resolved: ResolvedAdd, opts: PlanOptions): AddPlan {
 }
 
 // The three per-form file sets come from the ONE shared renderer
-// (`@kitn.ai/blocks/forms`, which is what /blocks shows too);
+// (`@kitn.ai/blocks/forms` — the gallery serves the identical output);
 // what stays here is what only the CLI knows: where the files land in the
 // consumer's project, and the note printed about them.
 

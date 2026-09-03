@@ -417,8 +417,8 @@ export function missingStarterProblem(
  * is not there.
  *
  * `@kitn.ai/blocks` lives in its own workspace package (see packages/blocks):
- * one source for the block registry and forms shared by the docs site's
- * /blocks section and this CLI, behind a package boundary instead of a relative
+ * one source for the block registry and forms shared by the `kai dev`
+ * gallery and this CLI, behind a package boundary instead of a relative
  * reach across packages. `cp` throws its own ENOENT on a missing source, so this
  * rule buys the same thing missingStarterProblem buys for a starter: the
  * message names the resolved directory instead of leaving a stack trace to
