@@ -25,6 +25,8 @@ import {
   checkBlockContracts,
   type RawBlockSource,
 } from '@kitn.ai/blocks';
+import { handlerName } from '@kitn.ai/blocks/forms';
+import { onName } from '../../scripts/gen-element-react.mjs';
 import { listIntegrations } from '../registry';
 
 const ROOT = resolve(__dirname, '../..');
@@ -102,6 +104,40 @@ describe("the real blocks against this package's real inputs", () => {
       expect(
         readBuiltArtifact(join(ROOT, 'scripts/block-driver/pages/generated', block.name, 'index.html')),
       ).toBe(local.html);
+    }
+  });
+});
+
+/**
+ * The blocks package restates two rules the kit owns, because it cannot
+ * import from packages/ui: the react block renderer needs the handler-prop
+ * name and the wrapper component name, and PR A's dependency direction is
+ * what keeps that package free of a build-order dependency on the kit. This
+ * suite is the one that already holds BOTH packages' inputs, so the
+ * restatements are checked here against the kit's own metadata rather than
+ * trusted (plan R17 and R18; a docs/coupling-map.md section 4 row).
+ */
+describe('the derivations the react block renderer makes', () => {
+  const meta = JSON.parse(readFileSync(join(ROOT, 'src/elements/element-meta.json'), 'utf8')) as {
+    tag: string;
+    displayName: string;
+    className: string;
+    events: { name: string }[];
+  }[];
+
+  it('handlerName agrees with the wrapper generator for every event the kit declares', () => {
+    const events = meta.flatMap((el) => el.events.map((e) => e.name));
+    expect(events.length).toBeGreaterThan(0); // anti-vacuity: an empty roster must not pass
+    for (const event of events) expect(handlerName(event)).toBe(onName(event));
+  });
+
+  it('the component and element-interface names are derivable from the tag, with no exceptions', () => {
+    const pascalTag = (tag: string) =>
+      tag.replace(/^kai-/, '').split('-').map((s) => s[0].toUpperCase() + s.slice(1)).join('');
+    expect(meta.length).toBeGreaterThan(0);
+    for (const el of meta) {
+      expect(el.displayName).toBe(pascalTag(el.tag));
+      expect(el.className).toBe(`Kai${pascalTag(el.tag)}Element`);
     }
   });
 });

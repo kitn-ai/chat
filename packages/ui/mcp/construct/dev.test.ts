@@ -772,16 +772,11 @@ describe('the gallery route table', () => {
       expect(out?.kind === 'file' && out.type, form).toBe('application/json');
       return out?.kind === 'file' ? (JSON.parse(String(out.body)) as { files: { path: string; content: string }[] }).files : [];
     };
-    // html is NOT asserted here: this fixture is an UNCONVERTED block (an
-    // authored <script type="module"> and an imperative demo-block.js), and
-    // the html form refuses one now. Its refusal has its own case below; the
-    // positive html assertions come back with the converted fixture.
-    // react — the page becomes a generated component plus derived typings.
-    const react = filesOf('react');
-    expect(react.map((f) => f.path)).toEqual(
-      expect.arrayContaining(['DemoBlock.tsx', 'kai-elements.d.ts', 'demo-block.d.ts', 'demo-block.js']),
-    );
-    expect(react.map((f) => f.path)).not.toContain('demo-block.html');
+    // Neither html NOR react is asserted here: this fixture is an UNCONVERTED
+    // block (an authored <script type="module"> and an imperative
+    // demo-block.js), and both forms refuse one now. Their refusal has its own
+    // case below; the positive assertions come back with the converted
+    // fixture.
     // cdn — one self-contained file with imports pinned to the served version.
     // The expected URL is DERIVED from the fixture's version, never a literal
     // pin: lint:cdn-pins scans every @kitn.ai/ui@<semver> literal in the tree
@@ -791,19 +786,23 @@ describe('the gallery route table', () => {
     expect(cdn[0].content).toContain(`https://cdn.jsdelivr.net/npm/@kitn.ai/ui@${dirs.version}/dist/`);
   });
 
-  it('an unconverted block gets a loud refusal from the html form, not a 404', () => {
+  it('an unconverted block gets a loud refusal from the html AND react forms, not a 404', () => {
     const { dirs } = galleryFixture();
-    const out = handleGalleryRequest('/gallery/api/form/demo-block/html', dirs);
-    expect(out?.kind).toBe('file');
-    expect(out?.kind === 'file' && out.status).toBe(500);
-    const body = String(out?.kind === 'file' ? out.body : '');
-    // The refusal names the block and says what is wrong with it in words.
-    // This fixture's page still carries its own <script type="module">, which
-    // is the FIRST thing the authored grammar refuses, so that is the reason
-    // it reports; the message points at the controller file as the fix.
-    expect(body).toContain('the html form of "demo-block" cannot be rendered');
-    expect(body).toContain('the entry script is GENERATED');
-    expect(body).toContain('controller.ts');
+    // One `try` in dev.ts dispatches every form, so both refusals arrive the
+    // same way and this is one case rather than two.
+    for (const form of ['html', 'react']) {
+      const out = handleGalleryRequest(`/gallery/api/form/demo-block/${form}`, dirs);
+      expect(out?.kind, form).toBe('file');
+      expect(out?.kind === 'file' && out.status, form).toBe(500);
+      const body = String(out?.kind === 'file' ? out.body : '');
+      // The refusal names the block and says what is wrong with it in words.
+      // This fixture's page still carries its own <script type="module">, which
+      // is the FIRST thing the authored grammar refuses, so that is the reason
+      // it reports; the message points at the controller file as the fix.
+      expect(body, form).toContain(`the ${form} form of "demo-block" cannot be rendered`);
+      expect(body, form).toContain('the entry script is GENERATED');
+      expect(body, form).toContain('controller.ts');
+    }
   });
 
   it('unknown forms and blocks on the form/zip routes answer missing — the form list derived, never restated', () => {
@@ -817,15 +816,15 @@ describe('the gallery route table', () => {
 
   it('GET /gallery/api/zip/<block>/<form> is the SAME rendered files as a store-only zip download', () => {
     const { dirs } = galleryFixture();
-    // `react`, not `html`, only while this fixture is UNCONVERTED: the html
-    // form refuses an unconverted block now, and this case is about the zip
-    // being the form route's own bytes rather than about which form. It goes
-    // back to html with the converted fixture.
-    const form = handleGalleryRequest('/gallery/api/form/demo-block/react', dirs);
+    // `cdn`, not `html`, only while this fixture is UNCONVERTED: the html and
+    // react forms both refuse an unconverted block now, and this case is about
+    // the zip being the form route's own bytes rather than about which form.
+    // It goes back to html with the converted fixture.
+    const form = handleGalleryRequest('/gallery/api/form/demo-block/cdn', dirs);
     const files = form?.kind === 'file' ? (JSON.parse(String(form.body)) as { files: { path: string; content: string }[] }).files : [];
-    const zip = handleGalleryRequest('/gallery/api/zip/demo-block/react', dirs);
+    const zip = handleGalleryRequest('/gallery/api/zip/demo-block/cdn', dirs);
     expect(zip?.kind === 'file' && zip.type).toBe('application/zip');
-    expect(zip?.kind === 'file' && zip.download).toBe('demo-block-react.zip');
+    expect(zip?.kind === 'file' && zip.download).toBe('demo-block-cdn.zip');
     const body = zip?.kind === 'file' ? (zip.body as Buffer) : Buffer.alloc(0);
     // Byte-equal to the form route's files, by construction: same renderer,
     // and store-only means each file's exact bytes appear in the archive.

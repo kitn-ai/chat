@@ -17,7 +17,12 @@ const reactImportPath = (srcElementsRel) =>
 
 // Event names are lower-kebab, kai-prefixed (e.g. `kai-message-action`). The React/Solid
 // handler prop strips the `kai-` prefix and PascalCases on hyphens → `onMessageAction`.
-const onName = (ev) => 'on' + ev.replace(/^kai-/, '').split('-').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('');
+// EXPORTED because @kitn.ai/blocks restates this rule (it cannot import from
+// packages/ui without a build-order dependency this repo does not allow), and
+// mcp/tests/blocks-artifacts.test.ts holds both sides to assert they agree for
+// every event the kit declares. `export` on a const changes nothing this
+// generator writes.
+export const onName = (ev) => 'on' + ev.replace(/^kai-/, '').split('-').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('');
 
 export function writeReact(root, elements, IMPORTS) {
   const used = new Set();

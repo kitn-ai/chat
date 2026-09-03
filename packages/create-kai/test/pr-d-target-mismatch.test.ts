@@ -14,19 +14,22 @@
 import { describe, expect, it } from 'vitest';
 import { installRoot } from '@kitn.ai/blocks/targets';
 import { planAdd } from '../src/blocks';
-import { loadBundledBlocks, KIT_RANGE, KIT_VERSION } from './helpers';
+import { authoredBlock, KIT_RANGE, KIT_VERSION } from './helpers';
 
 describe('the PR D target mismatch', () => {
-  it('the react form declares src/components/<id> while add still writes src/blocks/<id>', async () => {
-    const blocks = await loadBundledBlocks();
-    const block = blocks.find((b) => b.name === 'support-widget');
-    if (!block) throw new Error('support-widget is not in the bundled registry');
-
+  it('the react form declares src/components/<id> while add still writes src/blocks/<id>', () => {
+    // The subject is where `add` WRITES, so any renderable block shows it. It
+    // is the synthetic authored-contract fixture rather than support-widget
+    // only while the real blocks are unconverted: the react renderer refuses
+    // one, and this case would then be red for a reason that is not the
+    // mismatch.
+    const block = authoredBlock('authored-block');
     const plan = planAdd({ blocks: [block], routes: [] }, { form: 'react', kitRange: KIT_RANGE, kitVersion: KIT_VERSION });
     const written = plan.files.map((f) => f.path);
 
-    expect(installRoot('react', 'support-widget')).toBe('src/components/support-widget');
-    expect(written.every((p) => p.startsWith('src/blocks/support-widget/'))).toBe(true);
+    expect(written.length).toBeGreaterThan(0);
+    expect(installRoot('react', block.name)).toBe(`src/components/${block.name}`);
+    expect(written.every((p) => p.startsWith(`src/blocks/${block.name}/`))).toBe(true);
     expect(written.some((p) => p.startsWith('src/components/'))).toBe(false);
   });
 });
