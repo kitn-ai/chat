@@ -16,7 +16,9 @@
  * error and no failed request.
  */
 import { describe, expect, it } from 'vitest';
-import { undefinedAutoloadableTags } from './autoloader';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { undefinedAutoloadableTags } from './autoloader-walk';
 
 const html = (markup: string): HTMLElement => {
   const host = document.createElement('div');
@@ -44,5 +46,28 @@ describe('the autoloader tag scan', () => {
   it('ignores tags the manifest does not know', () => {
     const root = html('<template><not-a-kai-element></not-a-kai-element></template>');
     expect(undefinedAutoloadableTags(root)).toEqual([]);
+  });
+});
+
+/**
+ * The walk is INTERNAL, and this is what keeps it that way.
+ *
+ * It briefly was a named export of `autoloader.ts` for this test's sake, and
+ * `@kitn.ai/ui/autoloader` is a PUBLISHED subpath: the emitted bundle's export
+ * list grew a third name while `scripts/gen-element-dts.mjs` went on declaring
+ * two, so the runtime surface and the declared surface disagreed and nothing
+ * said so. Exporting for a test is how that happens, so the rule gets a check
+ * rather than a comment.
+ */
+describe('the autoloader subpath surface', () => {
+  it('exports exactly the two documented functions, and not the walk', async () => {
+    const entry = (await import('./autoloader')) as Record<string, unknown>;
+    const names = Object.keys(entry).filter((n) => n !== 'default').sort();
+    expect(names).toEqual(['setAutoloaderBasePath', 'startAutoloader']);
+    // The names `gen-element-dts.mjs` declares for the subpath, so the runtime
+    // list above and the shipped .d.ts cannot drift apart in silence.
+    const dts = readFileSync(resolve(__dirname, '../../scripts/gen-element-dts.mjs'), 'utf8');
+    for (const name of names) expect(dts).toContain(`export declare function ${name}`);
+    expect(dts).not.toContain('undefinedAutoloadableTags');
   });
 });

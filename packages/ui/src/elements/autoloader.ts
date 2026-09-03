@@ -17,6 +17,7 @@
 // equal the tag, and some modules register more than one tag), and modules are
 // fetched relative to THIS module's URL.
 import manifest from './element-manifest.json';
+import { undefinedAutoloadableTags } from './autoloader-walk';
 
 const tagToModule: Record<string, string> = manifest.tags;
 const inFlight = new Set<string>();
@@ -62,48 +63,8 @@ function warnOnce(tag: string, err: unknown): void {
   );
 }
 
-/**
- * Every kai-* tag under `root` (root included) that this autoloader knows and
- * that is not defined yet.
- *
- * `<template>` CONTENT COUNTS, and that is the part that is easy to get wrong.
- * A template's children live on its `.content` DocumentFragment rather than in
- * the tree, so `querySelectorAll` walks straight past them -- and a generated
- * block page ships its repeated row markup inside a template, where the row's
- * tag is often its only occurrence on the page. Missing it is a DEADLOCK
- * rather than a slow path: a page that awaits `customElements.whenDefined`
- * before its first render never reaches the render that would have put a row
- * in the live DOM for the MutationObserver to see.
- *
- * `:not(:defined)` is not used for the template pass, because a fragment's
- * elements are not upgraded regardless; the defined check is explicit here so
- * both passes answer the same question.
- *
- * Exported for its unit test: the walk is the whole rule, and `discover`'s own
- * effect is a dynamic import no test should be made to run.
- */
-export function undefinedAutoloadableTags(root: ParentNode | Element): string[] {
-  const tags = new Set<string>();
-  const add = (tag: string): void => {
-    if (tag in tagToModule && !customElements.get(tag)) tags.add(tag);
-  };
-  const walk = (node: ParentNode | Element): void => {
-    const self = (node as Element).tagName?.toLowerCase?.();
-    if (self) add(self);
-    if (self === 'template') {
-      walk((node as HTMLTemplateElement).content);
-      return;
-    }
-    node.querySelectorAll?.('*').forEach((el) => {
-      const tag = el.tagName.toLowerCase();
-      if (tag === 'template') walk(el as HTMLTemplateElement);
-      else add(tag);
-    });
-  };
-  walk(root);
-  return [...tags];
-}
-
+// Two lines over the walk, which lives in its own INTERNAL module so it can
+// have a unit test without becoming a public export of this subpath.
 function discover(root: ParentNode | Element): void {
   undefinedAutoloadableTags(root).forEach(register);
 }

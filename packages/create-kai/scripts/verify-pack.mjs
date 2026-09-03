@@ -157,8 +157,12 @@ if (blockFiles.length === 0) {
 // and then refuses at the user's first `add`, naming a generator they never
 // ran. The twins are written by the build's post-copy walk; this asserts they
 // survived into the tarball.
+// `.d.ts` is excluded: it is a declaration, not a source, and the build's
+// walk does not emit a twin for one (esbuild would produce an empty module).
+// Demanding a `types.d.js` beside a `types.d.ts` is a false positive that
+// would fail a shippable tarball.
 const twinless = blockFiles
-  .filter((f) => f.endsWith('.ts'))
+  .filter((f) => f.endsWith('.ts') && !f.endsWith('.d.ts'))
   .filter((f) => !files.includes(f.replace(/\.ts$/, '.js')));
 if (twinless.length > 0) {
   problems.push(
