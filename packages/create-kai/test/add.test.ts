@@ -610,3 +610,41 @@ describe('dependency merging never downgrades what the project already chose', (
     expect(JSON.parse(merged.text).dependencies['@kitn.ai/ui']).toBe('^0.1.0');
   });
 });
+
+describe('menu honesty: every --form value the flag accepts writes a real tree', () => {
+  // `menu-honesty.test.ts`'s rule applied to the delivery-form flag. The
+  // accepted set is the axis itself, and every value in it is driven through
+  // the REAL runAdd into a real temp project. A form the flag accepts but the
+  // generator cannot emit fails here whether or not anyone remembered a case,
+  // and PR B2's four forms are covered on arrival.
+  it('the accepted set is exactly the framework forms plus the paste form', () => {
+    expect(BLOCK_FORMS.map((f) => f.id).sort()).toEqual(
+      [...FRAMEWORK_BLOCK_FORMS.map((f) => f.id), 'cdn'].sort(),
+    );
+  });
+
+  it('has forms and blocks to drive, so the loops below are not vacuous', () => {
+    expect(BLOCK_FORMS.length).toBeGreaterThan(1);
+    expect(blocks.length).toBeGreaterThan(0);
+  });
+
+  for (const form of BLOCK_FORMS) {
+    it(`--form ${form.id} writes every file the form renders`, async () => {
+      for (const block of blocks) {
+        // A project with NO framework signal, so the flag is the only thing
+        // deciding: a leg that also matched detection would pass on detection.
+        const dir = await project(`form-${form.id}-${block.name}`, { name: 'host' });
+        const run = await runInto(dir, [block.name, '--form', form.id]);
+        expect(run.code, `${block.name} --form ${form.id}: ${run.err.join('\n')}`).toBe(0);
+        const planned = planAdd(
+          { blocks: [block], routes: [] },
+          { form: form.id, kitRange: KIT_RANGE, kitVersion: KIT_VERSION },
+        ).files;
+        expect(planned.length, `${block.name} --form ${form.id}: planned nothing`).toBeGreaterThan(0);
+        for (const file of planned) {
+          expect(existsSync(path.join(dir, file.path)), `${block.name} --form ${form.id}: ${file.path} not written`).toBe(true);
+        }
+      }
+    });
+  }
+});
