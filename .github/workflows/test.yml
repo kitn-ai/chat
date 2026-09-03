@@ -649,6 +649,41 @@ jobs:
       - name: create-kai packed-tarball shape
         run: pnpm --filter create-kai run verify:pack
 
+      # Cache the npm side of the react-host leg. verify:add's own react
+      # install is the one expensive thing in this leg (network + a cold
+      # install of react, react-dom, vite, the react plugin and typescript),
+      # same shape as the `browser` job's cache ahead of verify:blocks:react.
+      # Keyed on the fixture's own package.json plus create-kai's, so a pin
+      # bump on either side busts it.
+      - name: Cache npm (create-kai add smoke, react leg)
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: verify-add-npm-${{ hashFiles('packages/ui/scripts/block-driver/react-host/package.json', 'packages/create-kai/package.json') }}
+          restore-keys: verify-add-npm-
+
+      # The published `add`, which nothing above can see. The suite drives the
+      # planner in-process and verify:pack reads the tarball's LISTING; neither
+      # runs the binary. This packs the CLI, installs it, and runs `add` into one
+      # throwaway project per detection row -- react (which also installs the
+      # packed kit and compiles the written tree), another framework, and a
+      # directory with no package.json -- comparing every written byte against
+      # the dist/blocks artifacts the /blocks page serves. It is the guard on the
+      # section 3.4 ruling from the CLI's side: the path the page displays is the
+      # path add writes.
+      #
+      # It runs its own plants in the same process (`--self-test` is in the npm
+      # script): the cost here is the one npm install, and a second invocation
+      # would double the only expensive thing it does.
+      #
+      # NETWORK-DEPENDENT: the react leg's `npm install` reaches the registry
+      # for react, react-dom, vite, the react plugin and typescript, same as
+      # the `browser` job's verify:blocks:react step.
+      #
+      # Needs the `build` leg's artifact for dist/blocks and for packing the kit.
+      - name: create-kai add smoke (packed tarball, one project per detected form)
+        run: pnpm --filter create-kai run verify:add
+
       # AND AGAIN UNDER THE NPM THAT ACTUALLY PUBLISHES, which is not this one.
       #
       # The step above runs node 22's bundled npm (10.9.8). release-please.yml

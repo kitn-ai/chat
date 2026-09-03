@@ -150,6 +150,8 @@ The adversarial review caught this: as drafted, Task 1's three `plan*Block` func
 
 ## File structure
 
+<!-- gate-list: partial -- a file-change table naming created/modified paths, not a gate list; `node packages/ui/scripts/lint-gate-parity.mjs --list` prints the merge gate -->
+
 | File | Created / Modified | Responsibility |
 |---|---|---|
 | `packages/create-kai/src/blocks.ts` | Modify (Task 0 comments, Task 1 substantively) | Task 0: two `gallery` comments reworded by the banked patch. Task 1: `planAdd` writes `file.target` by routing every form through `renderBlockForm`; `blockDir()` deleted; `FRAMEWORK_SIGNALS` rows name a framework; `landingForm`/`emitsOwnTree` derive from `FRAMEWORK_BLOCK_FORMS`; `Detection` carries the fallback frameworks; `blockFormAxis` derives its options. |
