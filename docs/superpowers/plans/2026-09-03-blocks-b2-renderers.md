@@ -210,6 +210,10 @@ The refusal it exercises ("the block emitted other forms but not this one, so it
 
 The two doc linters over `docs/superpowers/**` are different guards with different markers, and confusing them leaves the tree red while looking fixed. `lint-gate-parity.mjs` honours `<!-- gate-list: partial -- <reason> -->` above a block that looks like a gate enumeration. `lint-threshold-derivation.mjs` honours exactly three things on the offending LINE: a backticked producing command, the literal phrase `ratchet, not a target`, or the parsed directive `lint-thresholds: waive -- <reason>` with a reason of at least fifteen characters. A `gate-list` marker does nothing for it. Read the header of `packages/ui/scripts/lint-threshold-derivation.mjs` before waiving anything, and prefer naming the command that prints the number to waiving at all.
 
+**R21. Every emitted adapter calls `controller.actions.boot()` from the host's own mount hook, after the ready-gated tree has rendered, matching the shipped react adapter's ordering.**
+
+The original renderer text for Tasks 3-6 set `ready` and called `boot()` in the same tick as the write, while the tree the ref lives on is gated on `ready` - so on vue, svelte, angular and solid every ref was still null inside `boot()`. The shipped react adapter (`useSupportWidget.ts`, read out of `dist/blocks/f/support-widget.react.json`) instead calls `boot()` from a `useEffect`, which React runs only after the DOM commits, so refs are already populated. No authored controller's `boot()` touches `deps.refs()` today, so nothing broke - but no cell in this PR could have seen it, because all four new cells are compile-only and the runtime cell stays react-only. A block whose `boot()` touches a ref would work in react and silently no-op in four forms, and "decide loudly" forbids shipping that divergence knowingly when the fix is one line per renderer and the compile cells can see a wrong hook name. So: vue calls `boot()` from `onMounted`, after `await nextTick()` past `ready.value = true`; svelte calls it from `onMount` (replacing the bare `$effect` that only did the registration wait, since `onMount` does that job too and is also the mount hook), after `await tick()` past `ready = true`; angular calls it from `ngAfterViewInit`, through `afterNextRender` scheduled there, after the store's `connect()` sets `ready`; solid already called it from `onMount`, and Solid's signal writes flush synchronously outside a `batch()`, so no additional wait was needed there, only the header comment saying so. Each renderer's header states the ordering in one sentence, and each task's suite gains one assertion that the `boot()` call sits inside that hook. Cost if wrong: a mount-hook ordering subtlety in one framework that a compile-only cell cannot see; the react runtime cell remains the only behavioral proof.
+
 ---
 
 ## Facts verified
@@ -255,7 +259,7 @@ Every row was read or run in the tree at plan time. Where the spec and the tree 
 | `packages/ui/node_modules/typescript` DOES NOT EXIST | `ls`. `node-linker=hoisted` puts the only copies at the repo root and under `packages/create-kai`, so any probe naming a `packages/ui/node_modules/typescript` path fails with a module-not-found before it can produce the red it was written to watch. Resolve it instead of typing it |
 | A bare side-effect import of a missing module produces NO diagnostic under `moduleResolution: bundler` | spiked: `import './definitely-missing-thing';` and `import 'some-missing-pkg';` in a checked `.ts` are silent, while a deliberate type error on the next line is reported. This is why dropping `shims.d.ts` (which carries `declare module '*.css'`) from a sandbox include happens to be harmless for the emitted trees today, and why ruling R16 makes `opts.include` additive anyway |
 | `runBlockCompileCells` hard-fails on a form id with no strategy, and per BLOCK on a block that emitted some forms but not this one | read `packages/ui/scripts/lib/block-compile-cells.mjs:142-159` (the strategy refusal) and `:160-172` (the per-block one). `blockFormCheck` (`packages/ui/scripts/verify-scaffold-compiles.mjs:1972-2001`) additionally refuses a registry block that emitted NO form at all |
-| `loadBlockForms` derives the `forms` axis from the emitted file NAMES | read `packages/ui/scripts/lib/block-compile-cells.mjs:48-70`: `formIds.add(parsed.form)` per file. So removing every file of one form removes the form from the axis and the run stays green, which is ruling R19's whole reason |
+| `loadBlockForms` derives the `forms` axis by reading `parsed.form` out of each file's BODY, with the file name only setting the iteration order | read `packages/ui/scripts/lib/block-compile-cells.mjs:56-66`: `formIds.add(parsed.form)` per file. So removing every file of one form removes the form from the axis and the run stays green, which is ruling R19's whole reason |
 | `sandbox(project, name)` writes its own tsconfig with the project's computed options and a recursive include, and exposes `dir`, `clear`, `run`, `selfTest` | read `packages/ui/scripts/lib/consumer-tsc-projects.mjs:466-511`. Its default include ends with the shims path (`:481-485`), which is what ruling R16 refuses to let a caller drop |
 | The consumer harness symlinks `vue`, `svelte`, `solid-js` and `@angular/core` but not `@angular/common`, `@angular/compiler` or `@angular/platform-browser` | read `consumer-tsc-projects.mjs:306-333` |
 | `gen-blocks.mjs` iterates `FRAMEWORK_BLOCK_FORMS` and needs no edit | read `packages/ui/scripts/gen-blocks.mjs:172-178` |
@@ -309,7 +313,7 @@ Every row was read or run in the tree at plan time. Where the spec and the tree 
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: three recorded facts every later task depends on - the Solid coverage output, the axes `verify:scaffold` prints today, and the gate list. Record all three in the task report; none of them is written into this plan.
+- Produces: four recorded facts every later task depends on - the Solid coverage output, the axes `verify:scaffold` prints today, the gate list, and the re-confirmed `ngc` TS2554 spike that gates whether Task 2 proceeds. Record all four in the task report; none of them is written into this plan.
 
 - [ ] **Step 1: Confirm the three worktree steps, even if told they were done**
 
@@ -376,6 +380,81 @@ for (const p of ['vue', 'svelte', '@angular/core', '@angular/common', '@angular/
 ```
 
 Expected: every one resolves, and every path is under the WORKTREE ROOT's `node_modules`, not `packages/ui/node_modules`. That is ruling R12's evidence: they are hoisted from `examples/starters/*` and no package that uses them declares them. Record the versions; Task 2 Step 2 writes exactly these into `packages/ui/package.json`.
+
+- [ ] **Step 6: Re-confirm `ngc` really works against the workspace's resolved TypeScript, before Task 2 commits a ninth devDependency on it**
+
+`@angular/compiler-cli` declares a `typescript` peer range the workspace's resolved TypeScript does not satisfy - a MAJOR-version gap, not the patch-level mismatch the phrasing elsewhere in this plan implies. The plan-time spike behind the Facts table row and ruling R18 saw `ngc --strictTemplates` report TS2554 in both directions, but that spike cannot be re-read from this worktree. Re-run it here, once, before Task 2's `@angular/compiler-cli` devDependency and eight siblings are committed: if `ngc` refuses or misbehaves, Task 2 Steps 3 and 4 and all of Task 5 collapse, and finding that out five tasks in is the expensive version of finding it out now.
+
+Resolve the real `ngc` entry point rather than typing a path (`packages/ui/node_modules/typescript` does not exist, and the same is true of `@angular/compiler-cli`; the only copy is hoisted to the worktree root):
+
+```bash
+cd "$WT" && node -e "
+const { createRequire } = require('module');
+const r = createRequire('$WT/packages/ui/scripts/lib/consumer-tsc-projects.mjs');
+const pkgJson = r.resolve('@angular/compiler-cli/package.json');
+const root = require('path').dirname(pkgJson);
+const bin = require(pkgJson).bin.ngc;
+console.log(require('path').resolve(root, bin));
+"
+```
+
+Expected: a path ending `@angular/compiler-cli/bundles/src/bin/ngc.js`, under the worktree root's `node_modules` (confirmed today, from this worktree: `node_modules/@angular/compiler-cli/bundles/src/bin/ngc.js`, `bin.ngc` in the package's own `package.json`). Export it:
+
+```bash
+export NGC="$(cd "$WT" && node -e "
+const { createRequire } = require('module');
+const r = createRequire('$WT/packages/ui/scripts/lib/consumer-tsc-projects.mjs');
+const pkgJson = r.resolve('@angular/compiler-cli/package.json');
+const root = require('path').dirname(pkgJson);
+console.log(require('path').resolve(root, require(pkgJson).bin.ngc));
+")"
+```
+
+Write the two-file throwaway. A zero-arg action called with `$event` is the plant: `strictTemplates` must refuse it with TS2554.
+
+```bash
+mkdir -p "$SCRATCH/ngc-spike" && cd "$SCRATCH/ngc-spike"
+ln -sfn "$WT/node_modules" "$SCRATCH/ngc-spike/node_modules"
+cat > plant.component.ts <<'EOF'
+import { Component } from '@angular/core';
+
+@Component({
+  selector: 'app-plant',
+  templateUrl: './plant.component.html',
+})
+export class PlantComponent {
+  poke(): void {}
+}
+EOF
+cat > plant.component.html <<'EOF'
+<button (click)="poke($event)">poke</button>
+EOF
+cat > tsconfig.json <<'EOF'
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "experimentalDecorators": true,
+    "isolatedModules": true
+  },
+  "angularCompilerOptions": {
+    "strictTemplates": true
+  },
+  "include": ["plant.component.ts"]
+}
+EOF
+node "$NGC" -p "$SCRATCH/ngc-spike/tsconfig.json"; echo "EXIT=$?"
+```
+
+Expected: non-zero exit and `error TS2554` in the output (`poke` takes 0 arguments, the template passes 1). Record the exact message in the task report.
+
+**If `error TS2554` does not fire** (a clean exit, a crash, or any other diagnostic instead): STOP. Do not proceed to Task 2. Report the exact output to the controller and wait for the angular-cell decision (ruling R5's `ngc --strictTemplates` departure is unbuildable without this) before any of Task 2's nine devDependencies are added or any angular-cell code is written.
 
 ---
 
@@ -479,7 +558,7 @@ describe('the solid JSX augmentation', () => {
 cd "$WT" && pnpm --filter @kitn.ai/ui exec vitest run --project=unit src/elements/solid-jsx-augmentation.test.ts
 ```
 
-Expected: FAIL, three cases. The FIRST fails on a plain containment assertion (`expect(SOURCE).toContain("declare module 'solid-js/jsx-runtime' {")`), with vitest's own diff and no custom text. The custom message `no \`declare module 'solid-js/jsx-runtime'\` block in element-types.d.ts` comes from `moduleBlock`, so it belongs to the SECOND case and the third. The fourth ("is generated") PASSES already, and that pass is the control: it proves the harness is reading the right file, which it does because `element-types.d.ts` begins `// AUTO-GENERATED by scripts/gen-element-api.mjs`.
+Expected: FAIL, three cases. The FIRST fails on a plain containment assertion (`expect(SOURCE).toContain("declare module 'solid-js/jsx-runtime' {")`), with vitest's own diff and no custom text. The custom message `no \`declare module 'solid-js/jsx-runtime'\` block in element-types.d.ts` comes from `moduleBlock`, so it belongs to the SECOND case. The fourth ("is generated") PASSES already, and that pass is the control: it proves the harness is reading the right file, which it does because `element-types.d.ts` begins `// AUTO-GENERATED by scripts/gen-element-api.mjs`.
 
 - [ ] **Step 3: Emit the augmentation**
 
@@ -843,7 +922,7 @@ function guardSandbox(box, name, form) {
 
 export function vueCell({ tsc, name, files }) {
   const box = tsc.sandbox('default', `block-${name}-vue`, {
-    include: ['**/*.ts', '**/*.tsx', '**/*.vue', '**/*.d.ts'],
+    include: ['**/*.vue'],
   });
   const guard = guardSandbox(box, name, 'vue');
   if (guard) return [guard];
@@ -857,7 +936,7 @@ export function vueCell({ tsc, name, files }) {
 
 export function svelteCell({ tsc, name, files }) {
   const box = tsc.sandbox('default', `block-${name}-svelte`, {
-    include: ['**/*.ts', '**/*.svelte', '**/*.d.ts'],
+    include: ['**/*.svelte'],
   });
   const guard = guardSandbox(box, name, 'svelte');
   if (guard) return [guard];
@@ -1128,7 +1207,7 @@ export function frameworkCellSelfTest({ tsc, log }) {
  *  plant's own import reaches the program by itself (ruling R4). */
 function vueCellWithoutAugmentation({ tsc, name, files }) {
   const box = tsc.sandbox('default', `block-${name}-vue`, {
-    include: ['**/*.ts', '**/*.tsx', '**/*.vue', '**/*.d.ts'],
+    include: ['**/*.vue'],
   });
   box.clear();
   writeTree(box.dir, files);
@@ -1600,6 +1679,12 @@ describe('the vue form', () => {
     expect(composable).toContain("from './fixture.controller'");
   });
 
+  it('calls boot() from onMounted, after the ready-gated tree has rendered', () => {
+    const composable = byPath(renderVueForm(block())).get('useFixture.ts')!;
+    expect(composable).toContain('await nextTick();\n    void controller.actions.boot();');
+    expect(composable).toContain("import { nextTick, onMounted, onUnmounted, ref, shallowRef } from 'vue';");
+  });
+
   it('names the one config line a Vue project needs, in the README', () => {
     const readme = byPath(renderVueForm(block())).get('README.md')!;
     expect(readme).toContain('isCustomElement');
@@ -1676,7 +1761,10 @@ const { state, actions, ready } = useFixture(() => ({ dock: dock.value }));
 // hands back a NEW state object per notification and the kai- reactivity
 // contract wants a new array reference for a list prop anyway, so deep
 // reactivity would only cost proxies over data that is replaced wholesale.
-import { onMounted, onUnmounted, ref, shallowRef } from 'vue';
+// boot() runs AFTER the ready-gated tree has rendered (an `await nextTick()`
+// past `ready.value = true`), matching the shipped react adapter's useEffect
+// ordering, so a boot() that touches a ref finds it populated on every host.
+import { nextTick, onMounted, onUnmounted, ref, shallowRef } from 'vue';
 import type { Ref, ShallowRef } from 'vue';
 // The add form's registration, not the autoloader's: the autoloader resolves
 // element modules relative to its own URL and 404s every one of them through a
@@ -1712,6 +1800,7 @@ export function useFixture(refs: () => FixtureRefs): UseFixture {
     });
     await Promise.all(TAGS.map((tag) => customElements.whenDefined(tag)));
     ready.value = true;
+    await nextTick();
     void controller.actions.boot();
   });
   onUnmounted(() => unsubscribe?.());
@@ -1994,7 +2083,7 @@ EOF
 - Consumes: `parseBlock`, `carriedFiles`, `nullRefs`, `isKai`, `camel`, `elementInterface`, `escapeAttr` from `./emit` (Task 3); `README_FILE` and `renderReadme` from `./readme`; `fileTarget` from `../targets`.
 - Produces: `renderSvelteForm(block): FormFile[]`; a `svelte` row in `BLOCK_FORMS`; a `svelte` case in `renderBlockForm`; `STRATEGIES.svelte`.
 
-**Where this plan follows the spec's INTENT and not its mechanism, stated up front.** Spec 3.5's table says the svelte form uses "`$effect` for property assignment". Reading Svelte 5.56's own runtime settles it differently: `set_custom_element_data` (`node_modules/svelte/src/internal/client/dom/elements/attributes.js:226-271`) sets the PROPERTY when the element is registered and the name is one of its setters, and falls back to `setAttribute` otherwise; and `set_attribute` (`:172-208`) assigns the property for a non-string value whose name is a setter, so `<span hidden={false}>` sets `hidden = false` rather than writing the string `"false"`. With the tree gated on registration, a plain `unread={...}` attribute in the template IS a property assignment. So the intent (properties get assigned, and a bound `false` does not read as true) is met, and a hand-rolled `$effect` per binding is not needed. `$effect` is still used, for the one job only it can do: the registration await, which must not run during SSR.
+**Where this plan follows the spec's INTENT and not its mechanism, stated up front.** Spec 3.5's table says the svelte form uses "`$effect` for property assignment". Reading Svelte 5.56's own runtime settles it differently: `set_custom_element_data` (`node_modules/svelte/src/internal/client/dom/elements/attributes.js:226-271`) sets the PROPERTY when the element is registered and the name is one of its setters, and falls back to `setAttribute` otherwise; and `set_attribute` (`:172-208`) assigns the property for a non-string value whose name is a setter, so `<span hidden={false}>` sets `hidden = false` rather than writing the string `"false"`. With the tree gated on registration, a plain `unread={...}` attribute in the template IS a property assignment. So the intent (properties get assigned, and a bound `false` does not read as true) is met, and a hand-rolled `$effect` per binding is not needed. The registration await, which must not run during SSR, lives in `onMount` instead of a bare `$effect`: `onMount` never runs during server rendering either, and it is the mount hook `boot()` is called from, matching the mount-hook pattern the vue, angular and solid renderers use (ruling R21).
 
 - [ ] **Step 1: Write the failing svelte suite**
 
@@ -2013,7 +2102,7 @@ describe('the svelte form', () => {
     // silent no-op, so the extension is load-bearing rather than a convention.
     const adapter = byPath(renderSvelteForm(block())).get('useFixture.svelte.ts')!;
     expect(adapter).toContain('$state');
-    expect(adapter).toContain('$effect');
+    expect(adapter).toContain('onMount');
   });
 
   it('targets every file at src/lib/components/<id>/', () => {
@@ -2022,22 +2111,29 @@ describe('the svelte form', () => {
     }
   });
 
-  it('does the registration await inside $effect, which never runs on the server', () => {
+  it('does the registration await inside onMount, which never runs on the server', () => {
     const adapter = byPath(renderSvelteForm(block())).get('useFixture.svelte.ts')!;
     expect(adapter).toContain("import '@kitn.ai/ui/elements';");
     expect(adapter).toContain(`const TAGS = ['kai-conversation-item', 'kai-conversations', 'kai-dock'];`);
-    expect(adapter).toMatch(/\$effect\(\(\) => \{[\s\S]*customElements\.whenDefined/);
+    expect(adapter).toMatch(/onMount\(\(\) => \{[\s\S]*customElements\.whenDefined/);
     // `customElements` does not exist on the server, and a SvelteKit page
-    // renders this component there. `$effect` is browser-only, which is the
-    // whole reason the await lives in one rather than at call time.
+    // renders this component there. `onMount` never runs during server
+    // rendering, which is the whole reason the await lives in one rather than
+    // at call time.
     //
     // Asserted as CONTAINMENT, not absence. The emitted adapter's await IS
     // indented, so a `/^\s*await Promise\.all\(TAGS/m` absence check would match
     // the correct line and fail against the renderer this task specifies. What
     // must not exist is the same await at module top level, with no indentation
-    // and no effect around it.
-    expect(adapter).toMatch(/\$effect\(\(\) => \{[\s\S]*await Promise\.all\(TAGS/);
+    // and no hook around it.
+    expect(adapter).toMatch(/onMount\(\(\) => \{[\s\S]*await Promise\.all\(TAGS/);
     expect(adapter).not.toMatch(/^await Promise\.all\(TAGS/m);
+  });
+
+  it('calls boot() from onMount, after the ready-gated tree has been flushed to the DOM', () => {
+    const adapter = byPath(renderSvelteForm(block())).get('useFixture.svelte.ts')!;
+    expect(adapter).toContain('await tick();\n      void controller.actions.boot();');
+    expect(adapter).toContain("import { onMount, tick } from 'svelte';");
   });
 
   it('gates the tree on ready, and takes the ref through bind:this', () => {
@@ -2166,6 +2262,7 @@ Create `packages/blocks/src/forms/svelte.ts`. The emitted output for the fixture
 // The add form's registration, not the autoloader's: the autoloader resolves
 // element modules relative to its own URL and 404s every one of them through a
 // bundler.
+import { onMount, tick } from 'svelte';
 import '@kitn.ai/ui/elements';
 import {
   createController,
@@ -2190,17 +2287,22 @@ export function useFixture(refs: () => FixtureRefs): UseFixture {
   let snapshot = $state<FixtureState>(controller.state());
   let ready = $state(false);
 
-  // IN AN EFFECT, and that is the SSR answer rather than a style choice:
-  // `$effect` runs in the browser only, and `customElements` does not exist on
-  // the server, so a SvelteKit page rendering this component would throw.
-  $effect(() => {
+  // IN onMount, and that is the SSR answer rather than a style choice:
+  // `onMount` never runs during server rendering, and `customElements` does
+  // not exist on the server, so a SvelteKit page rendering this component
+  // would throw. boot() runs AFTER `ready` flips and Svelte has flushed the
+  // gated tree to the DOM (an `await tick()` past `ready = true`), matching
+  // the shipped react adapter's useEffect ordering, so a boot() that touches
+  // a ref finds it populated on every host.
+  onMount(() => {
     const unsubscribe = controller.subscribe(() => {
       snapshot = controller.state();
     });
     void (async () => {
       await Promise.all(TAGS.map((tag) => customElements.whenDefined(tag)));
       ready = true;
-      await controller.actions.boot();
+      await tick();
+      void controller.actions.boot();
     })();
     return unsubscribe;
   });
@@ -2293,9 +2395,11 @@ prescribes `$effect` for property assignment; svelte 5.56's own
 set_custom_element_data assigns the property whenever the element is registered
 and the name is one of its setters, and this tree is gated on registration, so a
 plain attribute IS the property assignment and a bound `false` does not become
-the string "false". `$effect` is still used for the one job only it can do: the
-registration await, which must not run during SSR because `customElements` does
-not exist on the server.
+the string "false". The registration await, which must not run during SSR
+because `customElements` does not exist on the server, lives in `onMount`
+instead: `onMount` never runs during server rendering either, and it is also
+the mount hook `boot()` is called from, after the ready-gated tree has been
+flushed to the DOM, matching the shipped react adapter's ordering.
 
 `onkai-click` was verified against the compiler to emit
 `$.event('kai-click', node, handler)`, and the keyed `{#each ... (row.id)}` to
@@ -2551,7 +2655,15 @@ describe('the angular form', () => {
     expect(store).toContain("import '@kitn.ai/ui/elements';");
     expect(store).toContain(`const TAGS = ['kai-conversation-item', 'kai-conversations', 'kai-dock'];`);
     expect(store).toContain('{ dock: null }');
-    expect(store).toContain('void this.controller.actions.boot();');
+    // boot() is NOT called here: it is scheduled from the component's
+    // ngAfterViewInit, after Angular has rendered the ready-gated template.
+    expect(store).not.toContain('boot();');
+  });
+
+  it('calls boot() from ngAfterViewInit, through afterNextRender', () => {
+    const ts = byPath(renderAngularForm(block())).get('fixture.component.ts')!;
+    expect(ts).toContain('afterNextRender(() => { void this.store.actions.boot(); }, { injector: this.injector });');
+    expect(ts).toContain("import { AfterViewInit, Component, CUSTOM_ELEMENTS_SCHEMA, ElementRef, Injector, afterNextRender, inject, viewChild } from '@angular/core';");
   });
 
   it('the README names CUSTOM_ELEMENTS_SCHEMA and the style scoping', () => {
@@ -2584,7 +2696,7 @@ Create `packages/blocks/src/forms/angular.ts`. The emitted output for the fixtur
 ```ts
 // GENERATED by @kitn.ai/blocks from fixture.html and fixture.controller.ts.
 // It is your code now: edit freely, and regenerate to start over.
-import { AfterViewInit, Component, CUSTOM_ELEMENTS_SCHEMA, ElementRef, inject, viewChild } from '@angular/core';
+import { AfterViewInit, Component, CUSTOM_ELEMENTS_SCHEMA, ElementRef, Injector, afterNextRender, inject, viewChild } from '@angular/core';
 import type { KaiDockElement } from '@kitn.ai/ui/elements';
 import { FixtureStore } from './fixture.store';
 
@@ -2602,12 +2714,19 @@ import { FixtureStore } from './fixture.store';
 })
 export class FixtureComponent implements AfterViewInit {
   protected readonly store = inject(FixtureStore);
+  private readonly injector = inject(Injector);
   private readonly dock = viewChild<ElementRef<KaiDockElement>>('dock');
 
   // ngAfterViewInit, not the constructor: viewChild has nothing before the view
   // exists, and `customElements` does not exist during server rendering.
+  // boot() is scheduled from here too, through afterNextRender, so it fires
+  // AFTER Angular has rendered the ready-gated template, matching the shipped
+  // react adapter's useEffect ordering: a boot() that touches a ref finds it
+  // populated.
   ngAfterViewInit(): void {
-    void this.store.connect(() => ({ dock: this.dock()?.nativeElement ?? null }));
+    void this.store.connect(() => ({ dock: this.dock()?.nativeElement ?? null })).then(() => {
+      afterNextRender(() => { void this.store.actions.boot(); }, { injector: this.injector });
+    });
   }
 }
 ```
@@ -2666,12 +2785,14 @@ export class FixtureStore {
   readonly ready = signal(false);
   readonly actions: FixtureActions = this.controller.actions;
 
+  // Sets `ready` and returns; it does not call boot() itself. boot() is the
+  // component's job, scheduled from ngAfterViewInit through afterNextRender so
+  // it runs after Angular has rendered the ready-gated template.
   async connect(refs: () => FixtureRefs): Promise<void> {
     this.refs = refs;
     this.controller.subscribe(() => this.state.set(this.controller.state()));
     await Promise.all(TAGS.map((tag) => customElements.whenDefined(tag)));
     this.ready.set(true);
-    void this.controller.actions.boot();
   }
 }
 ```
@@ -2933,6 +3054,11 @@ describe('the solid form', () => {
     expect(adapter).toContain('void controller.actions.boot();');
   });
 
+  it('calls boot() from onMount, after setReady(true) in the same hook', () => {
+    const adapter = byPath(renderSolidForm(block())).get('useFixture.ts')!;
+    expect(adapter).toMatch(/onMount\(async \(\) => \{[\s\S]*setReady\(true\);\n\s*void controller\.actions\.boot\(\);/);
+  });
+
   it('cross-checks the bindings against the controller', () => {
     const b = block();
     (b.files as Map<string, string>).set('fixture.html', PAGE.replace('@kai-click="open"', '@kai-click="nope"'));
@@ -3043,7 +3169,10 @@ export function useFixture(refs: () => FixtureRefs): UseFixture {
   onCleanup(controller.subscribe(() => setState(controller.state())));
 
   // onMount, not the body: it runs in the browser only, and `customElements`
-  // does not exist during server rendering.
+  // does not exist during server rendering. boot() runs after `setReady(true)`
+  // inside the same hook: Solid's signal writes flush to the DOM synchronously
+  // outside a `batch()`, so the ready-gated tree is already rendered by the
+  // time boot() runs, matching the shipped react adapter's useEffect ordering.
   onMount(async () => {
     await Promise.all(TAGS.map((tag) => customElements.whenDefined(tag)));
     setReady(true);
@@ -3401,12 +3530,12 @@ cd "$WT" && git diff origin/main...HEAD | grep '^+' | grep -nP "[\x{1F300}-\x{1F
 cd "$WT" && git status --porcelain
 ```
 
-Expected: the four `OK` lines and a clean status. A dash hit inside `packages/ui/dist/` is not a hit: `dist/` is gitignored and does not appear in the diff, so anything reported is in tracked source.
+Expected: three `OK` lines (scratchpad paths, absolute paths in commit messages, dashes) and a clean status. The emoji grep is the exception: expect three hits, all the attribution glyph inside the committed plan file, and nothing else. A dash hit inside `packages/ui/dist/` is not a hit: `dist/` is gitignored and does not appear in the diff, so anything reported is in tracked source.
 
 **Two narrowings in those greps, both load-bearing, and neither is a weakening.**
 
 - **ADDED lines only** (`grep '^+'`). `git diff` carries three lines of context, and the tracked files this branch edits are full of em dashes already: `docs/coupling-map.md`, `packages/ui/scripts/gen-element-types.mjs`, `packages/ui/scripts/lib/consumer-tsc-projects.mjs` and `packages/ui/scripts/verify-pack-weight.mjs` all have them, including inside the ledger comment block Task 7 Step 3 appends to. Over the whole diff the `OK` line simply cannot print, and a check that always fires gets waived on sight. The constraint is about prose this branch ADDS, and this is the grep that asks that question.
-- **`✓` and `✗` exempted** (the emoji class skips U+2713 and U+2717). Both are U+27xx and both are this repo's own gate-output convention, used across `block-compile-cells.mjs`, `verify-scaffold-compiles.mjs` and `consumer-tsc-projects.mjs`, and Task 2 Step 5 adds another one deliberately. The mandated `🤖 Generated with [Claude Code]` line lives in the PR body rather than in a tracked file, so it does not reach these greps at all; if the plan file itself is committed on this branch, that line is inside it and is exempt by the Global Constraint above.
+- **`✓` and `✗` exempted** (the emoji class skips U+2713 and U+2717). Both are U+27xx and both are this repo's own gate-output convention, used across `block-compile-cells.mjs`, `verify-scaffold-compiles.mjs` and `consumer-tsc-projects.mjs`, and Task 2 Step 5 adds another one deliberately. The mandated `🤖 Generated with [Claude Code]` line lives in the PR body, which these greps never see. This plan file is itself committed on this branch and carries the attribution glyph on three added lines, which the emoji grep is not exempted from: expect exactly those three hits and nothing else.
 
 - [ ] **Step 3: Confirm the branch's own claim, one last time**
 
@@ -3545,7 +3674,7 @@ Two things go in the report as OWNER-FACING rather than as findings, because a p
 | Night run 3.4 bullet 4 (cell count and dropdown move together, confirm the dropdown grew unedited) | R10, Task 7 Step 1 |
 | Night run 3.4 eval gate (cells with printed axes, the vue plant watched failing, the dropdown assertion) | Task 2 Step 6, Task 7 Step 1, Task 8 Step 3 |
 
-Gaps found and closed while writing this: the Solid JSX augmentation (nothing in the spec anticipated it, and without it the solid form does not compile at all) became Task 1; the toolchains resolving only through hoisting became ruling R12 and Task 2 Step 1; the pack ceiling became ruling R13 and Task 7 Step 3; the Angular call arity, which the spec does not address and which `strictTemplates` refuses in both directions, became ruling R18 and Task 5 Step 1.
+Gaps found and closed while writing this: the Solid JSX augmentation (nothing in the spec anticipated it, and without it the solid form does not compile at all) became Task 1; the toolchains resolving only through hoisting became ruling R12 and Task 2 Step 1; the pack ceiling became ruling R13 and Task 7 Step 3; the Angular call arity, which the spec does not address and which `strictTemplates` refuses in both directions, became ruling R18 and Task 5 Step 1; the pre-flight finding that every new adapter called `boot()` before the ready-gated tree had rendered became ruling R21 and one change in each of Tasks 3-6.
 
 **2. Placeholder scan.** No "TBD", no "implement later", no "add error handling", no "similar to Task N". Tasks 4, 5 and 6 each restate the fixture-setup instruction in full rather than pointing back at Task 3, because an implementer may read them out of order. Every code step carries real code, and every predicted red names the exact message.
 
