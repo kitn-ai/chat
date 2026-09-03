@@ -37,6 +37,17 @@ interface KaiBase extends JSX.HTMLAttributes<HTMLElement> {
 
 declare module 'solid-js' {
   namespace JSX {
+    /**
+     * `attr:theme` forces the ATTRIBUTE form. Solid binds a dynamic value on a
+     * custom element as a PROPERTY (a static string literal in the template
+     * becomes an attribute, a reactive binding does not), and the site's other
+     * islands all put `theme` on their host as an attribute. Matching them
+     * keeps one mechanism, and an attribute is the form a human reading the
+     * DOM in a dark-mode screenshot can actually see.
+     */
+    interface ExplicitAttributes {
+      theme: 'light' | 'dark' | 'auto';
+    }
     interface CustomEvents {
       /** kai-button. */
       'kai-click': CustomEvent<void>;

@@ -12,6 +12,7 @@
  */
 import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
 import { BlockCard } from './BlockCard';
+import { createSiteTheme } from './site-theme';
 import {
   previewFooter,
   readFramework,
@@ -28,6 +29,9 @@ export interface BlocksPageProps {
 
 export function BlocksPage(props: BlocksPageProps): JSX.Element {
   const [framework, setFramework] = createSignal<BlockFormId>(readFramework());
+  // ONE observer for the section, not one per card. Every kai element on the
+  // page follows it.
+  const siteTheme = createSiteTheme();
   const [category, setCategory] = createSignal('all');
 
   const categories = createMemo(() => {
@@ -93,6 +97,7 @@ export function BlocksPage(props: BlocksPageProps): JSX.Element {
             {(item) => (
               <BlockCard
                 item={item}
+                theme={siteTheme()}
                 framework={framework()}
                 onFramework={chooseFramework}
                 loadForm={props.loadForm}

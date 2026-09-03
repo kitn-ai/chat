@@ -96,7 +96,14 @@ async function allCardsInCodeMode(): Promise<HTMLElement[]> {
 beforeEach(() => {
   localStorage.clear();
   loadForm.mockClear();
+  delete document.documentElement.dataset.theme;
 });
+
+/** Every kai-* element the card rendered, in the current mode. */
+const kaiElements = (card: HTMLElement): HTMLElement[] =>
+  Array.from(card.querySelectorAll<HTMLElement>('*')).filter((el) =>
+    el.tagName.toLowerCase().startsWith('kai-'),
+  );
 
 describe('the fixtures cover the whole axis', () => {
   it('has a payload for every block x every framework renderer', () => {
@@ -404,5 +411,56 @@ describe('two loads in flight', () => {
     expect(within(card).getByTestId('active-path').textContent?.trim()).toBe(
       forms['support-widget:react'].files[0].target,
     );
+  });
+});
+
+describe('the site theme', () => {
+  it('reaches every kai element in the card, in both modes', async () => {
+    // Each element resolves its tokens inside its own shadow root, so an
+    // element with no `theme` paints light inside the dark site. The site's
+    // islands forward document.documentElement.dataset.theme; so does this.
+    document.documentElement.dataset.theme = 'dark';
+    render(() => <BlocksPage items={items} loadForm={loadForm} />);
+    const card = screen.getByTestId('block-card-support-widget');
+
+    expect(kaiElements(card).length).toBeGreaterThan(0);
+    for (const el of kaiElements(card)) expect(el.getAttribute('theme')).toBe('dark');
+
+    setMode(card, 'code');
+    await waitFor(() => expect(within(card).queryByTestId('file-tree')).not.toBeNull());
+    // The elements code mode CREATES get it too, not just the ones at mount.
+    expect(kaiElements(card).length).toBeGreaterThan(0);
+    for (const el of kaiElements(card)) expect(el.getAttribute('theme')).toBe('dark');
+  });
+
+  it('follows a change on the document, the way the other docs islands do', async () => {
+    document.documentElement.dataset.theme = 'dark';
+    render(() => <BlocksPage items={items} loadForm={loadForm} />);
+    const card = screen.getByTestId('block-card-support-widget');
+
+    document.documentElement.dataset.theme = 'light';
+    await waitFor(() => {
+      for (const el of kaiElements(card)) expect(el.getAttribute('theme')).toBe('light');
+    });
+  });
+});
+
+describe('the toolbar geometry', () => {
+  it('is two reserved rows, and the contextual row holds exactly one group in either mode', async () => {
+    // What made a mode swap move the page at 390px was a wrapping single row:
+    // preview wrapped to three lines and code to two. Two rows, each with a
+    // reserved height and exactly one group in the second, is what makes the
+    // two modes the same height at every width. The heights themselves are
+    // measured in a real browser; this pins the structure that produces them.
+    render(() => <BlocksPage items={items} loadForm={loadForm} />);
+    const card = screen.getByTestId('block-card-support-widget');
+    const context = () => within(card).getByTestId('toolbar-row-context');
+
+    expect(within(card).getByTestId('toolbar-row-main')).toBeTruthy();
+    expect(context().children.length).toBe(1);
+
+    setMode(card, 'code');
+    await waitFor(() => expect(within(card).queryByTestId('framework-select')).not.toBeNull());
+    expect(context().children.length).toBe(1);
   });
 });
