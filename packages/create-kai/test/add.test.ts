@@ -675,18 +675,36 @@ describe('SECURITY: a fetched item cannot name a path outside the project', () =
   it('rejects a hostile files[].path (".." segment, escapes the project)', async () => {
     const dir = await project('hostile-path', { name: 'host' });
     const before = (await readdir(root)).sort();
-    const item = {
-      name: 'hostile-path-block',
-      title: 'Hostile',
-      description: 'a hostile item',
-      type: 'registry:block',
-      files: [{ path: '../../evil.txt', type: 'registry:page', content: 'pwned' }],
-    };
-    const run = await runInto(dir, ['https://registry.example/r/hostile-path-block.json'], {
-      fetchJson: async () => item,
+    // A REAL block's item (controller, cross-checked bindings, everything
+    // the renderer needs), with ONLY its registry:page file's path corrupted
+    // -- so the traversal is the one thing standing between this item and a
+    // clean write, not one of several reasons it fails. A minimal hand-typed
+    // item (no controller.ts) fails earlier, at the html renderer's own
+    // "needs a controller" check, before the write path is ever reached;
+    // that would leave the filesystem assertions below unable to fail even
+    // with the path rule disabled, which is exactly what the coordinator's
+    // re-review caught.
+    const block = blocks[0];
+    const item = buildRegistryItem(withStrippedTwins(block, (source) => source));
+    const pageEntry = item.files.find((f) => f.type === 'registry:page');
+    if (!pageEntry) throw new Error('fixture block has no registry:page entry');
+    // installRoot('html', block.name) is 'blocks/<name>' (two segments), so
+    // the payload climbs THREE levels -- past the page's own directory, past
+    // 'blocks', and out of the project dir itself -- landing at
+    // <root>/evil.txt, a sibling of the project rather than something inside
+    // it. Two '../'s only reaches back to the project root (still "inside
+    // the project"), which would leave the filesystem assertions below
+    // unable to fail even with the rule disabled.
+    const hostilePath = '../../../evil.txt';
+    pageEntry.path = hostilePath;
+    // item.name stays the block's own (a valid name) -- this case is about
+    // a hostile files[].path in isolation; the hostile-NAME case above
+    // already covers "name" on its own.
+    const run = await runInto(dir, [`https://registry.example/r/${block.name}-hostile-path.json`], {
+      fetchJson: async () => JSON.parse(JSON.stringify(item)),
     });
     expect(run.code).not.toBe(0);
-    expect(run.err.join('\n')).toContain('../../evil.txt');
+    expect(run.err.join('\n')).toContain(hostilePath);
     expect(run.err.join('\n')).toContain('".." segment');
     expect(existsSync(path.join(root, 'evil.txt'))).toBe(false);
     expect((await readdir(root)).sort()).toEqual(before);
