@@ -16,6 +16,7 @@
 
 IN scope:
 
+- Task 0: applying the already-banked `chore(create-kai): blocks, not gallery, in the comments` patch, so the five remaining `gallery` comments under `packages/create-kai` say `/blocks` before Task 1 touches one of the same lines.
 - `planAdd` writing every file at the rendered file's own `target`; `blockDir()` deleted; `packages/create-kai/test/pr-d-target-mismatch.test.ts` deleted in the same commit, said out loud in the commit body.
 - The displayed-path-equals-written-path floor: a test comparing `planAdd`'s output against `dist/blocks/f/<id>.<form>.json` for every block and every form.
 - The html renderer gaining the two-or-three-line README the react renderer already emits, through ONE shared `renderReadme`.
@@ -122,7 +123,7 @@ One process, not the `verify:blocks` two-invocation pattern (`--self-test && <ga
 
 **R10. The react leg reuses the checked-in host fixture at `packages/ui/scripts/block-driver/react-host`, resolved through `@kitn.ai/ui`'s package root.**
 
-The alternatives were a second copy of the fixture inside `packages/create-kai` (a copy of a pinned dependency set, which is the class of thing this repo keeps deleting) or the `consumer-tsc-projects.mjs` harness (cheaper - no `npm install` at all - but it resolves `@kitn.ai/ui` out of the BUILT WORKSPACE TREE, and the requirement is a typecheck against the INSTALLED kit; "the tree is not the tarball" is the whole reason this gate exists). So: copy the fixture, install the two packed tarballs into the copy, run the published CLI, write the one file the fixture does not ship (`src/block.ts`, whose import specifier is derived from the CLI's own written path), and run `npx tsc --noEmit` under the fixture's stock create-vite strict config. That is `verify-blocks-react.mjs`'s stage 2 shape, reused rather than reinvented, and it is stated in the PR body that the two gates deliberately overlap: that one proves the RENDERER's tree compiles, this one proves the PACKED CLI puts those bytes where a project can compile them.
+The alternatives were a second copy of the fixture inside `packages/create-kai` (a copy of a pinned dependency set, which is the class of thing this repo keeps deleting) or the `consumer-tsc-projects.mjs` harness (cheaper - no `npm install` at all - but it resolves `@kitn.ai/ui` out of the BUILT WORKSPACE TREE, and the requirement is a typecheck against the INSTALLED kit; "the tree is not the tarball" is the whole reason this gate exists). So: copy the fixture, install the packed kit tarball into the copy (the CLI itself runs from the tools directory, R12 - see the reconciled R10/R12 note above), run the published CLI, write the one file the fixture does not ship (`src/block.ts`, whose import specifier is derived from the CLI's own written path), and run `npx tsc --noEmit` under the fixture's stock create-vite strict config. That is `verify-blocks-react.mjs`'s stage 2 shape, reused rather than reinvented, and it is stated in the PR body that the two gates deliberately overlap: that one proves the RENDERER's tree compiles, this one proves the PACKED CLI puts those bytes where a project can compile them.
 
 **R11. Each leg discovers WHICH form it got by matching the tree on disk against the generated artifacts, instead of predicting it.**
 
@@ -137,35 +138,120 @@ The gate could restate "a vue project gets html". That row moves in B2 and the g
 
 `add` writes files and merges a `package.json`; neither needs a node_modules. So the CLI is installed ONCE into a tools directory and invoked by absolute path with the leg's directory as its cwd. Only the react leg installs, because only it typechecks. The leg directories are siblings of the tools directory under separate `mkdtemp` roots, so the CLI's own install can never be found by `nearestPackageJson` walking up from a leg - which for the no-project leg would silently turn rule 1 into rule 3, the exact failure the leg exists to catch. The leg asserts the "No project here" line as proof it did not.
 
+**R10 vs R12, reconciled: the react leg's app install carries only the kit tarball.** As first drafted, `reactLeg` installed BOTH `KIT_TARBALL` and `CLI_TARBALL` into the host app, but `add()` always invokes the CLI by absolute path out of the tools directory (R12) - the app-local `create-kai` install is never run. Two tarballs installed and one used is exactly the kind of unread copy this repo keeps deleting elsewhere, so the app install drops `CLI_TARBALL` and keeps only `KIT_TARBALL`, which is the one the compiled tree actually needs on its module graph.
+
+**R13. `planAdd` routes every write through `@kitn.ai/blocks`'s own `renderBlockForm`, so an accepted form with no renderer throws instead of silently landing on the html tree.**
+
+The adversarial review caught this: as drafted, Task 1's three `plan*Block` functions each called their OWN renderer directly (`renderHtmlForm`, `renderReactForm`, `renderCdnFormFiles`), and `planAdd`'s calling code branched `cdn` / `react` / else-html - so ANY form id that is neither `cdn` nor `react`, including one `BLOCK_FORMS` accepts that no renderer handles, fell into the html branch and wrote the html tree anyway, silently. That is the exact "menu accepts a value nothing can emit" shape Task 6 exists to catch, and Task 6's own planted test could not catch it, because nothing in the planner ever asked `@kitn.ai/blocks` whether the form has a renderer.
+
+`renderBlockForm(block, form, opts)` (`packages/blocks/src/forms/index.ts`) is already the ONE dispatch `gen-blocks.mjs` and the CLI are both supposed to share, and its `switch` has no `default` - a form id added to `BLOCK_FORMS` with no case in that switch returns `undefined` at runtime and fails `tsc --noEmit` at compile time. So Task 1 now routes every planned file through it: `planFiles(renderBlockForm(block, opts.form, { cdn: { version: opts.kitVersion } }), plan)`, called once per block regardless of form. `planFiles`' `for (const file of files)` throws immediately (`files is not iterable`) the moment `files` comes back `undefined`, which is before any note is printed and before any file is written. Bespoke note text (react's "render `<X />` from Y", html's "open Y through your dev server") is kept as a second, notes-only step over the already-rendered files, so a future framework with no bespoke note still gets the generic html-shaped phrasing rather than nothing - Task 1 Step 3 below shows the rewritten dispatch. This is why Task 6's plant narrative (a `BLOCK_FORMS` row with no renderer throwing "out of `renderBlockForm`") is now literally true instead of aspirational.
+
 ---
 
 ## File structure
 
 | File | Created / Modified | Responsibility |
 |---|---|---|
-| `packages/create-kai/src/blocks.ts` | Modify | `planAdd` writes `file.target`; `blockDir()` deleted; `FRAMEWORK_SIGNALS` rows name a framework; `landingForm`/`emitsOwnTree` derive from `FRAMEWORK_BLOCK_FORMS`; `Detection` carries the fallback frameworks; `blockFormAxis` derives its options. |
+| `packages/create-kai/src/blocks.ts` | Modify (Task 0 comments, Task 1 substantively) | Task 0: two `gallery` comments reworded by the banked patch. Task 1: `planAdd` writes `file.target` by routing every form through `renderBlockForm`; `blockDir()` deleted; `FRAMEWORK_SIGNALS` rows name a framework; `landingForm`/`emitsOwnTree` derive from `FRAMEWORK_BLOCK_FORMS`; `Detection` carries the fallback frameworks; `blockFormAxis` derives its options. |
+| `packages/create-kai/src/react-form.ts` | Modify (Task 0 only) | One `gallery` comment reworded by the banked patch. |
+| `packages/create-kai/src/build-guards.ts` | Modify (Task 0 only) | One `gallery` comment reworded by the banked patch. |
+| `packages/create-kai/scripts/build.mjs` | Modify (Task 0 only) | One `gallery` comment reworded by the banked patch. |
 | `packages/create-kai/src/add.ts` | Modify | `decideForm` returns the loud fallback note; `runAdd` prints the README and suppresses the duplicated `docs` line. |
 | `packages/create-kai/test/add-targets.test.ts` | Create | Where `add` writes: `planAdd` vs `fileTarget()` (pure), then `planAdd` vs `dist/blocks/f/<id>.<form>.json` bytes (the floor), for every block and every form. |
 | `packages/create-kai/test/add.test.ts` | Modify | Derived paths in place of the `src/blocks` literals; the react-form collision case; the detection rows against the new table; the README print; every offered `--form` value driven end to end. |
 | `packages/create-kai/test/pr-d-target-mismatch.test.ts` | **Delete** | The mismatch it pinned is closed by Task 1, in the same commit. |
 | `packages/create-kai/scripts/verify-add.mjs` | Create | `verify:add`: pack, install, run the published CLI into one project per detected form, match every byte against the generated artifacts, typecheck the react tree, then plant four defects and watch them caught. |
 | `packages/create-kai/package.json` | Modify | The `verify:add` script. |
-| `packages/blocks/src/forms/readme.ts` | Create | `README_FILE` and `renderReadme(block, lines)` - the one README template both renderers call. |
+| `packages/blocks/src/forms/readme.ts` | Create | `README_FILE` and `renderReadme(block, lines)` - the one README template both renderers call, including the derived "what the block needs" line. |
 | `packages/blocks/src/forms/html.ts` | Modify | Emits the README. |
 | `packages/blocks/src/forms/react.ts` | Modify | Emits its README through `renderReadme` instead of its own literal. |
 | `packages/blocks/src/forms/cdn.ts` | Modify | Drops the README before inlining, so the paste form stays one file. |
 | `packages/blocks/src/forms/index.ts` | Modify | Re-exports `README_FILE` and `renderReadme`. |
 | `packages/blocks/tests/html-form.test.ts` | Modify | The html README: present, targeted, free of the stream-reader tokens. |
 | `packages/blocks/tests/react-form.test.ts` | Modify | The react README still says what it said, now through the shared renderer. |
-| `.github/workflows/test.yml` | Modify | The `verify:add` step in the `unit` job, beside the create-kai steps that already hang off its build. |
+| `.github/workflows/test.yml` | Modify | The `verify:add` step in the `unit` job, beside the create-kai steps that already hang off its build, plus an `~/.npm` cache keyed on the react-host fixture and create-kai's `package.json`. |
 | `docs/coupling-map.md` | Modify | The `INSTALL_ROOTS` row loses the mismatch test and gains this PR's guards; the forms-list row gains the create-kai side's enforcement. |
+
+---
+
+## Task 0: finish the gallery-word sweep, before Task 1 touches the same lines
+
+**Files:**
+- Modify: `packages/create-kai/scripts/build.mjs`, `packages/create-kai/src/blocks.ts`, `packages/create-kai/src/build-guards.ts`, `packages/create-kai/src/react-form.ts` (all four via the banked patch)
+- Delete: `docs/superpowers/research/2026-09-03-create-kai-gallery-sweep.patch` (in its own commit)
+
+**Interfaces:** none. Comment-only change; nothing here is imported by a later task.
+
+Owner ruling S9/H4 ("call it blocks, not gallery, everywhere") already landed across most of the repo. Five `gallery` comments remain, all under `packages/create-kai`, and a patch for exactly those five was banked ahead of this plan rather than re-derived: `git apply --check` of it from the worktree root is clean today (verified below). This has to run BEFORE Task 1, because Task 1 Step 3 rewrites the same comment the patch's second hunk targets (`packages/create-kai/src/blocks.ts:323`) - apply the patch after Task 1 and that hunk no longer matches the file.
+
+- [ ] **Step 1: Confirm the patch still applies**
+
+```bash
+cd "$WT" && git apply --check docs/superpowers/research/2026-09-03-create-kai-gallery-sweep.patch
+```
+
+Expected: no output, exit 0. If it fails, the patch has drifted from `main` since it was banked - stop and reconcile by hand rather than forcing it; do not proceed to Step 2 on a dirty check.
+
+- [ ] **Step 2: Apply it and confirm the sweep is complete**
+
+```bash
+cd "$WT" && git apply docs/superpowers/research/2026-09-03-create-kai-gallery-sweep.patch
+cd "$WT" && grep -rn "gallery" packages/create-kai --include='*.ts' --include='*.mjs' --include='*.json'
+```
+
+Expected: the grep prints nothing. `packages/create-kai/scripts/build.mjs:158`, `src/blocks.ts:39` and `:323`, `src/build-guards.ts:421`, `src/react-form.ts:3` all now say `/blocks` (the docs site's section) or nothing framework-specific in its place - never `gallery` and never `kai dev`'s gallery, which this release does not ship a page for either.
+
+- [ ] **Step 3: Run the package's gates**
+
+```bash
+cd "$WT" && pnpm --filter create-kai run build
+cd "$WT" && pnpm --filter create-kai run typecheck
+cd "$WT" && pnpm --filter create-kai exec vitest run
+```
+
+Expected: green. Comment-only change; nothing here should move a test.
+
+- [ ] **Step 4: Commit the sweep**
+
+```bash
+cd "$WT" && git add packages/create-kai/scripts/build.mjs packages/create-kai/src/blocks.ts packages/create-kai/src/build-guards.ts packages/create-kai/src/react-form.ts
+cd "$WT" && git commit -m "$(cat <<'EOF'
+chore(create-kai): finish the gallery-word sweep
+
+Five comments under packages/create-kai still said "gallery" (owner ruling
+S9/H4: blocks, not gallery, everywhere). Applies the patch banked ahead of
+this plan rather than re-deriving it, before Task 1 touches one of the same
+lines (src/blocks.ts:323).
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01K58mYEyABM9r5t94JZUJi2
+EOF
+)"
+```
+
+- [ ] **Step 5: Delete the banked patch, in its own commit**
+
+The patch has done its job; keeping it in the tree after it is applied is a stale copy of a diff nothing reads again.
+
+```bash
+cd "$WT" && git rm docs/superpowers/research/2026-09-03-create-kai-gallery-sweep.patch
+cd "$WT" && git commit -m "$(cat <<'EOF'
+chore: drop the applied gallery-word-sweep patch
+
+Applied in the previous commit. Nothing reads it again.
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01K58mYEyABM9r5t94JZUJi2
+EOF
+)"
+```
 
 ---
 
 ## Task 1: `planAdd` writes at the targets table, and the mismatch test goes with it
 
 **Files:**
-- Modify: `packages/create-kai/src/blocks.ts` (the `blockDir` constant and the three `plan*Block` functions)
+- Modify: `packages/create-kai/src/blocks.ts` (the `blockDir` constant, the three `plan*Block` functions collapsed into one `planFormBlock` routed through `renderBlockForm`, and `planAdd`'s calling branch)
 - Modify: `packages/create-kai/test/add.test.ts` (the `src/blocks` literals, plus a react collision case)
 - Create: `packages/create-kai/test/add-targets.test.ts`
 - Delete: `packages/create-kai/test/pr-d-target-mismatch.test.ts`
@@ -281,27 +367,29 @@ const blockDir = (form: BlockForm, name: string) =>
   form === 'react' ? path.posix.join('src/blocks', name) : path.posix.join('blocks', name);
 ```
 
-Extend the import from `@kitn.ai/blocks/forms` with the file type, and add the targets import beside it:
+Extend the import from `@kitn.ai/blocks/forms` with the dispatch and the file type, and add the targets import beside it:
 
 ```ts
 import {
   adaptRegistrationForBundler,
   componentName,
-  renderCdnFormFiles,
-  renderReactForm,
-  renderHtmlForm,
+  renderBlockForm,
   type BlockFormId,
   type FormFile,
 } from '@kitn.ai/blocks/forms';
-import { fileTarget, installRoot } from '@kitn.ai/blocks/targets';
+import { fileTarget, installRoot, isTargetFramework } from '@kitn.ai/blocks/targets';
 ```
 
-Replace the three `plan*Block` functions with:
+`renderHtmlForm`, `renderReactForm` and `renderCdnFormFiles` drop out of the import: nothing in this file calls a specific renderer directly any more (ruling R13). `isTargetFramework` is new; the react-form's note branch below uses it to keep the html note's phrasing exactly what it was.
+
+Replace the three `plan*Block` functions AND the three-way branch in `planAdd` that calls them (the `if (opts.form === 'cdn') ... else if (opts.form === 'react') ... else { planHtmlBlock(...) }` a few lines above the functions) with:
 
 ```ts
-// The three per-form file sets come from the ONE shared renderer
-// (`@kitn.ai/blocks/forms`, which is what /blocks shows too); what stays here
-// is what only the CLI knows: the note printed about them.
+// The rendered files come from the ONE shared dispatch, `renderBlockForm`
+// (`@kitn.ai/blocks/forms`, which is what /blocks shows too) - never a
+// specific renderer called by hand. What stays here is what only the CLI
+// knows: where the files land (through `target`, already computed) and the
+// note printed about them.
 
 /**
  * The ONE place a rendered file becomes a planned write.
@@ -317,33 +405,63 @@ function planFiles(files: readonly FormFile[], plan: AddPlan): void {
   for (const file of files) plan.files.push({ path: file.target, contents: file.content });
 }
 
-function planHtmlBlock(block: Block, plan: AddPlan): void {
-  planFiles(renderHtmlForm(block), plan);
-  const dir = installRoot('html', block.name);
+/**
+ * Render one block into `opts.form` and plan its files and its note.
+ *
+ * THE FILES ROUTE THROUGH `renderBlockForm`, NEVER A SPECIFIC RENDERER
+ * (ruling R13). `@kitn.ai/blocks` keeps that dispatch's `switch` exhaustive
+ * over every id in `BLOCK_FORMS` on its own side (no `default`, so a form
+ * added there with no case fails ITS OWN `tsc --noEmit`); at runtime under a
+ * partially-patched tree it returns `undefined`, and `planFiles`'s `for`
+ * throws immediately - before a note is printed, before a file is written.
+ * That is what stands between "a --form value BLOCK_FORMS accepts" and "add
+ * silently writes the html tree for it", the failure a form id with no
+ * renderer produces if the caller decides by hand instead of asking
+ * `@kitn.ai/blocks`.
+ */
+function planFormBlock(block: Block, opts: PlanOptions, plan: AddPlan): void {
+  const files = renderBlockForm(block, opts.form, { cdn: { version: opts.kitVersion } });
+  planFiles(files, plan);
+
+  if (opts.form === 'cdn') {
+    plan.notes.push(
+      `${block.name}: no project here, so this is the self-contained CDN paste form - open ${block.name}.html directly, or paste it into any page. To scaffold a project around it, run \`npm create kai@latest\`.`,
+    );
+    return;
+  }
+  if (opts.form === 'react') {
+    const dir = installRoot('react', block.name);
+    plan.notes.push(
+      `${block.name}: react form under ${dir}/ (render <${componentName(block.name)} /> from ${fileTarget('react', block.name, `${componentName(block.name)}.tsx`)})`,
+    );
+    return;
+  }
+  // Every other project-shaped form, html included: the html-shaped note,
+  // naming its own install root. `isTargetFramework` gates the cast the same
+  // way it does everywhere else in this file; for 'html' this reproduces the
+  // note byte for byte, and for a future framework with no bespoke note of
+  // its own (PR B2's business, not this one) it is still a true sentence
+  // rather than a missing one.
+  const framework = isTargetFramework(opts.form) ? opts.form : 'html';
+  const dir = installRoot(framework, block.name);
   const page = block.manifest.files.find((f) => f.type === 'registry:page');
   // `.pop()` is `string | undefined` to tsc even on a non-empty split, so the
   // fallback is spelled out rather than asserted away.
   const pageFile = page ? (page.target ?? page.path.split('/').pop() ?? page.path) : '';
   plan.notes.push(
-    `${block.name}: web-component form under ${dir}/ (open ${fileTarget('html', block.name, pageFile)} through your dev server)`,
-  );
-}
-
-function planReactBlock(block: Block, plan: AddPlan): void {
-  planFiles(renderReactForm(block), plan);
-  const dir = installRoot('react', block.name);
-  plan.notes.push(
-    `${block.name}: react form under ${dir}/ (render <${componentName(block.name)} /> from ${fileTarget('react', block.name, `${componentName(block.name)}.tsx`)})`,
-  );
-}
-
-function planCdnBlock(block: Block, opts: PlanOptions, plan: AddPlan): void {
-  planFiles(renderCdnFormFiles(block, { version: opts.kitVersion }), plan);
-  plan.notes.push(
-    `${block.name}: no project here, so this is the self-contained CDN paste form - open ${block.name}.html directly, or paste it into any page. To scaffold a project around it, run \`npm create kai@latest\`.`,
+    `${block.name}: web-component form under ${dir}/ (open ${fileTarget(framework, block.name, pageFile)} through your dev server)`,
   );
 }
 ```
+
+And in `planAdd`, replace the branch that used to call the three separate functions:
+
+```ts
+  for (const block of resolved.blocks) {
+    planFormBlock(block, opts, plan);
+```
+
+(`opts` was already in scope there for `opts.kitVersion`; the old branch read `if (opts.form === 'cdn') { planCdnBlock(block, opts, plan); } else if (opts.form === 'react') { planReactBlock(block, plan); } else { planHtmlBlock(block, plan); }` - all three calls collapse into the one line above.)
 
 `path` stays imported: `resolveAdd` and `loadBlocks` still use it.
 
@@ -438,8 +556,12 @@ cd "$WT" && git commit -m "$(cat <<'EOF'
 feat(create-kai)!: add writes at the blocks targets table, not its own blockDir
 
 `planAdd` now writes every file at the rendered file's own `target`, which the
-renderers derive through `fileTarget()`. The react root moves from
-`src/blocks/<id>/` to the ruled `src/components/<id>/`, so the path the
+renderers derive through `fileTarget()`. Every form routes through
+`@kitn.ai/blocks`'s own `renderBlockForm` dispatch instead of `planAdd`
+calling a specific renderer and falling back to the html one for anything it
+does not recognize by name - a form id `BLOCK_FORMS` accepts with no renderer
+now throws instead of silently landing on the html tree. The react root moves
+from `src/blocks/<id>/` to the ruled `src/components/<id>/`, so the path the
 /blocks page displays is the path the CLI writes, byte for byte.
 
 DELETES `packages/create-kai/test/pr-d-target-mismatch.test.ts`. That test
@@ -470,13 +592,17 @@ EOF
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `packages/create-kai/test/add-targets.test.ts` (and add the imports named in the block):
+First, add these three imports to the TOP of `packages/create-kai/test/add-targets.test.ts`, beside the imports Task 1 wrote (`path` is new to that file; Task 1 imported neither `node:fs` nor `node:module` there) - hoisted rather than appended mid-file, which is legal TS/ESM but reads like an accident:
 
 ```ts
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+```
 
+Then append the rest of this step to the end of the file:
+
+```ts
 /**
  * THE ANTI-VACUITY FLOOR under the whole "one renderer, two callers" claim.
  *
@@ -638,11 +764,11 @@ EOF
 
 - [ ] **Step 1: Write the failing tests**
 
-In `packages/blocks/tests/html-form.test.ts`, append inside `describe('the html form')`:
+In `packages/blocks/tests/html-form.test.ts`, append inside `describe('the html form')`, using the file's OWN fixture helper (`stripped()`, already declared at the top of the file - not a fresh identity strip, which would pass even if `withStrippedTwins` stopped doing anything):
 
 ```ts
   it('emits a README that says what the block needs and where it runs', () => {
-    const files = renderHtmlForm(withStrippedTwins(block(), (s) => s));
+    const files = renderHtmlForm(stripped());
     const readme = files.find((f) => f.path === 'README.md');
     expect(readme, 'the html form emitted no README').toBeDefined();
     expect(readme!.target).toBe('blocks/fixture/README.md');
@@ -657,22 +783,22 @@ In `packages/blocks/tests/html-form.test.ts`, append inside `describe('the html 
     // `verify:blocks [html-binder]` scans EVERY file of the form for a
     // hand-rolled SSE reader. A README that quoted one would red the block on
     // its own documentation, which is a red nobody would read correctly.
-    const readme = renderHtmlForm(withStrippedTwins(block(), (s) => s)).find((f) => f.path === 'README.md')!;
+    const readme = renderHtmlForm(stripped()).find((f) => f.path === 'README.md')!;
     expect(readme.content).not.toMatch(/new\s+EventSource\(|text\/event-stream|\.getReader\(/);
   });
 ```
 
-In `packages/blocks/tests/react-form.test.ts`, append inside the form's describe:
+In `packages/blocks/tests/react-form.test.ts`, append inside the form's describe. This is deliberately NOT the same case as the existing `exports the component by NAME, which is what the README tells the reader to import` (line 137, which already passes today and would still pass with no README change at all - a duplicate proves nothing about the refactor). This is a byte-for-byte REGRESSION control instead: the fixture's `manifest.docs` is unset, so this pins the exact literal `react.ts` emits today, and it must still pass unchanged once `renderReadme` is the one producing it:
 
 ```ts
-  it('still tells a react consumer how to render it, through the shared README', () => {
+  it('the README is byte-identical to what this form emitted before the shared renderer (regression control)', () => {
     const readme = renderReactForm(block()).find((f) => f.path === 'README.md');
     expect(readme, 'the react form emitted no README').toBeDefined();
-    expect(readme!.content).toContain('import { Fixture }');
+    expect(readme!.content).toBe(
+      ['# F', '', 'f', '', "Render it: `import { Fixture } from './Fixture';`", ''].join('\n'),
+    );
   });
 ```
-
-(Use whatever the file's existing fixture helper is named; `react-form.test.ts` shares `packages/blocks/tests/fixtures/` with the html suite, so the component name is `Fixture`.)
 
 - [ ] **Step 2: Run them and watch them fail**
 
@@ -680,7 +806,7 @@ In `packages/blocks/tests/react-form.test.ts`, append inside the form's describe
 cd "$WT" && pnpm --filter @kitn.ai/blocks exec vitest run tests/html-form.test.ts tests/react-form.test.ts
 ```
 
-Expected: the two html cases FAIL with `the html form emitted no README` / `Cannot read properties of undefined (reading 'content')`; the react case PASSES already (its README exists), which is the control proving the harness is right about what a README looks like.
+Expected: the two html cases FAIL with `the html form emitted no README` / `Cannot read properties of undefined (reading 'content')`; the new react case PASSES already, because it pins react's CURRENT literal output rather than the shared renderer's - that pass is the control this step needs: it proves the harness is right about what the react README says before anything moves, so if Step 5 below ever changes react's bytes this same case goes red for the right reason instead of silently drifting.
 
 - [ ] **Step 3: Write the shared renderer**
 
@@ -712,23 +838,63 @@ import type { Block } from '../registry';
 export const README_FILE = 'README.md';
 
 /**
+ * "What the block needs" (spec 3.5), derived rather than left to ride on
+ * `manifest.docs` alone. The three shipped blocks all carry a `docs` sentence
+ * today (verified below), so this is currently invisible in every generated
+ * README - but a future block with envVars or a route dependency and NO
+ * `docs` would otherwise ship a README that says nothing about what it needs,
+ * which is the gap the adversarial review flagged. `null` when the block
+ * declares neither, so `renderReadme` adds nothing rather than an empty line.
+ */
+function needsLine(block: Block): string | null {
+  const envVars = Object.keys(block.manifest.envVars ?? {});
+  if (envVars.length > 0) return `Needs ${envVars.join(', ')} set.`;
+  const routes = (block.manifest.registryDependencies ?? []).filter((d) => d.startsWith('route:'));
+  if (routes.length > 0) {
+    return `Needs a server route: ${routes.map((r) => r.slice('route:'.length)).join(', ')}.`;
+  }
+  return null;
+}
+
+/**
  * `lines` is the form-specific middle: how a consumer of THIS form renders the
  * block, and the one config line their framework needs. Everything around it
  * is the block's own manifest, so a block edits its README by editing its
  * manifest.
  */
 export function renderReadme(block: Block, lines: readonly string[]): string {
+  const needs = needsLine(block);
   return [
     `# ${block.manifest.title}`,
     '',
     block.manifest.description,
     '',
     ...lines,
+    ...(needs ? ['', needs] : []),
     ...(block.manifest.docs ? ['', block.manifest.docs] : []),
     '',
   ].join('\n');
 }
 ```
+
+Add a test for the derivation itself. In `packages/blocks/tests/react-form.test.ts` (the react fixture is the more convenient one to extend inline, since `envVars`/`registryDependencies` are not part of the shared fixture files), append a case that builds a one-off block rather than reusing `block()`:
+
+```ts
+  it('the README names what the block needs when the manifest says so', () => {
+    const withEnv: Block = { ...block(), manifest: { ...block().manifest, envVars: { OPENAI_API_KEY: 'a key' } } };
+    const readme = renderReactForm(withEnv).find((f) => f.path === 'README.md')!;
+    expect(readme.content).toContain('Needs OPENAI_API_KEY set.');
+
+    const withRoute: Block = {
+      ...block(),
+      manifest: { ...block().manifest, registryDependencies: ['route:/api/chat'] },
+    };
+    const readmeRoute = renderReactForm(withRoute).find((f) => f.path === 'README.md')!;
+    expect(readmeRoute.content).toContain('Needs a server route: /api/chat.');
+  });
+```
+
+Watch this one FAIL before trusting it, the same way every other test in this plan is: comment out the two `needs ?` spreads in `renderReadme` (leave `needsLine` itself defined, so nothing else breaks), run `pnpm --filter @kitn.ai/blocks exec vitest run tests/react-form.test.ts -t 'needs'`, confirm both `toContain` assertions fail, then restore the two lines and re-run to confirm green.
 
 - [ ] **Step 4: Emit it from the html renderer**
 
@@ -797,6 +963,8 @@ Expected: PASS, including the pre-existing `emits the page, the binder, the stri
 
 - [ ] **Step 9: Regenerate the artifacts and run the block cells**
 
+`verify:blocks` needs a local Chromium (its `[driver]` stage drives the block through a real browser) - `npx playwright install chromium` first if this worktree has not run it before.
+
 ```bash
 cd "$WT" && pnpm --filter @kitn.ai/ui run build:blocks
 cd "$WT" && pnpm --filter @kitn.ai/ui run verify:blocks
@@ -814,13 +982,20 @@ cd "$WT" && git commit -m "$(cat <<'EOF'
 feat(blocks): the html form ships the README the react form already had
 
 One `renderReadme` in src/forms/readme.ts, called by both renderers: title,
-description, the form-specific render or serve line, then the manifest's docs.
-Spec 3.5 asks every project-shaped tree for two or three lines saying what the
-block needs plus the one framework-config line; the html tree had none.
+description, the form-specific render or serve line, a derived "what the
+block needs" line (envVars, then a route dependency, then nothing), then the
+manifest's docs. Spec 3.5 asks every project-shaped tree for two or three
+lines saying what the block needs plus the one framework-config line; the
+html tree had none, and a block with no `docs` sentence had no needs line at
+all.
 
 The cdn form drops it before inlining and stays a single pasted file. The
 template deliberately quotes no stream-reader token, because
 `verify:blocks [html-binder]` scans every file of the form for one.
+
+The three shipped blocks all carry a `docs` sentence today, so the derived
+needs line is currently invisible in every generated README: verified byte
+for byte by react-form.test.ts's new regression control.
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01K58mYEyABM9r5t94JZUJi2
@@ -842,7 +1017,7 @@ EOF
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `packages/create-kai/test/add.test.ts`, inside `describe('web-component form (any non-react project)')`:
+Add `README_FILE` to `test/add.test.ts`'s existing `@kitn.ai/blocks/forms` import (`BLOCK_FORMS, withStrippedTwins` today), then append inside `describe('web-component form (any non-react project)')`:
 
 ```ts
   it('prints the README it just wrote, and prints the docs sentence exactly once', async () => {
@@ -852,7 +1027,7 @@ Append to `packages/create-kai/test/add.test.ts`, inside `describe('web-componen
       const dir = await project(`readme-${block.name}`, { name: 'host', dependencies: { vue: '^3.0.0' } });
       const run = await runInto(dir, [block.name]);
       expect(run.code, run.err.join('\n')).toBe(0);
-      const written = await readFile(path.join(dir, fileTarget('html', block.name, 'README.md')), 'utf8');
+      const written = await readFile(path.join(dir, fileTarget('html', block.name, README_FILE)), 'utf8');
       const printed = run.out.join('\n');
       for (const line of written.trimEnd().split('\n').filter((l) => l.trim())) {
         expect(printed, `${block.name}: the README line "${line}" was written but not printed`).toContain(line);
@@ -1113,7 +1288,7 @@ Add `isTargetFramework` to the test file's `@kitn.ai/blocks/targets` import and 
 cd "$WT" && pnpm --filter create-kai exec vitest run test/add.test.ts -t 'detection signals'
 ```
 
-Expected: FAIL to compile/collect first - `Property 'framework' does not exist on type '{ dep: string; lands: ... }'` from the `for (const signal of FRAMEWORK_SIGNALS)` loop. After that is the point of the task; there is no partial red worth staging here, because the table's shape is what every case reads.
+Expected: FAIL, at RUNTIME rather than at collection - vitest transpiles this file without type-checking it, so `signal.framework` on the OLD `{ dep, lands }` rows reads `undefined` for every row rather than throwing a compile error. Two shapes of red follow from that one fact: `<dep>: the fallback is named...` fails for EVERY signal, because the old `detectForm` result has no `fallback` property at all (`expect(undefined).toEqual([...])`); and `react alone lands on html` fails on its own (`expected 'html', received 'react'`), because the test's `expected` variable was miscomputed from the always-`undefined` `signal.framework` while the OLD code still correctly returns `'react'` for that one row. The other five `... alone lands on ...` cases pass by coincidence (today's old rows already send them to html). Running `pnpm --filter create-kai run typecheck` afterwards additionally shows the COMPILE-time version of the same defect, `Property 'framework' does not exist on type '{ dep: string; lands: ... }'` - that is the confirmation, not the vitest symptom.
 
 - [ ] **Step 3: Rewrite the table and the detection**
 
@@ -1319,10 +1494,16 @@ cd "$WT" && node -e "
 const fs=require('fs');const p='packages/blocks/src/forms/index.ts';const s=fs.readFileSync(p,'utf8');
 fs.writeFileSync(p+'.bak',s);
 fs.writeFileSync(p,s.replace(\"{ id: 'react', label: 'React' },\", \"{ id: 'react', label: 'React' },\n  { id: 'vue', label: 'Vue' },\"));"
-cd "$WT" && pnpm --filter create-kai exec vitest run test/add.test.ts -t 'detection signals'
+cd "$WT" && pnpm --filter create-kai exec vitest run
 ```
 
-Expected: the run now includes a case named `vue alone lands on vue` (the case NAME changed with no test edited), and it FAILS - `renderBlockForm` has no `vue` branch, so nothing generates that tree. That red is the proof the create-kai side follows `FRAMEWORK_BLOCK_FORMS` rather than restating it; PR B2 turns it green by writing the renderer.
+Run the WHOLE create-kai suite for this plant, not just `-t 'detection signals'`: the `BLOCK_FORMS` row this plants adds a real target framework with no renderer behind it, and `detectForm`/`landingForm` (this task's own subject) cannot tell that apart from a real one - only code that actually RENDERS the form can, which lives in Task 1's and Task 2's files, not this task's.
+
+Expected:
+- `test/add.test.ts -t 'detection signals'` now includes a case named `vue alone lands on vue` (the case NAME changed with no test edited) and it PASSES - `landingForm('vue')` derives `'vue'` because `FRAMEWORK_BLOCK_FORMS` now lists it, exactly as designed. That PASS, with a renamed case and no code touched, is the derivation proof this step exists for.
+- `test/add-targets.test.ts` (Task 1 and Task 2's file) goes RED: the per-form loop over `FRAMEWORK_BLOCK_FORMS` now includes `vue`, so `renderBlockForm(block, 'vue', ...)` is called directly and returns `undefined` (`@kitn.ai/blocks`'s own switch has no `vue` case), and `rendered.length` throws `Cannot read properties of undefined (reading 'length')`. `planAdd({ ... }, { form: 'vue', ... })` throws the same way through `planFormBlock`'s `renderBlockForm` call (ruling R13) before it ever reaches a note. Task 2's floor additionally fails `the generated artifacts are present` naming `pnpm --filter @kitn.ai/ui run build:blocks`, because `dist/blocks/f/<id>.vue.json` was never generated for this plant.
+
+That combination - the detection SIDE derives cleanly and passes, the RENDER side has nothing behind it and throws loudly - is exactly what "the landing form is derived, and a form with no renderer fails somewhere real" is supposed to look like. PR B2 turns both green by writing the vue renderer and regenerating the artifacts, with nothing in this task's own file touched.
 
 ```bash
 cd "$WT" && mv packages/blocks/src/forms/index.ts.bak packages/blocks/src/forms/index.ts
@@ -1425,7 +1606,7 @@ fs.writeFileSync(p,s.replace(\"{ id: 'cdn', label: 'CDN single file' },\", \"{ i
 cd "$WT" && pnpm --filter create-kai exec vitest run test/add.test.ts -t 'menu honesty'
 ```
 
-Expected: FAIL twice - `the accepted set is exactly the framework forms plus the paste form` (the planted row is a framework form with no renderer) and `--form angular writes every file the form renders` (which throws out of `renderBlockForm`, whose switch has no such branch). That second failure is the exact shape of the shipped defect this rule exists for: a flag accepting a value nothing can emit.
+Expected: FAIL twice - `the accepted set is exactly the framework forms plus the paste form` (the planted row is a framework form with no renderer) and `--form angular writes every file the form renders` (`runAdd` exits non-zero: `planFormBlock` calls `renderBlockForm(block, 'angular', ...)`, which returns `undefined` because `@kitn.ai/blocks`'s own switch has no `angular` case, and `planFiles`'s `for (const file of files)` throws on it - ruling R13 is why this reds at all; before Task 1 routed every form through `renderBlockForm`, `planAdd`'s own `else` branch treated any unrecognized form as html and this case passed silently). That second failure is the exact shape of the shipped defect this rule exists for: a flag accepting a value nothing can emit.
 
 ```bash
 cd "$WT" && mv packages/blocks/src/forms/index.ts.bak packages/blocks/src/forms/index.ts
@@ -1589,11 +1770,23 @@ const cleanup = () => {
 };
 process.on('exit', cleanup);
 
+// The npm to pack with, honoring VERIFY_PACK_NPM the same way verify-pack.mjs
+// does, so this gate can be re-run under the release job's pinned npm too.
+const NPM = process.env.VERIFY_PACK_NPM ?? 'npm';
+
 function pack(dir, label) {
   const out = path.join(tmpRoot, 'tarballs');
   mkdirSync(out, { recursive: true });
-  const json = run(process.env.VERIFY_PACK_NPM ?? 'npm', ['pack', '--json', '--pack-destination', out], dir);
-  const file = path.join(out, readPackedFilename(json, label));
+  // readPackedFilename(raw, { npmVersion }) -> { filename, shape }: npm 12
+  // moved `npm pack --json`'s top level from an array to an object keyed by
+  // package name (see <repo>/scripts/pack-listing.mjs), so the version has to
+  // be read first and handed in - verify-blocks-react.mjs is the precedent.
+  const npmVersion = run(NPM, ['--version'], dir).trim();
+  const { filename } = readPackedFilename(
+    run(NPM, ['pack', '--json', '--pack-destination', out], dir),
+    { npmVersion },
+  );
+  const file = path.join(out, filename);
   log(`  packed    ${label} -> ${path.basename(file)}`);
   return file;
 }
@@ -1669,7 +1862,11 @@ function project(label, pkg) {
 function reactLeg() {
   const app = path.join(tmpRoot, 'react-host');
   cpSync(REACT_HOST, app, { recursive: true });
-  run('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error', KIT_TARBALL, CLI_TARBALL], app);
+  // ONLY the kit tarball: `add()` always invokes the CLI by absolute path out
+  // of the tools directory below (R12), never an app-local install, so
+  // installing CLI_TARBALL here too would be a copy nothing reads (R10 vs R12,
+  // reconciled - see the ruling).
+  run('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error', KIT_TARBALL], app);
   const installed = JSON.parse(readFileSync(path.join(app, 'node_modules/@kitn.ai/ui/package.json'), 'utf8')).version;
   log(`  react     installed @kitn.ai/ui@${installed} from the tarball`);
 
@@ -1681,7 +1878,6 @@ function reactLeg() {
     for (const file of generatedForms(block).find((f) => f.form === form).files) {
       if (!out.includes(file.target)) throw new Error(`${block}: wrote ${file.target} without announcing it`);
     }
-    const readme = generatedForms(app, block);
     log(`  react     ${block} -> ${form}`);
   }
   if (new Set(forms).size !== 1 || forms[0] !== 'react') {
@@ -1784,7 +1980,12 @@ if (SELF_TEST) {
   //    file must refuse everything and overwrite nothing.
   {
     const block = BLOCKS[0];
-    const target = generatedForms(block).find((f) => f.form === 'html').files[0].target;
+    // MATCH, never predict (R11): the vue leg's form is whatever it actually
+    // landed on, read off `results` rather than hard-coded as 'html' - the
+    // day PR B2 emits a vue tree this leg's row in `results` says 'vue' and
+    // the plant follows it with nothing here edited.
+    const vueForm = results.find((r) => r.leg === 'vue').form;
+    const target = generatedForms(block).find((f) => f.form === vueForm).files[0].target;
     const abs = path.join(vueDir, target);
     writeFileSync(abs, 'EDITED BY THE CONSUMER');
     let refused = false;
@@ -1819,7 +2020,8 @@ if (SELF_TEST) {
   //    the whole class this gate exists for.
   {
     const block = BLOCKS[0];
-    const target = generatedForms(block).find((f) => f.form === 'html').files.at(-1).target;
+    const vueForm = results.find((r) => r.leg === 'vue').form;
+    const target = generatedForms(block).find((f) => f.form === vueForm).files.at(-1).target;
     const abs = path.join(vueDir, target);
     const original = readFileSync(abs, 'utf8');
     writeFileSync(abs, `${original}\n<!-- drift -->\n`);
@@ -1843,7 +2045,7 @@ if (SELF_TEST) {
 }
 ```
 
-Note while implementing: the stray `const readme = generatedForms(app, block);` line in `reactLeg` above is a leftover from drafting - delete it. `noUnusedLocals` does not apply to `.mjs`, so nothing will catch it for you.
+`noUnusedLocals` does not apply to `.mjs`, so a stray unused local in this file would not be caught for you - `reactLeg` above has none; keep it that way when implementing.
 
 - [ ] **Step 2: Add the script**
 
@@ -1864,6 +2066,8 @@ cd "$WT" && pnpm --filter create-kai run verify:add
 
 Expected: the three legs green, `react -> react, vue -> html, none -> cdn`, then four `SELF-TEST OK` lines. Read the printed leg lines rather than trusting the exit code: they are the only statement of which detection rows were actually covered. **Record the wall time it printed** (`time` it) for Step 5 and the PR body; do not write a number into any file.
 
+**This is the first time all three shipped blocks' react trees have ever been installed into ONE host and compiled together** - `verify-blocks-react.mjs` compiles one block at a time, clearing every other block's root between runs. Nothing on the tree today proves three trees coexist under the fixture's strict `tsc`; a `grep -l` over `dist/blocks/f/*.react.json` for `declare global`/`declare module` finds none, so a name collision is the only failure shape expected, and none of the three blocks share a component name. If `tsc --noEmit` reds here for the first time, read the error before assuming the fixture is broken - it may be a real defect this task's own leg is the first thing to exercise.
+
 - [ ] **Step 4: Watch each leg fail before trusting it**
 
 The plants cover the checks. The LEGS still need to be watched, because a leg that silently wrote nothing would pass every assertion over an empty set:
@@ -1881,7 +2085,7 @@ Expected: FAIL immediately with `the bundled registry has no blocks, so every le
 cd "$WT" && mv packages/create-kai/scripts/verify-add.mjs.bak packages/create-kai/scripts/verify-add.mjs
 ```
 
-And the anti-vacuity floor:
+And the assertion that the vue leg's OWN row is still exercised, not just agreed with the other two legs:
 
 ```bash
 cd "$WT" && node -e "
@@ -1891,7 +2095,7 @@ fs.writeFileSync(p,s.replace(\"dependencies: { vue: '^3.0.0' } });\", \"dependen
 cd "$WT" && pnpm --filter create-kai run verify:add
 ```
 
-Expected: FAIL. With no framework signal the vue leg lands on `html` anyway, so the leg itself passes and the FLOOR is what fires... which means it does NOT fire, and the run is green. **That is the finding:** the floor catches "all three legs agree" but not "this leg stopped exercising its row". Add the missing assertion before moving on - in `otherFrameworkLeg`, after the `add`, assert the run announced the fallback (`generates no vue tree yet`) when `expected === 'html'`, which the drafted script already does. Re-run the plant and confirm it now FAILS with `landed on the html form without saying why`, then restore.
+Expected: FAIL immediately with `landed on the html form without saying why. A quiet fallback is the decision this gate exists to catch.` - `otherFrameworkLeg` already asserts (as drafted above) that when `expected === 'html'` the CLI's own output contains `generates no vue tree yet`; strip the vue dependency and the leg still lands on `html` (no framework signal at all also lands there), but the CLI now has nothing to be loud ABOUT, so it never prints that sentence and the assertion fires. This is the check that distinguishes "correctly quiet because there was nothing to decide" from "correctly landed on html because a real vue dependency has no tree yet, and said so" - the anti-vacuity floor (three legs landing on three different forms) would stay green through this plant on its own, because none of the three forms actually changed; this assertion is what catches the row silently stopping being exercised.
 
 ```bash
 cd "$WT" && mv packages/create-kai/scripts/verify-add.mjs.bak packages/create-kai/scripts/verify-add.mjs
@@ -1954,6 +2158,19 @@ EOF
 In `.github/workflows/test.yml`, in the `unit` job, immediately after the `create-kai packed-tarball shape` step:
 
 ```yaml
+      # Cache the npm side of the react-host leg. verify:add's own react
+      # install is the one expensive thing in this leg (network + a cold
+      # install of react, react-dom, vite, the react plugin and typescript),
+      # same shape as the `browser` job's cache ahead of verify:blocks:react.
+      # Keyed on the fixture's own package.json plus create-kai's, so a pin
+      # bump on either side busts it.
+      - name: Cache npm (create-kai add smoke, react leg)
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: verify-add-npm-${{ hashFiles('packages/ui/scripts/block-driver/react-host/package.json', 'packages/create-kai/package.json') }}
+          restore-keys: verify-add-npm-
+
       # The published `add`, which nothing above can see. The suite drives the
       # planner in-process and verify:pack reads the tarball's LISTING; neither
       # runs the binary. This packs the CLI, installs it, and runs `add` into one
@@ -1967,6 +2184,10 @@ In `.github/workflows/test.yml`, in the `unit` job, immediately after the `creat
       # It runs its own plants in the same process (`--self-test` is in the npm
       # script): the cost here is the one npm install, and a second invocation
       # would double the only expensive thing it does.
+      #
+      # NETWORK-DEPENDENT: the react leg's `npm install` reaches the registry
+      # for react, react-dom, vite, the react plugin and typescript, same as
+      # the `browser` job's verify:blocks:react step.
       #
       # Needs the `build` leg's artifact for dist/blocks and for packing the kit.
       - name: create-kai add smoke (packed tarball, one project per detected form)
@@ -2011,10 +2232,10 @@ In the forms-list row (`FRAMEWORK_BLOCK_FORMS`), the enforcement column names on
 ```bash
 cd "$WT" && pnpm --filter @kitn.ai/ui run lint:thresholds
 cd "$WT" && pnpm --filter @kitn.ai/ui run lint:gate-parity
-cd "$WT" && grep -rn "pr-d-target-mismatch" --include='*.md' --include='*.ts' --include='*.mjs' --include='*.yml' . | grep -v '^./docs/superpowers/plans/' | grep -v node_modules
+cd "$WT" && grep -rn "pr-d-target-mismatch" --include='*.md' --include='*.ts' --include='*.mjs' --include='*.yml' . | grep -v '^./docs/superpowers/' | grep -v node_modules
 ```
 
-Expected: both guards green, and the grep returns nothing outside `docs/superpowers/plans/` and `docs/superpowers/HANDOFF-*` (the plans and handoffs are a historical record and keep naming the file they scheduled for deletion).
+Expected: both guards green, and the grep returns nothing outside `docs/superpowers/` (the plans and handoffs under it are a historical record and keep naming the file they scheduled for deletion; excluding the whole directory rather than only `docs/superpowers/plans/` is what the "returns nothing" expectation actually requires, since the HANDOFF files and the PR C plan live in `docs/superpowers/` too, not under `plans/`).
 
 - [ ] **Step 6: Commit**
 
@@ -2024,7 +2245,10 @@ cd "$WT" && git commit -m "$(cat <<'EOF'
 ci: verify:add joins the required graph, and the targets couplings move
 
 The add smoke runs in the `unit` leg beside the create-kai steps that already
-hang off its build, where the kit artifact it packs is already downloaded.
+hang off its build, where the kit artifact it packs is already downloaded, with
+an `~/.npm` cache ahead of it keyed on the react-host fixture and create-kai's
+package.json (the same shape the `browser` job already runs ahead of
+verify:blocks:react).
 
 coupling-map: the INSTALL_ROOTS row drops the deleted mismatch test and names
 the two guards that replaced it; the forms-list row gains the create-kai side,
@@ -2101,17 +2325,31 @@ the /blocks page displays is byte for byte the path the CLI writes.
   the change.
 - Detection rows name a FRAMEWORK; where it lands comes from
   `FRAMEWORK_BLOCK_FORMS`. A framework with no generated tree lands on the
-  html form and is told so in one sentence. Ambiguity is decided on the
-  ANSWER, so two signals landing on the same tree stay silent today and start
-  asking on their own when PR B2 emits both trees.
+  html form and is told so in one sentence. Ambiguity is narrowed from "two
+  signals present" (the 08-31 spec's literal wording) to "two signals that
+  decide DIFFERENT forms" - count-based would ask vue-vs-svelte a question
+  with two identical answers today, which `add.test.ts` already pins as NOT
+  a question; answer-based converges on the spec's wording the day PR B2
+  gives vue and svelte different trees, with nothing edited here.
+- `FRAMEWORK_SIGNALS` keeps a row for every framework this release can
+  detect, even the ones with no tree of their own yet (vue, svelte, angular,
+  solid) - a stricter reading of spec section 7 ("detecting Vue and having no
+  Vue tree is the menu-honesty failure") would drop those rows until PR B2.
+  Rows are kept because dropping them removes the one thing that makes the
+  loud fallback sayable: a vue project would go undetected instead of landing
+  on html with a sentence explaining why. Decided loudly beats not detected.
 - The html form ships the README the react form already had, through one
-  shared `renderReadme`, and `add` prints it after the writes.
+  shared `renderReadme`, plus a derived "what the block needs" line
+  (envVars, then a route dependency, then nothing) for a future block with no
+  `docs` sentence of its own. `add` prints the README after the writes.
 - New gate `pnpm --filter create-kai run verify:add`: the PACKED CLI into one
   throwaway project per detection row, every byte matched against the
   generated artifacts, the react tree compiled against an installed packed
   kit. It deliberately overlaps `verify:blocks:react`, which proves the
   RENDERER's tree compiles; this proves the packed CLI puts those bytes where
-  a project can compile them.
+  a project can compile them. First time three blocks' react trees have
+  compiled together in one host - measured wall time and any surprise there
+  is recorded above.
 
 Out of scope and untouched: PR B2's four renderers (everything here grows when
 they land, and a planted `vue` row was used to watch that happen), the site,
@@ -2142,6 +2380,7 @@ cd "$WT" && git push origin --delete feat/create-kai-add-targets
 
 | Requirement | Task |
 |---|---|
+| S9/H4 "blocks, not gallery, everywhere": the five remaining `gallery` comments under `packages/create-kai` | 0 |
 | `blockDir()` moves onto the targets table; every file at `fileTarget(...)`; react `src/components/<id>/`, html `blocks/<id>/`, cdn one file in the cwd | 1 |
 | Displayed path equals written path, tested against `f/<id>.<form>.json` for every block and form, with an anti-vacuity floor | 2 |
 | `pr-d-target-mismatch.test.ts` red for the right reason, deleted in the same commit, said in the commit body | 1 (Steps 5, 9) |
@@ -2157,9 +2396,9 @@ cd "$WT" && git push origin --delete feat/create-kai-add-targets
 
 Spec 5.5 ("create-kai smoke extends to one non-react framework fixture") is Task 7's leg 2, which is stronger than asked: it drives every block, not one fixture.
 
-**2. Placeholder scan.** No TBD, no "similar to Task N", no "add error handling". Two deliberate call-outs rather than placeholders: the leftover line in `verify-add.mjs`'s `reactLeg` is named in Task 7 Step 1 with the instruction to delete it (it is a trap for an implementer who copies without reading), and Task 3's Step 8 says that if an existing file-list assertion in `html-form.test.ts` enumerates the form's files, updating it is part of the step - the exact list is not restated here because the test's current text is the authority.
+**2. Placeholder scan.** No TBD, no "similar to Task N", no "add error handling". One deliberate call-out rather than a placeholder: Task 3's Step 8 says that if an existing file-list assertion in `html-form.test.ts` enumerates the form's files, updating it is part of the step - the exact list is not restated here because the test's current text is the authority.
 
-**3. Type consistency.** `planFiles(files: readonly FormFile[], plan: AddPlan)`, `landingForm(framework: TargetFramework | null): ProjectForm`, `emitsOwnTree(framework): framework is TargetFramework & ProjectForm`, `blockFormAxis(found: readonly string[], forms: readonly ProjectForm[]): Axis`, `decideForm(...): Promise<{ form?: BlockForm; error?: string; note?: string }>`, `renderReadme(block: Block, lines: readonly string[]): string`, `README_FILE: 'README.md'`. `ProjectForm` is introduced in Task 5 and used only there and after; Tasks 1 through 4 use `BlockForm`/`BlockFormId` as the file does today. `Detection` gains `fallback` in Task 5, and Task 5's tests are the only ones that read it. One risk flagged in place: `INSTALL_ROOTS[id]` inside `blockFormAxis` needs `id` to be provably a `TargetFramework`, which is why the parameter is `ProjectForm` and Step 5 says to fix a red there at the parameter type rather than with a cast.
+**3. Type consistency.** `planFiles(files: readonly FormFile[], plan: AddPlan)`, `planFormBlock(block: Block, opts: PlanOptions, plan: AddPlan): void` (routes through `renderBlockForm`, ruling R13), `landingForm(framework: TargetFramework | null): ProjectForm`, `emitsOwnTree(framework): framework is TargetFramework & ProjectForm`, `blockFormAxis(found: readonly string[], forms: readonly ProjectForm[]): Axis`, `decideForm(...): Promise<{ form?: BlockForm; error?: string; note?: string }>`, `renderReadme(block: Block, lines: readonly string[]): string`, `needsLine(block: Block): string | null` (private to `readme.ts`), `README_FILE: 'README.md'`. `ProjectForm` is introduced in Task 5 and used only there and after; Tasks 1 through 4 use `BlockForm`/`BlockFormId` as the file does today. `Detection` gains `fallback` in Task 5, and Task 5's tests are the only ones that read it. One risk flagged in place: `INSTALL_ROOTS[id]` inside `blockFormAxis` needs `id` to be provably a `TargetFramework`, which is why the parameter is `ProjectForm` and Step 5 says to fix a red there at the parameter type rather than with a cast.
 
 ### Per-task closing gates
 
@@ -2167,6 +2406,7 @@ Spec 5.5 ("create-kai smoke extends to one non-react framework fixture") is Task
 
 | Task | Closing gates (all must be green before the commit) |
 |---|---|
+| 0 | `git apply --check` clean before applying · `pnpm --filter create-kai run build` · `run typecheck` · `exec vitest run` · the `gallery` grep under `packages/create-kai` empty |
 | 1 | `pnpm --filter create-kai run build` · `pnpm --filter create-kai run typecheck` · `pnpm --filter create-kai exec vitest run` |
 | 2 | the three above, plus the doctored-artifact and missing-directory reds watched, plus `pnpm --filter @kitn.ai/ui run build:blocks` to restore |
 | 3 | `pnpm --filter @kitn.ai/blocks run typecheck` · `pnpm --filter @kitn.ai/blocks exec vitest run` · `pnpm --filter @kitn.ai/ui run build:blocks` · `pnpm --filter @kitn.ai/ui run verify:blocks` · `pnpm --filter create-kai run build` · `pnpm --filter create-kai exec vitest run` |
@@ -2181,14 +2421,14 @@ Spec 5.5 ("create-kai smoke extends to one non-react framework fixture") is Task
 
 ## Facts verified on the tree
 
-Every fact this plan argues from, with the command that produced it. Run at `/Users/home/Projects/kitn-ai/kitn-chat/.claude/worktrees/blocks-c` (PR C's worktree, branch `feat/blocks-site-section`, HEAD `851f102d`), which is what PR D's `main` will be.
+Every fact this plan argues from, with the command that produced it. Most rows were run at `/Users/home/Projects/kitn-ai/kitn-chat/.claude/worktrees/blocks-c` (PR C's worktree, branch `feat/blocks-site-section`, HEAD `26bb65af` - the draft's table named `851f102d`, one docs commit stale; nothing either version reads had changed). The adversarial-review corrections and everything below the `---` inside this section were re-verified against `main` at `aa973c14` (the tree this plan's own worktree, `.claude/worktrees/blocks-d`, is cut from), read-only, after PR C merged.
 
 | Fact | Command |
 |---|---|
 | `blockDir()` writes react to `src/blocks/<name>` and everything else to `blocks/<name>`, and is the only place `planAdd` joins a directory | `cat packages/create-kai/src/blocks.ts` |
 | `INSTALL_ROOTS` maps react/vue/solid to `src/components`, svelte to `src/lib/components`, angular to `src/app/components`, html to `blocks`; `fileTarget` and `isTargetFramework` are exported | `cat packages/blocks/src/targets.ts` |
 | Every renderer already stamps `target` from `fileTarget()`; `cdn.ts` uses `${block.name}.html` | `cat packages/blocks/src/forms/{html,react,cdn}.ts` |
-| `FRAMEWORK_BLOCK_FORMS` is `BLOCK_FORMS` minus `cdn`, and `renderBlockForm` is the one dispatch both `gen-blocks.mjs` and the CLI call | `cat packages/blocks/src/forms/index.ts` |
+| `FRAMEWORK_BLOCK_FORMS` is `BLOCK_FORMS` minus `cdn`, and `renderBlockForm` is `gen-blocks.mjs`'s ONE dispatch, with an exhaustive `switch` and no `default` - BEFORE this plan the CLI did NOT call it: `planAdd` branched `cdn` / `react` / else-html by hand and the `else` branch silently treated ANY other form id as html (ruling R13, adversarial-review finding, HIGH) | `cat packages/blocks/src/forms/index.ts` and `sed -n '290,330p' packages/create-kai/src/blocks.ts` |
 | The react renderer emits `README.md`; the html renderer emits none | `grep -rn "README" packages/blocks/src/` (one hit, `src/forms/react.ts:296`) |
 | `registry.ts` imports nothing from `src/forms/`, so a new `src/forms/readme.ts` importing `../registry` is not a cycle | `grep -n "^import" packages/blocks/src/registry.ts` |
 | `verify:blocks [html-binder]` scans EVERY file of the html form for `EventSource` / `text/event-stream` / `.getReader(` | `sed -n '/function htmlBinderErrors/,/^}/p' packages/ui/scripts/verify-blocks.mjs` |
@@ -2212,6 +2452,15 @@ Every fact this plan argues from, with the command that produced it. Run at `/Us
 | `verify-blocks-react.mjs` packs the kit, installs it into a copy of `scripts/block-driver/react-host`, writes each tree at `installRoot('react', ...)`, writes `src/block.ts` with a specifier derived from the emitted target, and runs `npx tsc --noEmit` | `sed -n '150,240p' packages/ui/scripts/verify-blocks-react.mjs` |
 | The react host fixture is a stock create-vite react-ts app with pinned ranges, `tsconfig.json` including only `src`, and a `src/main.tsx` that imports `./block` | `cat packages/ui/scripts/block-driver/react-host/{package.json,tsconfig.json,src/main.tsx}` |
 | `createConsumerTsc` resolves `@kitn.ai/ui` out of the BUILT WORKSPACE TREE (`PACKAGE_ROOT`), not an install, which is why it is not the harness for "typechecks against the installed kit" | `sed -n '30,130p' packages/ui/scripts/lib/consumer-tsc-projects.mjs` and `sed -n '270,290p'` of the same file |
+| `readPackedFilename(raw, { npmVersion })` returns `{ filename, shape }` - NOT `readPackedFilename(json, label)` returning a bare filename, which is what Task 7's script drafted before this revision (adversarial-review finding, HIGH: it would throw destructuring `npmVersion` off a string). `verify-blocks-react.mjs:143-146` is the correct call: read `npm --version` first, then pass `{ npmVersion }` | `sed -n '190,236p' scripts/pack-listing.mjs` and `sed -n '140,146p' packages/ui/scripts/verify-blocks-react.mjs` |
+| The gallery-word sweep patch (`docs/superpowers/research/2026-09-03-create-kai-gallery-sweep.patch`) applies clean to `main` at `aa973c14`, and five `gallery` hits remain under `packages/create-kai` before it applies (the patch's own four files plus `src/blocks.ts` twice) - the draft plan named neither the patch nor the remaining hits (adversarial-review finding, HIGH) | `git apply --check docs/superpowers/research/2026-09-03-create-kai-gallery-sweep.patch` and `grep -rn gallery packages/create-kai --include='*.ts' --include='*.mjs' --include='*.json'` |
+| `decideForm` calls `io.ask(blockFormAxis(...), 'react')` directly; it is never routed through `decideAxis`/`answerAxis`, so `blockFormAxis`'s `because` field is asserted non-empty by the new test but never actually rendered as a stated line the way `layoutAxis`/`gatewayAxis` are (kept as-is; noted in ruling R6's text, not changed - `decideForm` must be able to REFUSE under `--yes` on an ambiguous axis, which `answerAxis` does not do) | `grep -n "decideForm\|io.ask\|answerAxis\|blockFormAxis" packages/create-kai/src/add.ts` and `sed -n '1,90p' packages/create-kai/src/axes.ts` |
+| `unit` job: `timeout-minutes: 20`, no `~/.npm` cache step anywhere in it (the `construct` and `browser` jobs each have one; `unit` has none before this plan adds one in Task 8) | `sed -n '495,560p' .github/workflows/test.yml` |
+| `packages/create-kai/src/blocks.ts`'s `planAdd` branches `if (opts.form === 'cdn') ... else if (opts.form === 'react') ... else { planHtmlBlock(block, plan) }` - the `else` is reached by ANY form id that is neither `cdn` nor `react`, confirming the silent-fallback defect ruling R13 fixes | `sed -n '293,320p' packages/create-kai/src/blocks.ts` |
+| The react form's current README literal is `['# ${title}', '', description, '', "Render it: \`import { X } from './X';\`", ...(docs ? ['', docs] : []), ''].join('\n')`, and the shared fixture's `block()` has `title: 'F'`, `description: 'f'`, name `Fixture`, no `docs` - so the byte-equality control in Task 3 is `['# F', '', 'f', '', "Render it: \`import { Fixture } from './Fixture';\`", ''].join('\n')` | `sed -n '270,296p' packages/blocks/src/forms/react.ts` and `sed -n '20,36p' packages/blocks/tests/react-form.test.ts` |
+| `html-form.test.ts` declares its own `stripped()` helper (not `withStrippedTwins(block(), (s) => s)`, which the draft's new cases used) | `grep -n "const stripped" packages/blocks/tests/html-form.test.ts` |
+| The three shipped blocks' `registry-item.json` all carry `registryDependencies: []` and `envVars: {}` today, so the new derived "what the block needs" line in `renderReadme` is currently invisible in every generated README (`docs` covers the same ground for all three) | `node -e` reading each `registry-item.json`'s `docs`/`dependencies`/`registryDependencies`/`envVars` |
+| `docs/coupling-map.md`'s `INSTALL_ROOTS` row (its enforcement column) and its forms-list row (line ~336, enforcement column) carry the exact quoted clauses Task 8 replaces/appends, verbatim on `main` at `aa973c14` | `sed -n '148p;336p' docs/coupling-map.md` |
 | `readPackedFilename` is the shared `npm pack --json` parser at the repo root, already used by create-kai's `verify-pack.mjs` | `grep -n "pack-listing" packages/create-kai/scripts/verify-pack.mjs` |
 | The three shipped blocks all carry a `docs` sentence, `dependencies: ["@kitn.ai/ui"]`, no env vars and no registry dependencies | `node -e "for(const n of ['support-widget','assistant','in-app-assistant']){...}"` |
 | `index.ts` wires `add` with `cwd: process.cwd()`, `blocksRoot: <dist>/blocks` and `interactive: Boolean(process.stdout.isTTY)`, and calls `main()` at module scope (so it is unimportable by tests) | `sed -n '95,135p' packages/create-kai/src/index.ts` |
