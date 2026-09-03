@@ -9,6 +9,11 @@ public/kitn/
 public/llms.txt
 public/llms-full.txt
 
+# blocks registry + previews copied by scripts/copy-blocks.mjs, and the
+# preview-source module it generates: regenerated on prebuild, never committed
+public/blocks/
+src/generated/
+
 # dependencies
 node_modules/
 

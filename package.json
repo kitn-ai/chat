@@ -26,7 +26,8 @@
     "overrides": {
       "storybook": "10.4.2",
       "storybook-solidjs-vite": "10.1.1",
-      "vitest": "4.1.2"
+      "vitest": "4.1.2",
+      "postcss": "8.5.26"
     }
   }
 }
