@@ -78,8 +78,10 @@ describe('the solid JSX augmentation', () => {
   it('carries every tag the react and vue augmentations carry', () => {
     const solid = tagsIn(moduleBlock('solid-js/jsx-runtime'));
     const react = tagsIn(moduleBlock('react'));
+    const vue = tagsIn(moduleBlock('vue'));
     expect(solid.length).toBeGreaterThan(0);
     expect(solid).toEqual(react);
+    expect(solid).toEqual(vue);
   });
 
   it('is generic, and says out loud that it is', () => {

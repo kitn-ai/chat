@@ -83,7 +83,9 @@ Every `#ref` in the three blocks sits on a `kai-` tag and every `@event` binds a
 
 The augmentation target is `solid-js/jsx-runtime`, not `solid-js`. `solid-js`'s own index re-exports `JSX` as a type (`node_modules/solid-js/types/index.d.ts:9`), while `solid-js/jsx-runtime`'s `types` condition points straight at `./types/jsx.d.ts`, the file that DECLARES `export namespace JSX`. Verified by compiling both shapes (Facts table): augmenting `solid-js/jsx-runtime` from a file that is itself a module merges cleanly and `<span>` still resolves; the same block in a file with no top-level import or export is an ambient module DECLARATION instead, which replaces solid's module wholesale and breaks every standard tag.
 
-`KaiElementSolidProps<T extends HTMLElement = HTMLElement>` extends `JSX.HTMLAttributes<T>`, generic on the ELEMENT TYPE, not on the props: each tag's `IntrinsicElements` entry is its own instantiation (`'kai-dock': KaiElementSolidProps<KaiDockElement>`, one line per element, derived from the same `${el.className}` interfaces the tag map already declares), so `ref` -- via Solid's own `CustomAttributes<T>`, which `HTMLAttributes<T>` extends -- infers the REAL element interface at every tag, unannotated or annotated. Only the PROPS stay generic (one shape, an index signature, for `prop:`/`attr:`/`on:` and kai's own non-scalar props) rather than per-element, for one reason worth stating: a per-element version of the EVENTS would need a type keyed by the RAW event name (`on:kai-click`), and the generator emits only the camel-cased `onKaiClick` shape the Vue and React blocks use. Deriving `on:kai-click` from `onKaiClick` at the type level is not possible, so per-element Solid EVENT typing is a generator change of its own. It goes on the backlog with that reason, and Task 6's gate output says out loud that the solid cell does not type a kai prop VALUE.
+`KaiElementSolidProps<T extends HTMLElement = HTMLElement>` extends `SolidHtmlAttributes<T>`, a local alias for `import('solid-js/jsx-runtime').JSX.HTMLAttributes<T>`, generic on the ELEMENT TYPE, not on the props: each tag's `IntrinsicElements` entry is its own instantiation (`'kai-dock': KaiElementSolidProps<KaiDockElement>`, one line per element, derived from the same `${el.className}` interfaces the tag map already declares), so `ref` -- via Solid's own `CustomAttributes<T>`, which `HTMLAttributes<T>` extends -- infers the REAL element interface at every tag, unannotated or annotated. Only the PROPS stay generic (one shape, an index signature, for `prop:`/`attr:`/`on:` and kai's own non-scalar props) rather than per-element, for one reason worth stating: a per-element version of the EVENTS would need a type keyed by the RAW event name (`on:kai-click`), and the generator emits only the camel-cased `onKaiClick` shape the Vue and React blocks use. Deriving `on:kai-click` from `onKaiClick` at the type level is not possible, so per-element Solid EVENT typing is a generator change of its own. It goes on the backlog with that reason, and Task 6's gate output says out loud that the solid cell does not type a kai prop VALUE.
+
+The `HTMLAttributes` reference is named through `import('solid-js/jsx-runtime')` rather than the bare `JSX.HTMLAttributes<T>`: a `declare module` block only MERGES with the real module when that module is already in the program, and the self-contained dist copy of this file imports nothing else from solid-js. Written bare, the block would be read as a fresh ambient declaration, `JSX` would mean the tiny namespace declared inside that block, and `JSX.HTMLAttributes` would be TS2694 under `skipLibCheck: false`. The `import(...)` type is what pulls solid's `types/jsx.d.ts` into the program and makes the merge happen.
 
 **R3. Every non-react renderer annotates its ref callback with the element interface, derived from the tag by the rule `react.ts` already documents.**
 
@@ -570,7 +572,7 @@ describe('the solid JSX augmentation', () => {
     expect(solid).toContain('KaiElementSolidProps');
   });
 
-  it('is generic on the ELEMENT TYPE, extending JSX.HTMLAttributes<T>', () => {
+  it('is generic on the ELEMENT TYPE, extending SolidHtmlAttributes<T>', () => {
     // Under a hand-rolled prop list, a fixed `HTMLElement`, or the index
     // signature alone, an unannotated `ref={(el) => ...}` or `onClick={(e) =>
     // ...}` is TS7006 (no contextual type to infer the callback's parameter
@@ -582,8 +584,23 @@ describe('the solid JSX augmentation', () => {
     // tag's own instantiation, unannotated or annotated.
     const solid = moduleBlock('solid-js/jsx-runtime');
     expect(solid).toContain(
-      'interface KaiElementSolidProps<T extends HTMLElement = HTMLElement> extends JSX.HTMLAttributes<T>',
+      'interface KaiElementSolidProps<T extends HTMLElement = HTMLElement> extends SolidHtmlAttributes<T>',
     );
+  });
+
+  it('reaches HTMLAttributes through an import type, not the bare name', () => {
+    // A module augmentation merges with the real module only when that module
+    // is in the program; otherwise tsc reads the block as a fresh ambient
+    // declaration, `JSX` means the tiny namespace declared inside it, and the
+    // bare `JSX.HTMLAttributes` is TS2694 under `skipLibCheck: false`. The
+    // shipped dist/elements.d.ts imports nothing (self-contained by design),
+    // and neither does a react or vue consumer's program, so the import type
+    // is what pulls solid's types/jsx.d.ts in and makes the merge happen.
+    const solid = moduleBlock('solid-js/jsx-runtime');
+    expect(solid).toContain(
+      "type SolidHtmlAttributes<T extends HTMLElement> = import('solid-js/jsx-runtime').JSX.HTMLAttributes<T>;",
+    );
+    expect(solid).not.toContain('extends JSX.HTMLAttributes<');
   });
 
   it('gives every tag its OWN element interface, not the generic HTMLElement default', () => {
@@ -662,6 +679,16 @@ In `packages/ui/scripts/gen-element-types.mjs`, immediately after the `jsxIntrin
     .join('\n');
 
   const solidIntrinsicBlock = `declare module 'solid-js/jsx-runtime' {
+  /** Solid's own \`JSX.HTMLAttributes\`, named through an \`import(...)\` type
+   *  rather than as the bare \`JSX.HTMLAttributes\` this block would otherwise
+   *  see. The import is what pulls solid's types/jsx.d.ts into the program;
+   *  without it, a copy of this file that imports nothing else (the shipped
+   *  dist/elements.d.ts, and any consumer whose program has no other reason to
+   *  load solid's JSX types) leaves this \`declare module\` a fresh ambient
+   *  declaration instead of a merge, and the bare name is TS2694 under
+   *  \`skipLibCheck: false\`. See scripts/gen-element-types.mjs. */
+  type SolidHtmlAttributes<T extends HTMLElement> = import('solid-js/jsx-runtime').JSX.HTMLAttributes<T>;
+
   /** A kai-* custom element as Solid's JSX checker sees it, parameterized by
    *  its own element interface (\`KaiDockElement\`, ...) so \`ref\` -- via
    *  Solid's own \`CustomAttributes<T>\`, which \`HTMLAttributes<T>\` extends --
@@ -676,7 +703,7 @@ In `packages/ui/scripts/gen-element-types.mjs`, immediately after the `jsxIntrin
    *  per element would invite the wrong spelling). Widened to \`unknown\`,
    *  which is compatible with every member \`HTMLAttributes\` declares, so
    *  the two don't conflict. */
-  interface KaiElementSolidProps<T extends HTMLElement = HTMLElement> extends JSX.HTMLAttributes<T> {
+  interface KaiElementSolidProps<T extends HTMLElement = HTMLElement> extends SolidHtmlAttributes<T> {
     [prop: string]: unknown;
   }
 
@@ -687,6 +714,8 @@ ${solidTagMap}
   }
 }`;
 ```
+
+An interface cannot extend an `import(...)` type expression directly (TS2499), hence the local `SolidHtmlAttributes` alias -- and naming the alias through `import('solid-js/jsx-runtime')` rather than the bare `JSX.HTMLAttributes<T>` is what makes the block a MERGE rather than a fresh ambient declaration: a `declare module` only merges with the real module when that module is already part of the program, and the shipped dist copy of this file is deliberately self-contained (no other imports), so nothing else would pull solid's `types/jsx.d.ts` in. The `import(...)` type both names the type and pulls that module into the program.
 
 Then add `solidIntrinsicBlock` to BOTH emitted copies, immediately after `jsxIntrinsicBlock` in each template literal - the dist copy and the `srcOut` source copy. Search for `jsxIntrinsicBlock` in the file; it appears once per copy, and each occurrence gets `\n\n${solidIntrinsicBlock}` after it.
 
