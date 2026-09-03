@@ -7,4 +7,4 @@
  * historical import path alive; add nothing here — new form logic belongs in
  * the shared module.
  */
-export { componentName, kaiTagsIn } from '@kitn.ai/blocks/forms';
+export { componentName } from '@kitn.ai/blocks/forms';

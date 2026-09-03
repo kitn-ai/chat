@@ -210,7 +210,12 @@ export function createController(deps: SupportWidgetDeps): SupportWidgetControll
       // The stack's one rule, CONSUMED not restated: drilled shows the back
       // arrow and hides the tab bar.
       patch({ backHidden: !drilled, tabBarHidden: drilled, tab: root ?? state.tab });
-      void controller.setView(view ?? 'home'); // only 'chat' satisfies the seen rule
+      // Only 'chat' satisfies the seen rule's view leg. An UNRESOLVED view is
+      // deliberately skipped rather than defaulted: the old imperative code
+      // passed `undefined` straight through, where the leg simply failed, and
+      // defaulting to 'home' would ASSERT the home view is showing when the
+      // stack resolved none.
+      if (view) void controller.setView(view);
     },
 
     tabChange(event) {

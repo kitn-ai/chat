@@ -240,6 +240,59 @@ describe('the react form', () => {
     expect(() => renderReactForm(b)).toThrow(/nope/);
   });
 
+  it('names a :attr binding on a kai element exactly as a literal attribute is named', () => {
+    // The binding path used to camelCase blindly, which emitted `class={...}`
+    // (React warns and drops it) and `dataTestid={...}` (not on the wrappers'
+    // closed prop type, so the emitted file does not compile). One rule, one
+    // function: `literalPropName`.
+    const b = block();
+    (b.files as Map<string, string>).set(
+      'fixture.html',
+      PAGE.replace('<kai-conversations>', '<kai-conversations :class="title" :data-testid="title" :aria-label="title">'),
+    );
+    const tsx = byPath(renderReactForm(b)).get('Fixture.tsx')!;
+    expect(tsx).toContain('className={state.title}');
+    expect(tsx).toContain('data-testid={state.title}');
+    expect(tsx).toContain('aria-label={state.title}');
+    expect(tsx).not.toContain('dataTestid');
+    expect(tsx).not.toContain('ariaLabel');
+    expect(tsx).not.toMatch(/\sclass=\{/);
+  });
+
+  it('escapes < and > in text, not only braces', () => {
+    // A bare `<` opens a tag, so text carrying one emits TSX that does not
+    // parse. The brace case was already handled and these two were not.
+    const b = block();
+    (b.files as Map<string, string>).set(
+      'fixture.html',
+      PAGE.replace('<span .textContent="title"></span>', '<span>1 &lt; 2 &amp; a &gt; b</span>'),
+    );
+    const tsx = byPath(renderReactForm(b)).get('Fixture.tsx')!;
+    expect(tsx).toContain("1 {'<'} 2 & a {'>'} b");
+  });
+
+  it('emits a literal attribute value carrying a double quote as an expression', () => {
+    // `title="say "hi""` closes the JSX string on the first inner quote.
+    const b = block();
+    (b.files as Map<string, string>).set(
+      'fixture.html',
+      PAGE.replace('<kai-conversations>', '<kai-conversations title="say &quot;hi&quot;">'),
+    );
+    const tsx = byPath(renderReactForm(b)).get('Fixture.tsx')!;
+    expect(tsx).toContain(`title={'say "hi"'}`);
+  });
+
+  it('refuses an @event on a plain tag, where React has no derivable handler name', () => {
+    // Refused at the grammar (parse-template), so the html form refuses the
+    // same page rather than the two forms disagreeing about one source.
+    const b = block();
+    (b.files as Map<string, string>).set(
+      'fixture.html',
+      PAGE.replace('<span .textContent="title"></span>', '<input @keydown="open" />'),
+    );
+    expect(() => renderReactForm(b)).toThrow(/kai-input/);
+  });
+
   it('refuses a block with no controller, by the file name it wanted', () => {
     const b = block();
     (b.files as Map<string, string>).delete('fixture.controller.ts');

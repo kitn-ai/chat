@@ -58,10 +58,13 @@ describe('the five binding kinds', () => {
     expect(el.type === 'element' && el.bindings[0]).toMatchObject({ kind: 'attr', name: 'hidden', value: 'backHidden' });
   });
 
-  it('@event binds an action, kai- or native', () => {
-    const t = ok('<kai-button @kai-click="back"></kai-button><button @click="close"></button>');
+  it('@event binds an action, on a kai- element', () => {
+    // A NATIVE event on a plain tag used to be legal here and is not any more:
+    // React's handler names are not derivable from `on<Name>`, so the react
+    // form had no translation for it. The refusal has its own case below.
+    const t = ok('<kai-button @kai-click="back"></kai-button><kai-input @kai-input="type"></kai-input>');
     const kinds = rootChildren(t).map((n) => (n.type === 'element' ? n.bindings[0] : null));
-    expect(kinds).toMatchObject([{ kind: 'event', name: 'kai-click', value: 'back' }, { kind: 'event', name: 'click', value: 'close' }]);
+    expect(kinds).toMatchObject([{ kind: 'event', name: 'kai-click', value: 'back' }, { kind: 'event', name: 'kai-input', value: 'type' }]);
   });
 
   it('#ref names a handle, and every ref name is collected', () => {
@@ -205,6 +208,52 @@ describe('every refusal', () => {
   it('refuses seed: inside a *for subtree', () => {
     expect(errsFor('<ul><li *for="row of rows" :key="row.id"><kai-view seed:name="a"></kai-view></li></ul>'))
       .toContain('inside a `*for` subtree');
+  });
+
+  it('refuses a markup sink by name: markup is not a binding', () => {
+    // Everything the model produced is untrusted input (CLAUDE.md), so a State
+    // field fed from a message IS the model-controlled path. These sinks turn
+    // one into markup and a generated form runs no sanitizer over it.
+    for (const attr of ['.innerHTML', '.outerHTML', '.srcdoc', '.insertAdjacentHTML', ':srcdoc']) {
+      const errs = errsFor(`<div ${attr}="body"></div>`);
+      expect(errs, attr).toContain(attr);
+      expect(errs, attr).toContain('markup is not a binding');
+      expect(errs, attr).toContain('.textContent');
+    }
+  });
+
+  it('refuses a navigable URL sink by name, in both spellings', () => {
+    // `javascript:` and `data:` are script. The kit HAS a scheme policy
+    // (`isSafeUrl`), and no generated form puts it on a bound value, so the
+    // binding is refused rather than emitted unguarded.
+    for (const attr of [':href', ':src', ':action', ':formaction', '.href', '.src', '.action', '.formAction']) {
+      const errs = errsFor(`<a ${attr}="target"></a>`);
+      expect(errs, attr).toContain(attr);
+      expect(errs, attr).toContain('no scheme guard');
+      expect(errs, attr).toContain('literal attribute');
+    }
+  });
+
+  it('refuses an @event on a plain tag, naming the kai element that wraps the interaction', () => {
+    // React's native handler names are not derivable from `on<Name>`
+    // (`onKeyDown`, and `onChange` does not even mean the same event), so the
+    // react form has no translation. Decided at the grammar, not in one
+    // renderer, because the grammar is where the shape is decided (R21).
+    const errs = errsFor('<input @keydown="press" />');
+    expect(errs).toContain('@keydown');
+    expect(errs).toContain('kai-button');
+    expect(errs).toContain('kai-input');
+  });
+
+  it('refuses an empty binding target by name', () => {
+    for (const attr of ['.', ':', '@', 'seed:']) {
+      const errs = errsFor(`<span ${attr}="x"></span>`);
+      expect(errs, attr).toContain(`"${attr}"`);
+      expect(errs, attr).toContain('names no target');
+    }
+    // `#ref=""` names a target and carries an empty NAME, which the ref rule
+    // already refuses by name; the case sits here so the pair is read together.
+    expect(errsFor('<span #ref=""></span>')).toContain('#ref=""');
   });
 });
 

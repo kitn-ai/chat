@@ -276,6 +276,18 @@ out loud, because a block reaching for a plain element is not exotic: the kit
 has no dot affordance on `kai-button`, so the unread signal beside that
 block's history button is the block's own `<span>`.
 
+**Amendment, 2026-09-02 (PR B, whole-branch review): `@event` is the one
+exception.** It binds on a `kai-*` element and nowhere else. The html binder
+would happily `addEventListener('keydown')` on a plain `<input>`, but React's
+handler names are not derivable from `on<Name>` for a native event: `keydown`
+is `onKeyDown`, and `change` does not even mean the same event there, so the
+react form has no translation and the two renderers would disagree about one
+authored page. The refusal is at the grammar rather than in the react renderer,
+by the same rule as the nested `*for`: the grammar is where the shape is
+decided. Its message names the element that owns the interaction (`kai-button`
+for a click, `kai-input` for typing), because "not here" without "there" leaves
+the author guessing. The other four kinds stay element-agnostic.
+
 **Amendment, 2026-09-02 (PR B).** The parser recovers the AUTHORED case of an
 attribute from parse5's source locations. parse5 is the WHATWG tokenizer and it
 LOWERCASES attribute names, so `.textContent` arrives as `.textcontent` and
@@ -332,6 +344,41 @@ upgrade has already captured by then: `kai-view-stack` untracks `view` into
 the first navigation rather than as a deep link. The blocks in this round all
 land on the same view either way, so nothing depends on the difference; it is
 stated here so nobody debugs it twice.
+
+**Amendment, 2026-09-02 (PR B, whole-branch review): the sinks a binding may
+not name.** A `.prop` or `:attr` binding is refused, by name, when its target
+is one of:
+
+- `.innerHTML`, `.outerHTML`, `.srcdoc`, `.insertAdjacentHTML`, and `:srcdoc`.
+  The message is "bind `.textContent`; markup is not a binding".
+- `:href`, `:src`, `:action`, `:formaction` and their property twins `.href`,
+  `.src`, `.action`, `.formAction`. The message says a navigable URL from State
+  has no scheme guard in a generated form yet, and to use a literal attribute
+  for a URL the block author wrote.
+
+The reason is the repo's threat model, not a hypothetical: everything the model
+produced is untrusted input, and the attacker only has to influence the model's
+OUTPUT. A State field fed from a message IS the model-controlled path, so a
+binding onto one of those sinks is a model-controlled string reaching
+`innerHTML` or an `href`, which is exactly the shape of the two Critical
+findings this repo has already shipped fixes for. The kit owns guards for both
+(`isSafeUrl` in `src/primitives/url-scheme-policy.ts` for anything navigable,
+and the markdown pipeline for anything that renders as markup), and no
+generated form puts either on a bound value; until one does, the honest answer
+is a refusal that names the fix rather than an emitted line that looks safe.
+Neither list is a filter to widen case by case: a block that needs one of these
+needs a kit element that owns the guard. Targets are matched the way the DOM
+reads them, so `.inner-html` and `.innerHTML` are one rule.
+
+`seed:` is deliberately NOT covered. Its value is a literal the block author
+typed into the page, never a State field, so it is the same trust level as the
+literal attribute the amendment above points authors at.
+
+**Amendment, 2026-09-02 (PR B, whole-branch review): an empty binding target is
+refused by name.** `.="x"`, `:="x"`, `@="x"` and `seed:="x"` classify as a kind
+and name nothing. Without the refusal the binding lands with an empty name and
+a renderer writes `setAttr(el, '', ...)` or a nameless JSX prop: a page that
+renders wrong instead of a page that was refused.
 
 ### 3.2 The controller: `<id>.controller.ts`
 

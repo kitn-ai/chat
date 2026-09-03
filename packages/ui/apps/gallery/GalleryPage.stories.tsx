@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { GalleryPage, type GalleryBlock } from './GalleryPage';
 import {
+  componentName,
   renderCdnFormFiles,
   renderHtmlForm,
   renderReactForm,
@@ -29,6 +30,15 @@ const src = (code: string) => ({
   parameters: { docs: { source: { code, language: 'tsx' } } },
 });
 
+// THE STUB BLOCK IS AUTHORED ON THE CONTRACT, not a lookalike page. Both
+// renderers refuse an unconverted page now (an authored `<script>`, no
+// `data-block-root`, no controller), and this module renders at import time,
+// so an unconverted stub does not fail a story: it fails the whole story file
+// to LOAD, which is how CI found it. The shape is the one
+// `packages/create-kai/test/helpers.ts`'s `authoredBlock()` builds: a page
+// with one block root and its wiring on the markup, a controller carrying the
+// three contract-named interfaces, and a hand-written `.js` twin beside every
+// `.ts` (a story cannot run esbuild, and the html form ships JavaScript).
 const stubHtml = (name: string, title: string) => `<!doctype html>
 <html lang="en">
   <head>
@@ -37,30 +47,91 @@ const stubHtml = (name: string, title: string) => `<!doctype html>
     <link rel="stylesheet" href="./${name}.css" />
   </head>
   <body>
-    <kai-dock position="bottom-right">
+    <p class="host-stand-in">This blank page stands in for your site.</p>
+    <kai-dock data-block-root #ref="dock" seed:position="bottom-right" @kai-open-change="openChange">
       <kai-panel>
-        <kai-view-stack></kai-view-stack>
+        <span .textContent="heading"></span>
+        <kai-view-stack #ref="stack"></kai-view-stack>
       </kai-panel>
     </kai-dock>
-    <script type="module" src="./${name}.js"></script>
   </body>
 </html>
 `;
 
-const stubJs = (name: string) => `import '@kitn.ai/ui/autoloader';
-import { SCRIPT } from './mock.js';
+const stubController = (component: string) => `import { SCRIPT } from './mock.js';
 
-await customElements.whenDefined('kai-panel');
-const panel = document.querySelector('kai-panel');
-// Array/object props are set as JS PROPERTIES, never attributes.
-console.log('${name} boots with', SCRIPT.length, 'scripted turns', panel);
+export interface ${component}State {
+  heading: string;
+}
+
+export interface ${component}Refs {
+  dock: unknown;
+  stack: unknown;
+}
+
+export interface ${component}Actions {
+  openChange(event: CustomEvent<{ open: boolean }>): void;
+  boot(): Promise<void>;
+}
+
+export function createController(deps: { refs: () => ${component}Refs }) {
+  let state: ${component}State = { heading: SCRIPT[0].text };
+  const listeners = new Set<() => void>();
+
+  const actions: ${component}Actions = {
+    openChange(event) {
+      if (!event.detail.open) deps.refs();
+    },
+    async boot() {},
+  };
+
+  return {
+    state: () => state,
+    actions,
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+`;
+
+/** The twin the html and cdn forms ship. Hand-written because a story has no
+ *  esbuild: it is `stubController` with the types taken off. */
+const stubControllerJs = `import { SCRIPT } from './mock.js';
+
+export function createController(deps) {
+  let state = { heading: SCRIPT[0].text };
+  const listeners = new Set();
+
+  const actions = {
+    openChange(event) {
+      if (!event.detail.open) deps.refs();
+    },
+    async boot() {},
+  };
+
+  return {
+    state: () => state,
+    actions,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
 `;
 
 const STUB_CSS = `body { margin: 0; }
 kai-panel { display: block; height: 100%; }
 `;
 
-const STUB_MOCK = `export const SCRIPT = [
+const STUB_MOCK_TS = `export const SCRIPT: { role: string; text: string }[] = [
+  { role: 'assistant', text: 'Hi! How can I help today?' },
+];
+`;
+
+const STUB_MOCK_JS = `export const SCRIPT = [
   { role: 'assistant', text: 'Hi! How can I help today?' },
 ];
 `;
@@ -76,11 +147,14 @@ function stubPreview(label: string) {
 /** The stub block in the AUTHORED shape, so the story's forms come out of
  *  the one shared renderer rather than being hand-typed lookalikes. */
 function authoredStub(name: string, title: string): Block {
+  const component = componentName(name);
   const files = new Map<string, string>([
     [`${name}.html`, stubHtml(name, title)],
-    [`${name}.js`, stubJs(name)],
+    [`${name}.controller.ts`, stubController(component)],
+    [`${name}.controller.js`, stubControllerJs],
     [`${name}.css`, STUB_CSS],
-    ['mock.js', STUB_MOCK],
+    ['mock.ts', STUB_MOCK_TS],
+    ['mock.js', STUB_MOCK_JS],
   ]);
   return {
     name,
@@ -91,8 +165,10 @@ function authoredStub(name: string, title: string): Block {
       type: 'registry:block',
       files: [
         { path: `${name}.html`, type: 'registry:page' },
-        { path: `${name}.js`, type: 'registry:file' },
+        { path: `${name}.controller.ts`, type: 'registry:file' },
+        { path: `${name}.controller.js`, type: 'registry:file' },
         { path: `${name}.css`, type: 'registry:file' },
+        { path: 'mock.ts', type: 'registry:file' },
         { path: 'mock.js', type: 'registry:file' },
       ],
     },

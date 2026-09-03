@@ -18,6 +18,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
+import { BLOCK_FORMS } from '@kitn.ai/blocks/forms';
+
 import type { AxisIo } from './axes';
 import {
   blockFormAxis,
@@ -56,12 +58,19 @@ interface AddArgs {
   errors: string[];
 }
 
+// THE form axis, read from `@kitn.ai/blocks/forms` and not restated: a fourth
+// delivery form joins `BLOCK_FORMS` and this flag accepts it, help text and
+// refusal message included, with nothing here to update.
+const FORM_IDS: readonly string[] = BLOCK_FORMS.map((form) => form.id);
+/** `html, react or cdn` -- the refusal message's list, in the axis's order. */
+const FORM_PROSE = `${FORM_IDS.slice(0, -1).join(', ')} or ${FORM_IDS[FORM_IDS.length - 1]}`;
+
 export const ADD_HELP = `
 create-kai add <block>       write a block from the registry into this project
 create-kai add <url>         resolve a per-block item JSON URL the same way
 
   --list [--json]            print the blocks this release ships and exit
-  --form <react|html|cdn>    override framework detection
+  --form <${FORM_IDS.join('|')}>    override framework detection
   --dir <path>               target project directory (default: cwd)
   -y, --yes                  non-interactive; an ambiguous detection fails instead of asking
 `;
@@ -89,8 +98,8 @@ export function parseAddArgs(argv: readonly string[]): AddArgs {
         else out.errors.push(`unexpected argument ${arg}`);
     }
   }
-  if (out.form !== undefined && !['react', 'html', 'cdn'].includes(out.form)) {
-    out.errors.push(`--form must be react, html or cdn, got '${out.form}'`);
+  if (out.form !== undefined && !FORM_IDS.includes(out.form)) {
+    out.errors.push(`--form must be ${FORM_PROSE}, got '${out.form}'`);
   }
   return out;
 }

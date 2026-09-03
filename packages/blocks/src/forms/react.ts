@@ -33,7 +33,12 @@ const pascalTag = (tag: string): string => pascal(tag.replace(/^kai-/, ''));
 export const handlerName = (event: string): string => `on${pascal(event.replace(/^kai-/, ''))}`;
 
 const isKai = (tag: string): boolean => tag.startsWith('kai-');
-const jsxText = (text: string): string => text.replace(/[{}]/g, (c) => `{'${c}'}`);
+// A brace opens a JSX expression and `<` opens a tag, so all four characters
+// are emitted as an expression holding the character. `&` needs nothing: JSX
+// text takes it literally, and escaping it would print `&amp;` on the page.
+const jsxText = (text: string): string => text.replace(/[{}<>]/g, (c) => `{'${c}'}`);
+/** A JS single-quoted string literal, for a value JSX cannot carry in quotes. */
+const jsString = (value: string): string => `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 const read = (value: string, scope: string | undefined): string =>
   scope && value.startsWith(`${scope}.`) ? value : `state.${value}`;
 
@@ -52,6 +57,11 @@ function literalPropName(tag: string, name: string): string {
 function literalProp(tag: string, name: string, value: string): string {
   const prop = literalPropName(tag, name);
   if (value === '') return prop;
+  // A double quote in the value closes the JSX string on the character AFTER
+  // it, so `title="say "hi""` is a parse error rather than a wrong value. The
+  // expression form carries any value, and it is used ONLY when needed so the
+  // ordinary attribute keeps reading like an attribute.
+  if (value.includes('"')) return `${prop}={${jsString(value)}}`;
   // The kit's own documented "default-true flag off" idiom does not survive
   // translation: the generated prop is `boolean`, so the string has to become
   // one. Safe unconditionally because no element declares a prop whose type
@@ -67,7 +77,12 @@ function bindingProp(tag: string, b: Binding, scope: string | undefined, refExpr
     case 'prop':
       return b.name === 'textContent' ? null : `${b.name}={${read(b.value, scope)}}`;
     case 'attr':
-      return `${isKai(tag) ? camel(b.name) : b.name}={${read(b.value, scope)}}`;
+      // THE SAME NAMING AS A LITERAL, deliberately one function: `:class` is
+      // `className` and `:for` is `htmlFor` in JSX, and `data-*` / `aria-*`
+      // stay verbatim. Camel-casing the target directly emitted `class={...}`
+      // (React warns and drops it) and `dataTestid={...}` (not on the
+      // wrappers' closed prop type, so the emitted file does not compile).
+      return `${literalPropName(tag, b.name)}={${read(b.value, scope)}}`;
     case 'event':
       return `${handlerName(b.name)}={actions.${b.value}}`;
     case 'ref':

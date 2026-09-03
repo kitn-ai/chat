@@ -83,6 +83,36 @@ function checkValue(ctx: Ctx, line: number, raw: string, value: string, scope: s
   return false;
 }
 
+/**
+ * THE SINKS A BINDING MAY NOT NAME (R21-style refusals, decided at the grammar
+ * so every delivery form refuses the same page).
+ *
+ * The repo's threat model: everything the model produced is untrusted input
+ * (CLAUDE.md). A State field fed from a message IS the model-controlled path,
+ * and a generated form runs no sanitizer and no scheme policy over a bound
+ * value, so the sink is refused rather than emitted unguarded. Neither list is
+ * a filter to be widened case by case: a block that needs one of these needs a
+ * kit element that owns the guard.
+ */
+const MARKUP_SINKS = new Set(['innerhtml', 'outerhtml', 'srcdoc', 'insertadjacenthtml']);
+/** The kit HAS a scheme policy (`isSafeUrl`, src/primitives/url-scheme-policy.ts)
+ *  and no generated form puts it on a bound value, so a navigable URL from
+ *  State is refused until one does. */
+const URL_SINKS = new Set(['href', 'src', 'action', 'formaction']);
+
+/** The refusal message for a sink a `.prop` or `:attr` binding must not name,
+ *  or null when the target is fine. `key` is the target normalized the way the
+ *  DOM would read it, so `.inner-html` and `.innerHTML` are one rule. */
+function sinkRefusal(raw: string, value: string, key: string): string | null {
+  if (MARKUP_SINKS.has(key)) {
+    return `${raw}="${value}": bind \`.textContent\`; markup is not a binding. Everything the model produced is untrusted input, and a State field fed from a message is the model-controlled path, so a generated form never writes one as HTML (spec 3.1).`;
+  }
+  if (URL_SINKS.has(key)) {
+    return `${raw}="${value}": a navigable URL from State has no scheme guard in a generated form yet, and \`javascript:\` is a scheme. Use a literal attribute for a URL the block author wrote (spec 3.1).`;
+  }
+  return null;
+}
+
 function classify(name: string): { kind: BindingKind | 'for' | 'key'; target: string } | null {
   if (name.startsWith('seed:')) return { kind: 'seed', target: name.slice('seed:'.length) };
   if (name.startsWith('.')) return { kind: 'prop', target: name.slice(1) };
@@ -155,6 +185,14 @@ function convertElement(el: P5Element, ctx: Ctx, scope: string | undefined, hasP
       keyValue = value;
       continue;
     }
+    // `.="x"`, `:="x"`, `@="x"`, `seed:="x"`: the punctuation classified and
+    // named nothing. Without this the binding lands with an empty name and a
+    // renderer writes `setAttr(el, '', ...)` or a nameless JSX prop, which is
+    // a page that renders wrong rather than a page that was refused.
+    if (kind.target === '') {
+      fail(ctx, line, `"${name}" names no target: a binding is spelled \`.prop\`, \`:attr\`, \`@event\`, \`#ref\` or \`seed:attr\`, with the name after the punctuation (spec 3.1).`);
+      continue;
+    }
     if (kind.kind === 'ref') {
       if (!IDENT.test(value)) {
         fail(ctx, line, `#ref="${value}": a ref name is a plain identifier.`);
@@ -174,6 +212,23 @@ function convertElement(el: P5Element, ctx: Ctx, scope: string | undefined, hasP
       continue;
     }
     if (kind.kind === 'event') {
+      // AN EVENT BINDS ON A kai- ELEMENT ONLY -- the one exception to
+      // "binding kinds are element-agnostic" (spec 3.1, amended). The html
+      // binder would happily `addEventListener('keydown')`, but React's
+      // native handler names are not derivable from `on<Name>`: `keydown` is
+      // `onKeyDown`, and `change` does not even mean the same event there. So
+      // the react form has no translation, and one page refused by one
+      // renderer is the two-renderers-disagree defect this contract removes.
+      // Decided here rather than in the renderer, because the grammar is where
+      // the shape is decided (R21).
+      if (!el.tagName.startsWith('kai-')) {
+        fail(
+          ctx,
+          line,
+          `${name}="${value}" is on <${el.tagName}>, a plain HTML element. Events bind on \`kai-*\` elements, which emit \`kai-*\` CustomEvents: wrap the interaction in the element that owns it (\`kai-button\` for a click, \`kai-input\` for typing) and bind its \`@kai-\` event.`,
+        );
+        continue;
+      }
       if (!IDENT.test(value)) {
         fail(ctx, line, `${name}="${value}": an event binds ONE action name, an identifier the controller exports.`);
         continue;
@@ -182,6 +237,11 @@ function convertElement(el: P5Element, ctx: Ctx, scope: string | undefined, hasP
       continue;
     }
     // prop | attr
+    const sink = sinkRefusal(name, value, (kind.kind === 'prop' ? camel(kind.target) : kind.target).toLowerCase());
+    if (sink) {
+      fail(ctx, line, sink);
+      continue;
+    }
     if (!checkValue(ctx, line, name, value, inScope)) continue;
     bindings.push({
       kind: kind.kind,

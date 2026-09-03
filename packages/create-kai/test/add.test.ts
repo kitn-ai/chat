@@ -30,7 +30,7 @@ import {
 } from '../src/blocks';
 import type { Block } from '../src/blocks';
 import { componentName } from '../src/react-form';
-import { withStrippedTwins } from '@kitn.ai/blocks/forms';
+import { BLOCK_FORMS, withStrippedTwins } from '@kitn.ai/blocks/forms';
 import { decideForm, mergeDependencies, parseAddArgs, runAdd } from '../src/add';
 import type { AddEnv } from '../src/add';
 import { BLOCKS_ROOT, KIT_RANGE, KIT_VERSION, authoredBlock, loadBundledBlocks } from './helpers';
@@ -468,10 +468,17 @@ describe('refusals name the way out', () => {
     expect(run.err.join('\n')).toContain('create-kai add --list');
   });
 
-  it('--form html is accepted and --form wc is refused by name', () => {
-    expect(parseAddArgs(['support-widget', '--form', 'html']).errors).toEqual([]);
+  it('every delivery form is accepted and --form wc is refused by name', () => {
+    // The accepted set is the form axis itself, DERIVED here as `add.ts`
+    // derives it: a fourth delivery form is accepted and named in the refusal
+    // with nothing on either side to hand-edit. Hand-typing the list is how
+    // the flag came to accept a form the axis had dropped.
+    for (const { id } of BLOCK_FORMS) expect(parseAddArgs(['support-widget', '--form', id]).errors, id).toEqual([]);
     const legacy = parseAddArgs(['support-widget', '--form', 'wc']);
-    expect(legacy.errors.join(' ')).toContain("--form must be react, html or cdn, got 'wc'");
+    const message = legacy.errors.join(' ');
+    expect(message).toContain('--form must be');
+    for (const { id } of BLOCK_FORMS) expect(message, id).toContain(id);
+    expect(message).toContain("got 'wc'");
   });
 
   // The three cases that stood here pinned `wrapEntryScript` and `bodyToJsx`,
