@@ -693,7 +693,9 @@ jobs:
   dist-guards:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Raised from 15 when the astro build of the docs site joined this leg: it
+    # is the one step here that compiles a whole site rather than reading dist/.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -1023,6 +1025,32 @@ jobs:
       # types resolved to `any`". Needs the `build` leg's artifact. ~8s, no network.
       - name: Docs alignment (every doc snippet compiles against the shipped API)
         run: pnpm --filter @kitn.ai/docs run verify:docs
+
+      # The /blocks section. The site is built in deploy-docs.yml on main, so
+      # until now nothing built it on a PR: a page that fails to compile shipped
+      # green through the gate and broke the deploy. These four steps close
+      # that, in the leg that already has the kit dist the prebuild copies.
+      - name: Docs site tests (the /blocks island, its axis and its targets)
+        run: pnpm --filter @kitn.ai/docs run test
+
+      - name: Docs /blocks typecheck (vitest transpiles, it does not check)
+        run: pnpm --filter @kitn.ai/docs run typecheck:blocks
+
+      # `pnpm --filter ... run build`, NOT `nx build docs`: the nx target
+      # depends on ^build and would rebuild the kit this leg already downloaded.
+      # KAI_BLOCKS_KIT is deliberately unset here -- this is the production
+      # build shape, and the step after it is what proves that.
+      - name: Docs site build (astro, with the blocks prebuild copy)
+        run: pnpm --filter @kitn.ai/docs run build
+
+      # The PLAIN form: the structural checks are fatal, the published-entry
+      # probe only warns. Whether jsDelivr serves the pinned entries is a fact
+      # about the registry at this moment, not about this checkout, so it must
+      # not hold the required graph hostage to the release cadence.
+      # deploy-docs.yml runs the same script with --require-published, where a
+      # non-200 IS fatal, because that is the run whose output goes live.
+      - name: Preview source guard (the deployed page pins the published kit)
+        run: pnpm --filter @kitn.ai/docs run verify:preview
 
       # Cache the npm side of the starters. Six of the eight are pnpm workspace
       # members already installed by the step above; the other two (nextjs,

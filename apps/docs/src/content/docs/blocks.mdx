@@ -1,0 +1,22 @@
+---
+title: Blocks
+description: Complete compositions built from kai elements. Preview one, read the files it writes, then run the command.
+template: splash
+tableOfContents: false
+# Starlight's pagination walks the whole sidebar order, so on a section
+# landing page it offers a neighbour from an unrelated topic. This page is an
+# entry point, not a step in a sequence.
+prev: false
+next: false
+---
+
+import BlocksIsland from '../../components/blocks/BlocksIsland.tsx';
+
+{/* SERVER-rendered marker, the same as `.landing-page` and `.kai-fullscreen`.
+    `:root:has(.blocks-page)` has to match at FIRST PAINT or the page renders
+    as a normal splash content column and jumps to full width when the island
+    mounts. `client:only="solid"` renders nothing on the server, so the marker
+    cannot live inside the island. */}
+<div class="blocks-page not-content">
+  <BlocksIsland client:only="solid" />
+</div>

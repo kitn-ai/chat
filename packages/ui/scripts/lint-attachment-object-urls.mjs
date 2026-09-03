@@ -113,8 +113,10 @@ const SKIP_DIRS = new Set([
 // whether it exists depends on whether anyone has run a build -- which made the
 // scanned-file count differ between a fresh checkout and a built one. Left in, a
 // finding could also be reported against a bundle nobody can edit, whose source
-// this scan already covers.
-const SKIP_PATHS = ['apps/docs/public/kitn'];
+// this scan already covers. `apps/docs/public/blocks/` is the same class, written
+// by copy-blocks.mjs: the generated block artifacts, plus the whole kit dist under
+// `public/blocks/kit/` when KAI_BLOCKS_KIT=local.
+const SKIP_PATHS = ['apps/docs/public/kitn', 'apps/docs/public/blocks'];
 const CODE_EXT = new Set(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']);
 const FENCE_EXT = new Set(['.md', '.mdx']);
 const MARKUP_EXT = new Set(['.astro', '.vue', '.svelte']);

@@ -13,9 +13,9 @@
 // .sidebar-pane`, but it renders that whole <nav> only when `hasSidebar`. So a
 // sidebar-less page (the landing page, template: splash) has no drawer at all,
 // and below the nav breakpoint it had no navigation either: logo and search,
-// with Docs, Components, Patterns, Examples, Integrations, Theme and Storybook
-// unreachable. The disclosure below fills exactly that gap and is gated on the
-// same `hasSidebar` flag PageFrame reads, so the two can never both appear.
+// with every topic in src/topics.mjs unreachable. The disclosure below fills
+// exactly that gap and is gated on the same `hasSidebar` flag PageFrame reads,
+// so the two can never both appear.
 // A header copy of the button on a page that DOES have a drawer is the bug this
 // gate exists to avoid: it sat underneath the real one and, having no
 // .sidebar-pane next to it, set body[data-mobile-menu-expanded] (which locks
@@ -106,8 +106,8 @@ const { hasSidebar } = Astro.locals.starlightRoute;
 </style>
 
 <script>
-  // Close on Escape and on a click outside. No scroll lock: the panel is seven
-  // links tall and the page behind it does not need freezing.
+  // Close on Escape and on a click outside. No scroll lock: the panel is a
+  // short list of topic links and the page behind it does not need freezing.
   const menu = document.querySelector<HTMLDetailsElement>('[data-topics-menu]');
   if (menu) {
     const summary = menu.querySelector('summary');

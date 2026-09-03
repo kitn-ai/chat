@@ -150,7 +150,18 @@ const SKIP_DIRS = new Set([
 // Gitignored COPIES of built kit output, not source (written by the docs site's
 // prebuild). Whether they exist depends on whether anyone has run a build, which
 // would make the file count differ between a fresh checkout and a built one.
-const SKIP_PATHS = ['apps/docs/public/kitn'];
+// `apps/docs/public/blocks/` is the same class and the sharper case: copy-blocks.mjs
+// copies the generated block artifacts there, and `r/*.cdn.html` carry pins that go
+// stale the moment a release bumps the version and nobody rebuilds. No `--fix` run
+// can keep them true, because the fix is a rebuild. KAI_BLOCKS_KIT=local also mounts
+// the whole kit dist under `public/blocks/kit/`. The pins' SOURCE, the generator in
+// packages/blocks/src/registry.ts, is scanned.
+// `apps/docs/src/generated/` is written by the same script and is gitignored too.
+// Its cdn-mode footer names the version, so --check-release-wiring saw a live pin
+// in a file release-please cannot be told about. That pin is UNSTALEABLE by
+// construction: copy-blocks.mjs reads it out of packages/ui/package.json, the very
+// file this guard compares against, on every prebuild.
+const SKIP_PATHS = ['apps/docs/public/kitn', 'apps/docs/public/blocks', 'apps/docs/src/generated'];
 // THIS GUARD'S OWN TWO FILES, because their fixture corpora are deliberately
 // full of stale pins -- the four literals that actually shipped, plus a
 // prerelease and an ahead-of-manifest typo. Scanning itself, the guard reported

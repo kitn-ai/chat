@@ -118,8 +118,10 @@ interface DeclaredStories {
 function declaredStories(): DeclaredStories {
   const ids = new Set<string>();
   const sections = new Set<string>();
-  // Both src/ and apps/ hold `.stories.tsx` files -- see story-roots.mjs's
-  // header (`.storybook/main.ts:54` is the authority the two roots mirror).
+  // A story can live outside `src/`, so the roots come from `storyRoots`,
+  // which derives them from `.storybook/main.ts`'s `stories:` globs rather than
+  // listing them -- see story-roots.mjs's header for why a listed root goes
+  // stale.
   for (const root of storyRoots(ROOT)) walk(root, (file) => {
     if (!/\.stories\.tsx?$/.test(file)) return;
     const src = readFileSync(file, 'utf8');

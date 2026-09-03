@@ -3,14 +3,14 @@ import solid from 'vite-plugin-solid';
 import tailwindcss from '@tailwindcss/postcss';
 import { resolve } from 'node:path';
 
-// The three prebuilt dev-tool pages, built at kit build time so the `kai dev`
+// The two prebuilt dev-tool pages, built at kit build time so the `kai dev`
 // CLI's thin server serves static files and compiles nothing at consumer
-// runtime. All three are light-DOM Solid with their own Tailwind build.
+// runtime. Both are light-DOM Solid with their own Tailwind build.
 //
-// base './' on all three because dev.ts serves each from an arbitrary port,
-// builder at the root and the other two under /theme-studio/ and /gallery/.
+// base './' on both because dev.ts serves each from an arbitrary port, the
+// builder at the root and the theme studio under /theme-studio/.
 //
-// Each has its own `root`, which is why these are three INVOCATIONS of one
+// Each has its own `root`, which is why these are two INVOCATIONS of one
 // config rather than one build: Vite's root is a per-build setting.
 //
 // This file lives two levels below the package root, so every path below
@@ -50,14 +50,6 @@ const TARGETS: Record<string, Page> = {
     outDir: 'dist/theme-studio',
     external: ['@kitn.ai/ui/elements'],
     paths: { '@kitn.ai/ui/elements': '/theme-studio/kit/kai.es.js' },
-  },
-  // The blocks gallery page (Task 5.1, blocks-and-parts plan): light-DOM Solid,
-  // prebuilt at kit build time exactly like the builder / theme-studio pages,
-  // so the CLI's thin server serves static files and compiles nothing at
-  // consumer runtime. base './' because dev.ts serves it under /gallery/.
-  gallery: {
-    root: 'apps/gallery',
-    outDir: 'dist/gallery',
   },
 };
 

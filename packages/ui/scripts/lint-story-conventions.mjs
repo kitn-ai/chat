@@ -64,8 +64,9 @@ const argOf = (flag) => {
 };
 const PKG_ROOT = resolve(argOf('--package-root') ?? join(SCRIPT_DIR, '..'));
 const SELF_TEST = argv.includes('--self-test');
-// Both `src/` and `apps/` hold `.stories.tsx` files -- see story-roots.mjs's
-// header (`.storybook/main.ts:54` is the authority the two roots mirror).
+// A story can live outside `src/`, so the roots come from `storyRoots`, which
+// derives them from `.storybook/main.ts`'s `stories:` globs rather than listing
+// them -- see story-roots.mjs's header for why a listed root goes stale.
 const STORY_ROOTS = storyRoots(PKG_ROOT);
 
 const parse = (path, text) =>

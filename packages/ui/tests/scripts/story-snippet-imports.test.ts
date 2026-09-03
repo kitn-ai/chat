@@ -63,8 +63,9 @@ const IMPORT_RE = /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*'(@kitn\.ai\/ui(?:\
 interface SnippetImport { file: string; spec: string; names: string[] }
 
 const found: SnippetImport[] = [];
-// Both src/ and apps/ hold `.stories.tsx` files -- see story-roots.mjs's
-// header (`.storybook/main.ts:54` is the authority the two roots mirror).
+// A story can live outside `src/`, so the roots come from `storyRoots`, which
+// derives them from `.storybook/main.ts`'s `stories:` globs rather than listing
+// them -- see story-roots.mjs's header for why a listed root goes stale.
 for (const file of storyRoots(pkgRoot).flatMap((dir) => storyFiles(dir)).sort()) {
   for (const m of readFileSync(file, 'utf8').matchAll(IMPORT_RE)) {
     const names = m[1]

@@ -176,7 +176,7 @@ export async function runBlockCompileCells({ tsc, blocks, forms, esbuild, log })
   // them reads as a pass.
   if (cells === 0) {
     failures.push(
-      'zero block form cells ran. That is a broken walk over dist/blocks/f/, not an empty gallery: ' +
+      'zero block form cells ran. That is a broken walk over dist/blocks/f/, not an empty registry: ' +
         'at least one block is on the authored contract and renders both framework forms.',
     );
   }

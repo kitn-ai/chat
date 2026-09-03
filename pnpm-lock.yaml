@@ -8,6 +8,7 @@ overrides:
   storybook: 10.4.2
   storybook-solidjs-vite: 10.1.1
   vitest: 4.1.2
+  postcss: 8.5.26
 
 importers:
 
@@ -24,19 +25,22 @@ importers:
         version: 6.0.1(@testing-library/jest-dom@6.9.1)(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(solid-js@1.9.13)(terser@5.31.6)(yaml@2.9.0)
       '@astrojs/starlight':
         specifier: ^0.40.0
-        version: 0.40.0(astro@6.4.8(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(rollup@4.62.2)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(typescript@6.0.3)
+        version: 0.40.0(astro@6.4.8(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(rollup@4.62.2)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(typescript@5.9.3)
       '@astrojs/starlight-tailwind':
         specifier: ^5.0.0
-        version: 5.0.0(@astrojs/starlight@0.40.0(astro@6.4.8(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(rollup@4.62.2)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(typescript@6.0.3))(tailwindcss@4.3.2)
+        version: 5.0.0(@astrojs/starlight@0.40.0(astro@6.4.8(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(rollup@4.62.2)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(typescript@5.9.3))(tailwindcss@4.3.2)
       '@iconify-json/lucide':
         specifier: ^1.2.113
         version: 1.2.115
+      '@kitn.ai/blocks':
+        specifier: workspace:*
+        version: link:../../packages/blocks
       '@kitn.ai/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       '@tailwindcss/vite':
         specifier: ^4.3.1
-        version: 4.3.2(vite@7.3.6(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))
+        version: 4.3.2(vite@6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))
       astro:
         specifier: ^6.4.5
         version: 6.4.8(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(rollup@4.62.2)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0)
@@ -57,13 +61,13 @@ importers:
         version: 1.9.13
       starlight-sidebar-topics:
         specifier: ^0.8.0
-        version: 0.8.0(@astrojs/starlight@0.40.0(astro@6.4.8(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(rollup@4.62.2)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(typescript@6.0.3))
+        version: 0.8.0(@astrojs/starlight@0.40.0(astro@6.4.8(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(rollup@4.62.2)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(typescript@5.9.3))
       tailwindcss:
         specifier: ^4.3.1
         version: 4.3.2
       vite:
-        specifier: ^7.3.6
-        version: 7.3.6(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0)
+        specifier: ^6.0.0
+        version: 6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0)
     devDependencies:
       '@iconify-json/logos':
         specifier: ^1.2.11
@@ -74,9 +78,27 @@ importers:
       '@iconify/utils':
         specifier: ^3.1.3
         version: 3.1.3
+      '@solidjs/testing-library':
+        specifier: ^0.8.10
+        version: 0.8.10(solid-js@1.9.13)
+      '@types/node':
+        specifier: ^26.0.0
+        version: 26.2.0
+      jsdom:
+        specifier: ^24.1.3
+        version: 24.1.3
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
       unplugin-icons:
         specifier: ^23.0.1
         version: 23.0.1(@vue/compiler-sfc@3.5.39)(svelte@5.56.4)
+      vite-plugin-solid:
+        specifier: ^2.11.12
+        version: 2.11.12(@testing-library/jest-dom@6.9.1)(solid-js@1.9.13)(vite@6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))
+      vitest:
+        specifier: 4.1.2
+        version: 4.1.2(@types/node@26.2.0)(@vitest/browser-playwright@4.1.2)(jsdom@24.1.3)(vite@6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))
 
   examples/apps/builder:
     dependencies:
@@ -276,7 +298,7 @@ importers:
     devDependencies:
       '@angular/build':
         specifier: ^22.0.0
-        version: 22.0.5(44351f1ccff6ca7cc0d3b9b6a9b4da28)
+        version: 22.0.5(d692ebd316489d337291512e8001c72a)
       '@angular/cli':
         specifier: ^22.0.0
         version: 22.0.5(@cfworker/json-schema@4.1.1)(@types/node@26.2.0)(chokidar@5.0.0)
@@ -831,7 +853,7 @@ packages:
       karma: ^6.4.0
       less: ^4.2.0
       ng-packagr: ^22.0.0
-      postcss: ^8.4.0
+      postcss: 8.5.26
       tailwindcss: ^2.0.0 || ^3.0.0 || ^4.0.0
       tslib: ^2.3.0
       typescript: '>=6.0 <6.1'
@@ -6744,13 +6766,13 @@ packages:
     resolution: {integrity: sha512-HQbt28KulC5AJzG+cZtj9kvKB93CFCdLvog1WFLf1D+xmMvPGlBstkpTEZfK5+AN9hfJocyBFCNiqyS48bpgzQ==}
     engines: {node: '>=12.0'}
     peerDependencies:
-      postcss: ^8.2.14
+      postcss: 8.5.26
 
   postcss-safe-parser@7.0.1:
     resolution: {integrity: sha512-0AioNCJZ2DPYz5ABT6bddIqlhgwhpHZ/l65YAYo0BCIn0xiDpsnTHz0gnoTGk0OXZW0JRs+cDwL8u/teRdz+8A==}
     engines: {node: '>=18.0'}
     peerDependencies:
-      postcss: ^8.4.31
+      postcss: 8.5.26
 
   postcss-selector-parser@6.0.10:
     resolution: {integrity: sha512-IQ7TZdoaqbT+LCpShg46jnZVlhWD2w6iQYAcYXfHARZ7X1t/UGhhceQDs5X0cGqKvYlHNOuv7Oa1xmb0oQuA3w==}
@@ -6759,10 +6781,6 @@ packages:
   postcss-selector-parser@6.1.4:
     resolution: {integrity: sha512-bIoJLOmjCO1S9XdY/DcnR5hJxvrDir1PbGChrzXG3vw0/FOliy/fA3dmdhQ441kah4gKv+TwckGzex6wNS5cnQ==}
     engines: {node: '>=4'}
-
-  postcss@8.5.16:
-    resolution: {integrity: sha512-vuwillviilfKZsg0VGj5R/YwwcHx4SLsIOI/7K6mQkWx+l5cUHTjj5g0AasTBcyXsbfTgrwsUNmVUb5xVwyPwg==}
-    engines: {node: ^10 || ^12 || >=14}
 
   postcss@8.5.26:
     resolution: {integrity: sha512-u82N74LFzG8ca+dD8puPnplTXoGH4fTPpVGuIbt36G3qvNlkvfD0lEAZSxaly3KX8TS/L1A1gsCEmvKmBcVbkQ==}
@@ -8517,7 +8535,7 @@ snapshots:
     transitivePeerDependencies:
       - chokidar
 
-  '@angular/build@22.0.5(44351f1ccff6ca7cc0d3b9b6a9b4da28)':
+  '@angular/build@22.0.5(d692ebd316489d337291512e8001c72a)':
     dependencies:
       '@ampproject/remapping': 2.3.0
       '@angular-devkit/architect': 0.2200.5(chokidar@5.0.0)
@@ -8555,7 +8573,7 @@ snapshots:
       istanbul-lib-instrument: 6.0.3
       less: 4.2.0
       lmdb: 3.5.4
-      postcss: 8.5.16
+      postcss: 8.5.26
       tailwindcss: 4.3.2
       vitest: 4.1.2(@types/node@26.2.0)(@vitest/browser-playwright@4.1.2)(jsdom@24.1.3)(vite@7.3.5(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))
     transitivePeerDependencies:
@@ -8751,12 +8769,12 @@ snapshots:
       - tsx
       - yaml
 
-  '@astrojs/starlight-tailwind@5.0.0(@astrojs/starlight@0.40.0(astro@6.4.8(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(rollup@4.62.2)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(typescript@6.0.3))(tailwindcss@4.3.2)':
+  '@astrojs/starlight-tailwind@5.0.0(@astrojs/starlight@0.40.0(astro@6.4.8(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(rollup@4.62.2)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(typescript@5.9.3))(tailwindcss@4.3.2)':
     dependencies:
-      '@astrojs/starlight': 0.40.0(astro@6.4.8(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(rollup@4.62.2)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(typescript@6.0.3)
+      '@astrojs/starlight': 0.40.0(astro@6.4.8(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(rollup@4.62.2)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(typescript@5.9.3)
       tailwindcss: 4.3.2
 
-  '@astrojs/starlight@0.40.0(astro@6.4.8(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(rollup@4.62.2)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(typescript@6.0.3)':
+  '@astrojs/starlight@0.40.0(astro@6.4.8(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(rollup@4.62.2)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(typescript@5.9.3)':
     dependencies:
       '@astrojs/markdown-remark': 7.2.0
       '@astrojs/mdx': 6.0.3(astro@6.4.8(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(rollup@4.62.2)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))
@@ -8772,7 +8790,7 @@ snapshots:
       hast-util-select: 6.0.4
       hast-util-to-string: 3.0.1
       hastscript: 9.0.1
-      i18next: 26.3.3(typescript@6.0.3)
+      i18next: 26.3.3(typescript@5.9.3)
       js-yaml: 4.3.0
       klona: 2.0.6
       magic-string: 0.30.21
@@ -9805,7 +9823,7 @@ snapshots:
       lru-cache: 11.5.1
       p-map: 7.0.5
       p-retry: 7.1.1
-      picomatch: 4.0.4
+      picomatch: 4.0.5
       posthog-node: 5.48.1(rxjs@7.8.2)
       tokenx: 1.6.0
       ws: 8.21.0
@@ -10977,7 +10995,7 @@ snapshots:
       '@alloc/quick-lru': 5.2.0
       '@tailwindcss/node': 4.3.2
       '@tailwindcss/oxide': 4.3.2
-      postcss: 8.5.16
+      postcss: 8.5.26
       tailwindcss: 4.3.2
 
   '@tailwindcss/typography@0.5.20(tailwindcss@4.3.2)':
@@ -10991,13 +11009,6 @@ snapshots:
       '@tailwindcss/oxide': 4.3.2
       tailwindcss: 4.3.2
       vite: 6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0)
-
-  '@tailwindcss/vite@4.3.2(vite@7.3.6(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))':
-    dependencies:
-      '@tailwindcss/node': 4.3.2
-      '@tailwindcss/oxide': 4.3.2
-      tailwindcss: 4.3.2
-      vite: 7.3.6(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0)
 
   '@tanstack/history@1.162.1': {}
 
@@ -11171,7 +11182,7 @@ snapshots:
       exsolve: 1.1.0
       lightningcss: 1.32.0
       pathe: 2.0.3
-      picomatch: 4.0.4
+      picomatch: 4.0.5
       seroval: 1.6.2
       source-map: 0.7.6
       srvx: 0.11.22
@@ -11561,6 +11572,20 @@ snapshots:
       - utf-8-validate
       - vite
 
+  '@vitest/browser-playwright@4.1.2(playwright@1.61.1)(vite@6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(vitest@4.1.2)':
+    dependencies:
+      '@vitest/browser': 4.1.2(vite@6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(vitest@4.1.2)
+      '@vitest/mocker': 4.1.2(vite@6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))
+      playwright: 1.61.1
+      tinyrainbow: 3.1.0
+      vitest: 4.1.2(@types/node@26.2.0)(@vitest/browser-playwright@4.1.2)(jsdom@24.1.3)(vite@6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))
+    transitivePeerDependencies:
+      - bufferutil
+      - msw
+      - utf-8-validate
+      - vite
+    optional: true
+
   '@vitest/browser-playwright@4.1.2(playwright@1.61.1)(vite@7.3.5(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(vitest@4.1.2)':
     dependencies:
       '@vitest/browser': 4.1.2(vite@7.3.5(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(vitest@4.1.2)
@@ -11637,6 +11662,24 @@ snapshots:
       - msw
       - utf-8-validate
       - vite
+
+  '@vitest/browser@4.1.2(vite@6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(vitest@4.1.2)':
+    dependencies:
+      '@blazediff/core': 1.9.1
+      '@vitest/mocker': 4.1.2(vite@6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))
+      '@vitest/utils': 4.1.2
+      magic-string: 0.30.21
+      pngjs: 7.0.0
+      sirv: 3.0.2
+      tinyrainbow: 3.1.0
+      vitest: 4.1.2(@types/node@26.2.0)(@vitest/browser-playwright@4.1.2)(jsdom@24.1.3)(vite@6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))
+      ws: 8.21.0
+    transitivePeerDependencies:
+      - bufferutil
+      - msw
+      - utf-8-validate
+      - vite
+    optional: true
 
   '@vitest/browser@4.1.2(vite@7.3.5(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(vitest@4.1.2)':
     dependencies:
@@ -11740,6 +11783,14 @@ snapshots:
       magic-string: 0.30.21
     optionalDependencies:
       vite: 6.4.3(@types/node@26.0.1)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0)
+
+  '@vitest/mocker@4.1.2(vite@6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))':
+    dependencies:
+      '@vitest/spy': 4.1.2
+      estree-walker: 3.0.3
+      magic-string: 0.30.21
+    optionalDependencies:
+      vite: 6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0)
 
   '@vitest/mocker@4.1.2(vite@7.3.5(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))':
     dependencies:
@@ -11868,7 +11919,7 @@ snapshots:
       '@vue/shared': 3.5.39
       estree-walker: 2.0.2
       magic-string: 0.30.21
-      postcss: 8.5.16
+      postcss: 8.5.26
       source-map-js: 1.2.1
 
   '@vue/compiler-ssr@3.5.39':
@@ -12383,9 +12434,9 @@ snapshots:
       domhandler: 5.0.3
       htmlparser2: 10.1.0
       picocolors: 1.1.1
-      postcss: 8.5.16
+      postcss: 8.5.26
       postcss-media-query-parser: 0.2.3
-      postcss-safe-parser: 7.0.1(postcss@8.5.16)
+      postcss-safe-parser: 7.0.1(postcss@8.5.26)
 
   bl@4.1.0:
     dependencies:
@@ -13192,10 +13243,6 @@ snapshots:
     dependencies:
       pend: 1.2.0
 
-  fdir@6.5.0(picomatch@4.0.4):
-    optionalDependencies:
-      picomatch: 4.0.4
-
   fdir@6.5.0(picomatch@4.0.5):
     optionalDependencies:
       picomatch: 4.0.5
@@ -13646,9 +13693,9 @@ snapshots:
 
   human-signals@8.0.1: {}
 
-  i18next@26.3.3(typescript@6.0.3):
+  i18next@26.3.3(typescript@5.9.3):
     optionalDependencies:
-      typescript: 6.0.3
+      typescript: 5.9.3
 
   iconv-lite@0.6.3:
     dependencies:
@@ -15286,9 +15333,9 @@ snapshots:
       postcss: 8.5.26
       postcss-selector-parser: 6.1.4
 
-  postcss-safe-parser@7.0.1(postcss@8.5.16):
+  postcss-safe-parser@7.0.1(postcss@8.5.26):
     dependencies:
-      postcss: 8.5.16
+      postcss: 8.5.26
 
   postcss-selector-parser@6.0.10:
     dependencies:
@@ -15299,12 +15346,6 @@ snapshots:
     dependencies:
       cssesc: 3.0.0
       util-deprecate: 1.0.2
-
-  postcss@8.5.16:
-    dependencies:
-      nanoid: 3.3.15
-      picocolors: 1.1.1
-      source-map-js: 1.2.1
 
   postcss@8.5.26:
     dependencies:
@@ -16035,9 +16076,9 @@ snapshots:
 
   stackback@0.0.2: {}
 
-  starlight-sidebar-topics@0.8.0(@astrojs/starlight@0.40.0(astro@6.4.8(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(rollup@4.62.2)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(typescript@6.0.3)):
+  starlight-sidebar-topics@0.8.0(@astrojs/starlight@0.40.0(astro@6.4.8(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(rollup@4.62.2)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(typescript@5.9.3)):
     dependencies:
-      '@astrojs/starlight': 0.40.0(astro@6.4.8(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(rollup@4.62.2)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(typescript@6.0.3)
+      '@astrojs/starlight': 0.40.0(astro@6.4.8(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(rollup@4.62.2)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(typescript@5.9.3)
       picomatch: 4.0.4
 
   statuses@2.0.2: {}
@@ -16276,13 +16317,13 @@ snapshots:
 
   tinyglobby@0.2.16:
     dependencies:
-      fdir: 6.5.0(picomatch@4.0.4)
-      picomatch: 4.0.4
+      fdir: 6.5.0(picomatch@4.0.5)
+      picomatch: 4.0.5
 
   tinyglobby@0.2.17:
     dependencies:
-      fdir: 6.5.0(picomatch@4.0.4)
-      picomatch: 4.0.4
+      fdir: 6.5.0(picomatch@4.0.5)
+      picomatch: 4.0.5
 
   tinyrainbow@2.0.0: {}
 
@@ -16617,9 +16658,9 @@ snapshots:
   vite@6.4.3(@types/node@22.20.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0):
     dependencies:
       esbuild: 0.25.12
-      fdir: 6.5.0(picomatch@4.0.4)
-      picomatch: 4.0.4
-      postcss: 8.5.16
+      fdir: 6.5.0(picomatch@4.0.5)
+      picomatch: 4.0.5
+      postcss: 8.5.26
       rollup: 4.62.2
       tinyglobby: 0.2.17
     optionalDependencies:
@@ -16635,9 +16676,9 @@ snapshots:
   vite@6.4.3(@types/node@26.0.1)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0):
     dependencies:
       esbuild: 0.25.12
-      fdir: 6.5.0(picomatch@4.0.4)
-      picomatch: 4.0.4
-      postcss: 8.5.16
+      fdir: 6.5.0(picomatch@4.0.5)
+      picomatch: 4.0.5
+      postcss: 8.5.26
       rollup: 4.62.2
       tinyglobby: 0.2.17
     optionalDependencies:
@@ -16653,9 +16694,9 @@ snapshots:
   vite@6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0):
     dependencies:
       esbuild: 0.25.12
-      fdir: 6.5.0(picomatch@4.0.4)
-      picomatch: 4.0.4
-      postcss: 8.5.16
+      fdir: 6.5.0(picomatch@4.0.5)
+      picomatch: 4.0.5
+      postcss: 8.5.26
       rollup: 4.62.2
       tinyglobby: 0.2.17
     optionalDependencies:
@@ -16671,9 +16712,9 @@ snapshots:
   vite@7.3.5(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0):
     dependencies:
       esbuild: 0.27.7
-      fdir: 6.5.0(picomatch@4.0.4)
-      picomatch: 4.0.4
-      postcss: 8.5.16
+      fdir: 6.5.0(picomatch@4.0.5)
+      picomatch: 4.0.5
+      postcss: 8.5.26
       rollup: 4.62.2
       tinyglobby: 0.2.17
     optionalDependencies:
@@ -16768,7 +16809,7 @@ snapshots:
       magic-string: 0.30.21
       obug: 2.1.3
       pathe: 2.0.3
-      picomatch: 4.0.4
+      picomatch: 4.0.5
       std-env: 4.1.0
       tinybench: 2.9.0
       tinyexec: 1.2.4
@@ -16797,7 +16838,7 @@ snapshots:
       magic-string: 0.30.21
       obug: 2.1.3
       pathe: 2.0.3
-      picomatch: 4.0.4
+      picomatch: 4.0.5
       std-env: 4.1.0
       tinybench: 2.9.0
       tinyexec: 1.2.4
@@ -16826,7 +16867,7 @@ snapshots:
       magic-string: 0.30.21
       obug: 2.1.3
       pathe: 2.0.3
-      picomatch: 4.0.4
+      picomatch: 4.0.5
       std-env: 4.1.0
       tinybench: 2.9.0
       tinyexec: 1.2.4
@@ -16837,6 +16878,35 @@ snapshots:
     optionalDependencies:
       '@types/node': 26.0.1
       '@vitest/browser-playwright': 4.1.2(playwright@1.61.1)(vite@8.2.2(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)(less@4.2.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(vitest@4.1.2)
+      jsdom: 24.1.3
+    transitivePeerDependencies:
+      - msw
+
+  vitest@4.1.2(@types/node@26.2.0)(@vitest/browser-playwright@4.1.2)(jsdom@24.1.3)(vite@6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0)):
+    dependencies:
+      '@vitest/expect': 4.1.2
+      '@vitest/mocker': 4.1.2(vite@6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))
+      '@vitest/pretty-format': 4.1.2
+      '@vitest/runner': 4.1.2
+      '@vitest/snapshot': 4.1.2
+      '@vitest/spy': 4.1.2
+      '@vitest/utils': 4.1.2
+      es-module-lexer: 2.2.0
+      expect-type: 1.4.0
+      magic-string: 0.30.21
+      obug: 2.1.3
+      pathe: 2.0.3
+      picomatch: 4.0.5
+      std-env: 4.1.0
+      tinybench: 2.9.0
+      tinyexec: 1.2.4
+      tinyglobby: 0.2.17
+      tinyrainbow: 3.1.0
+      vite: 6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 26.2.0
+      '@vitest/browser-playwright': 4.1.2(playwright@1.61.1)(vite@6.4.3(@types/node@26.2.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(vitest@4.1.2)
       jsdom: 24.1.3
     transitivePeerDependencies:
       - msw
@@ -16855,7 +16925,7 @@ snapshots:
       magic-string: 0.30.21
       obug: 2.1.3
       pathe: 2.0.3
-      picomatch: 4.0.4
+      picomatch: 4.0.5
       std-env: 4.1.0
       tinybench: 2.9.0
       tinyexec: 1.2.4
@@ -16885,7 +16955,7 @@ snapshots:
       magic-string: 0.30.21
       obug: 2.1.3
       pathe: 2.0.3
-      picomatch: 4.0.4
+      picomatch: 4.0.5
       std-env: 4.1.0
       tinybench: 2.9.0
       tinyexec: 1.2.4

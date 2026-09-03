@@ -399,7 +399,7 @@ if (!existsSync(join(ROOT, 'dist', 'kai.es.js')) || !existsSync(OUT_DIR)) {
 
 const sources = scanBlocks(BLOCKS_DIR);
 if (sources.length === 0) {
-  console.error(`verify-blocks: no block directories under ${BLOCKS_DIR} -- a zero-block scan is a broken walk, not an empty gallery.`);
+  console.error(`verify-blocks: no block directories under ${BLOCKS_DIR} -- a zero-block scan is a broken walk, not an empty registry.`);
   process.exit(1);
 }
 console.log(`verify-blocks: ${sources.length} block(s) discovered: ${sources.map((s) => s.dirName).join(', ')}`);
@@ -469,7 +469,7 @@ for (const source of sources) {
   }
 }
 // Anti-vacuity: zero structural cells is a broken walk over dist/blocks/f/,
-// not an empty gallery. At least one block is on the authored contract.
+// not an empty registry. At least one block is on the authored contract.
 if (structuralCells === 0) {
   failures.push('(all) [html-binder, react-tree] zero cells ran -- no per-form tree was found under dist/blocks/f/. Build first; a silent zero here reads as green.');
   console.error('RED (all) [html-binder, react-tree] zero cells ran -- no per-form tree under dist/blocks/f/');

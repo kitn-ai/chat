@@ -18,14 +18,15 @@
  *
  * ONE RENDERER, TWO CALLERS, by the same precedent as `registry.ts`:
  * `create-kai` bundle-imports this module (`src/react-form.ts` re-exports it,
- * `src/blocks.ts` plans writes over it), and the `kai dev` gallery serves the
- * identical output per framework over GET /gallery/api/form/. A drift between
- * "what the gallery shows" and "what add writes" is therefore a build failure,
- * never a runtime surprise.
+ * `src/blocks.ts` plans writes over it), and `gen-blocks.mjs` renders the
+ * identical output per framework into `dist/blocks/f/<name>.<form>.json`,
+ * which is what the docs site's /blocks section shows. A drift between "what
+ * /blocks shows" and "what add writes" is therefore a build failure, never a
+ * runtime surprise.
  *
  * DISCIPLINE -- pure functions over injected data, no `node:*` imports, same
  * as `registry.ts`: this file typechecks under the package's browser tsconfig
- * (the gallery page imports `BLOCK_FORMS` directly) and bundles into the CLI.
+ * (the /blocks page imports the form axis directly) and bundles into the CLI.
  */
 import type { Block, CdnFormOptions } from '../registry';
 import type { FormFile } from '../contract/types';
@@ -50,7 +51,7 @@ export { pascal as componentName } from '../registry';
 
 /**
  * Every delivery form a block can be rendered into -- THE list, derived by
- * consumers (the gallery's framework selector, the CLI's planner), never
+ * consumers (the /blocks page's framework selector, the CLI's planner), never
  * hand-restated. `html` leads: it is the authored truth and the default tab.
  */
 export const BLOCK_FORMS = [
@@ -85,11 +86,10 @@ export function isBlockFormId(id: string): id is BlockFormId {
  * WHERE THE STRIP HAPPENS, and why not here: the controller is TypeScript and
  * the html and cdn forms land in contexts with no build step, so the types
  * have to come off. This package cannot strip them (it depends on nothing
- * that can) and neither of the two RUNTIME renderers can either: the kai dev
- * gallery route runs inside the published @kitn.ai/ui CLI (esbuild is a
- * devDependency there) and `create-kai add` runs on Node >= 20.19, which
- * predates `module.stripTypeScriptTypes`. And "each caller strips with what it
- * has" makes this module's central claim false, because two strippers emit two
+ * that can) and neither can the renderer that runs on a consumer's machine:
+ * `create-kai add` runs on Node >= 20.19, which predates
+ * `module.stripTypeScriptTypes`. And "each caller strips with what it has"
+ * makes this module's central claim false, because two strippers emit two
  * different files.
  *
  * So the strip runs ONCE, at generation time, with esbuild, and the twin
@@ -118,7 +118,7 @@ export function withStrippedTwins(block: Block, strip: (source: string, fileName
 
 // ------------------------------------------------------- the form renderers
 
-/** ONE dispatch over the form axis -- the gallery route and the CLI planner
+/** ONE dispatch over the form axis -- `gen-blocks.mjs` and the CLI planner
  *  both call this, so the two can never disagree about what a form contains. */
 export function renderBlockForm(block: Block, form: BlockFormId, opts: { cdn: CdnFormOptions }): FormFile[] {
   switch (form) {

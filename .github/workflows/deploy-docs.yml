@@ -31,6 +31,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec nx build docs   # builds @kitn.ai/ui first (dependsOn ^build), then astro
 
+      # The STRICT form of the preview guard, before anything is uploaded. A
+      # deploy must not ship previews whose pinned kit entries jsDelivr does not
+      # serve: the page would look finished and every iframe would be empty.
+      # Red here means "release first, then re-run this workflow"; nothing is
+      # broken in the meantime, because Pages keeps the last deploy live.
+      # dist-guards runs the plain form, where the same probe only warns.
+      - name: Preview entries are on the CDN (strict, gates the deploy)
+        run: pnpm --filter @kitn.ai/docs run verify:preview -- --require-published
+
       # Also publish Storybook under /storybook of the docs site, so it serves at
       # ui.kitn.ai/storybook from this same GitHub Pages deploy. `nx build-storybook
       # ui` builds the kit dist first (its dependsOn) so the static build registers
