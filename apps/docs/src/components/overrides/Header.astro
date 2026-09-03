@@ -106,8 +106,8 @@ const { hasSidebar } = Astro.locals.starlightRoute;
 </style>
 
 <script>
-  // Close on Escape and on a click outside. No scroll lock: the panel is seven
-  // links tall and the page behind it does not need freezing.
+  // Close on Escape and on a click outside. No scroll lock: the panel is a
+  // short list of topic links and the page behind it does not need freezing.
   const menu = document.querySelector<HTMLDetailsElement>('[data-topics-menu]');
   if (menu) {
     const summary = menu.querySelector('summary');

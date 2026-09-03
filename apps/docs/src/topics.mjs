@@ -212,6 +212,12 @@ export const topics = [
     ],
   },
   {
+    label: 'Blocks',
+    link: '/blocks/',
+    id: 'blocks',
+    items: [{ label: 'Blocks', slug: 'blocks' }],
+  },
+  {
     label: 'Integrations',
     link: '/integrations/overview/',
     id: 'integrations',

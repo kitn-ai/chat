@@ -46,16 +46,18 @@
    800px the old value showed them twice; the sidebar was a drawer while the
    header still claimed to be a desktop header.
 
-   --breakpoint-nav is where the header ROW stops fitting: logo + five sections +
+   --breakpoint-nav is where the header ROW stops fitting: logo + six sections +
    Theme + Storybook + the search box + the controls. Measured in Chromium on
    /guides/introduction/ (scrollWidth of the header's children plus its gaps and
-   padding) the row needs 1162px, so it collapses below 75rem/1200px, leaving a
-   little room for wider font metrics, and the sidebar's topic switcher becomes
-   the navigation. Re-measure after adding a topic: an overflowing row does not
-   fail loudly, it just crowds the search box. */
+   padding, confirmed by walking the viewport down 1px at a time with the nav
+   forced visible until the row overflowed) the row needs 1226px, so it
+   collapses below 78rem/1248px, leaving a little room for wider font metrics,
+   and the sidebar's topic switcher becomes the navigation. Re-measure after
+   adding a topic: an overflowing row does not fail loudly, it just crowds the
+   search box. */
 @theme {
   --breakpoint-chrome: 50rem;
-  --breakpoint-nav: 75rem;
+  --breakpoint-nav: 78rem;
 }
 
 /* Topic switching: where the header nav is showing, IT is the switcher, so the
@@ -108,6 +110,20 @@ body:has(.landing-page) h1#_top { display: none; }
 /* Splash renders an empty <footer> band below the content — drop it so the
    closing CTA is the true bottom of the page. */
 body:has(.landing-page) .main-frame footer { display: none; }
+
+/* The blocks index is a scrolling page of full-width cards inside the splash
+   shell, the same shape as the landing page: the marker widens the content
+   column to the viewport and zeroes its padding so the page controls its own
+   inner max-width. Header and footer stay.
+   The `.blocks-page` marker is SERVER-rendered in blocks.mdx, like the two
+   above it: `:has()` must match before hydration or the page paints narrow
+   and then jumps, and the island is client:only. */
+:root:has(.blocks-page) { --sl-content-width: 100%; --sl-content-pad-x: 0rem; }
+body:has(.blocks-page) .content-panel { padding: 0; border: 0; }
+body:has(.blocks-page) .sl-markdown-content { margin: 0; }
+/* Starlight renders the frontmatter title as an <h1>; the page supplies its
+   own hero heading. */
+body:has(.blocks-page) h1#_top { display: none; }
 
 /* Install-chip copy button: hide the check until copied, then swap. Global so
    EVERY chip works (Astro scopes a component's <style>, so the hero's rule
