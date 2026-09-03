@@ -61,7 +61,7 @@ create-kai add <block>       write a block from the registry into this project
 create-kai add <url>         resolve a per-block item JSON URL the same way
 
   --list [--json]            print the blocks this release ships and exit
-  --form <react|wc|cdn>      override framework detection
+  --form <react|html|cdn>    override framework detection
   --dir <path>               target project directory (default: cwd)
   -y, --yes                  non-interactive; an ambiguous detection fails instead of asking
 `;
@@ -89,8 +89,8 @@ export function parseAddArgs(argv: readonly string[]): AddArgs {
         else out.errors.push(`unexpected argument ${arg}`);
     }
   }
-  if (out.form !== undefined && !['react', 'wc', 'cdn'].includes(out.form)) {
-    out.errors.push(`--form must be react, wc or cdn, got '${out.form}'`);
+  if (out.form !== undefined && !['react', 'html', 'cdn'].includes(out.form)) {
+    out.errors.push(`--form must be react, html or cdn, got '${out.form}'`);
   }
   return out;
 }
@@ -133,13 +133,13 @@ export async function decideForm(
       return {
         error:
           `this project depends on ${detection.found.join(' AND ')}, so the block form is ambiguous. ` +
-          'Pass --form react or --form wc.',
+          'Pass --form react or --form html.',
       };
     }
     const answer = await io.ask(blockFormAxis(detection.found), 'react');
     return { form: answer as BlockForm };
   }
-  if (detection.kind === 'none') return { form: 'wc' };
+  if (detection.kind === 'none') return { form: 'html' };
   return { form: detection.form };
 }
 

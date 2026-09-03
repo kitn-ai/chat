@@ -5,9 +5,9 @@
  * an imperative entry script (spec 2026-08-31, Part 3). This module renders
  * that one source into each form a consumer can receive:
  *
- *   - `wc`   — the web-component form `create-kai add` writes into any
+ *   - `html` - the web-component form `create-kai add` writes into any
  *              non-react project: the authored files with the entry script
- *              wrapped (see `wrapWcEntryScript`) and registration adapted for
+ *              wrapped (see `wrapHtmlEntryScript`) and registration adapted for
  *              a bundler (see `adaptRegistrationForBundler`).
  *   - `react`— the react form: the page body as JSX, the entry script wrapped
  *              into `initBlock()`, JSX typings derived from the markup.
@@ -32,10 +32,10 @@ import { generateCdnForm, type Block, type CdnFormOptions } from './registry';
 /**
  * Every delivery form a block can be rendered into — THE list, derived by
  * consumers (the gallery's framework selector, the CLI's planner), never
- * hand-restated. `wc` leads: it is the authored truth and the default tab.
+ * hand-restated. `html` leads: it is the authored truth and the default tab.
  */
 export const BLOCK_FORMS = [
-  { id: 'wc', label: 'Web components' },
+  { id: 'html', label: 'HTML' },
   { id: 'react', label: 'React' },
   { id: 'cdn', label: 'CDN single file' },
 ] as const;
@@ -196,7 +196,7 @@ export function wrapEntryScript(js: string): { code?: string; errors: string[] }
  * IIFE lets the module graph finish evaluating; the body still awaits
  * registration INSIDE the function, where nothing imports it.
  */
-export function wrapWcEntryScript(js: string): { code?: string; errors: string[] } {
+export function wrapHtmlEntryScript(js: string): { code?: string; errors: string[] } {
   const split = splitImports(js);
   if (split.errors.length) return { errors: split.errors };
   return {
@@ -304,7 +304,7 @@ export function renderEntryTypings(entryScript: string): string {
  * registration rewrite. Throws with the block's name when a script cannot be
  * wrapped — a refusal, never a partial block (same contract as `add`).
  */
-export function renderWcForm(block: Block): FormFile[] {
+export function renderHtmlForm(block: Block): FormFile[] {
   const pageEntry = block.manifest.files.find((f) => f.type === 'registry:page');
   const pageHtml = pageEntry ? (block.files.get(pageEntry.path) as string) : '';
   const entryScripts = new Set(moduleScriptsIn(pageHtml));
@@ -313,7 +313,7 @@ export function renderWcForm(block: Block): FormFile[] {
     let contents = block.files.get(entry.path) as string;
     if (entry.path.endsWith('.js')) {
       if (entryScripts.has(entry.path)) {
-        const wrapped = wrapWcEntryScript(contents);
+        const wrapped = wrapHtmlEntryScript(contents);
         if (wrapped.errors.length) throw new Error(`${block.name}: ${wrapped.errors.join('; ')}`);
         contents = wrapped.code as string;
       }
@@ -387,7 +387,7 @@ export function renderCdnFormFiles(block: Block, opts: CdnFormOptions): FormFile
  *  both call this, so the two can never disagree about what a form contains. */
 export function renderBlockForm(block: Block, form: BlockFormId, opts: { cdn: CdnFormOptions }): FormFile[] {
   switch (form) {
-    case 'wc': return renderWcForm(block);
+    case 'html': return renderHtmlForm(block);
     case 'react': return renderReactForm(block);
     case 'cdn': return renderCdnFormFiles(block, opts.cdn);
   }

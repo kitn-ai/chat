@@ -31,7 +31,7 @@ import {
 } from '../src/blocks';
 import type { Block } from '../src/blocks';
 import { bodyToJsx, componentName, wrapEntryScript } from '../src/react-form';
-import { decideForm, mergeDependencies, runAdd } from '../src/add';
+import { decideForm, mergeDependencies, parseAddArgs, runAdd } from '../src/add';
 import type { AddEnv } from '../src/add';
 
 const BLOCKS_ROOT = path.resolve(__dirname, '../dist/blocks');
@@ -257,7 +257,7 @@ describe('the detection signals table, row by row', () => {
   }
 
   it('a project with no framework signal at all is still a project: web components', () => {
-    expect(detectForm({ dependencies: { express: '^4.0.0' } })).toEqual({ kind: 'detected', form: 'wc', found: [] });
+    expect(detectForm({ dependencies: { express: '^4.0.0' } })).toEqual({ kind: 'detected', form: 'html', found: [] });
   });
 
   it('devDependencies count as signals too', () => {
@@ -280,12 +280,12 @@ describe('the detection signals table, row by row', () => {
       { dependencies: { react: '1', svelte: '4' } },
       true,
       true,
-      { ask: async (axis) => { asked.push(axis); return 'wc'; }, state: () => {} },
+      { ask: async (axis) => { asked.push(axis); return 'html'; }, state: () => {} },
     );
-    expect(decided.form).toBe('wc');
+    expect(decided.form).toBe('html');
     expect(asked).toHaveLength(1);
     expect(asked[0].question).toContain('react AND svelte');
-    expect(asked[0].options.map((o) => o.id).sort()).toEqual(['react', 'wc']);
+    expect(asked[0].options.map((o) => o.id).sort()).toEqual(['html', 'react']);
   });
 
   it('ambiguous + non-interactive REFUSES with the flag to pass, never guesses', async () => {
@@ -302,11 +302,11 @@ describe('the detection signals table, row by row', () => {
   });
 
   it('a --form flag answers the axis without asking, like every other flag', async () => {
-    const decided = await decideForm('wc', { dependencies: { react: '1' } }, true, true, {
+    const decided = await decideForm('html', { dependencies: { react: '1' } }, true, true, {
       ask: async () => { throw new Error('flag given, must not ask'); },
       state: () => {},
     });
-    expect(decided.form).toBe('wc');
+    expect(decided.form).toBe('html');
   });
 
   it('the ambiguous axis has a real choice, so the axis rule would ask it', () => {
@@ -405,7 +405,7 @@ describe('route:<integration> dependencies, resolved against the scaffolder cata
       local: (name) => (name === 'routed-block' ? routed() : undefined),
       fetchItem: async () => { throw new Error('no fetch expected'); },
     });
-    const plan = planAdd(resolved, { form: 'wc', kitRange: KIT_RANGE, kitVersion: KIT_VERSION });
+    const plan = planAdd(resolved, { form: 'html', kitRange: KIT_RANGE, kitVersion: KIT_VERSION });
     expect(plan.files.map((f) => f.path)).not.toContain('server/chat.ts');
     const notes = plan.notes.join('\n');
     expect(notes).toContain('openrouter');
@@ -425,6 +425,12 @@ describe('refusals name the way out', () => {
     const run = await runInto(dir, ['no-such-block']);
     expect(run.code).toBe(1);
     expect(run.err.join('\n')).toContain('create-kai add --list');
+  });
+
+  it('--form html is accepted and --form wc is refused by name', () => {
+    expect(parseAddArgs(['support-widget', '--form', 'html']).errors).toEqual([]);
+    const legacy = parseAddArgs(['support-widget', '--form', 'wc']);
+    expect(legacy.errors.join(' ')).toContain("--form must be react, html or cdn, got 'wc'");
   });
 
   it('wrapEntryScript refuses a script with exports of its own', () => {

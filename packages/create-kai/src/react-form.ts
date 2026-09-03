@@ -15,5 +15,5 @@ export {
   renderEntryTypings,
   renderJsxTypings,
   wrapEntryScript,
-  wrapWcEntryScript,
+  wrapHtmlEntryScript,
 } from '@kitn.ai/blocks/forms';

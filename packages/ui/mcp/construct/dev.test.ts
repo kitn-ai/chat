@@ -772,13 +772,13 @@ describe('the gallery route table', () => {
       expect(out?.kind === 'file' && out.type, form).toBe('application/json');
       return out?.kind === 'file' ? (JSON.parse(String(out.body)) as { files: { path: string; content: string }[] }).files : [];
     };
-    // wc — the add form: the entry script is IIFE-wrapped and registration is
+    // html - the add form: the entry script is IIFE-wrapped and registration is
     // rewritten off the CDN-only autoloader (what `add` writes, byte for byte).
-    const wc = filesOf('wc');
-    expect(wc.map((f) => f.path)).toContain('demo-block.html');
-    const wcJs = wc.find((f) => f.path === 'demo-block.js')?.content ?? '';
-    expect(wcJs).toContain('(async () => {');
-    expect(wcJs).toContain(`import '@kitn.ai/ui/elements'`);
+    const html = filesOf('html');
+    expect(html.map((f) => f.path)).toContain('demo-block.html');
+    const htmlJs = html.find((f) => f.path === 'demo-block.js')?.content ?? '';
+    expect(htmlJs).toContain('(async () => {');
+    expect(htmlJs).toContain(`import '@kitn.ai/ui/elements'`);
     // react — the page becomes a generated component plus derived typings.
     const react = filesOf('react');
     expect(react.map((f) => f.path)).toEqual(
@@ -798,18 +798,18 @@ describe('the gallery route table', () => {
     const { dirs } = galleryFixture();
     const badForm = handleGalleryRequest('/gallery/api/form/demo-block/vue', dirs);
     expect(badForm?.kind === 'missing' && badForm.message).toContain(BLOCK_FORMS.map((f) => f.id).join(', '));
-    expect(handleGalleryRequest('/gallery/api/form/nope/wc', dirs)).toMatchObject({ kind: 'missing' });
+    expect(handleGalleryRequest('/gallery/api/form/nope/html', dirs)).toMatchObject({ kind: 'missing' });
     expect(handleGalleryRequest('/gallery/api/zip/demo-block/vue', dirs)).toMatchObject({ kind: 'missing' });
-    expect(handleGalleryRequest('/gallery/api/form/..%2Fx/wc', dirs)).toMatchObject({ kind: 'missing' });
+    expect(handleGalleryRequest('/gallery/api/form/..%2Fx/html', dirs)).toMatchObject({ kind: 'missing' });
   });
 
   it('GET /gallery/api/zip/<block>/<form> is the SAME rendered files as a store-only zip download', () => {
     const { dirs } = galleryFixture();
-    const form = handleGalleryRequest('/gallery/api/form/demo-block/wc', dirs);
+    const form = handleGalleryRequest('/gallery/api/form/demo-block/html', dirs);
     const files = form?.kind === 'file' ? (JSON.parse(String(form.body)) as { files: { path: string; content: string }[] }).files : [];
-    const zip = handleGalleryRequest('/gallery/api/zip/demo-block/wc', dirs);
+    const zip = handleGalleryRequest('/gallery/api/zip/demo-block/html', dirs);
     expect(zip?.kind === 'file' && zip.type).toBe('application/zip');
-    expect(zip?.kind === 'file' && zip.download).toBe('demo-block-wc.zip');
+    expect(zip?.kind === 'file' && zip.download).toBe('demo-block-html.zip');
     const body = zip?.kind === 'file' ? (zip.body as Buffer) : Buffer.alloc(0);
     // Byte-equal to the form route's files, by construction: same renderer,
     // and store-only means each file's exact bytes appear in the archive.

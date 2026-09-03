@@ -2,8 +2,8 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { GalleryPage, type GalleryBlock } from './GalleryPage';
 import {
   renderCdnFormFiles,
+  renderHtmlForm,
   renderReactForm,
-  renderWcForm,
   type FormFile,
   type BlockFormId,
 } from '@kitn.ai/blocks/forms';
@@ -102,7 +102,7 @@ function authoredStub(name: string, title: string): Block {
 
 function stubForms(block: Block): Partial<Record<BlockFormId, FormFile[]>> {
   return {
-    wc: renderWcForm(block),
+    html: renderHtmlForm(block),
     react: renderReactForm(block),
     cdn: renderCdnFormFiles(block, { version: '0.0.0-story', base: '/kit/' }),
   };

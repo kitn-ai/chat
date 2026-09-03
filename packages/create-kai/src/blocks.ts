@@ -43,7 +43,7 @@ import {
   componentName,
   renderCdnFormFiles,
   renderReactForm,
-  renderWcForm,
+  renderHtmlForm,
   type BlockFormId,
 } from '@kitn.ai/blocks/forms';
 
@@ -212,13 +212,13 @@ export async function resolveAdd(spec: string, resolvers: BlockResolvers): Promi
  * else lands on the plain web-component files, which is the base form every
  * block is authored in.
  */
-export const FRAMEWORK_SIGNALS: readonly { dep: string; lands: 'react' | 'wc' }[] = [
+export const FRAMEWORK_SIGNALS: readonly { dep: string; lands: 'react' | 'html' }[] = [
   { dep: 'react', lands: 'react' },
-  { dep: 'preact', lands: 'wc' },
-  { dep: 'vue', lands: 'wc' },
-  { dep: 'svelte', lands: 'wc' },
-  { dep: '@angular/core', lands: 'wc' },
-  { dep: 'solid-js', lands: 'wc' },
+  { dep: 'preact', lands: 'html' },
+  { dep: 'vue', lands: 'html' },
+  { dep: 'svelte', lands: 'html' },
+  { dep: '@angular/core', lands: 'html' },
+  { dep: 'solid-js', lands: 'html' },
 ];
 
 export type BlockForm = BlockFormId;
@@ -240,7 +240,7 @@ export function detectForm(packageJson: unknown | null): Detection {
   
   // Any other project - one non-react framework, several, or none at all -
   // gets the base web-component form: elements work everywhere.
-  return { kind: 'detected', form: 'wc', found: found.map((s) => s.dep) };
+  return { kind: 'detected', form: 'html', found: found.map((s) => s.dep) };
 }
 
 /**
@@ -255,7 +255,7 @@ export function blockFormAxis(found: readonly string[]): Axis {
     question: `This project depends on ${found.join(' AND ')}; which form does the block land in?`,
     options: [
       { id: 'react', label: 'React', hint: 'a .tsx component plus the block files, registered via @kitn.ai/ui/react' },
-      { id: 'wc', label: 'Web components', hint: 'the framework-neutral html + script + css form' },
+      { id: 'html', label: 'HTML', hint: 'the framework-neutral html + script + css form' },
     ],
     because: '',
   };
@@ -299,7 +299,7 @@ export function planAdd(resolved: ResolvedAdd, opts: PlanOptions): AddPlan {
     } else if (opts.form === 'react') {
       planReactBlock(block, plan);
     } else {
-      planWcBlock(block, plan);
+      planHtmlBlock(block, plan);
     }
     for (const dep of block.manifest.dependencies ?? []) {
       // The kit rides the CLI's own pin; anything else a block declares is
@@ -324,9 +324,9 @@ export function planAdd(resolved: ResolvedAdd, opts: PlanOptions): AddPlan {
 // what stays here is what only the CLI knows: where the files land in the
 // consumer's project, and the note printed about them.
 
-function planWcBlock(block: Block, plan: AddPlan): void {
-  const dir = blockDir('wc', block.name);
-  for (const file of renderWcForm(block)) {
+function planHtmlBlock(block: Block, plan: AddPlan): void {
+  const dir = blockDir('html', block.name);
+  for (const file of renderHtmlForm(block)) {
     plan.files.push({ path: path.posix.join(dir, file.path), contents: file.content });
   }
   const page = block.manifest.files.find((f) => f.type === 'registry:page');
