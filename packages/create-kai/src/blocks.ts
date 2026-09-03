@@ -39,13 +39,15 @@ import type {
 // the per-framework code view on the docs site's /blocks section, so what
 // /blocks shows is byte-for-byte what `add` writes.
 import {
+  BLOCK_FORMS,
+  FRAMEWORK_BLOCK_FORMS,
   adaptRegistrationForBundler,
   componentName,
   renderBlockForm,
   type BlockFormId,
   type FormFile,
 } from '@kitn.ai/blocks/forms';
-import { fileTarget, installRoot, isTargetFramework } from '@kitn.ai/blocks/targets';
+import { INSTALL_ROOTS, fileTarget, installRoot, isTargetFramework, type TargetFramework } from '@kitn.ai/blocks/targets';
 
 import { getIntegration, listIntegrations } from './catalog';
 import type { Integration } from './catalog';
@@ -203,30 +205,66 @@ export async function resolveAdd(spec: string, resolvers: BlockResolvers): Promi
   return { blocks, routes: [...routes.values()] };
 }
 
-// ---------------------------------------------------- framework detection
+// ---------------------------------------------------------- framework detection
 
 /**
  * The signals table (spec Part 3, detection ruling). DATA, so a new framework
- * variant is a row, not a branch: `lands` names the delivery form a project
- * with this dependency gets. Only react has its own form today; everything
- * else lands on the plain web-component files, which is the base form every
- * block is authored in.
+ * variant is a row, not a branch.
+ *
+ * A row names the dependency and the FRAMEWORK it means. Where that framework
+ * LANDS is not in the table: it is derived from the renderer list below, so
+ * the day a renderer for it exists the row starts pointing at its own tree
+ * with nothing here to edit. The previous version carried the landing form per
+ * row, which made this file a second copy of "which renderers exist" living in
+ * a package the renderer work has no reason to open.
+ *
+ * `preact` carries `null`: it is a real signal (a preact project is a project)
+ * and it will never have an install root of its own, because a preact host
+ * renders the custom elements like any other. `null` says that; `'html'` would
+ * have read as "preact's own tree is the html one", which is a different and
+ * false claim.
  */
-export const FRAMEWORK_SIGNALS: readonly { dep: string; lands: 'react' | 'html' }[] = [
-  { dep: 'react', lands: 'react' },
-  { dep: 'preact', lands: 'html' },
-  { dep: 'vue', lands: 'html' },
-  { dep: 'svelte', lands: 'html' },
-  { dep: '@angular/core', lands: 'html' },
-  { dep: 'solid-js', lands: 'html' },
+export const FRAMEWORK_SIGNALS: readonly { dep: string; framework: TargetFramework | null }[] = [
+  { dep: 'react', framework: 'react' },
+  { dep: 'preact', framework: null },
+  { dep: 'vue', framework: 'vue' },
+  { dep: 'svelte', framework: 'svelte' },
+  { dep: '@angular/core', framework: 'angular' },
+  { dep: 'solid-js', framework: 'solid' },
 ];
 
 export type BlockForm = BlockFormId;
+/** Every form that is a project tree: the delivery forms minus the paste form. */
+export type ProjectForm = Exclude<BlockForm, 'cdn'>;
+
+/**
+ * Does this release generate a tree for this framework?
+ *
+ * The narrowing is the coupling, spelled in the type system: a form id that is
+ * also a target framework. Today that is `html` and `react`; PR B2 adds four
+ * rows to `BLOCK_FORMS` and this predicate widens with them.
+ */
+function emitsOwnTree(framework: TargetFramework | null): framework is TargetFramework & ProjectForm {
+  return framework !== null && FRAMEWORK_BLOCK_FORMS.some((form) => form.id === framework);
+}
+
+/** Where a signal's framework lands TODAY: its own tree when the generator
+ *  emits one, the framework-neutral html form until then. */
+export function landingForm(framework: TargetFramework | null): ProjectForm {
+  return emitsOwnTree(framework) ? framework : 'html';
+}
 
 export type Detection =
   | { kind: 'none' }
-  | { kind: 'detected'; form: Exclude<BlockForm, 'cdn'>; found: string[] }
-  | { kind: 'ambiguous'; found: string[] };
+  | {
+      kind: 'detected';
+      form: ProjectForm;
+      found: string[];
+      /** frameworks this project uses whose OWN tree this release does not
+       *  generate yet, so the caller can say so instead of deciding quietly */
+      fallback: TargetFramework[];
+    }
+  | { kind: 'ambiguous'; found: string[]; forms: ProjectForm[] };
 
 /** Read the detection off a parsed package.json, or its absence. */
 export function detectForm(packageJson: unknown | null): Detection {
@@ -234,30 +272,50 @@ export function detectForm(packageJson: unknown | null): Detection {
   const pkg = packageJson as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
   const deps = { ...pkg.dependencies, ...pkg.devDependencies };
   const found = FRAMEWORK_SIGNALS.filter((signal) => signal.dep in deps);
-  const lands = new Set(found.map((signal) => signal.lands));
-  if (lands.size > 1) return { kind: 'ambiguous', found: found.map((signal) => signal.dep) };
-  if (lands.has('react')) return { kind: 'detected', form: 'react', found: found.map((s) => s.dep) };
-  
-  // Any other project - one non-react framework, several, or none at all -
-  // gets the base web-component form: elements work everywhere.
-  return { kind: 'detected', form: 'html', found: found.map((s) => s.dep) };
+  const forms = [...new Set(found.map((signal) => landingForm(signal.framework)))];
+
+  // AMBIGUITY IS ABOUT THE ANSWER, NOT THE SIGNAL COUNT. Two signals landing
+  // on the same tree is not a question: today vue and svelte both land on the
+  // html form and asking which of two identical outcomes the user wants is
+  // noise, not loudness. When PR B2 emits both trees they start deciding
+  // different forms and this begins asking on its own.
+  if (forms.length > 1) return { kind: 'ambiguous', found: found.map((s) => s.dep), forms };
+
+  return {
+    kind: 'detected',
+    // Any project with no framework signal at all - or one whose only signal
+    // has no tree of its own - gets the base web-component form: elements work
+    // everywhere.
+    form: forms[0] ?? 'html',
+    found: found.map((s) => s.dep),
+    fallback: found
+      .map((s) => s.framework)
+      .filter((f): f is TargetFramework => f !== null && !emitsOwnTree(f)),
+  };
 }
 
 /**
  * The ambiguous case as an axis, so the ask goes through the same `AxisIo`
  * seam every other create-kai question does and the menu-honesty discipline
  * (spy-driven tests over what was CALLED) applies to it.
+ *
+ * The options are the forms actually IN CONTENTION, derived from the
+ * detection, with labels read off `BLOCK_FORMS`. Hand-listing two of them here
+ * was a menu with a hand list in it, inside the one function whose reason for
+ * existing is the menu-honesty seam.
  */
-export function blockFormAxis(found: readonly string[]): Axis {
+export function blockFormAxis(found: readonly string[], forms: readonly (ProjectForm & TargetFramework)[]): Axis {
+  const label = (id: string): string => BLOCK_FORMS.find((form) => form.id === id)?.label ?? id;
   return {
     id: 'block-form',
     label: 'Block form',
     question: `This project depends on ${found.join(' AND ')}; which form does the block land in?`,
-    options: [
-      { id: 'react', label: 'React', hint: 'a .tsx component plus the block files, registered via @kitn.ai/ui/react' },
-      { id: 'html', label: 'HTML', hint: 'the framework-neutral html + script + css form' },
-    ],
-    because: '',
+    options: forms.map((id) => ({
+      id,
+      label: label(id),
+      hint: `files under ${INSTALL_ROOTS[id]}/<block>/`,
+    })),
+    because: 'the frameworks this project uses land in different forms, so which one you want is a real choice',
   };
 }
 

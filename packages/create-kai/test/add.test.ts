@@ -23,15 +23,14 @@ import { buildRegistryItem } from '@kitn.ai/blocks';
 import type { Axis } from '../src/axes';
 import {
   FRAMEWORK_SIGNALS,
-  blockFormAxis,
   detectForm,
   planAdd,
   resolveAdd,
 } from '../src/blocks';
 import type { Block } from '../src/blocks';
 import { componentName } from '../src/react-form';
-import { BLOCK_FORMS, README_FILE, withStrippedTwins } from '@kitn.ai/blocks/forms';
-import { fileTarget, installRoot } from '@kitn.ai/blocks/targets';
+import { BLOCK_FORMS, FRAMEWORK_BLOCK_FORMS, README_FILE, withStrippedTwins } from '@kitn.ai/blocks/forms';
+import { fileTarget, installRoot, isTargetFramework } from '@kitn.ai/blocks/targets';
 import { decideForm, mergeDependencies, parseAddArgs, runAdd } from '../src/add';
 import type { AddEnv } from '../src/add';
 import { BLOCKS_ROOT, KIT_RANGE, KIT_VERSION, authoredBlock, loadBundledBlocks } from './helpers';
@@ -337,43 +336,89 @@ describe('the detection signals table, row by row', () => {
     expect(decided.form).toBe('cdn');
   });
 
+  it('has signal rows to drive, so the loop below is not vacuous', () => {
+    expect(FRAMEWORK_SIGNALS.length).toBeGreaterThan(0);
+  });
+
   for (const signal of FRAMEWORK_SIGNALS) {
-    it(`${signal.dep} alone lands on ${signal.lands}`, () => {
+    // The EXPECTATION is derived from the same place the code derives it: a
+    // framework lands in its own tree when the generator emits one, and in the
+    // framework-neutral html form until then. PR B2 moves both sides at once.
+    const emits = FRAMEWORK_BLOCK_FORMS.some((form) => form.id === signal.framework);
+    const expected = emits ? signal.framework : 'html';
+
+    it(`${signal.dep} alone lands on ${expected}`, () => {
       const detection = detectForm({ dependencies: { [signal.dep]: '1.0.0' } });
-      expect(detection).toEqual({ kind: 'detected', form: signal.lands, found: [signal.dep] });
+      expect(detection.kind).toBe('detected');
+      expect(detection.kind === 'detected' && detection.form).toBe(expected);
+    });
+
+    it(`${signal.dep}: the fallback is named when this release generates no ${signal.framework ?? 'framework'} tree`, () => {
+      const detection = detectForm({ dependencies: { [signal.dep]: '1.0.0' } });
+      if (detection.kind !== 'detected') throw new Error('expected a detection');
+      // `null` means the framework has no tree of its own and never will
+      // (preact renders web components like any other host), so it is not a
+      // fallback to announce.
+      expect(detection.fallback).toEqual(emits || signal.framework === null ? [] : [signal.framework]);
     });
   }
 
+  it('every framework a signal names has an install root', () => {
+    for (const signal of FRAMEWORK_SIGNALS) {
+      if (signal.framework === null) continue;
+      expect(isTargetFramework(signal.framework), signal.framework).toBe(true);
+    }
+  });
+
   it('a project with no framework signal at all is still a project: web components', () => {
-    expect(detectForm({ dependencies: { express: '^4.0.0' } })).toEqual({ kind: 'detected', form: 'html', found: [] });
+    const detection = detectForm({ dependencies: { express: '^4.0.0' } });
+    expect(detection).toEqual({ kind: 'detected', form: 'html', found: [], fallback: [] });
   });
 
   it('devDependencies count as signals too', () => {
     expect(detectForm({ devDependencies: { react: '^19.0.0' } }).kind).toBe('detected');
   });
 
-  it('react AND svelte is ambiguous, with what was found named', () => {
+  it('two signals that decide DIFFERENT forms are ambiguous, with what was found named', () => {
+    // react always has its own tree; svelte does not until PR B2. Whichever is
+    // true, these two decide different forms, which is what makes it a
+    // question worth asking.
     const detection = detectForm({ dependencies: { react: '1', svelte: '4' } });
-    expect(detection).toEqual({ kind: 'ambiguous', found: ['react', 'svelte'] });
+    expect(detection.kind).toBe('ambiguous');
+    expect(detection.kind === 'ambiguous' && detection.found).toEqual(['react', 'svelte']);
   });
 
-  it('two non-react frameworks agree on the answer, so nothing is ambiguous', () => {
-    expect(detectForm({ dependencies: { vue: '3', svelte: '4' } }).kind).toBe('detected');
+  it('two signals that decide the SAME form are not a question at all', () => {
+    // Today vue and svelte both land on html, so there is nothing to choose
+    // and asking would be noise. When B2 emits both trees they start deciding
+    // different forms and this case flips on its own - which is why the
+    // expectation is derived rather than written.
+    const forms = new Set(['vue', 'svelte'].map((dep) => {
+      const d = detectForm({ dependencies: { [dep]: '1' } });
+      return d.kind === 'detected' ? d.form : 'ambiguous';
+    }));
+    const detection = detectForm({ dependencies: { vue: '3', svelte: '4' } });
+    expect(detection.kind).toBe(forms.size === 1 ? 'detected' : 'ambiguous');
   });
 
-  it('ambiguous + interactive ASKS through the axis seam, naming what was found', async () => {
+  it('ambiguous + interactive ASKS through the axis seam, offering only the forms in contention', async () => {
     const asked: Axis[] = [];
     const decided = await decideForm(
       undefined,
       { dependencies: { react: '1', svelte: '4' } },
       true,
       true,
-      { ask: async (axis) => { asked.push(axis); return 'html'; }, state: () => {} },
+      { ask: async (axis) => { asked.push(axis); return axis.options[axis.options.length - 1].id; }, state: () => {} },
     );
-    expect(decided.form).toBe('html');
     expect(asked).toHaveLength(1);
     expect(asked[0].question).toContain('react AND svelte');
-    expect(asked[0].options.map((o) => o.id).sort()).toEqual(['html', 'react']);
+    expect(asked[0].options.length).toBeGreaterThan(1);
+    // MENU HONESTY: every option offered is a form the generator emits.
+    for (const option of asked[0].options) {
+      expect(BLOCK_FORMS.map((f) => f.id), `offered '${option.id}'`).toContain(option.id);
+    }
+    expect(asked[0].because.length, 'an axis with an empty `because` cannot be stated').toBeGreaterThan(0);
+    expect(decided.form).toBe(asked[0].options[asked[0].options.length - 1].id);
   });
 
   it('ambiguous + non-interactive REFUSES with the flag to pass, never guesses', async () => {
@@ -397,8 +442,27 @@ describe('the detection signals table, row by row', () => {
     expect(decided.form).toBe('html');
   });
 
-  it('the ambiguous axis has a real choice, so the axis rule would ask it', () => {
-    expect(blockFormAxis(['react', 'svelte']).options.length).toBeGreaterThan(1);
+  it('a framework with no generated tree is told so, loudly, in one sentence', async () => {
+    // Decided loudly: landing a vue project on the html form is a decision,
+    // and making it silently is the failure mode this repo names most often.
+    const decided = await decideForm(undefined, { dependencies: { vue: '3' } }, true, false, {
+      ask: async () => { throw new Error('not ambiguous, must not ask'); },
+      state: () => {},
+    });
+    // Cast to a plain string comparison: today's BlockFormId union has no
+    // 'vue' member at all, so a literal comparison against it is a compile
+    // error rather than a false condition. Step 6 plants a real 'vue' row and
+    // this widened check is what lets the SAME line answer true on both sides
+    // of that plant with nothing here to edit.
+    const emitsVue = (FRAMEWORK_BLOCK_FORMS as readonly { id: string }[]).some((form) => form.id === 'vue');
+    if (emitsVue) {
+      expect(decided.form).toBe('vue');
+      expect(decided.note).toBeUndefined();
+    } else {
+      expect(decided.form).toBe('html');
+      expect(decided.note).toContain('vue');
+      expect(decided.note).toContain('html');
+    }
   });
 });
 
