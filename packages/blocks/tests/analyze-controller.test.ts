@@ -59,6 +59,11 @@ describe('analyzeController', () => {
     expect(out.errors.join(' ')).toContain('export interface WidgetActions');
   });
 
+  it('refuses an Actions block with no boot hook', () => {
+    const out = analyzeController(GOOD.replace('  boot(): Promise<void>;\n', ''), 'Widget', 'w');
+    expect(out.errors.join(' ')).toContain('declares no `boot`');
+  });
+
   it('refuses an EMPTY actions block rather than reporting none', () => {
     const out = analyzeController(GOOD.replace(/export interface WidgetActions \{[\s\S]*?\n\}/, 'export interface WidgetActions {\n}'), 'Widget', 'w');
     expect(out.errors.join(' ')).toContain('declares no actions');

@@ -418,6 +418,9 @@ importers:
         specifier: ^7.3.0
         version: 7.3.0
     devDependencies:
+      esbuild:
+        specifier: ^0.28.0
+        version: 0.28.1
       typescript:
         specifier: ^5.5.0
         version: 5.9.3

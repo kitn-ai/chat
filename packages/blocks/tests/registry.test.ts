@@ -114,7 +114,7 @@ describe('the package exports map', () => {
 
   it('points both entries at their real source files', () => {
     expect(pkg.exports['.'].default).toBe('./src/registry.ts');
-    expect(pkg.exports['./forms'].default).toBe('./src/forms.ts');
+    expect(pkg.exports['./forms'].default).toBe('./src/forms/index.ts');
   });
 
   it('resolves `types` and `default` to the SAME file for every entry', () => {

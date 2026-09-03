@@ -753,7 +753,18 @@ export interface GalleryDirs {
 }
 
 export type GalleryResponse =
-  | { kind: 'file'; type: string; body: string | Buffer; cors?: boolean; /** save-as filename: the server adds a content-disposition attachment header */ download?: string }
+  | {
+      kind: 'file';
+      type: string;
+      body: string | Buffer;
+      cors?: boolean;
+      /** The status to write. Absent means 200, which every route but the
+       *  render-refusal one below wants. A refusal is a 5xx and NOT a
+       *  `missing`: 404 would say the block is not there when it plainly is. */
+      status?: number;
+      /** save-as filename: the server adds a content-disposition attachment header */
+      download?: string;
+    }
   | { kind: 'redirect'; location: string }
   | { kind: 'missing'; message: string };
 
@@ -832,7 +843,20 @@ export function handleGalleryRequest(url: string, dirs: GalleryDirs): GalleryRes
           cdn: { version: dirs.version },
         });
       } catch (err) {
-        return { kind: 'missing', message: `the ${form} form cannot be rendered: ${err instanceof Error ? err.message : String(err)}` };
+        // A render REFUSAL is not a missing route. The block is there and the
+        // renderer will not emit it, which is a fact the reader needs in
+        // words: an unconverted block (no <id>.controller.ts, or a page still
+        // carrying its own <script type="module">) cannot be rendered under
+        // the authored contract. Loud, and never a crashed dev server.
+        return {
+          kind: 'file',
+          status: 500,
+          type: 'text/plain; charset=utf-8',
+          body: Buffer.from(
+            `the ${form} form of "${name}" cannot be rendered:\n${err instanceof Error ? err.message : String(err)}\n`,
+            'utf8',
+          ),
+        };
       }
       if (route === 'form') {
         return { kind: 'file', type: 'application/json', body: JSON.stringify({ form, files }) };
@@ -1304,7 +1328,7 @@ export async function devBuilder(
           if (galleryOut.kind === 'missing') {
             return send(404, { problems: [{ path: '', message: galleryOut.message }] });
           }
-          res.writeHead(200, {
+          res.writeHead(galleryOut.status ?? 200, {
             'content-type': galleryOut.type,
             ...(galleryOut.cors ? { 'access-control-allow-origin': '*' } : {}),
             ...(galleryOut.download ? { 'content-disposition': `attachment; filename="${galleryOut.download}"` } : {}),

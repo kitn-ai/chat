@@ -167,6 +167,14 @@ export function analyzeController(
 
   const stateFields = read('State', 'state');
   const actionNames = read('Actions', 'actions');
+  // `boot()` is the mount hook every host calls once after wiring: the react
+  // adapter fires it in an effect, and the html binder awaits it before
+  // setting the driver's readiness signal. The html form has nowhere else to
+  // hydrate from storage, so it is required rather than conventional (spec
+  // 3.2, as amended by the PR B plan, R15).
+  if (actionNames.length > 0 && !actionNames.includes('boot')) {
+    errors.push(`${where}: ${componentName}Actions declares no \`boot\`. Every host calls boot() once after wiring, and the html form has nowhere else to hydrate from storage (spec 3.2, as amended by the PR B plan).`);
+  }
   const refNames = read('Refs', 'refs');
 
   if (errors.length) return { errors };
