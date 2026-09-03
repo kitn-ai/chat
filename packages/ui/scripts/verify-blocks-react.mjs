@@ -107,7 +107,7 @@ if (!existsSync(join(ROOT, 'dist', 'kai.es.js')) || !existsSync(join(ROOT, 'dist
 }
 
 const sources = scanBlocks(BLOCKS_DIR);
-if (sources.length === 0) fail(`no block directories under ${BLOCKS_DIR} -- a zero-block scan is a broken walk, not an empty gallery.`);
+if (sources.length === 0) fail(`no block directories under ${BLOCKS_DIR} -- a zero-block scan is a broken walk, not an empty registry.`);
 const { blocks, errors: discoveryErrors } = registry.discoverBlocks(sources, routeIntegrations);
 if (discoveryErrors.length) fail(`the block scan did not validate:\n  RED ${discoveryErrors.join('\n  RED ')}`);
 

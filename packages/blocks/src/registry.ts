@@ -4,8 +4,8 @@
  * a `registry-item.json` manifest on the adopted shadcn registry-item
  * skeleton. This module is the ONE place that understands that layout:
  * validation, the derived `registry.json` index, the static per-block item
- * JSON (the public integration surface the CLI, gallery and MCP all
- * resolve), and the CDN-form generator that renders the authored `add` form
+ * JSON (the public integration surface the CLI, the docs site and the MCP
+ * all resolve), and the CDN-form generator that renders the authored `add` form
  * into a self-contained paste form.
  *
  * DISCIPLINE — pure functions over injected data, no `node:fs`. Two reasons:
@@ -106,7 +106,7 @@ export interface BlockValidationContext {
 
 const FILE_TYPES = new Set(['registry:page', 'registry:file', 'registry:component']);
 
-/** House-voice guard for strings the gallery/CLI RENDER: no em dashes, no
+/** House-voice guard for strings the /blocks page and the CLI RENDER: no em dashes, no
  *  emoji (CLAUDE.md conventions; the plan's Task 3.1 brief names both). */
 function proseErrors(field: string, value: string): string[] {
   const errors: string[] = [];
@@ -285,7 +285,7 @@ export function buildRegistryIndex(blocks: readonly Block[]): {
 
 /** The static per-block item JSON (`r/<name>.json` shape): the manifest with
  *  each files[] entry carrying its `content`. THE integration surface — the
- *  CLI, the gallery, the MCP and any third-party tool resolve this URL. */
+ *  CLI, the docs site, the MCP and any third-party tool resolve this URL. */
 export function buildRegistryItem(block: Block): BlockManifest & {
   files: (BlockFileEntry & { content: string })[];
 } {

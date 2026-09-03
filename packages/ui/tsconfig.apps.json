@@ -1,5 +1,5 @@
 {
-  "comment": "Typechecks the three shipped dev-tool apps (apps/builder, apps/theme-studio, apps/gallery). They live outside src/ so the library tsconfig (src/** only) and the dts emit never see them; this project is what keeps them typechecked. Same compiler options as tsconfig.json, noEmit.",
+  "comment": "Typechecks the two shipped dev-tool apps (apps/builder, apps/theme-studio). They live outside src/ so the library tsconfig (src/** only) and the dts emit never see them; this project is what keeps them typechecked. Same compiler options as tsconfig.json, noEmit.",
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",

@@ -416,8 +416,26 @@ if (SELF_TEST) {
  * theme-studio, they consume the package's own dist rather than duplicating
  * it. Margin rule unchanged: 11.5595 + ~0.29 MiB of headroom -> 11.85 MiB
  * (rounded to the same 0.05 grain the prior entries use).
+ *
+ * 11.85 -> 10.90 MiB (2026-09-03, the gallery retires): the first entry that
+ * moves the ceiling DOWN. Only the first half of the entry above is going:
+ * `dist/gallery/` (the prebuilt page `kai dev --builder` served at /gallery/)
+ * is retired with the page itself by PR C, which puts the browse surface on
+ * the docs site at /blocks. `dist/blocks/` stays, and is now the whole reason
+ * the entry above exists: the docs site renders from it and `create-kai add`
+ * resolves it. Measured on this tool either side of the deletion, both on a
+ * cold build of this branch:
+ *
+ *   before: "675 files, 11.77 MiB unpacked (ceiling 11.85 MiB)"
+ *   after:  "659 files, 10.60 MiB unpacked"
+ *
+ * 16 files and 1.17 MiB, which is dist/gallery entire (index.html plus 15
+ * assets) and nothing else. Margin rule unchanged: 10.60 + ~0.29 MiB of
+ * headroom -> 10.90 MiB (rounded to the same 0.05 grain the prior entries
+ * use). Lowering it is the point: left at 11.85 the guard would not notice
+ * the page, or anything else that size, coming back.
  */
-const MAX_UNPACKED_BYTES = 11.85 * 1024 * 1024;
+const MAX_UNPACKED_BYTES = 10.90 * 1024 * 1024;
 
 const kib = (n) => `${(n / 1024).toFixed(1)} KiB`;
 const mib = (n) => `${(n / 1024 / 1024).toFixed(2)} MiB`;

@@ -3,10 +3,10 @@
 // `.storybook/main.ts`'s `stories:` glob is the authority (see
 // lint-catalog-drift.mjs's `storyExtensions()` for the same read-don't-copy
 // rule applied to extensions): it indexes both `../src/**/*.stories.@(ts|tsx)`
-// and `../apps/**/*.stories.@(ts|tsx)` since the apps-out-of-src move put
-// `apps/gallery/GalleryPage.stories.tsx` outside `src/`. Every script that
-// walks the tree looking for story files needs both roots or it silently
-// stops seeing that file — this is what a `src`-only walk got wrong.
+// and `../apps/**/*.stories.@(ts|tsx)`, so a story file can live outside
+// `src/` under one of the dev-tool apps. Every script that walks the tree
+// looking for story files needs both roots or it silently stops seeing
+// whatever the second glob indexes, which is what a `src`-only walk got wrong.
 //
 // `apps` may not exist on a tree that predates the move (or a partial
 // checkout), so callers get back only the roots that are actually present.

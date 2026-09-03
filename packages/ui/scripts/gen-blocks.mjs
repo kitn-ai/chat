@@ -14,7 +14,7 @@
 //   dist/blocks/r/<name>.json                 the per-block item JSON with
 //                                             file contents - THE public
 //                                             integration surface (CLI,
-//                                             gallery, MCP all resolve it)
+//                                             docs site, MCP all resolve it)
 //   dist/blocks/f/<name>.<form>.json          one file per block per FRAMEWORK
 //                                             delivery form (spec 3.5): the
 //                                             rendered tree, contents and
@@ -118,7 +118,7 @@ for (const entry of readdirSync(BLOCKS_DIR, { withFileTypes: true })) {
   sources.push({ dirName: entry.name, manifestJson: readFileSync(manifestPath, 'utf8'), files });
 }
 if (sources.length === 0) {
-  console.error(`gen-blocks: no block directories under ${BLOCKS_DIR} - a zero-block scan is a broken walk, not an empty gallery`);
+  console.error(`gen-blocks: no block directories under ${BLOCKS_DIR} - a zero-block scan is a broken walk, not an empty registry`);
   process.exit(1);
 }
 
@@ -135,10 +135,9 @@ if (errors.length) {
 // no build step (a pasted single file, and a tree dropped next to markup), so
 // the types come off HERE, once, and the stripped twin travels with the block
 // inside the emitted item JSON. `packages/blocks` cannot do it: it depends on
-// nothing, and the two RUNTIME renderers (the kai dev gallery route, inside
-// the published CLI, and `create-kai add`, on Node >= 20.19) have no stripper
-// either. Two strippers would emit two different files and break the one
-// claim src/forms/index.ts makes.
+// nothing, and the renderer that runs on a consumer's machine (`create-kai
+// add`, on Node >= 20.19) has no stripper either. Two strippers would emit two
+// different files and break the one claim src/forms/index.ts makes.
 const stripTypes = (source, fileName) =>
   esbuild.transformSync(source, { loader: 'ts', format: 'esm', target: 'es2022', sourcefile: fileName }).code;
 
