@@ -61,6 +61,34 @@ const stripped = () =>
   );
 const byPath = (files: { path: string; content: string }[]) => new Map(files.map((f) => [f.path, f.content]));
 
+describe('withStrippedTwins', () => {
+  it('lists the twin in the MANIFEST even when the file is already on disk', () => {
+    // The shape `create-kai`'s dist has: its build writes the twins beside the
+    // copied sources, so `files` already carries them while `manifest.files`
+    // still lists only the authored four. An early return on "the file is
+    // there" left the manifest entry off, and `buildRegistryItem` serializes
+    // the MANIFEST -- so a fetched item JSON silently omitted a file the html
+    // form then refused to render without.
+    const base = block();
+    const withTwinOnDisk: Block = {
+      ...base,
+      files: new Map([...base.files, ['fixture.controller.js', 'export function createController() {}\n']]),
+    };
+    const out = withStrippedTwins(withTwinOnDisk, () => 'SHOULD NOT BE CALLED');
+    expect(out.manifest.files.map((f) => f.path)).toContain('fixture.controller.js');
+    // The file on disk WINS: it is the one the build already wrote, and
+    // re-stripping it here would be the second stripper this whole design
+    // exists to avoid.
+    expect(out.files.get('fixture.controller.js')).toBe('export function createController() {}\n');
+  });
+
+  it('is idempotent: running it twice adds the twin once', () => {
+    const once = withStrippedTwins(block(), (source) => source);
+    const twice = withStrippedTwins(once, (source) => source);
+    expect(twice.manifest.files).toEqual(once.manifest.files);
+  });
+});
+
 describe('the html form', () => {
   it('refuses to render without the stripped twin, and names the generator', () => {
     expect(() => renderHtmlForm(block())).toThrow(/fixture\.controller\.js/);
@@ -97,6 +125,12 @@ describe('the html form', () => {
     expect(binder).not.toContain('@kitn.ai/ui/autoloader');
     expect(binder).toContain('customElements.whenDefined');
     expect(binder).toContain("'kai-conversation-item'");
+  });
+
+  it('keeps the autoloader when the caller asks for it (the cdn form s native pattern)', () => {
+    const binder = byPath(renderHtmlForm(stripped(), { registration: 'autoloader' })).get('fixture.js')!;
+    expect(binder).toContain("import '@kitn.ai/ui/autoloader';");
+    expect(binder).not.toContain("import '@kitn.ai/ui/elements';");
   });
 
   it('writes the seed once, before the first apply, and never inside apply()', () => {

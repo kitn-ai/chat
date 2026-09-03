@@ -12,8 +12,9 @@
  *   - `react`- the react form: the block root as a tree of the typed
  *              wrappers from `@kitn.ai/ui/react`, plus a `useSyncExternalStore`
  *              adapter over the controller (see `./react`).
- *   - `cdn`  — the single-file CDN paste form, rendered by `registry.ts`'s
- *              `generateCdnForm` (imports pinned onto the published entries).
+ *   - `cdn`  : the single-file CDN paste form: the HTML form above, inlined
+ *              and pinned onto the published entries by `registry.ts`'s
+ *              `generateCdnForm` (see `./cdn`).
  *
  * ONE RENDERER, TWO CALLERS, by the same precedent as `registry.ts`:
  * `create-kai` bundle-imports this module (`src/react-form.ts` re-exports it,
@@ -26,16 +27,19 @@
  * as `registry.ts`: this file typechecks under the package's browser tsconfig
  * (the gallery page imports `BLOCK_FORMS` directly) and bundles into the CLI.
  */
-import { generateCdnForm, type Block, type CdnFormOptions } from '../registry';
+import type { Block, CdnFormOptions } from '../registry';
 import type { FormFile } from '../contract/types';
 import { renderHtmlForm } from './html';
 import { renderReactForm } from './react';
+import { renderCdnFormFiles } from './cdn';
 
 // The renderers live in their own modules and are re-exported HERE, so every
 // caller keeps importing `@kitn.ai/blocks/forms` and nothing under src/forms/
 // ever imports this barrel back (that would be a cycle).
 export { renderHtmlForm, renderBinder, serializeTemplate, adaptRegistrationForBundler } from './html';
+export type { HtmlFormOptions } from './html';
 export { renderReactForm, handlerName } from './react';
+export { renderCdnFormFiles } from './cdn';
 export type { FormFile };
 
 /** kebab-or-plain block name to a react component name: support-widget -> SupportWidget.
@@ -107,30 +111,20 @@ export function withStrippedTwins(block: Block, strip: (source: string, fileName
   for (const entry of block.manifest.files) {
     if (!entry.path.endsWith('.ts')) continue;
     const twin = entry.path.replace(/\.ts$/, '.js');
-    if (files.has(twin)) continue;
-    files.set(twin, strip(block.files.get(entry.path) ?? '', entry.path));
-    manifestFiles.push({ path: twin, type: 'registry:file' });
+    // The two halves are decided SEPARATELY, because they can disagree.
+    // `create-kai`'s dist carries the twin as a FILE (its build wrote it) while
+    // the manifest still lists only the authored sources, and one early return
+    // covering both left the manifest entry off -- so `buildRegistryItem`,
+    // which serializes the manifest, dropped a file the html form then refused
+    // to render without. A twin already present wins: re-stripping it would be
+    // the second stripper this design exists to avoid.
+    if (!files.has(twin)) files.set(twin, strip(block.files.get(entry.path) ?? '', entry.path));
+    if (!manifestFiles.some((f) => f.path === twin)) manifestFiles.push({ path: twin, type: 'registry:file' });
   }
   return { name: block.name, manifest: { ...block.manifest, files: manifestFiles }, files };
 }
 
 // ------------------------------------------------------- the form renderers
-
-/**
- * The CDN single-file form: `generateCdnForm`'s output as one `<name>.html`.
- * A block that composes OTHER blocks cannot be a single paste file, and the
- * refusal names that rather than emitting a partial composition.
- */
-export function renderCdnFormFiles(block: Block, opts: CdnFormOptions): FormFile[] {
-  if ((block.manifest.registryDependencies ?? []).some((dep) => !dep.startsWith('route:'))) {
-    throw new Error(
-      `${block.name} composes other blocks, and the single-file paste form cannot carry them yet; run \`create-kai add\` inside a project instead`,
-    );
-  }
-  const form = generateCdnForm(block, opts);
-  if (!form.html) throw new Error(`${block.name}: the paste form cannot be generated: ${form.errors.join('; ')}`);
-  return [{ path: `${block.name}.html`, content: form.html, target: `${block.name}.html` }];
-}
 
 /** ONE dispatch over the form axis — the gallery route and the CLI planner
  *  both call this, so the two can never disagree about what a form contains. */

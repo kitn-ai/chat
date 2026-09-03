@@ -451,6 +451,21 @@ export function zeroBlocksCopiedProblem(count: number): string | null {
 }
 
 /**
+ * Refuse to build a tarball whose copied blocks carry no stripped .js twins.
+ *
+ * The block controller is TypeScript, and `add` renders the html form at
+ * RUNTIME with no stripper of its own (this CLI's engines floor predates
+ * `module.stripTypeScriptTypes`), so the twin has to be in the tarball or the
+ * renderer refuses at a user's first `add`. Same anti-vacuity shape as
+ * zeroBlocksCopiedProblem beside it: every block has a controller, so zero
+ * twins means the post-copy walk is broken, not that there was nothing to do.
+ */
+export function zeroBlockTwinsProblem(count: number): string | null {
+  if (count > 0) return null;
+  return 'create-kai build: wrote zero .js twins beside the copied block sources - every block has a .controller.ts, so a zero here is a broken walk, not an empty catalog';
+}
+
+/**
  * The name a starter carries its ignore file under.
  *
  * Re-exported rather than declared: it is one row of `STRIPPED_DOTFILES`

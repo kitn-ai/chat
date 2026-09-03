@@ -14,11 +14,12 @@
  * the react transforms' own refusals.
  */
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { buildRegistryItem } from '@kitn.ai/blocks';
+import { buildRegistryItem, isAuthoredContractPage } from '@kitn.ai/blocks';
 import type { Axis } from '../src/axes';
 import {
   FRAMEWORK_SIGNALS,
@@ -28,14 +29,22 @@ import {
   resolveAdd,
 } from '../src/blocks';
 import type { Block } from '../src/blocks';
-// `componentName` comes back with the positive react-form assertions in the
-// commit that converts the blocks (Task 9); nothing here names it today.
+import { componentName } from '../src/react-form';
+import { withStrippedTwins } from '@kitn.ai/blocks/forms';
 import { decideForm, mergeDependencies, parseAddArgs, runAdd } from '../src/add';
 import type { AddEnv } from '../src/add';
 import { BLOCKS_ROOT, KIT_RANGE, KIT_VERSION, authoredBlock, loadBundledBlocks } from './helpers';
 
 let root: string;
 let blocks: Block[];
+
+/** On the authored contract? The registry's OWN predicate, never a name list:
+ *  a block joins the positive loops the moment its page declares bindings.
+ *  Transitional, and it goes when the last block converts. */
+const onContract = (block: Block): boolean => {
+  const page = block.manifest.files.find((f) => f.type === 'registry:page');
+  return isAuthoredContractPage((page && block.files.get(page.path)) ?? '');
+};
 
 beforeAll(async () => {
   root = await mkdtemp(path.join(tmpdir(), 'create-kai-add-'));
@@ -125,17 +134,95 @@ describe('every listed block writes through the real add path, in every form', (
 });
 
 describe('web-component form (any non-react project)', () => {
-  // The real blocks are still authored the old way at this point in the
-  // branch, so the html renderer refuses every one of them by name. The four
-  // positive cases this describe carried are restored in the commit that
-  // converts them (Task 9): "writes every manifest file and pins the kit",
-  // "wraps the wc entry script so nothing top-level awaits through a
-  // bundler", "renders registration per delivery: emitted scripts never
-  // import the CDN-only autoloader", and "refuses a second add loudly,
-  // listing the collisions, overwriting nothing".
-  it('refuses the html form for a block that is not on the authored contract yet', async () => {
-    for (const block of blocks) {
-      const dir = await project(`html-${block.name}`, { name: 'host', dependencies: { vue: '^3.0.0' } });
+  // AUTHORED-CONTRACT BLOCKS ONLY, until the round finishes converting the
+  // rest: the html form refuses a page that declares no bindings and has no
+  // controller, by name, and that refusal has its own case at the end of this
+  // describe. The predicate is the registry's own, never a name list, so a
+  // block joins these loops the moment it is converted.
+  const authored = () => blocks.filter((b) => onContract(b));
+  const legacy = () => blocks.filter((b) => !onContract(b));
+
+  it('has authored-contract blocks to drive, so the loops below are not vacuous', () => {
+    expect(authored().length).toBeGreaterThan(0);
+  });
+
+  it('writes every manifest file and pins the kit', async () => {
+    for (const block of authored()) {
+      const dir = await project(`wc-${block.name}`, { name: 'host', dependencies: { vue: '^3.0.0' } });
+      const run = await runInto(dir, [block.name]);
+      expect(run.code, run.err.join('\n')).toBe(0);
+      // The html form's OWN file list, not the manifest's: the authored
+      // `.ts` sources are shipped as their stripped `.js` twins and the entry
+      // script is generated, so the manifest is no longer the write list.
+      const planned = planAdd({ blocks: [block], routes: [] }, { form: 'html', kitRange: KIT_RANGE, kitVersion: KIT_VERSION }).files;
+      expect(planned.length, `${block.name}: the html form planned nothing`).toBeGreaterThan(0);
+      for (const file of planned) {
+        expect(existsSync(path.join(dir, file.path)), `${block.name}: ${file.path} not written`).toBe(true);
+      }
+      const pkg = JSON.parse(await readFile(path.join(dir, 'package.json'), 'utf8'));
+      expect(pkg.dependencies['@kitn.ai/ui']).toBe(KIT_RANGE);
+      if (block.manifest.docs) {
+        expect(run.out.join('\n')).toContain(block.manifest.docs);
+      }
+    }
+  });
+
+  it('the emitted binder signals readiness and awaits registration, at module scope', async () => {
+    // This case used to assert an IIFE wrap (`(async () => {`) around the
+    // AUTHORED entry script, so that nothing awaited at module scope through
+    // a consumer bundler. The authored entry script is gone: the binder is
+    // GENERATED, and it awaits registration and boot() at module scope
+    // deliberately, ending with the driver's one readiness constant. So the
+    // subject moves to what the generated file must actually contain.
+    for (const block of authored()) {
+      const dir = await project(`binder-${block.name}`, { name: 'host' });
+      expect((await runInto(dir, [block.name])).code).toBe(0);
+      const binder = await readFile(path.join(dir, 'blocks', block.name, `${block.name}.js`), 'utf8');
+      expect(binder, `${block.name}: no whenDefined await`).toContain('customElements.whenDefined');
+      expect(binder, `${block.name}: no controller call`).toContain('createController');
+      expect(binder, `${block.name}: no readiness signal`).toContain('window.__blockReady = true;');
+    }
+  });
+
+  it('renders registration per delivery: emitted scripts never import the CDN-only autoloader', async () => {
+    // The autoloader resolves element modules relative to its own URL, so a
+    // bundled project 404s every element and renders nothing - observed live
+    // before this rewrite existed. The CDN paste form keeps it (its native
+    // pattern); both add forms must not.
+    for (const block of authored()) {
+      const wcDir = await project(`reg-wc-${block.name}`, { name: 'host' });
+      const reactDir = await project(`reg-react-${block.name}`, { name: 'host', dependencies: { react: '19' } });
+      expect((await runInto(wcDir, [block.name])).code).toBe(0);
+      expect((await runInto(reactDir, [block.name])).code).toBe(0);
+      for (const base of [path.join(wcDir, 'blocks', block.name), path.join(reactDir, 'src/blocks', block.name)]) {
+        for (const file of (await readdir(base)).filter((f) => f.endsWith('.js'))) {
+          const js = await readFile(path.join(base, file), 'utf8');
+          expect(js, `${base}/${file} still imports the autoloader`).not.toContain(`'@kitn.ai/ui/autoloader'`);
+        }
+      }
+    }
+  });
+
+  it('refuses a second add loudly, listing the collisions, overwriting nothing', async () => {
+    const block = authored()[0];
+    const dir = await project('collide', { name: 'host' });
+    expect((await runInto(dir, [block.name])).code).toBe(0);
+    const page = block.manifest.files.find((f) => f.type === 'registry:page')!;
+    const pagePath = path.join(dir, 'blocks', block.name, page.target ?? path.basename(page.path));
+    await writeFile(pagePath, 'EDITED BY THE CONSUMER');
+    const second = await runInto(dir, [block.name]);
+    expect(second.code).toBe(1);
+    expect(second.err.join('\n')).toContain('refusing to overwrite');
+    expect(second.err.join('\n')).toContain(path.posix.join('blocks', block.name, page.target ?? path.basename(page.path)));
+    expect(await readFile(pagePath, 'utf8')).toBe('EDITED BY THE CONSUMER');
+  });
+
+  it('refuses a block that is not on the authored contract yet, by name', async () => {
+    // Skipped rather than deleted when the last block converts: this is the
+    // refusal a CONSUMER with an old block hits, and it is not transitional.
+    // `dev.test.ts` keeps a synthetic fixture for it for the same reason.
+    for (const block of legacy()) {
+      const dir = await project(`html-legacy-${block.name}`, { name: 'host', dependencies: { vue: '^3.0.0' } });
       const run = await runInto(dir, [block.name, '--form', 'html']);
       expect(run.code, `${block.name}: expected a refusal`).toBe(1);
       expect(run.err.join('\n'), block.name).toContain(block.name);
@@ -145,18 +232,27 @@ describe('web-component form (any non-react project)', () => {
 });
 
 describe('react form (react in the project deps)', () => {
-  // The real blocks are still authored the old way at this point in the
-  // branch; the react renderer refuses a page with no controller, by name.
-  // Task 9 converts them and this case becomes the positive assertions again,
-  // in that commit: "writes the component, the hook and the controller for
-  // every block; never the page html".
-  it('refuses the react form for a block that is not on the authored contract yet', async () => {
-    for (const block of blocks) {
+  const authored = () => blocks.filter((b) => onContract(b));
+
+  it('writes the component, the hook and the controller for every block; never the page html', async () => {
+    expect(authored().length).toBeGreaterThan(0);
+    for (const block of authored()) {
       const dir = await project(`react-${block.name}`, { name: 'host', dependencies: { react: '^19.0.0' } });
       const run = await runInto(dir, [block.name]);
-      expect(run.code, `${block.name}: expected a refusal`).toBe(1);
-      expect(run.err.join('\n'), block.name).toContain(block.name);
-      expect(run.err.join('\n'), block.name).toContain('controller.ts');
+      expect(run.code, `${block.name}: ${run.err.join('\n')}`).toBe(0);
+      const base = path.join(dir, 'src/blocks', block.name);
+      const tsx = await readFile(path.join(base, `${componentName(block.name)}.tsx`), 'utf8');
+      expect(tsx).toContain("from '@kitn.ai/ui/react'");
+      expect(tsx).toContain(`export function ${componentName(block.name)}()`);
+      expect(tsx).toContain(`from './use${componentName(block.name)}'`);
+      expect(tsx).toContain('className=');
+      expect(tsx).not.toMatch(/<script\b/);
+      expect(tsx).not.toContain(' class="');
+      expect(existsSync(path.join(base, 'kai-elements.d.ts'))).toBe(false);
+      expect(existsSync(path.join(base, `use${componentName(block.name)}.ts`))).toBe(true);
+      expect(existsSync(path.join(base, `${block.name}.controller.ts`))).toBe(true);
+      const page = block.manifest.files.find((f) => f.type === 'registry:page')!;
+      expect(existsSync(path.join(base, page.target ?? path.basename(page.path)))).toBe(false);
     }
   });
 });
@@ -248,13 +344,13 @@ describe('the detection signals table, row by row', () => {
 });
 
 describe('per-block item JSON URLs resolve through the same path (the integration surface)', () => {
-  it('a fetched item reaches the same renderer the bundled block does', async () => {
-    // While the real blocks are unconverted that renderer REFUSES, so what
-    // this pins today is the fetch surface plus the refusal being identical
-    // through both doors. Task 9 converts them and the assertion goes back to
-    // "writes the same files the bundled block does".
-    const block = blocks[0];
-    const item = buildRegistryItem(block);
+  it('a fetched item writes the same files the bundled block does', async () => {
+    const block = blocks.find((b) => onContract(b))!;
+    // The item as the REGISTRY publishes it: gen-blocks.mjs runs
+    // withStrippedTwins before buildRegistryItem, so the twins are listed in
+    // the manifest a consumer fetches. The bundled copy already has them on
+    // disk, so nothing is re-stripped here.
+    const item = buildRegistryItem(withStrippedTwins(block, (source) => source));
     const dir = await project('url-case', { name: 'host', dependencies: { vue: '3' } });
     let fetched: string | undefined;
     const run = await runInto(dir, [`https://registry.example/r/${block.name}.json`], {
@@ -264,8 +360,15 @@ describe('per-block item JSON URLs resolve through the same path (the integratio
       },
     });
     expect(fetched).toBe(`https://registry.example/r/${block.name}.json`);
-    expect(run.code).toBe(1);
-    expect(run.err.join('\n')).toContain('controller.ts');
+    expect(run.code, run.err.join('\n')).toBe(0);
+    // The SAME renderer, so the same files: an item JSON carries the stripped
+    // twins gen-blocks wrote into it, which is why the fetched door does not
+    // need a stripper of its own.
+    const planned = planAdd({ blocks: [block], routes: [] }, { form: 'html', kitRange: KIT_RANGE, kitVersion: KIT_VERSION }).files;
+    expect(planned.length).toBeGreaterThan(0);
+    for (const file of planned) {
+      expect(existsSync(path.join(dir, file.path)), `${file.path} not written through the URL door`).toBe(true);
+    }
   });
 
   it('bare registryDependencies inside a URL item resolve as sibling URLs', async () => {

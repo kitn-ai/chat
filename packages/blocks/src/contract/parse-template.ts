@@ -377,6 +377,22 @@ export function parseTemplate(html: string, where: string): { template?: ParsedT
   };
 }
 
+/**
+ * Is this page on the authored contract at all?
+ *
+ * TRANSITIONAL, and it has one deletion site: Task 12 converts the last two
+ * blocks and the contract becomes mandatory, at which point every caller of
+ * this drops the branch and this function goes with it. Until then a page
+ * that declares no binding is a page nobody has converted yet, and the two
+ * callers (`checkBlockContracts`, which skips the grammar checks for one, and
+ * `renderCdnFormFiles`, which inlines its authored script the old way) must
+ * agree about which pages those are -- so the sniff is written ONCE, here,
+ * rather than restated at each site.
+ */
+export function isAuthoredContractPage(pageHtml: string): boolean {
+  return /\s(?:seed:|[.:@#*])[\w-]+\s*=/.test(pageHtml);
+}
+
 /** Every element node, document order -- what a renderer or a checker walks. */
 export function walkElements(nodes: readonly TemplateNode[]): Extract<TemplateNode, { type: 'element' }>[] {
   const out: Extract<TemplateNode, { type: 'element' }>[] = [];

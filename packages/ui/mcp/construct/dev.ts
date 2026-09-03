@@ -18,8 +18,8 @@ import { fileURLToPath } from 'node:url';
 import { generateProject, writeProject, type GeneratedFile, type GenerateOptions } from './codegen';
 import { npmArgs, npmInvocation } from './local-kit';
 import { validateConstruct, type Construct, type ConstructProblem } from './schema';
-import { generateCdnForm, type Block, type BlockManifest } from '@kitn.ai/blocks';
-import { BLOCK_FORMS, isBlockFormId, renderBlockForm, type FormFile } from '@kitn.ai/blocks/forms';
+import type { Block, BlockManifest } from '@kitn.ai/blocks';
+import { BLOCK_FORMS, isBlockFormId, renderBlockForm, renderCdnFormFiles, type FormFile } from '@kitn.ai/blocks/forms';
 import { buildableTemplates, inferTemplateId, templateById, type ConstructListing } from './templates';
 
 export type { ConstructListing } from './templates';
@@ -628,8 +628,8 @@ export function blocksDistDir(): string | undefined {
 // server is KEPT infrastructure and becomes the gallery's front door). It
 // serves the prebuilt page (dist/gallery), the derived registry artifacts
 // (dist/blocks — the public integration surface the CLI and MCP also
-// resolve), and a LIVE per-block preview: the same `generateCdnForm`
-// serializer gen-blocks.mjs uses, rendered at request time against the
+// resolve), and a LIVE per-block preview: the same `renderCdnFormFiles`
+// renderer gen-blocks.mjs uses, rendered at request time against the
 // server's own /kit/ mount of the package dist. That choice over iframing
 // the pinned-CDN form is deliberate and honest: the CDN form pins the
 // CURRENT package.json version, which during development is usually not
@@ -640,8 +640,8 @@ export function blocksDistDir(): string | undefined {
 // No origin guard needed: every gallery route is a GET and writes nothing.
 
 /** A registry ITEM (r/<name>.json — manifest + inlined file contents),
- *  reconstructed into the `Block` shape `generateCdnForm` takes. One
- *  serializer, two callers (gen-blocks at build, this route at serve). */
+ *  reconstructed into the `Block` shape the cdn renderer takes. One
+ *  renderer, two callers (gen-blocks at build, this route at serve). */
 export function blockFromRegistryItem(item: Omit<BlockManifest, 'files'> & { files: (BlockManifest['files'][number] & { content: string })[] }): Block {
   return {
     name: item.name,
@@ -651,7 +651,15 @@ export function blockFromRegistryItem(item: Omit<BlockManifest, 'files'> & { fil
 }
 
 /** The live-preview HTML for one block: its item JSON rendered through the
- *  one CDN-form serializer with the local `/kit/` base (no pins). */
+ *  one CDN-form renderer with the local `/kit/` base (no pins).
+ *
+ *  `renderCdnFormFiles`, not `generateCdnForm`: under the authored contract
+ *  the entry script is GENERATED, so the paste form renders the html form
+ *  first and inlines that. Handing the inliner the authored page instead
+ *  produces markup with no JavaScript in it, which still renders as a page
+ *  and so fails silently. It THROWS on a refusal where the serializer
+ *  answered `{ errors }`, and this function's contract is the answer shape,
+ *  so the throw is caught and reported through the path it already had. */
 export function galleryPreviewHtml(itemJsonText: string, version: string): { html?: string; errors: string[] } {
   let item: unknown;
   try {
@@ -659,10 +667,12 @@ export function galleryPreviewHtml(itemJsonText: string, version: string): { htm
   } catch (err) {
     return { errors: [`item JSON unreadable: ${err instanceof Error ? err.message : String(err)}`] };
   }
-  return generateCdnForm(blockFromRegistryItem(item as Parameters<typeof blockFromRegistryItem>[0]), {
-    version,
-    base: '/kit/',
-  });
+  try {
+    const block = blockFromRegistryItem(item as Parameters<typeof blockFromRegistryItem>[0]);
+    return { html: renderCdnFormFiles(block, { version, base: '/kit/' })[0].content, errors: [] };
+  } catch (err) {
+    return { errors: [err instanceof Error ? err.message : String(err)] };
+  }
 }
 
 /** Block names come from URLs here; the registry constrains real names to

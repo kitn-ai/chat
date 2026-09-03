@@ -151,6 +151,22 @@ if (blockFiles.length === 0) {
   );
 }
 
+// The same failure shape one level in. A block controller is TypeScript and
+// `add` renders the html form at RUNTIME with no stripper of its own, so a
+// tarball carrying the .ts source and not its stripped .js twin installs fine
+// and then refuses at the user's first `add`, naming a generator they never
+// ran. The twins are written by the build's post-copy walk; this asserts they
+// survived into the tarball.
+const twinless = blockFiles
+  .filter((f) => f.endsWith('.ts'))
+  .filter((f) => !files.includes(f.replace(/\.ts$/, '.js')));
+if (twinless.length > 0) {
+  problems.push(
+    `no .js twin in the tarball for ${twinless.length} block source(s) - ${twinless.join(', ')} - ` +
+      '`create-kai add` strips no types at runtime, so the html form would refuse at a user\'s first add',
+  );
+}
+
 // The template set, from the packed listing UNION the directories on disk. A
 // template that packed to nothing at all is absent from the listing, so deriving
 // the set from the listing alone would drop it from every per-template rule

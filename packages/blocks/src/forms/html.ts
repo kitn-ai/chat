@@ -253,7 +253,21 @@ export function renderBinder(opts: { blockName: string; template: ParsedTemplate
   return body;
 }
 
-export function renderHtmlForm(block: Block): FormFile[] {
+export interface HtmlFormOptions {
+  /**
+   * How the emitted scripts register the elements. `bundler` (the default) is
+   * the `add` form: the autoloader resolves element modules relative to its
+   * own URL and 404s every one of them through a bundler, so the scripts
+   * import the register-all bundle instead. `autoloader` is what the cdn
+   * single-file form asks for -- the autoloader IS its native pattern, and
+   * `renderCdnFormFiles` renders this form first and inlines it, so without
+   * the option the paste form would inline the bundler's specifier and pin a
+   * register-all bundle it never wanted.
+   */
+  registration?: 'bundler' | 'autoloader';
+}
+
+export function renderHtmlForm(block: Block, opts: HtmlFormOptions = {}): FormFile[] {
   const pageEntry = block.manifest.files.find((f) => f.type === 'registry:page');
   if (!pageEntry) throw new Error(`${block.name}: no registry:page entry to render the html form from`);
   const pageHtml = block.files.get(pageEntry.path) as string;
@@ -275,6 +289,9 @@ export function renderHtmlForm(block: Block): FormFile[] {
   const crossErrors = crossCheckBindings(parsed.template, analysis.shape, `${block.name}/${pageEntry.path}`);
   if (crossErrors.length) throw new Error(`${block.name}: ${crossErrors.join('; ')}`);
 
+  const adaptRegistration =
+    (opts.registration ?? 'bundler') === 'autoloader' ? (js: string): string => js : adaptRegistrationForBundler;
+
   const entryScript = `${block.name}.js`;
   const files: FormFile[] = [];
   const put = (path: string, content: string): void => {
@@ -282,7 +299,7 @@ export function renderHtmlForm(block: Block): FormFile[] {
   };
 
   put(pageEntry.path, serializeTemplate(parsed.template, { entryScript }));
-  put(entryScript, adaptRegistrationForBundler(renderBinder({ blockName: block.name, template: parsed.template, shape: analysis.shape })));
+  put(entryScript, adaptRegistration(renderBinder({ blockName: block.name, template: parsed.template, shape: analysis.shape })));
 
   for (const entry of block.manifest.files) {
     if (entry.type === 'registry:page') continue;
@@ -295,7 +312,7 @@ export function renderHtmlForm(block: Block): FormFile[] {
           `${block.name}: ${twin} is missing. The html form ships JavaScript, and the stripped twin is written at generation time by packages/ui/scripts/gen-blocks.mjs (esbuild) or packages/create-kai/scripts/build.mjs. Run a build.`,
         );
       }
-      put(twin, adaptRegistrationForBundler(stripped));
+      put(twin, adaptRegistration(stripped));
       continue;
     }
     put(entry.path, block.files.get(entry.path) as string);

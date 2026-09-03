@@ -1,3 +1,10 @@
+// @vitest-environment node
+//
+// NODE, not the project's jsdom: this suite runs esbuild's transform to derive
+// the same stripped `.js` twin gen-blocks.mjs writes, and esbuild refuses to
+// load under jsdom ("new TextEncoder().encode('') instanceof Uint8Array is
+// incorrectly false" -- jsdom's TextEncoder produces a foreign Uint8Array).
+// Nothing here touches the DOM.
 /**
  * The four blocks assertions whose inputs live in THIS package: the real
  * integration catalog, the real element-nonscalar map, this package's version,
@@ -17,15 +24,16 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { createRequire } from 'node:module';
+import { transformSync } from 'esbuild';
 import {
   discoverBlocks,
   buildRegistryIndex,
   buildRegistryItem,
-  generateCdnForm,
   checkBlockContracts,
+  isAuthoredContractPage,
   type RawBlockSource,
 } from '@kitn.ai/blocks';
-import { handlerName } from '@kitn.ai/blocks/forms';
+import { handlerName, renderCdnFormFiles, withStrippedTwins } from '@kitn.ai/blocks/forms';
 import { onName } from '../../scripts/gen-element-react.mjs';
 import { listIntegrations } from '../registry';
 
@@ -76,6 +84,18 @@ describe("the real blocks against this package's real inputs", () => {
   const sources = scanRealBlocks();
   const { blocks, errors } = discoverBlocks(sources, ROUTES);
 
+  /**
+   * The twins, derived the same way gen-blocks.mjs derives them.
+   *
+   * The built artifacts carry a `.js` twin beside every `.ts` block source,
+   * so comparing them against `buildRegistryItem(block)` over the AUTHORED
+   * block compares two different things. This package has esbuild, so it can
+   * run the generator's own transform rather than trusting the built file.
+   */
+  const stripTypes = (source: string, fileName: string): string =>
+    transformSync(source, { loader: 'ts', format: 'esm', target: 'es2022', sourcefile: fileName }).code;
+  const twinned = blocks.map((b) => withStrippedTwins(b, stripTypes));
+
   it('discovers every block directory, error-free, against the real integration catalog', () => {
     expect(errors).toEqual([]);
     expect(blocks.length).toBeGreaterThanOrEqual(1); // a zero-block scan is a broken walk
@@ -88,23 +108,62 @@ describe("the real blocks against this package's real inputs", () => {
 
   it('the built dist/blocks/registry.json and r/<name>.json match what the current sources produce', () => {
     const builtIndex = JSON.parse(readBuiltArtifact(join(DIST_BLOCKS, 'registry.json')));
-    expect(builtIndex).toEqual(buildRegistryIndex(blocks));
-    for (const block of blocks) {
+    expect(builtIndex).toEqual(buildRegistryIndex(twinned));
+    for (const block of twinned) {
       const built = JSON.parse(readBuiltArtifact(join(DIST_BLOCKS, 'r', `${block.name}.json`)));
       expect(built).toEqual(buildRegistryItem(block));
     }
   });
 
+  it('the emitted item JSON carries a .js twin beside every .ts source', () => {
+    // The anti-vacuity floor for the line above: if `twinned` silently added
+    // nothing, the comparison would still pass and prove less than it reads.
+    let checked = 0;
+    for (const block of twinned) {
+      const built = JSON.parse(readBuiltArtifact(join(DIST_BLOCKS, 'r', `${block.name}.json`)));
+      const paths = (built.files as { path: string }[]).map((f) => f.path);
+      for (const path of paths.filter((f) => f.endsWith('.ts'))) {
+        expect(paths, `${block.name}: ${path} has no .js twin in the item JSON`).toContain(
+          path.replace(/\.ts$/, '.js'),
+        );
+        checked += 1;
+      }
+    }
+    expect(checked, 'no .ts block source at all - this check would pass vacuously').toBeGreaterThan(0);
+  });
+
   it('the built cdn.html and generated driver page match what the current sources produce, pinned to this package version', () => {
-    for (const block of blocks) {
-      const cdn = generateCdnForm(block, { version: VERSION });
-      expect(cdn.errors).toEqual([]);
-      expect(readBuiltArtifact(join(DIST_BLOCKS, 'r', `${block.name}.cdn.html`))).toBe(cdn.html);
-      const local = generateCdnForm(block, { version: VERSION, base: '/kit/' });
+    for (const block of twinned) {
+      const cdn = renderCdnFormFiles(block, { version: VERSION })[0].content;
+      expect(readBuiltArtifact(join(DIST_BLOCKS, 'r', `${block.name}.cdn.html`))).toBe(cdn);
+      const local = renderCdnFormFiles(block, { version: VERSION, base: '/kit/' })[0].content;
       expect(
         readBuiltArtifact(join(ROOT, 'scripts/block-driver/pages/generated', block.name, 'index.html')),
-      ).toBe(local.html);
+      ).toBe(local);
     }
+  });
+
+  it('the emitted cdn form and driver page carry the binder and the controller, not just markup', () => {
+    // The failure this catches is silent by construction: a form whose script
+    // never got inlined is still valid HTML and still renders a page.
+    // `createController` is asserted only for blocks already ON the authored
+    // contract -- TRANSITIONAL, and it widens on its own as Task 12 converts
+    // the rest, with the floor below refusing to let it cover zero.
+    let converted = 0;
+    for (const block of blocks) {
+      const pageEntry = block.manifest.files.find((f) => f.type === 'registry:page');
+      const authored = isAuthoredContractPage(block.files.get(pageEntry?.path ?? '') ?? '');
+      if (authored) converted += 1;
+      for (const path of [
+        join(DIST_BLOCKS, 'r', `${block.name}.cdn.html`),
+        join(ROOT, 'scripts/block-driver/pages/generated', block.name, 'index.html'),
+      ]) {
+        const html = readBuiltArtifact(path);
+        expect(html, path).toContain('window.__blockReady = true');
+        if (authored) expect(html, path).toContain('createController');
+      }
+    }
+    expect(converted, 'no block is on the authored contract - the controller half checks nothing').toBeGreaterThan(0);
   });
 });
 

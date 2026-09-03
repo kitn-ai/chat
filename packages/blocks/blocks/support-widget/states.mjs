@@ -34,7 +34,7 @@ export default {
   viewport: { width: 1100, height: 760 },
   schemes: ['light', 'dark'],
   ready: (page) => page
-    .waitForFunction(() => window.__widgetReady === true, null, { timeout: 15000 })
+    .waitForFunction(() => window.__blockReady === true, null, { timeout: 15000 })
     .then(() => page.waitForTimeout(400)),
 
   pages: {

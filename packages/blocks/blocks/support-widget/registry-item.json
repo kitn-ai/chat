@@ -6,14 +6,14 @@
   "categories": ["widget", "support"],
   "files": [
     { "path": "support-widget.html", "type": "registry:page" },
-    { "path": "support-widget.js", "type": "registry:file" },
+    { "path": "support-widget.controller.ts", "type": "registry:file" },
     { "path": "support-widget.css", "type": "registry:file" },
-    { "path": "mock.js", "type": "registry:file" }
+    { "path": "mock.ts", "type": "registry:file" }
   ],
   "dependencies": ["@kitn.ai/ui"],
   "registryDependencies": [],
   "cssVars": { "light": {}, "dark": {} },
   "envVars": {},
-  "docs": "Runs against a scripted local mock out of the box - no endpoint, no key. To go live, replace the mock responder in support-widget.js with a fetch to your chat endpoint and keep parsing through the @kitn.ai/ui/wire readers.",
+  "docs": "Runs against a scripted local mock out of the box - no endpoint, no key. To go live, replace the mock responder in support-widget.controller.ts with a fetch to your chat endpoint and keep parsing through the @kitn.ai/ui/wire readers.",
   "meta": { "iframeHeight": "760px" }
 }

@@ -697,11 +697,45 @@ const ITEM = {
       path: 'demo-block.html',
       type: 'registry:page' as const,
       content:
-        '<!doctype html>\n<html><head><link rel="stylesheet" href="./demo-block.css" /></head>' +
-        '<body><kai-panel></kai-panel><script type="module" src="./demo-block.js"></script></body></html>',
+        '<!doctype html>\n<html lang="en"><head><link rel="stylesheet" href="./demo-block.css" /></head>' +
+        '<body><div data-block-root><kai-panel :hidden="collapsed" @kai-click="open"></kai-panel></div></body></html>',
     },
-    { path: 'demo-block.js', type: 'registry:file' as const, content: "import '@kitn.ai/ui/autoloader';\nconsole.log('hi');" },
+    {
+      path: 'demo-block.controller.ts',
+      type: 'registry:file' as const,
+      content:
+        'export interface DemoBlockState { collapsed: boolean; }\n' +
+        'export interface DemoBlockRefs { panel: unknown; }\n' +
+        'export interface DemoBlockActions { open(): void; boot(): Promise<void>; }\n' +
+        'export function createController(deps: unknown) { return deps as never; }\n',
+    },
+    // The `.js` twin is in the fixture BY HAND because this route renders
+    // from an item JSON, and in production gen-blocks.mjs is what puts it
+    // there (there is no stripper inside the published CLI).
+    { path: 'demo-block.controller.js', type: 'registry:file' as const, content: 'export function createController(deps) { return deps; }\n' },
     { path: 'demo-block.css', type: 'registry:file' as const, content: 'body { margin: 0; }' },
+  ],
+};
+
+/** A block that was never converted: an authored `<script type="module">` and
+ *  no controller. The refusal path is permanent behaviour -- a consumer with
+ *  an old block hits it -- so it keeps a fixture of its own after the shared
+ *  one converts. */
+const UNCONVERTED_ITEM = {
+  name: 'old-block',
+  title: 'Old block',
+  description: 'A block authored before the contract.',
+  type: 'registry:block' as const,
+  files: [
+    {
+      path: 'old-block.html',
+      type: 'registry:page' as const,
+      content:
+        '<!doctype html>\n<html><head><link rel="stylesheet" href="./old-block.css" /></head>' +
+        '<body><kai-panel></kai-panel><script type="module" src="./old-block.js"></script></body></html>',
+    },
+    { path: 'old-block.js', type: 'registry:file' as const, content: "import '@kitn.ai/ui/autoloader';\nconsole.log('hi');" },
+    { path: 'old-block.css', type: 'registry:file' as const, content: 'body { margin: 0; }' },
   ],
 };
 
@@ -712,8 +746,9 @@ function galleryFixture(): { dirs: GalleryDirs; root: string } {
   const pageDir = join(root, 'dist', 'gallery');
   mkdirSync(join(blocksDir, 'r'), { recursive: true });
   mkdirSync(join(pageDir, 'assets'), { recursive: true });
-  writeF(join(blocksDir, 'registry.json'), JSON.stringify({ items: [{ name: 'demo-block' }] }));
+  writeF(join(blocksDir, 'registry.json'), JSON.stringify({ items: [{ name: 'demo-block' }, { name: 'old-block' }] }));
   writeF(join(blocksDir, 'r', 'demo-block.json'), JSON.stringify(ITEM));
+  writeF(join(blocksDir, 'r', 'old-block.json'), JSON.stringify(UNCONVERTED_ITEM));
   writeF(join(blocksDir, 'r', 'demo-block.cdn.html'), '<!doctype html><html><body>cdn form</body></html>');
   writeF(join(pageDir, 'index.html'), '<!doctype html><html><body>gallery shell</body></html>');
   writeF(join(pageDir, 'assets', 'app.js'), 'console.log("app");');
@@ -772,12 +807,22 @@ describe('the gallery route table', () => {
       expect(out?.kind === 'file' && out.type, form).toBe('application/json');
       return out?.kind === 'file' ? (JSON.parse(String(out.body)) as { files: { path: string; content: string }[] }).files : [];
     };
-    // Neither html NOR react is asserted here: this fixture is an UNCONVERTED
-    // block (an authored <script type="module"> and an imperative
-    // demo-block.js), and both forms refuse one now. Their refusal has its own
-    // case below; the positive assertions come back with the converted
-    // fixture.
-    // cdn — one self-contained file with imports pinned to the served version.
+    // html - the serialized page, the GENERATED binder, the stripped
+    // controller twin and the css. The binder ends with the readiness line
+    // (the IIFE wrap went with the authored entry script), and registration
+    // is adapted for a bundler.
+    const html = filesOf('html');
+    expect(html.map((f) => f.path).sort()).toEqual([
+      'demo-block.controller.js', 'demo-block.css', 'demo-block.html', 'demo-block.js',
+    ]);
+    const htmlJs = html.find((f) => f.path === 'demo-block.js')!.content;
+    expect(htmlJs).toContain('window.__blockReady = true;');
+    expect(htmlJs).toContain("import '@kitn.ai/ui/elements'");
+    // react - the component, the hook, the controller SOURCE and a README.
+    expect(filesOf('react').map((f) => f.path)).toEqual(
+      expect.arrayContaining(['DemoBlock.tsx', 'useDemoBlock.ts', 'demo-block.controller.ts', 'README.md']),
+    );
+    // cdn - one self-contained file with imports pinned to the served version.
     // The expected URL is DERIVED from the fixture's version, never a literal
     // pin: lint:cdn-pins scans every @kitn.ai/ui@<semver> literal in the tree
     // and would (rightly) flag a hand-typed one here as a live unwired pin.
@@ -788,10 +833,12 @@ describe('the gallery route table', () => {
 
   it('an unconverted block gets a loud refusal from the html AND react forms, not a 404', () => {
     const { dirs } = galleryFixture();
+    // On its OWN fixture now that the shared one is converted: the refusal is
+    // permanent behaviour, because a consumer with an old block hits it.
     // One `try` in dev.ts dispatches every form, so both refusals arrive the
     // same way and this is one case rather than two.
     for (const form of ['html', 'react']) {
-      const out = handleGalleryRequest(`/gallery/api/form/demo-block/${form}`, dirs);
+      const out = handleGalleryRequest(`/gallery/api/form/old-block/${form}`, dirs);
       expect(out?.kind, form).toBe('file');
       expect(out?.kind === 'file' && out.status, form).toBe(500);
       const body = String(out?.kind === 'file' ? out.body : '');
@@ -799,7 +846,7 @@ describe('the gallery route table', () => {
       // This fixture's page still carries its own <script type="module">, which
       // is the FIRST thing the authored grammar refuses, so that is the reason
       // it reports; the message points at the controller file as the fix.
-      expect(body, form).toContain(`the ${form} form of "demo-block" cannot be rendered`);
+      expect(body, form).toContain(`the ${form} form of "old-block" cannot be rendered`);
       expect(body, form).toContain('the entry script is GENERATED');
       expect(body, form).toContain('controller.ts');
     }
@@ -816,15 +863,11 @@ describe('the gallery route table', () => {
 
   it('GET /gallery/api/zip/<block>/<form> is the SAME rendered files as a store-only zip download', () => {
     const { dirs } = galleryFixture();
-    // `cdn`, not `html`, only while this fixture is UNCONVERTED: the html and
-    // react forms both refuse an unconverted block now, and this case is about
-    // the zip being the form route's own bytes rather than about which form.
-    // It goes back to html with the converted fixture.
-    const form = handleGalleryRequest('/gallery/api/form/demo-block/cdn', dirs);
+    const form = handleGalleryRequest('/gallery/api/form/demo-block/html', dirs);
     const files = form?.kind === 'file' ? (JSON.parse(String(form.body)) as { files: { path: string; content: string }[] }).files : [];
-    const zip = handleGalleryRequest('/gallery/api/zip/demo-block/cdn', dirs);
+    const zip = handleGalleryRequest('/gallery/api/zip/demo-block/html', dirs);
     expect(zip?.kind === 'file' && zip.type).toBe('application/zip');
-    expect(zip?.kind === 'file' && zip.download).toBe('demo-block-cdn.zip');
+    expect(zip?.kind === 'file' && zip.download).toBe('demo-block-html.zip');
     const body = zip?.kind === 'file' ? (zip.body as Buffer) : Buffer.alloc(0);
     // Byte-equal to the form route's files, by construction: same renderer,
     // and store-only means each file's exact bytes appear in the archive.
@@ -923,11 +966,10 @@ describe('the gallery preview serializer seam', () => {
   it('blockFromRegistryItem reconstructs the Block shape the generator takes (manifest without content, files as a map)', () => {
     const block = blockFromRegistryItem(ITEM);
     expect(block.name).toBe('demo-block');
-    expect(block.manifest.files.map((f) => Object.keys(f).sort())).toEqual([
-      ['path', 'type'],
-      ['path', 'type'],
-      ['path', 'type'],
-    ]);
+    // The shape, per entry, over however many the fixture holds - a hand-typed
+    // row count would just have to move every time the fixture gains a file.
+    expect(block.manifest.files).toHaveLength(ITEM.files.length);
+    for (const entry of block.manifest.files) expect(Object.keys(entry).sort()).toEqual(['path', 'type']);
     expect(block.files.get('demo-block.css')).toBe('body { margin: 0; }');
   });
 
