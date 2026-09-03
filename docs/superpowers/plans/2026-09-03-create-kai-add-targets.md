@@ -1852,9 +1852,14 @@ function add(cwd, block, extra = []) {
 
 const results = [];
 
-/** A project directory with the given package.json, in its own mkdtemp root. */
+/**
+ * A project directory with the given package.json, in its own mkdtemp root
+ * under tmpRoot (not under toolsDir - R12 only forbids toolsDir being an
+ * ancestor of a leg, and nesting here means cleanup()'s single rmSync of
+ * tmpRoot removes every leg directory too, not just the react host).
+ */
 function project(label, pkg) {
-  const dir = mkdtempSync(path.join(tmpdir(), `verify-add-${label}-`));
+  const dir = mkdtempSync(path.join(tmpRoot, `verify-add-${label}-`));
   if (pkg !== null) writeFileSync(path.join(dir, 'package.json'), JSON.stringify(pkg, null, 2));
   return dir;
 }
