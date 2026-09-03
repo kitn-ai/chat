@@ -209,6 +209,16 @@ function convertElement(el: P5Element, ctx: Ctx, scope: string | undefined, hasP
     if (refName !== undefined) {
       fail(ctx, line, `an element carrying *for cannot also carry \`#ref\`: the ref would name one of many rows.`);
     }
+    // A `*for` inside a `*for` subtree has no answer in the binder, and the
+    // binder would not say so: the inner repeat ships as its own <template>
+    // nested inside the outer one's content, where a document-scope
+    // `querySelector('template[data-kai-for="N"]')` cannot reach it, and its
+    // row setters would address markers that only exist per outer clone. The
+    // refusal is here rather than in the renderer because the grammar is
+    // where the shape is decided (R21).
+    if (scope !== undefined) {
+      fail(ctx, line, `*for="${repeat.item} of ${repeat.list}" is a nested \`*for\`, inside the \`*for\` that declares \`${scope}\`. The binder clones ONE template per repeat, from document scope, and has no answer for a template inside a template: lift the inner list onto its own element outside the repeat.`);
+    }
   } else if (keyValue !== undefined) {
     fail(ctx, line, `:key="${keyValue}" is only legal on an element carrying \`*for\`.`);
   }

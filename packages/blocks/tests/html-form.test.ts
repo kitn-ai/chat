@@ -128,6 +128,46 @@ describe('the html form', () => {
     expect(rowBody).toContain('inRow(node,');
   });
 
+  it('hands the row function the document state a plain-identifier binding needs', () => {
+    // The defect: a plain identifier inside a `*for` is legal (it reads a
+    // State field, not a row field), and `applyRowsN` is a MODULE-LEVEL
+    // function. Emitting `state.title` in there is a ReferenceError on the
+    // first apply, because `state` is a local of `apply()`.
+    const b = block();
+    (b.files as Map<string, string>).set(
+      'fixture.html',
+      PAGE.replace(
+        '<span .textContent="row.title"></span>',
+        '<span .textContent="row.title"></span>\n          <span .textContent="title"></span>',
+      ),
+    );
+    const binder = byPath(renderHtmlForm(withStrippedTwins(b, (s) => s))).get('fixture.js')!;
+    expect(binder).toMatch(/function applyRows\d+\(rows, state\)/);
+    expect(binder).toMatch(/applyRows\d+\(state\.rows, state\)/);
+  });
+
+  it('emits a binder that PARSES', () => {
+    // The binder has no typecheck behind it anywhere, so the cheapest real
+    // check is that a JavaScript parser accepts it. esbuild is already a
+    // devDependency for the strip; this reuses it as a syntax gate over the
+    // one file nothing else compiles.
+    const binder = byPath(renderHtmlForm(stripped())).get('fixture.js')!;
+    expect(() => transformSync(binder, { loader: 'js', format: 'esm' })).not.toThrow();
+  });
+
+  it('keeps a comment verbatim instead of escaping what parse5 never decoded', () => {
+    // parse5 does NOT decode entities inside a comment, so escaping again
+    // turns `<!-- a & b -->` into `<!-- a &amp; b -->` and an authored
+    // `&amp;` into `&amp;amp;`. Corruption, one round per render.
+    const b = block();
+    (b.files as Map<string, string>).set(
+      'fixture.html',
+      PAGE.replace('<p class="host-stand-in">stand-in</p>', '<!-- a & b, and &amp; too -->'),
+    );
+    const page = byPath(renderHtmlForm(withStrippedTwins(b, (s) => s))).get('fixture.html')!;
+    expect(page).toContain('<!-- a & b, and &amp; too -->');
+  });
+
   it('removes an attribute on false/null/undefined and NOT on 0 or the empty string', () => {
     const binder = byPath(renderHtmlForm(stripped())).get('fixture.js')!;
     const setAttr = binder.slice(binder.indexOf('const setAttr'), binder.indexOf('const controller'));

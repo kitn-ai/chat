@@ -157,6 +157,12 @@ describe('every refusal', () => {
     expect(errsFor('<ul><li *for="row of rows" :key="row.id" #ref="x"></li></ul>')).toContain('cannot also carry `#ref`');
   });
 
+  it('refuses a *for nested inside another *for subtree', () => {
+    const errs = errsFor('<ul><li *for="row of rows" :key="row.id"><span *for="tag of tags" :key="tag.id"></span></li></ul>');
+    expect(errs).toContain('nested `*for`');
+    expect(errs).toContain('lift');
+  });
+
   it('refuses a duplicate #ref name', () => {
     expect(errsFor('<kai-dock #ref="a"></kai-dock><kai-dock #ref="a"></kai-dock>')).toContain('#ref="a" is declared twice');
   });

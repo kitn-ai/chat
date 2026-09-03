@@ -47,7 +47,12 @@ const escAttr = (s: string): string => ascii(s.replace(/&/g, '&amp;').replace(/<
 
 function serializeNode(node: TemplateNode, pad: string): string {
   if (node.type === 'text') return `${pad}${escText(node.text.trim())}`;
-  if (node.type === 'comment') return `${pad}<!--${escText(node.text)}-->`;
+  // A comment's text is VERBATIM, ASCII-folded and nothing else. parse5 does
+  // not decode entities inside a comment (its content is not character data),
+  // so running it through escText would escape what was never unescaped:
+  // `<!-- a & b -->` becomes `<!-- a &amp; b -->` and an authored `&amp;`
+  // becomes `&amp;amp;`, one round of corruption per render.
+  if (node.type === 'comment') return `${pad}<!--${ascii(node.text)}-->`;
   const attrs = node.attrs.map((a) => (a.value === '' ? ` ${a.name}` : ` ${a.name}="${escAttr(a.value)}"`)).join('');
   const marker = node.marker === undefined ? '' : ` data-kai-b="${node.marker}"`;
   const open = `<${node.tag}${attrs}${marker}>`;
@@ -157,7 +162,10 @@ export function renderBinder(opts: { blockName: string; template: ParsedTemplate
       [
         `const rowTemplate${n} = document.querySelector('template[data-kai-for="${n}"]');`,
         `const rowParent${n} = rowTemplate${n}.parentElement;`,
-        `function applyRows${n}(rows) {`,
+        `// \`state\` is a PARAMETER, not a closure read: a plain identifier`,
+        `// inside a *for is legal and reads a State field, and this function`,
+        `// is module-level, so \`state\` would otherwise be undefined here.`,
+        `function applyRows${n}(rows, state) {`,
         `  const existing = new Map();`,
         `  for (const node of rowParent${n}.querySelectorAll(':scope > [data-kai-row="${n}"]')) existing.set(node.getAttribute('data-kai-key'), node);`,
         `  let prev = rowTemplate${n};`,
@@ -179,7 +187,7 @@ export function renderBinder(opts: { blockName: string; template: ParsedTemplate
         `}`,
       ].join('\n'),
     );
-    applies.push(`  applyRows${n}(state.${el.repeat.list});`);
+    applies.push(`  applyRows${n}(state.${el.repeat.list}, state);`);
   }
 
   const body = [
@@ -216,7 +224,7 @@ export function renderBinder(opts: { blockName: string; template: ParsedTemplate
           '// seed: written ONCE, after registration and before the first apply,',
           '// then never again. "After registration" is the honest wording: an',
           '// element that captures a prop at upgrade (kai-view-stack captures',
-          '// `view` into initialView, view-stack.tsx:125) has already captured',
+          '// `view` into initialView, in view-stack.tsx) has already captured',
           '// by the time this line runs, so a seed on such a prop acts as the',
           '// first NAVIGATION rather than as a deep link. That is the same',
           '// landing view here, and it is the behaviour to expect.',
