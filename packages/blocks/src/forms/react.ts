@@ -17,7 +17,7 @@
  * import and the await the other forms need would be noise here.
  */
 import { parseTemplate, walkElements } from '../contract/parse-template';
-import { analyzeController } from '../contract/analyze-controller';
+import { analyzeController, crossCheckBindings } from '../contract/analyze-controller';
 import { fileTarget } from '../targets';
 import { pascal, type Block } from '../registry';
 // Never './index': index.ts re-exports this module, so importing the barrel
@@ -33,14 +33,24 @@ const pascalTag = (tag: string): string => pascal(tag.replace(/^kai-/, ''));
 export const handlerName = (event: string): string => `on${pascal(event.replace(/^kai-/, ''))}`;
 
 const isKai = (tag: string): boolean => tag.startsWith('kai-');
+const jsxText = (text: string): string => text.replace(/[{}]/g, (c) => `{'${c}'}`);
 const read = (value: string, scope: string | undefined): string =>
   scope && value.startsWith(`${scope}.`) ? value : `state.${value}`;
 
+/** The JSX prop NAME a literal attribute lands on. `data-*` and `aria-*` are
+ *  verbatim: React takes them as authored, and camelCasing them invents a
+ *  `dataTestid` / `ariaLabel` that is not on the wrappers' closed prop type,
+ *  so the emitted file would not compile. */
+function literalPropName(tag: string, name: string): string {
+  if (name === 'class') return 'className';
+  if (name === 'for') return 'htmlFor';
+  if (name.startsWith('data-') || name.startsWith('aria-')) return name;
+  return isKai(tag) && name !== 'slot' && name !== 'id' ? camel(name) : name;
+}
+
 /** A literal attribute as a JSX prop. */
 function literalProp(tag: string, name: string, value: string): string {
-  if (name === 'class') return `className="${value}"`;
-  if (name === 'for') return `htmlFor="${value}"`;
-  const prop = isKai(tag) && name !== 'slot' && name !== 'id' ? camel(name) : name;
+  const prop = literalPropName(tag, name);
   if (value === '') return prop;
   // The kit's own documented "default-true flag off" idiom does not survive
   // translation: the generated prop is `boolean`, so the string has to become
@@ -73,7 +83,11 @@ interface Emit {
 }
 
 function printNode(node: TemplateNode, pad: string, scope: string | undefined, emit: Emit): string {
-  if (node.type === 'text') return `${pad}${node.text.trim()}`;
+  // A brace in text opens a JSX expression, so a literal one is emitted as
+  // an expression holding the character. The predecessor refused the page
+  // instead; there is no reason to, and refusing a page over an apostrophe's
+  // neighbour is the kind of gap a consumer hits and cannot fix.
+  if (node.type === 'text') return `${pad}${jsxText(node.text.trim())}`;
   if (node.type === 'comment') return `${pad}{/*${node.text.replace(/\*\//g, '* /')}*/}`;
 
   const tag = isKai(node.tag) ? pascalTag(node.tag) : node.tag;
@@ -95,10 +109,20 @@ function printNode(node: TemplateNode, pad: string, scope: string | undefined, e
   const childScope = node.repeat ? node.repeat.item : scope;
 
   const refExpr = (b: Binding): string => `ref={(el) => { refs.current.${b.name} = el; }}`;
+  const bindingProps = node.bindings
+    .map((b) => bindingProp(node.tag, b, childScope, refExpr))
+    .filter((p): p is string => p !== null);
+  // A LITERAL BESIDE ITS OWN BINDING is dropped, and the binding wins. The
+  // authored page carries both when the literal is what the element shows
+  // BEFORE registration, which the html form needs and React does not: a prop
+  // applies on the first render. Emitting both is a duplicate JSX attribute.
+  const bound = new Set(bindingProps.map((p) => p.split(/[={\s]/)[0]));
   const props = [
     ...(refBinding ? [] : seedRef ? [`ref={(el) => { seedRef${node.marker}.current = el; }}`] : []),
-    ...node.attrs.map((a) => literalProp(node.tag, a.name, a.value)),
-    ...node.bindings.map((b) => bindingProp(node.tag, b, childScope, refExpr)).filter((p): p is string => p !== null),
+    ...node.attrs
+      .filter((a) => !bound.has(literalPropName(node.tag, a.name)))
+      .map((a) => literalProp(node.tag, a.name, a.value)),
+    ...bindingProps,
   ];
 
   const textBinding = node.bindings.find((b) => b.kind === 'prop' && b.name === 'textContent');
@@ -133,6 +157,22 @@ export function renderReactForm(block: Block): FormFile[] {
   const analysis = analyzeController(controllerSource, name, `${block.name}/${controllerPath}`);
   if (!analysis.shape) throw new Error(`${block.name}: ${analysis.errors.join('; ')}`);
 
+  // The cross-check is not the gate's alone: `create-kai add` and `kai dev`
+  // render without ever running checkBlockContracts, so it runs HERE too or
+  // those two front doors emit a tree that calls a function nobody exports.
+  const crossErrors = crossCheckBindings(parsed.template, analysis.shape, `${block.name}/${pageEntry.path}`);
+  if (crossErrors.length) throw new Error(`${block.name}: ${crossErrors.join('; ')}`);
+
+  // JSX has no string `style`, and there is no honest translation: parsing CSS
+  // text into a style object is a second CSS implementation. Refused by name,
+  // with the fix, rather than emitted as a file that does not compile.
+  const styled = walkElements(parsed.template.body).find((el) => el.attrs.some((a) => a.name === 'style'));
+  if (styled) {
+    throw new Error(
+      `${block.name}: ${pageEntry.path}:${styled.line}: <${styled.tag}> sets style="..." as a string, which JSX does not accept. Move the rule into the block stylesheet.`,
+    );
+  }
+
   const emit: Emit = { seeds: [], refNames: new Set() };
   // THE BLOCK ROOT, not the page. The authored page opens with a host
   // stand-in paragraph so the html and cdn forms are a runnable PAGE; a react
@@ -149,10 +189,14 @@ export function renderReactForm(block: Block): FormFile[] {
   // react compile cell on it.
   const components = [...new Set(walkElements([root]).filter((el) => isKai(el.tag)).map((el) => pascalTag(el.tag)))].sort();
 
+  const hooks = [...(emit.seeds.length ? ['useEffect'] : []), ...(emit.refNames.size ? ['useRef'] : [])];
   const tsx = [
     `// GENERATED by @kitn.ai/blocks from ${block.name}.html and ${controllerPath}.`,
     `// It is your code now: edit freely, and regenerate to start over.`,
-    `import { useEffect${emit.refNames.size ? ', useRef' : ''} } from 'react';`,
+    // ONLY the hooks this file uses: `useEffect` is emitted for a seed and for
+    // nothing else, so importing it unconditionally is TS6133 under the
+    // `noUnusedLocals` a stock react-ts project turns on.
+    ...(hooks.length ? [`import { ${hooks.join(', ')} } from 'react';`] : []),
     `import { ${components.join(', ')} } from '@kitn.ai/ui/react';`,
     `import { use${name} } from './use${name}';`,
     ...parsed.template.stylesheets.map((css) => `import './${css}';`),
@@ -204,7 +248,7 @@ export function renderReactForm(block: Block): FormFile[] {
     '',
     `export function use${name}(): Use${name} {`,
     `  // The refs object is stable and the controller reads it lazily, which is`,
-    `  // why deps.refs is a getter: here both handles are still null.`,
+    `  // why deps.refs is a getter: here the handles are still null.`,
     `  const refs = useRef<${name}Refs>({ ${analysis.shape.refNames.map((r) => `${r}: null`).join(', ')} });`,
     `  const [controller] = useState(() => createController({ refs: () => refs.current }));`,
     `  const state = useSyncExternalStore(controller.subscribe, controller.state, controller.state);`,

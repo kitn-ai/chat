@@ -148,6 +148,98 @@ describe('the react form', () => {
     expect(tsx).not.toContain('whenDefined');
   });
 
+  it('imports only the react hooks it actually uses', () => {
+    // `useEffect` is emitted ONLY for a seed, so importing it unconditionally
+    // is TS6133 (`noUnusedLocals`) in a stock react-ts project: the emitted
+    // file does not compile in the consumer's tree, and nothing here would
+    // have said so.
+    const seeded = byPath(renderReactForm(block())).get('Fixture.tsx')!;
+    expect(seeded).toContain("import { useEffect } from 'react';");
+
+    const b = block();
+    (b.files as Map<string, string>).set('fixture.html', PAGE.replace(' seed:position="bottom-end"', ''));
+    const unseeded = byPath(renderReactForm(b)).get('Fixture.tsx')!;
+    expect(unseeded).not.toContain('useEffect');
+    expect(unseeded).not.toContain("from 'react';"); // no hooks at all, so no import line
+
+    // A seed on an element with no `#ref` allocates one, which is the other
+    // hook the list can contain.
+    const c = block();
+    (c.files as Map<string, string>).set(
+      'fixture.html',
+      PAGE.replace('<kai-conversations>', '<kai-conversations seed:density="panel">'),
+    );
+    expect(byPath(renderReactForm(c)).get('Fixture.tsx')).toContain("import { useEffect, useRef } from 'react';");
+  });
+
+  it('passes data- and aria- attributes through verbatim rather than camelCasing them', () => {
+    // React takes `data-*` and `aria-*` as authored. CamelCasing them invents
+    // `dataTestid` and `ariaLabel`, which are not on the wrappers' closed prop
+    // type, so the emitted file fails to compile.
+    const b = block();
+    (b.files as Map<string, string>).set(
+      'fixture.html',
+      PAGE.replace('<kai-dock data-block-root', '<kai-dock data-block-root data-testid="dock" aria-label="Support"'),
+    );
+    const tsx = byPath(renderReactForm(b)).get('Fixture.tsx')!;
+    expect(tsx).toContain('data-testid="dock"');
+    expect(tsx).toContain('aria-label="Support"');
+    expect(tsx).not.toContain('dataTestid');
+    expect(tsx).not.toContain('ariaLabel');
+  });
+
+  it('drops a literal attribute that a binding of the same name already writes', () => {
+    // The authored page carries both when the literal is the value the element
+    // shows BEFORE the controller runs: the html form needs it, and React does
+    // not (the prop applies on the first render). Emitting both is a duplicate
+    // JSX attribute.
+    const b = block();
+    (b.files as Map<string, string>).set(
+      'fixture.html',
+      PAGE
+        .replace('<kai-conversations>', '<kai-conversations hidden :hidden="hidden">')
+        .replace('.unread="hidden"', 'unread .unread="hidden"'),
+    );
+    const tsx = byPath(renderReactForm(b)).get('Fixture.tsx')!;
+    const conversations = tsx.split('\n').find((l) => l.includes('<Conversations'))!;
+    expect(conversations).toContain('hidden={state.hidden}');
+    expect(conversations).not.toMatch(/<Conversations\s+hidden[\s>]/);
+    const dock = tsx.split('\n').find((l) => l.includes('<Dock'))!;
+    expect(dock).toContain('unread={state.hidden}');
+    expect(dock).not.toMatch(/\sunread[\s>]/);
+  });
+
+  it('escapes literal braces in text rather than emitting TSX that does not parse', () => {
+    const b = block();
+    (b.files as Map<string, string>).set(
+      'fixture.html',
+      PAGE.replace('<span .textContent="title"></span>', '<span>a { b }</span>'),
+    );
+    const tsx = byPath(renderReactForm(b)).get('Fixture.tsx')!;
+    expect(tsx).toContain("{'{'}");
+    expect(tsx).toContain("{'}'}");
+    expect(tsx).not.toMatch(/a \{ b \}/);
+  });
+
+  it('refuses a string style attribute by name, pointing at the stylesheet', () => {
+    const b = block();
+    (b.files as Map<string, string>).set(
+      'fixture.html',
+      PAGE.replace('<kai-conversations>', '<kai-conversations style="color: red">'),
+    );
+    expect(() => renderReactForm(b)).toThrow(/style=/);
+    expect(() => renderReactForm(b)).toThrow(/stylesheet/);
+  });
+
+  it('cross-checks the bindings against the controller, as the html form does', () => {
+    // `create-kai add` and `kai dev` render without ever running
+    // checkBlockContracts, so without this the tsx calls a function nobody
+    // exports and the reader finds out from tsc in their own project.
+    const b = block();
+    (b.files as Map<string, string>).set('fixture.html', PAGE.replace('@kai-click="open"', '@kai-click="nope"'));
+    expect(() => renderReactForm(b)).toThrow(/nope/);
+  });
+
   it('refuses a block with no controller, by the file name it wanted', () => {
     const b = block();
     (b.files as Map<string, string>).delete('fixture.controller.ts');
