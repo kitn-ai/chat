@@ -26,11 +26,11 @@ export async function loadBundledBlocks(): Promise<Block[]> {
  * A block authored ON the contract: one marked block root, the wiring on the
  * markup, and a controller instead of an entry script.
  *
- * The CLI suites need one while the REAL blocks are still authored the old
- * way (they convert in the commit after the renderers land), and a synthetic
- * one keeps a case about route resolution or write targets from also being a
- * case about conversion. The type names the controller declares are fixed by
- * the contract, so they are derived from the block id here too.
+ * A synthetic one keeps a case about route resolution or write targets from
+ * also being a case about whichever real block happens to suit it: no authored
+ * block declares a `route:` dependency, and none should have to. The type
+ * names the controller declares are fixed by the contract, so they are derived
+ * from the block id here too.
  */
 export function authoredBlock(name: string, manifest: Partial<Block['manifest']> = {}): Block {
   const component = componentName(name);

@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { buildRegistryItem, isAuthoredContractPage } from '@kitn.ai/blocks';
+import { buildRegistryItem } from '@kitn.ai/blocks';
 import type { Axis } from '../src/axes';
 import {
   FRAMEWORK_SIGNALS,
@@ -37,14 +37,6 @@ import { BLOCKS_ROOT, KIT_RANGE, KIT_VERSION, authoredBlock, loadBundledBlocks }
 
 let root: string;
 let blocks: Block[];
-
-/** On the authored contract? The registry's OWN predicate, never a name list:
- *  a block joins the positive loops the moment its page declares bindings.
- *  Transitional, and it goes when the last block converts. */
-const onContract = (block: Block): boolean => {
-  const page = block.manifest.files.find((f) => f.type === 'registry:page');
-  return isAuthoredContractPage((page && block.files.get(page.path)) ?? '');
-};
 
 beforeAll(async () => {
   root = await mkdtemp(path.join(tmpdir(), 'create-kai-add-'));
@@ -125,24 +117,24 @@ describe('every listed block writes through the real add path, in every form', (
   });
 
   for (const name of ['support-widget', 'assistant', 'in-app-assistant']) {
-    // The roster above is NOT the subject (the derived loop below is); it only
-    // pins that the reference block stays enrolled by name.
+    // The roster is NOT the subject (the derived loops below are); it pins
+    // that each named block stays enrolled. It asserted only `support-widget`
+    // while the other two were unconverted, so it read as three checks and was
+    // one; the contract is mandatory now and all three are real.
     it(`still ships ${name} or this file's assumptions moved`, () => {
-      if (name === 'support-widget') expect(blocks.map((b) => b.name)).toContain(name);
+      expect(blocks.map((b) => b.name)).toContain(name);
     });
   }
 });
 
 describe('web-component form (any non-react project)', () => {
-  // AUTHORED-CONTRACT BLOCKS ONLY, until the round finishes converting the
-  // rest: the html form refuses a page that declares no bindings and has no
-  // controller, by name, and that refusal has its own case at the end of this
-  // describe. The predicate is the registry's own, never a name list, so a
-  // block joins these loops the moment it is converted.
-  const authored = () => blocks.filter((b) => onContract(b));
-  const legacy = () => blocks.filter((b) => !onContract(b));
+  // EVERY bundled block, with no predicate in front of it: the contract is
+  // mandatory, so a block that resolves is a block the html form renders. The
+  // refusal a consumer meets with an unconverted block has its own case at the
+  // end of this describe, driven by a fetched item.
+  const authored = () => blocks;
 
-  it('has authored-contract blocks to drive, so the loops below are not vacuous', () => {
+  it('has blocks to drive, so the loops below are not vacuous', () => {
     expect(authored().length).toBeGreaterThan(0);
   });
 
@@ -217,22 +209,41 @@ describe('web-component form (any non-react project)', () => {
     expect(await readFile(pagePath, 'utf8')).toBe('EDITED BY THE CONSUMER');
   });
 
-  it('refuses a block that is not on the authored contract yet, by name', async () => {
-    // Skipped rather than deleted when the last block converts: this is the
-    // refusal a CONSUMER with an old block hits, and it is not transitional.
-    // `dev.test.ts` keeps a synthetic fixture for it for the same reason.
-    for (const block of legacy()) {
-      const dir = await project(`html-legacy-${block.name}`, { name: 'host', dependencies: { vue: '^3.0.0' } });
-      const run = await runInto(dir, [block.name, '--form', 'html']);
-      expect(run.code, `${block.name}: expected a refusal`).toBe(1);
-      expect(run.err.join('\n'), block.name).toContain(block.name);
-      expect(run.err.join('\n'), block.name).toContain('controller.ts');
-    }
+  it('refuses a block that is not on the authored contract, by name', async () => {
+    // NOT transitional. Every bundled block is converted now, so this drives
+    // the door a consumer would actually meet an old block through: a fetched
+    // item JSON whose page still carries its own entry script. The refusal has
+    // to name the file the wiring belongs in, or the consumer is told only
+    // that something is wrong. (`dev.test.ts` keeps a synthetic fixture for
+    // the same reason.)
+    const item = {
+      name: 'legacy-block',
+      title: 'Legacy block',
+      description: 'a block authored before the contract, as a consumer might still fetch one',
+      type: 'registry:block',
+      files: [
+        {
+          path: 'legacy-block.html',
+          type: 'registry:page',
+          content:
+            '<!doctype html>\n<html lang="en"><head></head><body><kai-thread id="t"></kai-thread>'
+            + '<script type="module" src="./legacy-block.js"></scr' + 'ipt></body></html>\n',
+        },
+        { path: 'legacy-block.js', type: 'registry:file', content: "document.getElementById('t').messages = [];\n" },
+      ],
+    };
+    const dir = await project('html-legacy', { name: 'host', dependencies: { vue: '^3.0.0' } });
+    const run = await runInto(dir, ['https://registry.example/r/legacy-block.json', '--form', 'html'], {
+      fetchJson: async () => JSON.parse(JSON.stringify(item)),
+    });
+    expect(run.code, 'expected a refusal').toBe(1);
+    expect(run.err.join('\n')).toContain('legacy-block');
+    expect(run.err.join('\n')).toContain('controller.ts');
   });
 });
 
 describe('react form (react in the project deps)', () => {
-  const authored = () => blocks.filter((b) => onContract(b));
+  const authored = () => blocks;
 
   it('writes the component, the hook and the controller for every block; never the page html', async () => {
     expect(authored().length).toBeGreaterThan(0);
@@ -345,7 +356,7 @@ describe('the detection signals table, row by row', () => {
 
 describe('per-block item JSON URLs resolve through the same path (the integration surface)', () => {
   it('a fetched item writes the same files the bundled block does', async () => {
-    const block = blocks.find((b) => onContract(b))!;
+    const block = blocks[0];
     // The item as the REGISTRY publishes it: gen-blocks.mjs runs
     // withStrippedTwins before buildRegistryItem, so the twins are listed in
     // the manifest a consumer fetches. The bundled copy already has them on
@@ -409,9 +420,10 @@ describe('per-block item JSON URLs resolve through the same path (the integratio
 });
 
 describe('route:<integration> dependencies, resolved against the scaffolder catalog', () => {
-  // Authored ON THE CONTRACT (the shared fixture), because this describe's
-  // subject is route resolution: it has to render for either form to be
-  // reached, and the real blocks do not convert until the next commit.
+  // A synthetic block (the shared fixture) rather than a real one, because
+  // this describe's subject is route resolution: no authored block declares a
+  // `route:` dependency, and a case about routes should not also be a case
+  // about whichever block happens to have one.
   const routed = (): Block => authoredBlock('routed-block', { registryDependencies: ['route:openrouter'] });
 
   it('the react form emits the route the way the scaffolder does', async () => {

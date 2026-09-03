@@ -77,16 +77,6 @@ export function isBlockFormId(id: string): id is BlockFormId {
   return BLOCK_FORMS.some((form) => form.id === id);
 }
 
-/** The page's module-script entries, in order (`./name.js` only). */
-export function moduleScriptsIn(pageHtml: string): string[] {
-  return [...pageHtml.matchAll(/<script\s+type="module"\s+src="\.\/([^"]+)"\s*><\/script>/g)].map((m) => m[1]);
-}
-
-/** The page's relative stylesheet links, in order. */
-export function stylesheetsIn(pageHtml: string): string[] {
-  return [...pageHtml.matchAll(/<link\s+rel="stylesheet"\s+href="\.\/([^"]+)"\s*\/?>/g)].map((m) => m[1]);
-}
-
 // ------------------------------------------------------------- kai tag scan
 
 /** Every `kai-*` tag the markup renders, sorted, deduped. A STRING scan, kept

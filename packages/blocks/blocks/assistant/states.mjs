@@ -37,6 +37,22 @@ export default {
       // store, not this block).
       expectedFirstTitle: 'Reading q3-metrics.pdf now.',
     },
+    // The REACT form, mounted at the root of a throwaway Vite app by
+    // scripts/verify-blocks-react.mjs. Same story, same probes, same
+    // page-specific facts: only the URL differs, because the react tree is a
+    // component in an app rather than a page in a directory. The element ids
+    // survive the translation (a literal id is a literal attribute), which is
+    // what lets one set of probes drive both.
+    react: {
+      path: '/',
+      indexKey: 'kai:assistant:threads',
+      expectedFirstTitle: 'Reading q3-metrics.pdf now.',
+      // Computed style is a measurement of the document it was taken in, and
+      // the react host is a Vite index.html with a mounted subtree rather
+      // than this block's own page. This page asserts state, navigation and
+      // console-cleanliness; the style probes stay where they were measured.
+      skipLayout: true,
+    },
   },
 
   states: [

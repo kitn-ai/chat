@@ -30,7 +30,6 @@ import {
   buildRegistryIndex,
   buildRegistryItem,
   checkBlockContracts,
-  isAuthoredContractPage,
   type RawBlockSource,
 } from '@kitn.ai/blocks';
 import { handlerName, renderCdnFormFiles, withStrippedTwins } from '@kitn.ai/blocks/forms';
@@ -146,24 +145,19 @@ describe("the real blocks against this package's real inputs", () => {
   it('the emitted cdn form and driver page carry the binder and the controller, not just markup', () => {
     // The failure this catches is silent by construction: a form whose script
     // never got inlined is still valid HTML and still renders a page.
-    // `createController` is asserted only for blocks already ON the authored
-    // contract -- TRANSITIONAL, and it widens on its own as Task 12 converts
-    // the rest, with the floor below refusing to let it cover zero.
-    let converted = 0;
+    let checked = 0;
     for (const block of blocks) {
-      const pageEntry = block.manifest.files.find((f) => f.type === 'registry:page');
-      const authored = isAuthoredContractPage(block.files.get(pageEntry?.path ?? '') ?? '');
-      if (authored) converted += 1;
       for (const path of [
         join(DIST_BLOCKS, 'r', `${block.name}.cdn.html`),
         join(ROOT, 'scripts/block-driver/pages/generated', block.name, 'index.html'),
       ]) {
         const html = readBuiltArtifact(path);
         expect(html, path).toContain('window.__blockReady = true');
-        if (authored) expect(html, path).toContain('createController');
+        expect(html, path).toContain('createController');
+        checked += 1;
       }
     }
-    expect(converted, 'no block is on the authored contract - the controller half checks nothing').toBeGreaterThan(0);
+    expect(checked, 'no emitted form was read - this check would pass vacuously').toBeGreaterThan(0);
   });
 });
 

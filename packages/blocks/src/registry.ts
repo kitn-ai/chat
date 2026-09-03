@@ -26,12 +26,7 @@
  * it, not before.
  */
 
-import { parseTemplate, isAuthoredContractPage } from './contract/parse-template';
-
-// The transitional predicate is re-exported from the package entry because
-// three callers outside this module need it and it has ONE definition (see
-// its own comment for the Task 12 deletion site).
-export { isAuthoredContractPage } from './contract/parse-template';
+import { parseTemplate } from './contract/parse-template';
 
 import { analyzeController, crossCheckBindings } from './contract/analyze-controller';
 
@@ -653,13 +648,14 @@ export function checkBlockContracts(
   }
 
   // The GRAMMAR has one owner. Rather than restating the binding rules here,
-  // parse the page and surface what the parser says; a block that is not on
-  // the authored contract yet (no binding-prefixed attribute anywhere) is
-  // skipped, which is what carries the unconverted blocks through the
-  // conversion round.
+  // parse the page and surface what the parser says.
+  //
+  // Every block is an authored-contract block now (PR B). A page with no
+  // bindings and no controller is not a simpler block, it is an unconverted
+  // one, and the forms cannot be generated from it.
   const pageEntry = block.manifest.files.find((f) => f.type === 'registry:page');
   const pageHtml = pageEntry ? block.files.get(pageEntry.path) : undefined;
-  if (pageEntry && pageHtml !== undefined && isAuthoredContractPage(pageHtml)) {
+  if (pageEntry && pageHtml !== undefined) {
     const where = `${block.name}/${pageEntry.path}`;
     const parsed = parseTemplate(pageHtml, where);
     errors.push(...parsed.errors);
@@ -668,7 +664,7 @@ export function checkBlockContracts(
     const controllerPath = `${block.name}.controller.ts`;
     const controllerSource = block.files.get(controllerPath);
     if (controllerSource === undefined) {
-      errors.push(`${block.name}: the page declares bindings, so the block needs ${controllerPath} (spec 3.2). The wiring moved off the script and onto the markup; the logic lives in the controller.`);
+      errors.push(`${block.name}: every block needs ${controllerPath} (spec 3.2). The wiring belongs on the markup and the logic in the controller; a page with neither is an unconverted block, not a simpler one.`);
     } else if (parsed.template) {
       const shape = analyzeController(controllerSource, name, `${block.name}/${controllerPath}`);
       errors.push(...shape.errors);

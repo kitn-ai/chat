@@ -36,8 +36,8 @@
 //
 // Those two read dist/blocks/f/<name>.<form>.json, the per-form trees
 // gen-blocks emits and the blocks site displays, so what is checked is what a
-// reader copies. A block still on the pre-contract page shape renders no
-// framework form and is skipped by name (PR B Task 12 converts the rest).
+// reader copies. Every block renders every framework form, so a MISSING tree
+// is a red rather than a skip.
 //
 // A discovered block MISSING its states.mjs or its committed baseline is a
 // HARD FAILURE -- a block cannot ship unverified -- and the message says how
@@ -168,9 +168,9 @@ function runDriver(name, { baseline, schemes, port, shots }) {
   return spawnSync(process.execPath, args, { cwd: ROOT, encoding: 'utf8' });
 }
 
-// The per-form trees gen-blocks emitted, or null when the block renders none
-// (transitional: a page still on the pre-contract shape has no template to
-// render from, and PR B Task 12 converts the rest).
+// The per-form trees gen-blocks emitted, or null when the file is absent --
+// which is a red at every call site below, never a skip: every block is on the
+// authored contract and renders every framework form.
 function readFormFiles(name, form) {
   const path = join(OUT_DIR, 'f', `${name}.${form}.json`);
   if (!existsSync(path)) return null;
@@ -455,25 +455,18 @@ rmSync(shotsRoot, { recursive: true, force: true });
 
 // [html-binder] and [react-tree] -- over the per-form trees the site displays.
 let structuralCells = 0;
-const noForms = [];
 for (const source of sources) {
   const name = source.dirName;
-  const html = readFormFiles(name, 'html');
-  const react = readFormFiles(name, 'react');
-  if (!html && !react) { noForms.push(name); continue; }
   for (const [checkName, files, errsOf] of [
-    ['html-binder', html, htmlBinderErrors],
-    ['react-tree', react, reactTreeErrors],
+    ['html-binder', readFormFiles(name, 'html'), htmlBinderErrors],
+    ['react-tree', readFormFiles(name, 'react'), reactTreeErrors],
   ]) {
-    if (!files) { red(name, checkName, `no dist/blocks/f/${name}.${checkName === 'html-binder' ? 'html' : 'react'}.json, but the block emitted its other form -- half a tree is unchecked`); continue; }
+    if (!files) { red(name, checkName, `no dist/blocks/f/${name}.${checkName === 'html-binder' ? 'html' : 'react'}.json. Every block renders every framework form, so a missing tree is an unchecked block, not a simpler one -- build, and read what gen-blocks says.`); continue; }
     structuralCells += 1;
     const errs = errsOf(name, files);
     if (errs.length) red(name, checkName, errs);
     else ok(name, checkName, `(${files.length} file(s))`);
   }
-}
-if (noForms.length) {
-  console.log(`SKIP ${noForms.join(', ')} [html-binder, react-tree] -- not on the authored contract yet, so no framework form is rendered (PR B Task 12 converts them)`);
 }
 // Anti-vacuity: zero structural cells is a broken walk over dist/blocks/f/,
 // not an empty gallery. At least one block is on the authored contract.

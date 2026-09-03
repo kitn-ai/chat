@@ -6,14 +6,14 @@
   "categories": ["assistant", "full-page"],
   "files": [
     { "path": "assistant.html", "type": "registry:page" },
-    { "path": "assistant.js", "type": "registry:file" },
+    { "path": "assistant.controller.ts", "type": "registry:file" },
     { "path": "assistant.css", "type": "registry:file" },
-    { "path": "mock.js", "type": "registry:file" }
+    { "path": "mock.ts", "type": "registry:file" }
   ],
   "dependencies": ["@kitn.ai/ui"],
   "registryDependencies": [],
   "cssVars": { "light": {}, "dark": {} },
   "envVars": {},
-  "docs": "Runs against a scripted local mock out of the box - no endpoint, no key. To go live, replace the mock responder in assistant.js with a fetch to your chat endpoint (send the selected model id with the request) and keep parsing through the @kitn.ai/ui/wire readers.",
+  "docs": "Runs against a scripted local mock out of the box - no endpoint, no key. To go live, replace the mock responder in assistant.controller.ts with a fetch to your chat endpoint (send the selected model id with the request) and keep parsing through the @kitn.ai/ui/wire readers.",
   "meta": { "iframeHeight": "800px" }
 }

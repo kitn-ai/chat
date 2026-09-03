@@ -13,7 +13,6 @@
  * it directly with an authored block is the defect this module removes.
  */
 import { generateCdnForm, type Block, type CdnFormOptions } from '../registry';
-import { isAuthoredContractPage } from '../contract/parse-template';
 import type { FormFile } from '../contract/types';
 import { renderHtmlForm } from './html';
 
@@ -34,21 +33,12 @@ export function renderCdnFormFiles(block: Block, opts: CdnFormOptions): FormFile
 }
 
 /**
- * The page the inliner is handed: the rendered HTML FORM for a block on the
- * authored contract, and the AUTHORED files for one that is not.
- *
- * TRANSITIONAL, with one deletion site. Task 12 converts the last two blocks
- * and the contract becomes mandatory; this branch and its predicate go with
- * it, and every block renders through the html form. Until then a block whose
- * page declares no binding still carries its own `<script type="module">`,
- * which is what the inliner has always taken, and refusing it here would take
- * the two unconverted blocks out of `gen-blocks` a full task early.
+ * The page the inliner is handed: the rendered HTML FORM, always. Every block
+ * is an authored-contract block, so no block carries an entry script of its
+ * own for the inliner to take, and the paste form is the html form with its
+ * relative imports resolved against a CDN.
  */
 function renderedPage(block: Block): Block {
-  const pageEntry = block.manifest.files.find((f) => f.type === 'registry:page');
-  const pageHtml = pageEntry ? block.files.get(pageEntry.path) : undefined;
-  if (pageHtml === undefined || !isAuthoredContractPage(pageHtml)) return block;
-
   // `autoloader`, not the default: the register-all rewrite exists for
   // bundlers, and this form runs off raw CDN URLs in a plain page.
   const html = renderHtmlForm(block, { registration: 'autoloader' });

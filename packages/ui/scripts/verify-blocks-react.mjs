@@ -101,12 +101,6 @@ const routeIntegrations = scaffolder.listIntegrations().map((i) => i.id);
 const stripTypes = (source, fileName) =>
   esbuild.transformSync(source, { loader: 'ts', format: 'esm', target: 'es2022', sourcefile: fileName }).code;
 
-/** The block's `registry:page` source, or '' when it declares none. */
-function pageHtmlOf(block) {
-  const entry = block.manifest.files.find((f) => f.type === 'registry:page');
-  return (entry && block.files.get(entry.path)) ?? '';
-}
-
 // Preconditions. A skip here reads as green, so both are hard failures.
 if (!existsSync(join(ROOT, 'dist', 'kai.es.js')) || !existsSync(join(ROOT, 'dist', 'blocks'))) {
   fail('dist/kai.es.js (or dist/blocks/) is missing. This cell packs the BUILT package and drives it in a browser, so it cannot skip. Run `npm run build` in packages/ui first.');
@@ -117,13 +111,21 @@ if (sources.length === 0) fail(`no block directories under ${BLOCKS_DIR} -- a ze
 const { blocks, errors: discoveryErrors } = registry.discoverBlocks(sources, routeIntegrations);
 if (discoveryErrors.length) fail(`the block scan did not validate:\n  RED ${discoveryErrors.join('\n  RED ')}`);
 
-// TRANSITIONAL: a block still on the pre-contract page shape renders no react
-// form at all (there is no parsed template to render from), so it is skipped
-// BY NAME. PR B Task 12 converts the rest, and this branch then covers nothing.
-const authored = blocks.filter((b) => registry.isAuthoredContractPage(pageHtmlOf(b)));
-const skipped = blocks.filter((b) => !authored.includes(b)).map((b) => b.name);
-if (authored.length === 0) {
-  fail('no discovered block is on the authored contract, so this cell would run nothing. A zero-block run reads as green and is a hard failure.');
+// Every discovered block renders a react form. There is no skip list: a block
+// that cannot render one fails in `renderReact` by name.
+if (blocks.length === 0) {
+  fail('no discovered block, so this cell would run nothing. A zero-block run reads as green and is a hard failure.');
+}
+
+// The self-test's plants are written against ONE block's emitted tree, and
+// they are picked BY NAME rather than by position. `blocks[0]` is whichever
+// block sorts first, so a rename or a new block would silently hand the
+// plants a tree they do not match -- which the "the plant did not apply"
+// guard below would then report as a plant failure rather than as what it is.
+const PLANT_BLOCK = 'support-widget';
+const plantBlock = blocks.find((b) => b.name === PLANT_BLOCK);
+if (SELF_TEST && !plantBlock) {
+  fail(`--self-test plants are written against ${PLANT_BLOCK}'s emitted react tree (its refs, its State fields, its ViewStack) and that block is not in the registry. Point the plants at a block that is here, or restore it; a self-test with nothing to plant into proves nothing.`);
 }
 
 /** The rendered react tree for one block, as the site displays it. */
@@ -159,10 +161,14 @@ function standUpApp(tmp) {
   return { app, resolved };
 }
 
-/** Write one block's rendered tree into the app AT ITS targets. */
+/** Write one block's rendered tree into the app AT ITS targets.
+ *
+ *  EVERY block's install root is cleared first, not just this one's. tsc runs
+ *  over the whole app, so a tree left behind by the previous block is still in
+ *  the program: its diagnostics would print under THIS block's name, and a
+ *  block whose own tree is clean would go red for someone else's. */
 function installTree(app, block, files) {
-  const installRoot = targets.installRoot('react', block.name);
-  rmSync(join(app, installRoot), { recursive: true, force: true });
+  for (const other of blocks) rmSync(join(app, targets.installRoot('react', other.name)), { recursive: true, force: true });
   for (const file of files) {
     const dest = join(app, file.target);
     mkdirSync(dirname(dest), { recursive: true });
@@ -266,11 +272,12 @@ async function runBlock({ app, block, files, port, shots }) {
 // stage that must catch it, so a plant caught early cannot be reported as
 // proof of the stage it was written for.
 //
-// They are written against the FIRST authored block's emitted tree, which is
-// what --self-test runs on. That is a coupling, and it is guarded rather than
-// hoped over: a plant whose replacement finds nothing changes no file, and the
-// runner treats "the plant did not apply" as a failure. Otherwise it would run
-// the clean tree and report its green as a catch.
+// They are written against ONE NAMED block's emitted tree (PLANT_BLOCK above),
+// which is what --self-test runs on. That is a coupling, and it is guarded
+// twice: the block is looked up by name and its absence is a hard failure, and
+// a plant whose replacement finds nothing changes no file, which the runner
+// treats as a failure. Otherwise it would run the clean tree and report its
+// green as a catch.
 const PLANTS = [
   {
     label: 'a leftover cast in the react tree',
@@ -349,10 +356,10 @@ try {
   const shotsRoot = join(tmp, 'shots');
 
   if (SELF_TEST) {
-    failed = !(await selfTest(app, authored[0], shotsRoot));
+    failed = !(await selfTest(app, plantBlock, shotsRoot));
   } else {
     const ran = [];
-    for (const block of authored) {
+    for (const block of blocks) {
       const t0 = Date.now();
       const res = await runBlock({ app, block, files: renderReact(block), port: GATE_PORT, shots: join(shotsRoot, block.name) });
       const secs = ((Date.now() - t0) / 1000).toFixed(1);
@@ -363,9 +370,6 @@ try {
         failed = true;
         console.error(`RED ${res.output}`);
       }
-    }
-    if (skipped.length) {
-      console.log(`SKIP ${skipped.join(', ')} [react runtime] -- not on the authored contract yet, so no react form is rendered (PR B Task 12 converts them)`);
     }
     // Anti-vacuity: a run over zero blocks is a broken walk, not a clean tree.
     if (ran.length === 0) failed = true;

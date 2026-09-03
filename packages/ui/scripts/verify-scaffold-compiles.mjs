@@ -1976,10 +1976,15 @@ async function blockFormCheck(esbuild) {
     cleanup();
     fail(`the block form trees are missing: ${missing}`);
   }
+  // Every block renders every framework form, so a block in the index with no
+  // per-form tree is an UNCHECKED block. It was a printed skip while the round
+  // was converting them; it is a hard failure now, because the quiet version
+  // of this is a block the site tells a reader to copy and nothing compiles.
   if (noForms.length) {
-    console.log(
-      `  · no per-form tree for ${noForms.join(', ')}: not on the authored contract yet ` +
-        '(PR B Task 12 converts them), so there is nothing to compile for them',
+    cleanup();
+    fail(
+      `no per-form tree under dist/blocks/f/ for ${noForms.join(', ')}, which the registry index lists. ` +
+        'Every block renders every framework form: build, and read what gen-blocks says about that block.',
     );
   }
   const { cells, failures } = await runBlockCompileCells({

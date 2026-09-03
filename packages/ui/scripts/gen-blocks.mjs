@@ -151,8 +151,6 @@ const outputs = new Map();
 const put = (path, content) => outputs.set(path, content);
 
 put(join(OUT_DIR, 'registry.json'), JSON.stringify(blocksMod.buildRegistryIndex(withTwins), null, 2) + '\n');
-/** Blocks that render no framework form yet - see the transitional note below. */
-const skippedForms = [];
 for (const block of withTwins) {
   put(join(OUT_DIR, 'r', `${block.name}.json`), JSON.stringify(blocksMod.buildRegistryItem(block), null, 2) + '\n');
 
@@ -169,16 +167,9 @@ for (const block of withTwins) {
   // the page displays carries the stripped .js twin the html form installs.
   // The axis is `FRAMEWORK_BLOCK_FORMS`, read where it lives: `cdn` is a
   // single pasted file with no project to compile and is covered by
-  // verify:blocks [pins] and the driver instead.
-  //
-  // TRANSITIONAL: a block still on the pre-contract page shape renders no
-  // framework form at all (there is no parsed template to render from), so it
-  // is skipped by name here and its compile cells are skipped with it. PR B
-  // Task 12 converts the rest, and this branch then covers nothing.
-  if (!blocksMod.isAuthoredContractPage(pageHtmlOf(block))) {
-    skippedForms.push(block.name);
-    continue;
-  }
+  // verify:blocks [pins] and the driver instead. Every discovered block
+  // renders every framework form; a block that cannot is a hard failure in
+  // `formFiles` below, never a skip.
   for (const form of blocksForms.FRAMEWORK_BLOCK_FORMS) {
     const files = formFiles(block, form.id);
     put(
@@ -186,17 +177,6 @@ for (const block of withTwins) {
       JSON.stringify({ block: block.name, form: form.id, files }, null, 2) + '\n',
     );
   }
-}
-if (skippedForms.length) {
-  console.log(
-    `gen-blocks: no per-form JSON for ${skippedForms.join(', ')} - not on the authored contract yet (PR B Task 12 converts them), so the form renderers and their compile cells have nothing to run on.`,
-  );
-}
-
-/** The block's `registry:page` source, or '' when it declares none. */
-function pageHtmlOf(block) {
-  const entry = block.manifest.files.find((f) => f.type === 'registry:page');
-  return (entry && block.files.get(entry.path)) ?? '';
 }
 
 function formFiles(block, formId) {

@@ -263,6 +263,31 @@ attribute, and a non-scalar in attribute position is wrong however it is spelled
 `--self-test`. `.prop=` and `*for=` are the two prefixes that legitimately carry
 a non-scalar.
 
+**Amendment, 2026-09-02 (PR B, converting `in-app-assistant`):** the binding
+kinds are ELEMENT-AGNOSTIC. Every example above is a `kai-*` element, and
+nothing in the table depends on one: `:hidden="historyDotHidden"` on a plain
+`<span>` and `.textContent="row.title"` on a plain `<span>` are the same two
+kinds doing the same two things, because the binder writes an attribute and a
+property and any element takes both. The one place the distinction survives is
+naming, in the renderers: a `kai-*` tag's literal attributes and `:attr`
+bindings are camelCased onto the generated wrapper's props, and a plain tag's
+are emitted verbatim, because that is what the host framework accepts. Say it
+out loud, because a block reaching for a plain element is not exotic: the kit
+has no dot affordance on `kai-button`, so the unread signal beside that
+block's history button is the block's own `<span>`.
+
+**Amendment, 2026-09-02 (PR B, converting `in-app-assistant`):** a driver probe
+that reads the HOST CHROME is not a fact about the block, and the block root is
+why. The `html` and `cdn` forms render the whole page; every component-framework
+form emits the `data-block-root` subtree alone, so the stand-in app around the
+block is present on one page and deliberately absent on the other. A probe
+asserting it is visible passes on the first page and fails on the second while
+nothing is wrong. The fix is the one the driver already has for the same shape
+elsewhere: the page spec declares the fact (`hostChrome`) and the probe reports
+whether what is on screen matches what that page declared, so its recorded value
+is page-neutral. Scenario authors: a probe over anything outside the block root
+needs this, and there is no way to tell from the probe alone.
+
 ### 3.2 The controller: `<id>.controller.ts`
 
 TypeScript now, not `.js`. The framework-neutral logic, exported as:
@@ -305,6 +330,19 @@ field: the spike's conversion carries `backHidden`, `tabBarHidden`,
 is the deliberate trade. Dumb bindings are what six renderers can agree about,
 and the cost is that the field list is shaped by the layout, so a controller is
 not portable to a different arrangement of the same block.
+
+**Amendment, 2026-09-02 (PR B, converting `assistant`):** the corollary, which
+the rule above reads as denying and does not. `State` is a view model, so it
+carries what a BINDING reads and nothing else; a controller is free to hold
+other state beside it, in its own closure, and should. `assistant`'s rail filter
+is the case: the old script read `item.textContent` off every rendered row and
+set `item.hidden`, which is the DOM query the contract forbids. The conversion
+is a `query` field plus a `conversationRows` field that is already filtered --
+and an unfiltered projection of the same rows that lives outside `State`,
+because nothing binds it and re-filtering on the next keystroke needs it. Adding
+it to `State` would inflate the view model with a field no renderer will ever
+read and no host will ever diff. The test is the same one that decides every
+other field: does a binding name it?
 
 ### 3.3 The rest of the authored directory
 

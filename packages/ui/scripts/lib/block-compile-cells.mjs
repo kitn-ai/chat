@@ -41,8 +41,9 @@ const TS_LEFTOVER = /^\s*(?:export\s+)?(?:interface|type)\s|:\s*(?:string|number
  *
  * Returns the cell axis: `blocks` (each with the forms it emitted), `forms`
  * (the form ids seen, sorted), and `noForms` (blocks in the registry index
- * that emitted none -- the transitional pre-contract pages, which gen-blocks
- * names as it skips them).
+ * that emitted none). `noForms` is a FAILURE list rather than a skip list at
+ * the call site: every block is on the authored contract and renders every
+ * framework form.
  */
 export function loadBlockForms(distBlocksDir) {
   const formsDir = join(distBlocksDir, 'f');

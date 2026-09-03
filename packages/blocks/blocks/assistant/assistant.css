@@ -22,11 +22,6 @@ kai-conversations.rail {
   display: block; min-height: 0;
   border-inline-end: 1px solid color-mix(in srgb, currentColor 12%, transparent);
 }
-/* Item-mode search filtering toggles `hidden` on consumer-owned rows; the
- * elements' shared base sheet sets :host{display:block}, which outranks the
- * UA's [hidden] rule, so the author-level rule is needed (the same fix the
- * support-widget block carries for its chrome). */
-kai-conversation-item[hidden] { display: none; }
 /* The right-aligned relative time slotted into each row's menu region:
  * type scale only; the muted tint comes from currentColor. */
 kai-conversation-item .row-time { font-size: 0.75rem; color: color-mix(in srgb, currentColor 60%, transparent); }

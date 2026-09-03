@@ -475,4 +475,12 @@ describe('contract checks (each plant watched being caught)', () => {
     expect(contractErrors('<kai-button @kai-click="open"></kai-button>').join(' '))
       .toContain('demo.controller.ts');
   });
+
+  it('refuses a block with no controller, now that the contract is mandatory', () => {
+    // The case above is a page that DECLARES bindings. This one declares
+    // none, which used to be how an unconverted block travelled through the
+    // conversion round: the checks were skipped for it entirely and this
+    // assertion passed vacuously on an empty error list.
+    expect(contractErrors('<kai-thread></kai-thread>').join(' ')).toContain('.controller.ts');
+  });
 });
