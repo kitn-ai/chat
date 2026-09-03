@@ -93,30 +93,46 @@ function interfaceBody(source: string, name: string): string | null {
  * `Map<string, number>`) well enough for a parameter list or object type --
  * it is not a real parser and does not need to disambiguate `<` as
  * less-than, which cannot occur in this position in a type annotation.
+ *
+ * ONE EXCEPTION: an arrow-typed parameter's `=>` (`cb: (a: string) => void`)
+ * is NOT a `<`/`>` pair, but its `>` still reads as a lone closer under plain
+ * counting and drags depth down early, un-hiding the rest of that parameter
+ * list's separators. So a `>` immediately after `=` (ignoring the space
+ * between them) is treated as part of an arrow token, not a bracket, and
+ * leaves depth untouched.
  */
 function splitMembers(body: string): string[] {
   const tokens: string[] = [];
   let depth = 0;
   let current = '';
+  let lastNonSpace = '';
   for (const ch of body) {
-    if (ch === '(' || ch === '{' || ch === '[' || ch === '<') depth += 1;
-    else if (ch === ')' || ch === '}' || ch === ']' || ch === '>') depth = Math.max(0, depth - 1);
+    const isArrowClose = ch === '>' && lastNonSpace === '=';
+    if (!isArrowClose) {
+      if (ch === '(' || ch === '{' || ch === '[' || ch === '<') depth += 1;
+      else if (ch === ')' || ch === '}' || ch === ']' || ch === '>') depth = Math.max(0, depth - 1);
+    }
     if (depth === 0 && (ch === ';' || ch === ',' || ch === '\n')) {
       tokens.push(current);
       current = '';
-      continue;
+    } else {
+      current += ch;
     }
-    current += ch;
+    if (ch !== ' ' && ch !== '\t' && ch !== '\n') lastNonSpace = ch;
   }
   tokens.push(current);
   return tokens;
 }
 
-/** Member names of an interface body: `name:`, `name?:`, `name(`. */
+/**
+ * Member names of an interface body: `name:`, `name?:`, `name(`, or
+ * `name<` for a generic method (`send<T>(x: T): void`) -- still one member,
+ * so the character class accepts `<` alongside `:` and `(`.
+ */
 function memberNames(body: string): string[] {
   const names: string[] = [];
   for (const token of splitMembers(body)) {
-    const m = /^\s*(?:readonly\s+)?([A-Za-z_$][\w$]*)\s*\??\s*[:(]/.exec(token);
+    const m = /^\s*(?:readonly\s+)?([A-Za-z_$][\w$]*)\s*\??\s*[:(<]/.exec(token);
     if (m && !names.includes(m[1])) names.push(m[1]);
   }
   return names;

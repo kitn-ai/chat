@@ -118,3 +118,21 @@ describe('analyzeController: parameter-list and object-literal members do not le
     expect(out.shape?.stateFields).toEqual(['filters']);
   });
 });
+
+describe('analyzeController: arrow-typed parameters and generic methods', () => {
+  it('does not let an arrow-typed parameter\'s `=>` close the parameter list early', () => {
+    const body = 'export interface WidgetActions { send(cb: (a: string) => void, opts: { silent: boolean }): void; boot(): Promise<void>; }';
+    const source = GOOD.replace(/export interface WidgetActions \{[\s\S]*?\n\}/, body);
+    const out = analyzeController(source, 'Widget', 'w');
+    expect(out.errors).toEqual([]);
+    expect(out.shape?.actionNames).toEqual(['send', 'boot']);
+  });
+
+  it('reads a generic method as one member, alongside a plain one', () => {
+    const body = 'export interface WidgetActions {\n  send<T extends Foo<Bar, Baz>>(x: T): void;\n  boot(): Promise<void>;\n}';
+    const source = GOOD.replace(/export interface WidgetActions \{[\s\S]*?\n\}/, body);
+    const out = analyzeController(source, 'Widget', 'w');
+    expect(out.errors).toEqual([]);
+    expect(out.shape?.actionNames).toEqual(['send', 'boot']);
+  });
+});
