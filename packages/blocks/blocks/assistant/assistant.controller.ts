@@ -150,10 +150,12 @@ export function createController(deps: AssistantDeps): AssistantController {
   // binds it, and a field nothing binds is not part of the view model.
   let allRows: ConversationRow[] = [];
 
-  /** The old script's filter, faithfully: it matched the row's whole
-   *  `textContent`, which is the title, the preview line and the relative
-   *  time concatenated. Same three fields, read off the row model instead of
-   *  off the DOM. */
+  /** The old script matched the row's whole `textContent`: the title, the
+   *  preview line and the relative time, concatenated with NO separator. Same
+   *  three fields here, read off the row model instead of off the DOM, and
+   *  joined with spaces -- so a query is no longer able to match across a
+   *  boundary the reader never sees ("just now" against a title ending in
+   *  "ju"). That is a deliberate difference and the better behaviour. */
   const filterRows = (rows: ConversationRow[], query: string): ConversationRow[] =>
     query === ''
       ? rows

@@ -171,7 +171,13 @@ export function createController(deps: InAppAssistantDeps): InAppAssistantContro
       // The stack's one rule, CONSUMED not restated: drilled shows the back
       // arrow and hides the history button.
       patch({ backHidden: !drilled, historyHidden: drilled });
-      void controller.setView(view ?? 'chat'); // only 'chat' satisfies the seen rule
+      // Only 'chat' satisfies the seen rule's view leg. An UNRESOLVED view is
+      // deliberately skipped rather than defaulted: the old imperative code
+      // passed `undefined` straight through, where the leg simply failed, and
+      // defaulting to 'chat' would ASSERT the chat view is showing when the
+      // stack resolved none -- marking an active conversation read with
+      // nothing on screen.
+      if (view) void controller.setView(view);
     },
 
     back() {

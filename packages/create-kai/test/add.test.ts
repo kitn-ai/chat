@@ -132,14 +132,14 @@ describe('web-component form (any non-react project)', () => {
   // mandatory, so a block that resolves is a block the html form renders. The
   // refusal a consumer meets with an unconverted block has its own case at the
   // end of this describe, driven by a fetched item.
-  const authored = () => blocks;
+  const all = () => blocks;
 
   it('has blocks to drive, so the loops below are not vacuous', () => {
-    expect(authored().length).toBeGreaterThan(0);
+    expect(all().length).toBeGreaterThan(0);
   });
 
   it('writes every manifest file and pins the kit', async () => {
-    for (const block of authored()) {
+    for (const block of all()) {
       const dir = await project(`wc-${block.name}`, { name: 'host', dependencies: { vue: '^3.0.0' } });
       const run = await runInto(dir, [block.name]);
       expect(run.code, run.err.join('\n')).toBe(0);
@@ -166,7 +166,7 @@ describe('web-component form (any non-react project)', () => {
     // GENERATED, and it awaits registration and boot() at module scope
     // deliberately, ending with the driver's one readiness constant. So the
     // subject moves to what the generated file must actually contain.
-    for (const block of authored()) {
+    for (const block of all()) {
       const dir = await project(`binder-${block.name}`, { name: 'host' });
       expect((await runInto(dir, [block.name])).code).toBe(0);
       const binder = await readFile(path.join(dir, 'blocks', block.name, `${block.name}.js`), 'utf8');
@@ -181,7 +181,7 @@ describe('web-component form (any non-react project)', () => {
     // bundled project 404s every element and renders nothing - observed live
     // before this rewrite existed. The CDN paste form keeps it (its native
     // pattern); both add forms must not.
-    for (const block of authored()) {
+    for (const block of all()) {
       const wcDir = await project(`reg-wc-${block.name}`, { name: 'host' });
       const reactDir = await project(`reg-react-${block.name}`, { name: 'host', dependencies: { react: '19' } });
       expect((await runInto(wcDir, [block.name])).code).toBe(0);
@@ -196,7 +196,7 @@ describe('web-component form (any non-react project)', () => {
   });
 
   it('refuses a second add loudly, listing the collisions, overwriting nothing', async () => {
-    const block = authored()[0];
+    const block = all()[0];
     const dir = await project('collide', { name: 'host' });
     expect((await runInto(dir, [block.name])).code).toBe(0);
     const page = block.manifest.files.find((f) => f.type === 'registry:page')!;
@@ -243,11 +243,11 @@ describe('web-component form (any non-react project)', () => {
 });
 
 describe('react form (react in the project deps)', () => {
-  const authored = () => blocks;
+  const all = () => blocks;
 
   it('writes the component, the hook and the controller for every block; never the page html', async () => {
-    expect(authored().length).toBeGreaterThan(0);
-    for (const block of authored()) {
+    expect(all().length).toBeGreaterThan(0);
+    for (const block of all()) {
       const dir = await project(`react-${block.name}`, { name: 'host', dependencies: { react: '^19.0.0' } });
       const run = await runInto(dir, [block.name]);
       expect(run.code, `${block.name}: ${run.err.join('\n')}`).toBe(0);
