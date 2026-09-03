@@ -652,9 +652,9 @@ jobs:
       # Cache the npm side of the react-host leg. verify:add's own react
       # install is the one expensive thing in this leg (network + a cold
       # install of react, react-dom, vite, the react plugin and typescript).
-      # This is the workflow's first `~/.npm` cache; the `browser` job's
-      # verify:blocks:react step does the same kind of install today with
-      # no cache ahead of it.
+      # Same shape as the `construct` job's `~/.npm` cache; the `browser`
+      # job's verify:blocks:react step does the same kind of install today
+      # with no cache ahead of it.
       # Keyed on the fixture's own package.json plus create-kai's, so a pin
       # bump on either side busts it.
       - name: Cache npm (create-kai add smoke, react leg)
