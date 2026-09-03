@@ -1692,11 +1692,10 @@ Create `packages/create-kai/scripts/verify-add.mjs`:
  * the "No project here" line as proof it did not.
  *
  * THE REACT HOST IS packages/ui/scripts/block-driver/react-host, reused rather
- * than copied: a stock create-vite react-ts app with PINNED dependency ranges,
- * which is the difference between a gate and a weather report. It deliberately
- * overlaps `verify:blocks:react` -- that gate proves the RENDERER's tree
- * compiles, this one proves the PACKED CLI puts those bytes where a project
- * can compile them.
+ * than copied: a stock create-vite react-ts app with the dependency ranges
+ * that scaffold declared. It deliberately overlaps `verify:blocks:react` --
+ * that gate proves the RENDERER's tree compiles, this one proves the PACKED
+ * CLI puts those bytes where a project can compile them.
  *
  *   node scripts/verify-add.mjs              # the legs
  *   node scripts/verify-add.mjs --self-test  # the legs, then four plants
@@ -1802,7 +1801,11 @@ const KIT_TARBALL = pack(UI_ROOT, '@kitn.ai/ui');
 // leg's project directory.
 toolsDir = mkdtempSync(path.join(tmpdir(), 'verify-add-tools-'));
 writeFileSync(path.join(toolsDir, 'package.json'), JSON.stringify({ name: 'verify-add-tools', private: true }, null, 2));
-run('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error', CLI_TARBALL], toolsDir);
+try {
+  run(NPM, ['install', '--no-audit', '--no-fund', '--loglevel=error', CLI_TARBALL], toolsDir);
+} catch (err) {
+  fail(`npm install of the packed CLI failed (network?):\n${err.stderr || err.stdout || err.message}`);
+}
 const CLI = path.join(toolsDir, 'node_modules/create-kai/dist/index.js');
 if (!existsSync(CLI)) fail(`the packed CLI installed without a ${path.relative(toolsDir, CLI)} - the tarball is missing its bin`);
 
@@ -1875,7 +1878,11 @@ function reactLeg() {
   // of the tools directory below (R12), never an app-local install, so
   // installing CLI_TARBALL here too would be a copy nothing reads (R10 vs R12,
   // reconciled - see the ruling).
-  run('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error', KIT_TARBALL], app);
+  try {
+    run(NPM, ['install', '--no-audit', '--no-fund', '--loglevel=error', KIT_TARBALL], app);
+  } catch (err) {
+    fail(`npm install of the packed kit into the react host failed (network?):\n${err.stderr || err.stdout || err.message}`);
+  }
   const installed = JSON.parse(readFileSync(path.join(app, 'node_modules/@kitn.ai/ui/package.json'), 'utf8')).version;
   log(`  react     installed @kitn.ai/ui@${installed} from the tarball`);
 
@@ -1929,6 +1936,9 @@ function otherFrameworkLeg() {
     const out = add(dir, block);
     const form = matchForm(dir, block);
     forms.push(form);
+    // Coupled to the note's wording in src/add.ts's `decideForm` ("generates
+    // no ${fallback} tree yet"); if that prose changes, change this fragment
+    // to match rather than deleting the check.
     if (expected === 'html' && !out.includes('generates no vue tree yet')) {
       fail(`${block}: landed on the html form without saying why. A quiet fallback is the decision this gate exists to catch.`);
     }
