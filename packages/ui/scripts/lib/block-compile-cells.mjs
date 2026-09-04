@@ -140,7 +140,7 @@ function htmlCell({ esbuild, name, files }) {
  * than a skip: a cell that quietly stops running is the exact shape of check
  * this repo keeps paying for.
  */
-const STRATEGIES = { react: reactCell, html: htmlCell, vue: FRAMEWORK_CELLS.vue };
+const STRATEGIES = { react: reactCell, html: htmlCell, vue: FRAMEWORK_CELLS.vue, svelte: FRAMEWORK_CELLS.svelte };
 
 /**
  * Run every block x form cell. Prints the axis and the cell count it actually

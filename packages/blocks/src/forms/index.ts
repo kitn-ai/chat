@@ -16,6 +16,9 @@
  *              custom elements, plus a composable holding one `shallowRef`
  *              over the controller (see `./vue`, built on the shared
  *              component-framework preamble in `./emit`).
+ *   - `svelte`: the svelte form: the block root as a `.svelte` component over
+ *              the custom elements, plus a `.svelte.ts` rune adapter holding
+ *              one `$state` snapshot (see `./svelte`, same preamble).
  *   - `cdn`  : the single-file CDN paste form: the HTML form above, inlined
  *              and pinned onto the published entries by `registry.ts`'s
  *              `generateCdnForm` (see `./cdn`).
@@ -37,6 +40,7 @@ import type { FormFile } from '../contract/types';
 import { renderHtmlForm } from './html';
 import { renderReactForm } from './react';
 import { renderVueForm } from './vue';
+import { renderSvelteForm } from './svelte';
 import { renderCdnFormFiles } from './cdn';
 
 // The renderers live in their own modules and are re-exported HERE, so every
@@ -46,6 +50,7 @@ export { renderHtmlForm, renderBinder, serializeTemplate, adaptRegistrationForBu
 export type { HtmlFormOptions } from './html';
 export { renderReactForm, handlerName } from './react';
 export { renderVueForm } from './vue';
+export { renderSvelteForm } from './svelte';
 export { renderCdnFormFiles } from './cdn';
 export { README_FILE, renderReadme } from './readme';
 export type { FormFile };
@@ -65,6 +70,7 @@ export const BLOCK_FORMS = [
   { id: 'html', label: 'HTML' },
   { id: 'react', label: 'React' },
   { id: 'vue', label: 'Vue' },
+  { id: 'svelte', label: 'Svelte' },
   { id: 'cdn', label: 'CDN single file' },
 ] as const;
 
@@ -133,6 +139,7 @@ export function renderBlockForm(block: Block, form: BlockFormId, opts: { cdn: Cd
     case 'html': return renderHtmlForm(block);
     case 'react': return renderReactForm(block);
     case 'vue': return renderVueForm(block);
+    case 'svelte': return renderSvelteForm(block);
     case 'cdn': return renderCdnFormFiles(block, opts.cdn);
   }
 }
