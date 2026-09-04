@@ -434,8 +434,28 @@ if (SELF_TEST) {
  * headroom -> 10.90 MiB (rounded to the same 0.05 grain the prior entries
  * use). Lowering it is the point: left at 11.85 the guard would not notice
  * the page, or anything else that size, coming back.
+ *
+ * 10.90 -> 11.20 MiB (2026-09-03, PR B2's four new block renderers): tripped
+ * at 11,446,436 bytes / 10.9162 MiB / 671 files (over by ~0.02 MiB) on a cold
+ * build of this branch. What grew is exactly `dist/blocks/f/`: it went from
+ * blocks x 2 (html, react; cdn's single file lives under dist/blocks/r/
+ * instead, per FRAMEWORK_BLOCK_FORMS excluding it) to blocks x 6 with vue,
+ * svelte, angular and solid landing, 12 new `<id>.<form>.json` files at
+ * ~20-31 KiB each (336 KiB total for the 12 new files, against 144 KiB for
+ * the 6 pre-existing html/react ones) -- each one a full compiled tree
+ * including the controller and the mock, the same shape the html/react forms
+ * already shipped. Nothing else moved: this is new shipped surface, not a
+ * dedupe regression or a duplicate artifact. `dist/blocks/` ships in `files`
+ * because both the docs site's /blocks section and `create-kai add` resolve
+ * it at runtime (`fileTarget()`), so the four new forms had to leave the
+ * tarball heavier. Margin rule unchanged: 10.9162 + ~0.29 MiB of headroom ->
+ * 11.2062, rounded to the same 0.05 MiB grain the prior entries use ->
+ * 11.20 MiB. The margin stays at ~0.29 MiB and no more, because that is what
+ * was tuned to catch the dist llms-full copy quietly coming back (see the
+ * 13.15 MiB entry above) -- a bigger cushion here would hide that regression
+ * again just as surely.
  */
-const MAX_UNPACKED_BYTES = 10.90 * 1024 * 1024;
+const MAX_UNPACKED_BYTES = 11.20 * 1024 * 1024;
 
 const kib = (n) => `${(n / 1024).toFixed(1)} KiB`;
 const mib = (n) => `${(n / 1024 / 1024).toFixed(2)} MiB`;

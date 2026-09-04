@@ -88,4 +88,15 @@ describe('languageFor', () => {
     expect(languageFor('src/components/x/x.controller.ts')).toBe('typescript');
     expect(languageFor('src/components/x/README.md')).toBe('markdown');
   });
+
+  it('highlights the SFC extensions the framework forms emit', () => {
+    // Not derived from the forms list: this is a switch over file EXTENSIONS,
+    // and two new forms brought two new ones. The default is 'text', so a
+    // missing case renders a whole Vue SFC unhighlighted rather than failing.
+    // Both languages are already lazy-loadable in the kit's highlighter.
+    expect(languageFor('src/components/x/X.vue')).toBe('vue');
+    expect(languageFor('src/lib/components/x/X.svelte')).toBe('svelte');
+    // The svelte adapter is a .svelte.ts module, which is TypeScript.
+    expect(languageFor('src/lib/components/x/useX.svelte.ts')).toBe('typescript');
+  });
 });

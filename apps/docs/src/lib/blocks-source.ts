@@ -104,6 +104,8 @@ export function languageFor(path: string): string {
     case 'js': case 'mjs': return 'javascript';
     case 'ts': return 'typescript';
     case 'tsx': return 'tsx';
+    case 'vue': return 'vue';
+    case 'svelte': return 'svelte';
     case 'json': return 'json';
     case 'md': return 'markdown';
     default: return 'text';
