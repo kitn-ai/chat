@@ -25,6 +25,7 @@
 
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { CELL_NOTES } from './block-framework-cells.mjs';
 
 /**
  * TypeScript that survived the strip.
@@ -177,7 +178,7 @@ export async function runBlockCompileCells({ tsc, blocks, forms, esbuild, log })
   if (cells === 0) {
     failures.push(
       'zero block form cells ran. That is a broken walk over dist/blocks/f/, not an empty registry: ' +
-        'at least one block is on the authored contract and renders both framework forms.',
+        'at least one block is on the authored contract and renders every framework form.',
     );
   }
 
@@ -185,8 +186,11 @@ export async function runBlockCompileCells({ tsc, blocks, forms, esbuild, log })
     `  · block forms: ${cells} cell(s) over ${blocks.length} block(s) x ${forms.length} form(s) (${forms.join(', ')})`,
   );
   log(
-    '    html is a syntax + strip check only (esbuild parses the emitted .js, and it must carry no TypeScript);\n' +
-      '    what the binder MEANS is the block driver\'s half, in a real browser against a committed baseline.',
+    '    html    esbuild parses the emitted .js and it must carry no TypeScript. Syntax + strip only;\n' +
+      "            what the binder MEANS is the block driver's half, in a real browser against a committed baseline.\n" +
+      '    react   tsc under a stock consumer tsconfig, and the only form with a RUNTIME cell (verify:blocks:react).',
   );
+  for (const form of forms) if (CELL_NOTES[form]) log(`    ${CELL_NOTES[form]}`);
+  log('    NONE of the four framework cells above RUNS anything. Compile-checked only.');
   return { cells, failures };
 }

@@ -1279,9 +1279,14 @@ export class PlantComponent {
 `),
     ], 'opne'],
 
-    // solid: a JSX expression defect under the generic augmentation, plus the
-    // TS7006 an unannotated ref callback produces. Both are what the solid cell
-    // CAN see, and the second is why the renderer annotates its ref parameter.
+    // solid: a JSX expression defect resolved against the controller's
+    // `actions` under the kit's generic solid-js/jsx-runtime augmentation. The
+    // augmentation types every kai element's event handlers generically (it
+    // does not know per-tag prop shapes -- CELL_NOTES says so), so this plant
+    // is deliberately NOT a prop-type defect: it is a typo on the controller
+    // side (`c.actions.opne`) that only a real program-wide type check catches,
+    // which is what this cell CAN see and a `tsc`-under-`solid` pass over an
+    // unreachable tree could not.
     ['solid', 'JSX expression against the controller', [
       f('plant.controller.ts', CONTROLLER),
       f('Plant.tsx', `import '@kitn.ai/ui/elements';

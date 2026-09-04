@@ -510,6 +510,21 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@angular/common':
+        specifier: ^22.0.5
+        version: 22.0.5(@angular/core@22.0.5(@angular/compiler@22.0.5)(rxjs@7.8.2))(rxjs@7.8.2)
+      '@angular/compiler':
+        specifier: ^22.0.5
+        version: 22.0.5
+      '@angular/compiler-cli':
+        specifier: ^22.0.5
+        version: 22.0.5(@angular/compiler@22.0.5)(typescript@5.9.3)
+      '@angular/core':
+        specifier: ^22.0.5
+        version: 22.0.5(@angular/compiler@22.0.5)(rxjs@7.8.2)
+      '@angular/platform-browser':
+        specifier: ^22.0.5
+        version: 22.0.5(@angular/common@22.0.5(@angular/core@22.0.5(@angular/compiler@22.0.5)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.0.5(@angular/compiler@22.0.5)(rxjs@7.8.2))
       '@angular/ssr':
         specifier: ^22.0.0
         version: 22.1.3(@angular/common@22.0.5(@angular/core@22.0.5(@angular/compiler@22.0.5)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.0.5(@angular/compiler@22.0.5)(rxjs@7.8.2))(@angular/router@22.1.1(@angular/common@22.0.5(@angular/core@22.0.5(@angular/compiler@22.0.5)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.0.5(@angular/compiler@22.0.5)(rxjs@7.8.2))(@angular/platform-browser@22.0.5(@angular/common@22.0.5(@angular/core@22.0.5(@angular/compiler@22.0.5)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.0.5(@angular/compiler@22.0.5)(rxjs@7.8.2)))(rxjs@7.8.2))
@@ -651,6 +666,12 @@ importers:
       storybook-solidjs-vite:
         specifier: 10.1.1
         version: 10.1.1(esbuild@0.28.1)(rollup@4.62.2)(solid-js@1.9.13)(storybook@10.4.2(@testing-library/dom@10.4.1)(@types/react@19.2.17)(prettier@3.9.6)(react@19.2.7))(typescript@5.9.3)(vite-plugin-solid@2.11.12(@testing-library/jest-dom@6.9.1)(solid-js@1.9.13)(vite@6.4.3(@types/node@26.0.1)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0)))(vite@6.4.3(@types/node@26.0.1)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))(webpack@5.94.0(esbuild@0.28.1)(lightningcss@1.33.0))
+      svelte:
+        specifier: ^5.56.4
+        version: 5.56.4
+      svelte-check:
+        specifier: ^4.7.1
+        version: 4.7.1(picomatch@4.0.5)(svelte@5.56.4)(typescript@5.9.3)
       tailwindcss:
         specifier: ^4.2.2
         version: 4.3.2
@@ -672,6 +693,12 @@ importers:
       vitest:
         specifier: 4.1.2
         version: 4.1.2(@types/node@26.0.1)(@vitest/browser-playwright@4.1.2)(jsdom@24.1.3)(vite@6.4.3(@types/node@26.0.1)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.33.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))
+      vue:
+        specifier: ^3.5.39
+        version: 3.5.39(typescript@5.9.3)
+      vue-tsc:
+        specifier: ^2.2.12
+        version: 2.2.12(typescript@5.9.3)
 
 packages:
 
@@ -8621,6 +8648,22 @@ snapshots:
       rxjs: 7.8.2
       tslib: 2.8.1
 
+  '@angular/compiler-cli@22.0.5(@angular/compiler@22.0.5)(typescript@5.9.3)':
+    dependencies:
+      '@angular/compiler': 22.0.5
+      '@babel/core': 7.29.7
+      '@jridgewell/sourcemap-codec': 1.5.5
+      chokidar: 5.0.0
+      convert-source-map: 1.9.0
+      reflect-metadata: 0.2.2
+      semver: 7.8.5
+      tslib: 2.8.1
+      yargs: 18.0.0
+    optionalDependencies:
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - supports-color
+
   '@angular/compiler-cli@22.0.5(@angular/compiler@22.0.5)(typescript@6.0.3)':
     dependencies:
       '@angular/compiler': 22.0.5
@@ -11958,6 +12001,19 @@ snapshots:
     optionalDependencies:
       typescript: 5.7.3
 
+  '@vue/language-core@2.2.12(typescript@5.9.3)':
+    dependencies:
+      '@volar/language-core': 2.4.15
+      '@vue/compiler-dom': 3.5.39
+      '@vue/compiler-vue2': 2.7.16
+      '@vue/shared': 3.5.39
+      alien-signals: 1.0.13
+      minimatch: 9.0.9
+      muggle-string: 0.4.1
+      path-browserify: 1.0.1
+    optionalDependencies:
+      typescript: 5.9.3
+
   '@vue/reactivity@3.5.39':
     dependencies:
       '@vue/shared': 3.5.39
@@ -11985,7 +12041,6 @@ snapshots:
       '@vue/compiler-ssr': 3.5.39
       '@vue/shared': 3.5.39
       vue: 3.5.39(typescript@5.9.3)
-    optional: true
 
   '@vue/shared@3.5.39': {}
 
@@ -16220,6 +16275,19 @@ snapshots:
     transitivePeerDependencies:
       - picomatch
 
+  svelte-check@4.7.1(picomatch@4.0.5)(svelte@5.56.4)(typescript@5.9.3):
+    dependencies:
+      '@jridgewell/trace-mapping': 0.3.31
+      '@sveltejs/load-config': 0.2.0
+      chokidar: 4.0.3
+      fdir: 6.5.0(picomatch@4.0.5)
+      picocolors: 1.1.1
+      sade: 1.8.1
+      svelte: 5.56.4
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - picomatch
+
   svelte@5.56.4:
     dependencies:
       '@jridgewell/remapping': 2.3.5
@@ -16978,6 +17046,12 @@ snapshots:
       '@vue/language-core': 2.2.12(typescript@5.7.3)
       typescript: 5.7.3
 
+  vue-tsc@2.2.12(typescript@5.9.3):
+    dependencies:
+      '@volar/typescript': 2.4.15
+      '@vue/language-core': 2.2.12(typescript@5.9.3)
+      typescript: 5.9.3
+
   vue@3.5.39(typescript@5.7.3):
     dependencies:
       '@vue/compiler-dom': 3.5.39
@@ -16997,7 +17071,6 @@ snapshots:
       '@vue/shared': 3.5.39
     optionalDependencies:
       typescript: 5.9.3
-    optional: true
 
   w3c-xmlserializer@5.0.0:
     dependencies:

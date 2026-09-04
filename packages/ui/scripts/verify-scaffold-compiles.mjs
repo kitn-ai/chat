@@ -224,6 +224,7 @@ import { createRequire } from 'node:module';
 // keeps paying for; read that module's header before editing either caller.
 import { EXT, FRAMEWORK_PROJECT as PROJECT, createConsumerTsc, liftScript } from './lib/consumer-tsc-projects.mjs';
 import { loadBlockForms, runBlockCompileCells } from './lib/block-compile-cells.mjs';
+import { frameworkCellSelfTest } from './lib/block-framework-cells.mjs';
 
 // `typescript` is loaded through Node's resolver rather than imported: the
 // checks below use its AST API synchronously, deep inside functions.
@@ -1986,6 +1987,17 @@ async function blockFormCheck(esbuild) {
       `no per-form tree under dist/blocks/f/ for ${noForms.join(', ')}, which the registry index lists. ` +
         'Every block renders every framework form: build, and read what gen-blocks says about that block.',
     );
+  }
+  // THE PLANTS FIRST. Every framework cell is handed a tree with a known
+  // template defect and must name it, and the vue cell is additionally run
+  // with the kit's augmentation UNREACHABLE and must go GREEN there. A cell
+  // that cannot fail passes every real cell below vacuously, and looks
+  // identical to one that works.
+  const plantProblems = frameworkCellSelfTest({ tsc: consumerTsc, log: console.log });
+  if (plantProblems.length) {
+    for (const p of plantProblems) console.log(`  ✗ ${p}`);
+    cleanup();
+    fail(`${plantProblems.length} block framework cell plant(s) did not behave as specified. A cell that cannot go red is compile theatre.`);
   }
   const { cells, failures } = await runBlockCompileCells({
     tsc: consumerTsc,

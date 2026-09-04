@@ -306,7 +306,7 @@ export function createConsumerTsc({ keep = false, fail }) {
   for (const pkg of [
     // ── front end (block 1) ──
     'react', 'react-dom', 'vue', 'svelte', '@types/react', '@types/react-dom',
-    'solid-js', '@angular/core',
+    'solid-js', '@angular/core', '@angular/common', '@angular/compiler', '@angular/platform-browser',
     // ── backend routes (block 2) ──
     // The HOSTS. These decide the shape a route has to have, and getting one wrong
     // is the defect class block (2) keeps shipping, so they are the real packages
@@ -462,8 +462,20 @@ declare module '*.css';
    *
    * node_modules still resolves: the sandbox is inside `tmp`, and both Node and
    * tsc walk up.
+   *
+   * `opts.include` is APPENDED to the default include array, for a caller whose
+   * files are not .ts/.tsx (a .vue SFC, a .svelte component). Appended rather
+   * than replacing, because the default array ends with the shims path and a
+   * caller that restated the list would silently drop it: `declare module
+   * '*.css'` and the next/dynamic and router stand-ins live there, and losing
+   * them would show up as a defect in whatever tree happened to import a
+   * stylesheet. `opts.tsconfigExtra` is spread at the TOP level of the written
+   * tsconfig, for a caller whose tool reads a sibling of `compilerOptions`
+   * (`angularCompilerOptions`). Neither touches the compilerOptions merge: that
+   * stays the project's own computed object and is never re-typed, which is the
+   * property this module's header defends.
    */
-  function sandbox(project, name) {
+  function sandbox(project, name, opts = {}) {
     const spec = PROJECTS[project];
     if (!spec) {
       cleanup();
@@ -477,9 +489,14 @@ declare module '*.css';
       JSON.stringify(
         {
           compilerOptions: { ...BASE_OPTIONS, ...spec.options },
-          // The shims live at the temp root; a nested include cannot reach them
-          // by glob, so they are named explicitly by relative path.
-          include: ['**/*.ts', '**/*.tsx', '**/*.d.ts', relative(dir, shims).split('\\').join('/')],
+          include: [
+            '**/*.ts',
+            '**/*.tsx',
+            '**/*.d.ts',
+            relative(dir, shims).split('\\').join('/'),
+            ...(opts.include ?? []),
+          ],
+          ...(opts.tsconfigExtra ?? {}),
         },
         null,
         2,
