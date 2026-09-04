@@ -171,19 +171,6 @@ export function angularCell({ tsc, name, files }) {
         strictInjectionParameters: true,
         strictInputAccessModifiers: true,
         enableI18nLegacyMessageIdFormat: false,
-        // `strictTemplates: true` turns this on too, and it types every
-        // `$event` against `HTMLElementEventMap` -- a map a `kai-*` event
-        // name is never IN, because every one of them is a CustomEvent on a
-        // custom element, not a known DOM event. Left on, `$event` in
-        // `(kai-conversation-select)="store.actions.pick($event)"` types as
-        // plain `Event`, and TS2345 fires against the action's declared
-        // `CustomEvent<T>` parameter on every real block that has one --
-        // found running this cell against the shipped blocks, not the plant
-        // fixtures (theirs are all zero-arg calls). Off, `$event` types as
-        // `any` for an event name the map does not recognise, which is
-        // correct here: this is the field a REAL Angular project sets when
-        // its templates listen for custom elements' events.
-        strictDomEventTypes: false,
       },
     },
   });

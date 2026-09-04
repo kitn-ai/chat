@@ -17,7 +17,7 @@
  *
  * Angular is also the only host that CALLS the action from the template:
  * `strictTemplates` type-checks that call in both directions, so
- * `ControllerShape.actionArity` decides whether `$event` is passed.
+ * `ControllerShape.actionArity` decides whether `$any($event)` is passed.
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -112,13 +112,23 @@ describe('the angular form', () => {
     expect(html).toContain('(kai-click)="store.actions.open()"');
   });
 
-  it('passes $event to an action that DECLARES a parameter, and to no other', () => {
+  it('passes $any($event) to an action that DECLARES a parameter, and to no other', () => {
     // Both directions are TS2554 under strictTemplates: a zero-arg action
-    // called with $event is "Expected 0 arguments, but got 1", and a one-arg
-    // action called with none is "Expected 1 arguments, but got 0". Nothing
-    // about the event NAME predicts which -- kai-click carries no detail, and
-    // support-widget.controller.ts mixes both arities across kai-* events in
-    // ONE template -- so the renderer reads ControllerShape.actionArity.
+    // called with an argument is "Expected 0 arguments, but got 1", and a
+    // one-arg action called with none is "Expected 1 arguments, but got 0".
+    // Nothing about the event NAME predicts which -- kai-click carries no
+    // detail, and support-widget.controller.ts mixes both arities across
+    // kai-* events in ONE template -- so the renderer reads
+    // ControllerShape.actionArity.
+    //
+    // The argument is $any($event), not bare $event: strictTemplates also
+    // types $event against HTMLElementEventMap, which no kai-* event is ever
+    // in, so a bare $event types as Event and TS2345 rejects it against the
+    // action's declared CustomEvent<T> parameter. $any() is Angular's own
+    // documented escape hatch for this -- it leaves the compiler's global
+    // settings (strictDomEventTypes included) exactly what a stock Angular
+    // project ships, which is why a stock consumer tsconfig has to compile
+    // this and not a loosened one.
     //
     // The shared fixture declares only zero-arg actions, so this case builds
     // the mixed shape rather than changing the fixture out from under the vue,
@@ -134,8 +144,8 @@ describe('the angular form', () => {
     );
     const html = byPath(renderAngularForm(b)).get('fixture.component.html')!;
     expect(html).toContain('(kai-click)="store.actions.open()"');
-    expect(html).toContain('(kai-conversation-select)="store.actions.pick($event)"');
-    expect(html).not.toContain('store.actions.open($event)');
+    expect(html).toContain('(kai-conversation-select)="store.actions.pick($any($event))"');
+    expect(html).not.toContain('store.actions.open($any($event))');
     expect(html).not.toContain('store.actions.pick()');
   });
 
@@ -182,10 +192,17 @@ describe('the angular form', () => {
     expect(() => renderAngularForm(b)).toThrow(/nope/);
   });
 
-  it('never drops a seed colliding with a [prop] binding on the same element: it applies in ngAfterViewInit instead', () => {
-    // CONTROLLER RULING B2-T3-a, the same shape svelte-form.test.ts and
-    // vue-form.test.ts pin. dock already has a #ref, so the seed reuses it
-    // rather than inventing a synthetic one.
+  it('never drops a seed colliding with a [prop] binding on the same element: it applies inside afterNextRender, before boot()', () => {
+    // CONTROLLER RULING B2-T5-a, amending B2-T3-a. dock already has a #ref,
+    // so the seed reuses it rather than inventing a synthetic one.
+    //
+    // Setting `ready` to true does not render synchronously, so the seed
+    // cannot be applied right after that (inside the store's connect()): the
+    // view does not exist there yet and the viewChild reads as undefined,
+    // silently dropping the setAttribute call behind the `?.`. It has to be
+    // in the component's afterNextRender callback -- the same callback that
+    // schedules boot() -- which is the first point after the ready-gated
+    // tree has actually rendered.
     const b = block();
     (b.files as Map<string, string>).set(
       'fixture.html',
@@ -196,6 +213,7 @@ describe('the angular form', () => {
     );
     const files = byPath(renderAngularForm(b));
     const html = files.get('fixture.component.html')!;
+    const ts = files.get('fixture.component.ts')!;
     const store = files.get('fixture.store.ts')!;
     // Not a static attribute anywhere: the reactive binding it collides with
     // is unaffected.
@@ -204,23 +222,25 @@ describe('the angular form', () => {
     // The OTHER seed on the same element, which does not collide, is
     // unaffected: still a plain static attribute.
     expect(html).toContain('position="bottom-end"');
-    expect(store).toContain("seedTargets['dock']?.setAttribute('unread', 'true');");
-    const readyAt = store.indexOf('this.ready.set(true);');
-    const seedAt = store.indexOf("setAttribute('unread', 'true')");
-    expect(readyAt).toBeGreaterThan(-1);
-    expect(seedAt).toBeGreaterThan(readyAt);
-    // boot() is the COMPONENT's job, scheduled after connect() resolves, so
-    // the ordering guarantee is: ready gate, then the seed, then boot -- the
-    // seed is applied inside connect(), which the component awaits before
-    // scheduling boot() through afterNextRender.
-    const ts = files.get('fixture.component.ts')!;
-    const connectAt = ts.indexOf('this.store.connect(');
+    // The seed is applied by the COMPONENT, through the dock viewChild's
+    // nativeElement, never through an index-signature-typed record (that was
+    // the TS4111 shape under ngc's stock noPropertyAccessFromIndexSignature).
+    expect(ts).toContain("this.dock()?.nativeElement.setAttribute('unread', 'true');");
+    // The store applies no seed at all: connect() only sets ready.
+    expect(store).not.toContain('setAttribute');
+    // Pin the exact placement: INSIDE the afterNextRender callback that also
+    // schedules boot(), and strictly BEFORE the boot() call within it.
+    const afterNextRenderAt = ts.indexOf('afterNextRender(() => {');
+    const seedAt = ts.indexOf("this.dock()?.nativeElement.setAttribute('unread', 'true');");
     const bootAt = ts.indexOf('void this.store.actions.boot();');
-    expect(connectAt).toBeGreaterThan(-1);
-    expect(bootAt).toBeGreaterThan(connectAt);
+    const closeAt = ts.indexOf('}, { injector: this.injector });');
+    expect(afterNextRenderAt).toBeGreaterThan(-1);
+    expect(seedAt).toBeGreaterThan(afterNextRenderAt);
+    expect(bootAt).toBeGreaterThan(seedAt);
+    expect(closeAt).toBeGreaterThan(bootAt);
   });
 
-  it('never drops a seed colliding with a literal attribute of the same name: it applies through a synthetic viewChild', () => {
+  it('never drops a seed colliding with a literal attribute of the same name: it applies through a synthetic viewChild, inside afterNextRender', () => {
     // The second collision shape B2-T3-a names: a literal attribute (not a
     // binding) claiming the same name. kai-conversations has no #ref in the
     // fixture, so this exercises the synthetic-ref path.
@@ -239,32 +259,38 @@ describe('the angular form', () => {
     expect(html).not.toMatch(/label="seeded"/);
     expect(html).toMatch(/#seedRef\d+/);
     expect(ts).toMatch(/private readonly seedRef\d+ = viewChild<ElementRef<KaiConversationsElement>>\('seedRef\d+'\);/);
-    expect(store).toContain("setAttribute('label', 'seeded')");
-    const readyAt = store.indexOf('this.ready.set(true);');
-    const seedAt = store.indexOf("setAttribute('label', 'seeded')");
-    expect(readyAt).toBeGreaterThan(-1);
-    expect(seedAt).toBeGreaterThan(readyAt);
+    expect(ts).toMatch(/this\.seedRef\d+\(\)\?\.nativeElement\.setAttribute\('label', 'seeded'\);/);
+    expect(store).not.toContain('setAttribute');
+    const afterNextRenderAt = ts.indexOf('afterNextRender(() => {');
+    const seedMatch = /this\.seedRef\d+\(\)\?\.nativeElement\.setAttribute\('label', 'seeded'\);/.exec(ts);
+    const bootAt = ts.indexOf('void this.store.actions.boot();');
+    expect(afterNextRenderAt).toBeGreaterThan(-1);
+    expect(seedMatch).not.toBeNull();
+    expect(seedMatch!.index).toBeGreaterThan(afterNextRenderAt);
+    expect(bootAt).toBeGreaterThan(seedMatch!.index);
   });
 
-  it('escapes {{, <, > and & in text, and passes a comment through unescaped', () => {
+  it('escapes {{, }, @, < and & in text, and passes a comment through unescaped', () => {
+    // THE VUE ANALOGY DOES NOT HOLD HERE: Angular has block syntax vue does
+    // not. Every emitted template is already wrapped in `@if (...) { ... }`,
+    // and a repeated row in `@for (...) { ... }` -- so a literal `}` or `@`
+    // in text is block-significant at any depth, not just the closing half
+    // of a mustache pair the way it would be harmless in vue's grammar. Only
+    // the OPENING `{{` needs its second brace broken (the same rule vue.ts
+    // uses, for the same interpolation-opening reason); every `}` and every
+    // `@` is escaped outright, because either one can corrupt the
+    // surrounding @if/@for block rather than merely fail to parse.
     const b = block();
     (b.files as Map<string, string>).set(
       'fixture.html',
       PAGE.replace(
         '<span .textContent="title"></span>',
-        '<!-- note --><span>a {{ b }} &lt; c &amp; d &gt; e</span>',
+        '<!-- note --><span>a {{ b } @c &lt; d &amp; e &gt; f</span>',
       ),
     );
     const html = byPath(renderAngularForm(b)).get('fixture.component.html')!;
-    // Only the SECOND brace of the OPENING `{{` is encoded (same rule as
-    // vue.ts, which parses the same mustache shape): the entity decodes to
-    // `{`, so the raw first brace plus the decoded second one renders as
-    // `{{` again but no longer opens an Angular interpolation for the
-    // compiler reading the source text. The closing `}}` needs no treatment,
-    // the same reason vue's does not: it only closes an interpolation the
-    // opening pair already started.
-    expect(html).toContain('a {&#123; b }} &lt; c &amp; d &gt; e');
-    expect(html).not.toContain('a {{ b }} < c & d > e');
+    expect(html).toContain('a {&#123; b &#125; &#64;c &lt; d &amp; e &gt; f');
+    expect(html).not.toContain('a {{ b } @c < d & e > f');
     // A comment node passes through: nothing inside an HTML comment needs
     // entity escaping, only a literal `-->` would (defensive, unreachable
     // through an authored page -- the parser that read it would have already

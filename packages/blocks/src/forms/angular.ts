@@ -30,13 +30,20 @@
  *
  * ANGULAR IS THE ONLY HOST THAT CALLS THE ACTION FROM THE TEMPLATE (ruling
  * R18). An Angular event binding is a STATEMENT, and `strictTemplates`
- * type-checks that call in both directions: a zero-arg action called with
- * `$event` is TS2554 "Expected 0 arguments, but got 1", and a one-arg action
+ * type-checks that call in both directions: a zero-arg action called with an
+ * argument is TS2554 "Expected 0 arguments, but got 1", and a one-arg action
  * called with none is TS2554 the other way. Nothing about the event NAME
  * predicts which -- `kai-click` carries no detail at all, and
  * `support-widget.controller.ts` mixes both arities across `kai-*` events in
  * one template -- so this renderer reads `ControllerShape.actionArity`
- * instead of guessing from the name.
+ * instead of guessing from the name. The argument itself is `$any($event)`,
+ * not bare `$event`: `strictTemplates` also types `$event` against
+ * `HTMLElementEventMap`, which no `kai-*` event is ever in, so a bare
+ * `$event` types as `Event` and TS2345 rejects it against the action's
+ * declared `CustomEvent<T>` parameter. `$any()` is Angular's own documented
+ * per-expression escape hatch for this, so the compiler's global settings
+ * (`strictDomEventTypes` included) stay exactly what a stock Angular project
+ * ships.
  */
 import { fileTarget } from '../targets';
 import { README_FILE, renderReadme } from './readme';
@@ -46,29 +53,43 @@ import type { Binding, FormFile, TemplateNode } from '../contract/types';
 
 type ElementNode = Extract<TemplateNode, { type: 'element' }>;
 
-/** A JS single-quoted string literal, for the store's own `setAttribute`
- *  calls (a JS context, not a template attribute -- `escapeAttr` is the wrong
- *  escaper here). */
+/** A JS single-quoted string literal, for the component's own colliding-seed
+ *  `setAttribute` calls (a JS context, not a template attribute --
+ *  `escapeAttr` is the wrong escaper here). */
 const jsString = (value: string): string => `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 
 /**
  * Literal text in the angular template.
  *
  * `&` first, or the ampersand of an entity this function itself introduced
- * gets escaped twice. `<` / `>` because a bare one opens or closes a tag, the
- * same reason vue's does. `{{` is broken the same way vue's is: only the
- * SECOND brace is encoded (`{{` becomes `{&#123;`), which still renders as
- * `{{` (the entity decodes to `{`) but no longer opens an interpolation for
- * the compiler reading the source text. Angular templates also treat a bare
- * `{` specially inside an ICU expression, which is the other reason a stray
- * brace is not left unescaped.
+ * gets escaped twice. `<` / `>` because a bare one opens or closes a tag.
+ * `{{` is broken the way vue's is: only the SECOND brace is encoded (`{{`
+ * becomes `{&#123;`), which still renders as `{{` (the entity decodes to
+ * `{`) but no longer opens an interpolation for the compiler reading the
+ * source text.
+ *
+ * THE VUE ANALOGY STOPS THERE, because Angular has BLOCK syntax vue does
+ * not: every emitted template is wrapped in `@if (store.ready()) { ... }`,
+ * and a repeated element in `@for (row of ...; track row.id) { ... }`. A
+ * literal `}` in text is block-significant at any depth, not just paired
+ * with an opening `{{` -- an unescaped one can close the surrounding
+ * `@if`/`@for` block early, corrupting the template silently rather than
+ * failing to parse. So EVERY `}` is escaped, not only the closing half of a
+ * mustache pair the way it would be pointless to touch in vue's grammar. `@`
+ * is escaped for the same reason: it is what OPENS a block (`@if`, `@for`,
+ * `@switch`, `@empty`, `@else`, `@case`, `@default`), so a literal `@word` in
+ * text risks being read as the start of one. Angular's own docs name
+ * `&#123;`/`&#125;`/`&#64;` as the escapes for `{`/`}`/`@` in exactly this
+ * position.
  */
 function escapeText(text: string): string {
   return text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/\{\{/g, '{&#123;');
+    .replace(/\{\{/g, '{&#123;')
+    .replace(/\}/g, '&#125;')
+    .replace(/@/g, '&#64;');
 }
 
 /** A comment's text. `-->` cannot occur in an AUTHORED HTML comment, but this
@@ -117,12 +138,20 @@ function bindingAttr(tag: string, b: Binding, scope: string | undefined, arity: 
       // Angular passes an unrecognised event name straight to
       // addEventListener, which is what a non-bubbling kai- event needs. The
       // action is CALLED here, not referenced: an Angular event binding is a
-      // statement, and strictTemplates type-checks the call. So $event is
-      // passed IFF the action declares a parameter (ruling R18): both
+      // statement, and strictTemplates type-checks the call. So an argument
+      // is passed IFF the action declares a parameter (ruling R18): both
       // directions are TS2554, and the event name predicts neither --
       // kai-click carries no detail, and the real blocks mix both arities
-      // across kai-* events in one template.
-      return `(${b.name})="store.actions.${b.value}(${(arity[b.value] ?? 0) > 0 ? '$event' : ''})"`;
+      // across kai-* events in one template. The argument is `$any($event)`,
+      // not bare `$event`: strictTemplates also types `$event` against
+      // `HTMLElementEventMap`, a map no `kai-*` event is ever in (every one
+      // is a CustomEvent on a custom element, never a known DOM event), so a
+      // bare `$event` types as plain `Event` and TS2345 rejects it against
+      // the action's declared `CustomEvent<T>` parameter. `$any()` is
+      // Angular's own documented escape hatch for exactly this: it casts the
+      // expression to `any` for the template type checker without touching
+      // the compiler's global settings.
+      return `(${b.name})="store.actions.${b.value}(${(arity[b.value] ?? 0) > 0 ? '$any($event)' : ''})"`;
     case 'ref':
       return `#${b.name}`;
     case 'seed':
@@ -130,7 +159,8 @@ function bindingAttr(tag: string, b: Binding, scope: string | undefined, arity: 
       // use: a seed whose target name is also claimed by a prop/attr binding
       // or a literal attribute on the same element is filtered out of
       // `node.bindings` before this runs (see `printElement`) and applied
-      // through ngAfterViewInit instead (CONTROLLER RULING B2-T3-a).
+      // through ngAfterViewInit's afterNextRender instead (CONTROLLER
+      // RULING B2-T5-a, amending B2-T3-a).
       return null;
   }
 }
@@ -141,7 +171,8 @@ const read = (value: string, scope: string | undefined): string =>
 /** A seed the template cannot carry as a static attribute: something else on
  *  the same element already claims its name. `ref` names the `#ref` (an
  *  existing one, or a synthetic one this renderer invents) whose
- *  `setAttribute` call the store emits. */
+ *  `setAttribute` call the component emits, from `ngAfterViewInit`'s
+ *  `afterNextRender` (CONTROLLER RULING B2-T5-a). */
 interface CollidingSeed {
   ref: string;
   name: string;
@@ -172,7 +203,8 @@ function printElement(
     .map((a) => literalAttr(tag, a.name, a.value));
 
   // CONTROLLER RULING B2-T3-a: a seed never disappears. See the module
-  // header; this is the same collision test vue.ts and svelte.ts run.
+  // header; this is the same collision test vue.ts and svelte.ts run. WHERE
+  // it is applied is amended by B2-T5-a, also in the module header.
   const claimedNames = new Set([...boundNames, ...node.attrs.map((a) => propName(tag, a.name))]);
   const refBinding = node.bindings.find((b) => b.kind === 'ref');
   const collidingSeeds = node.bindings.filter((b) => b.kind === 'seed' && claimedNames.has(propName(tag, b.name)));
@@ -258,13 +290,11 @@ export function renderAngularForm(block: Block): FormFile[] {
   const refImports = [
     ...new Set([...refTypes.values(), ...emit.extraRefs.values()].filter((t) => t !== 'HTMLElement')),
   ].sort();
-  // Every distinct ref a colliding seed applies through, whether that ref is
-  // ALSO part of the controller's declared Refs (an authored `#ref`, already
-  // in `refEntries`) or a synthetic one this renderer invented for an element
-  // that had none.
-  const seedRefNames = [...new Set(emit.collidingSeeds.map((s) => s.ref))].sort();
 
-  const stylesheet = parsed.template.stylesheets[0] as string | undefined;
+  // Every linked stylesheet, not just the first: a block that links more than
+  // one must not have the rest silently dropped (the same rule vue.ts's own
+  // `stylesheets.map` follows for its `import` lines).
+  const stylesheets = parsed.template.stylesheets;
 
   const componentCoreImports = [
     'AfterViewInit',
@@ -292,7 +322,7 @@ export function renderAngularForm(block: Block): FormFile[] {
     '@Component({',
     `  selector: 'app-${block.name}',`,
     `  templateUrl: './${block.name}.component.html',`,
-    ...(stylesheet ? [`  styleUrls: ['./${stylesheet}'],`] : []),
+    ...(stylesheets.length ? [`  styleUrls: [${stylesheets.map((css) => `'./${css}'`).join(', ')}],`] : []),
     `  // The store is INSTANCE-scoped. Two of this block on one page each need`,
     `  // their own controller: it owns a subscription and a snapshot.`,
     `  providers: [${name}Store],`,
@@ -314,11 +344,25 @@ export function renderAngularForm(block: Block): FormFile[] {
     `  // matching the shipped react adapter's useEffect ordering: a boot() that`,
     `  // touches a ref finds it populated.`,
     `  ngAfterViewInit(): void {`,
-    `    void this.store.connect(` +
-      `() => (${nullRefsAsGetters(shape, refEntries)})` +
-      (seedRefNames.length ? `, () => (${seedRefsAsGetters(seedRefNames)})` : '') +
-      `).then(() => {`,
-    `      afterNextRender(() => { void this.store.actions.boot(); }, { injector: this.injector });`,
+    `    void this.store.connect(() => (${nullRefsAsGetters(shape, refEntries)})).then(() => {`,
+    ...(emit.collidingSeeds.length
+      ? [
+          `      afterNextRender(() => {`,
+          `        // CONTROLLER RULING B2-T5-a, amending B2-T3-a: setting the \`ready\``,
+          `        // signal does not render synchronously, so applying a colliding`,
+          `        // seed right after \`this.ready.set(true)\` finds no view yet -- its`,
+          `        // viewChild is undefined and the \`?.\` silently drops the seed. It`,
+          `        // applies HERE instead, inside afterNextRender (which runs after`,
+          `        // Angular has actually flushed the ready-gated tree to the DOM),`,
+          `        // immediately before boot() -- the order vue's own awaited`,
+          `        // nextTick and svelte's awaited tick give it.`,
+          ...emit.collidingSeeds.map(
+            (s) => `        this.${s.ref}()?.nativeElement.setAttribute(${jsString(s.name)}, ${jsString(s.value)});`,
+          ),
+          `        void this.store.actions.boot();`,
+          `      }, { injector: this.injector });`,
+        ]
+      : [`      afterNextRender(() => { void this.store.actions.boot(); }, { injector: this.injector });`]),
     `    });`,
     `  }`,
     '}',
@@ -326,7 +370,6 @@ export function renderAngularForm(block: Block): FormFile[] {
   ].join('\n');
 
   const tagsLiteral = `[${tags.map((t) => `'${t}'`).join(', ')}]`;
-  const seedRefsType = seedRefNames.length ? `Record<string, Element | null>` : undefined;
 
   const storeTs = [
     `// GENERATED by @kitn.ai/blocks: the angular adapter.`,
@@ -361,34 +404,16 @@ export function renderAngularForm(block: Block): FormFile[] {
     `  readonly ready = signal(false);`,
     `  readonly actions: ${name}Actions = this.controller.actions;`,
     '',
-    `  // Sets \`ready\` and returns; it does not call boot() itself. boot() is`,
-    `  // the component's job, scheduled from ngAfterViewInit through`,
-    `  // afterNextRender so it runs after Angular has rendered the ready-gated`,
-    `  // template.`,
-    `  async connect(refs: () => ${name}Refs${seedRefsType ? `, seedRefs?: () => ${seedRefsType}` : ''}): Promise<void> {`,
+    `  // Sets \`ready\` and returns; it does not call boot() itself, and it`,
+    `  // does not apply any colliding seed either (CONTROLLER RULING`,
+    `  // B2-T5-a): both are the component's job, from ngAfterViewInit's`,
+    `  // afterNextRender, which is the first point after \`ready\` flips where`,
+    `  // the view has actually rendered. Setting a signal here does not.`,
+    `  async connect(refs: () => ${name}Refs): Promise<void> {`,
     `    this.refs = refs;`,
     `    this.controller.subscribe(() => this.state.set(this.controller.state()));`,
     `    await Promise.all(TAGS.map((tag) => customElements.whenDefined(tag)));`,
     `    this.ready.set(true);`,
-    ...(emit.collidingSeeds.length
-      ? [
-          `    // CONTROLLER RULING B2-T3-a: a seed colliding with a reactive`,
-          `    // binding or a literal attribute of the same name (spec 8b,`,
-          `    // amendment 5, as amended) cannot stay a static attribute, so it`,
-          `    // applies here instead, once, after the ready-gated tree has`,
-          `    // rendered and before boot() (the order react's and vue's own`,
-          `    // mount hooks give it).`,
-          `    const seedTargets = seedRefs ? seedRefs() : {};`,
-          // Bracket access, not dot: seedTargets is typed through an index
-          // signature (Record<string, Element | null>), and the stock
-          // Angular CLI tsconfig sets noPropertyAccessFromIndexSignature, so
-          // a dotted access is TS4111 under ngc even though vue-tsc and
-          // svelte-check do not set that option.
-          ...emit.collidingSeeds.map(
-            (s) => `    seedTargets[${jsString(s.ref)}]?.setAttribute(${jsString(s.name)}, ${jsString(s.value)});`,
-          ),
-        ]
-      : []),
     `  }`,
     '}',
     '',
@@ -415,8 +440,8 @@ export function renderAngularForm(block: Block): FormFile[] {
       `Render it: \`<app-${block.name} />\`, importing \`${name}Component\` from \`./${block.name}.component\`.`,
       '',
       'The component declares `CUSTOM_ELEMENTS_SCHEMA`, which is what lets Angular render `kai-` elements without trying to resolve them as components.',
-      ...(stylesheet
-        ? ['', `Angular scopes \`${stylesheet}\` to this component. A rule that has to reach the page around the block belongs in your global styles instead.`]
+      ...(stylesheets.length
+        ? ['', `Angular scopes ${stylesheets.map((css) => `\`${css}\``).join(' and ')} to this component. A rule that has to reach the page around the block belongs in your global styles instead.`]
         : []),
     ]),
   );
@@ -425,20 +450,15 @@ export function renderAngularForm(block: Block): FormFile[] {
 }
 
 /** The object literal `connect` hands the controller from `ngAfterViewInit`:
- *  every declared ref, read off its `viewChild` signal's `.nativeElement`. */
+ *  every declared ref, read off its `viewChild` signal's `.nativeElement`. A
+ *  synthetic ref invented for a colliding seed (no authored `#ref` to reuse)
+ *  is never one of `shape.refNames`, so it never appears here -- it is read
+ *  directly, in the `afterNextRender` callback below, which is the ONLY
+ *  reader of its `viewChild` and why a synthetic ref is never TS6133
+ *  "declared but never read". */
 function nullRefsAsGetters(shape: { refNames: string[] }, refEntries: [string, string][]): string {
   const byName = new Set(refEntries.map(([r]) => r));
   return `{ ${shape.refNames
     .map((r) => (byName.has(r) ? `${r}: this.${r}()?.nativeElement ?? null` : `${r}: null`))
     .join(', ')} }`;
-}
-
-/** The object literal `connect`'s second argument hands over: every distinct
- *  ref a colliding seed applies through, read off its `viewChild` signal.
- *  This is the ONLY reader of a synthetic ref's `viewChild` (an element that
- *  had no authored `#ref`), which is why a synthetic ref with a colliding
- *  seed and no other use would otherwise be TS6133 "declared but never
- *  read". */
-function seedRefsAsGetters(seedRefNames: string[]): string {
-  return `{ ${seedRefNames.map((r) => `${r}: this.${r}()?.nativeElement ?? null`).join(', ')} }`;
 }
