@@ -140,7 +140,12 @@ describe('web-component form (any non-react project)', () => {
 
   it('writes every manifest file and pins the kit', async () => {
     for (const block of all()) {
-      const dir = await project(`wc-${block.name}`, { name: 'host', dependencies: { vue: '^3.0.0' } });
+      // `preact`, not `vue`: FRAMEWORK_SIGNALS maps preact to a null
+      // framework on purpose (a project that will never get its own tree),
+      // so it stays a safe "any non-react project" proxy across every future
+      // renderer this PR adds. Vue used to fill this role before it had a
+      // real tree of its own; PR B2's vue landing broke that assumption.
+      const dir = await project(`wc-${block.name}`, { name: 'host', dependencies: { preact: '^10.0.0' } });
       const run = await runInto(dir, [block.name]);
       expect(run.code, run.err.join('\n')).toBe(0);
       // The html form's OWN file list, not the manifest's: the authored
@@ -235,7 +240,7 @@ describe('web-component form (any non-react project)', () => {
         { path: 'legacy-block.js', type: 'registry:file', content: "document.getElementById('t').messages = [];\n" },
       ],
     };
-    const dir = await project('html-legacy', { name: 'host', dependencies: { vue: '^3.0.0' } });
+    const dir = await project('html-legacy', { name: 'host', dependencies: { preact: '^10.0.0' } });
     const run = await runInto(dir, ['https://registry.example/r/legacy-block.json', '--form', 'html'], {
       fetchJson: async () => JSON.parse(JSON.stringify(item)),
     });
@@ -248,7 +253,7 @@ describe('web-component form (any non-react project)', () => {
     // The README is what a consumer reads to find out what the block needs.
     // Writing it and not printing it makes the terminal end on a file list.
     for (const block of all()) {
-      const dir = await project(`readme-${block.name}`, { name: 'host', dependencies: { vue: '^3.0.0' } });
+      const dir = await project(`readme-${block.name}`, { name: 'host', dependencies: { preact: '^10.0.0' } });
       const run = await runInto(dir, [block.name]);
       expect(run.code, run.err.join('\n')).toBe(0);
       const written = await readFile(path.join(dir, fileTarget('html', block.name, README_FILE)), 'utf8');
@@ -474,7 +479,7 @@ describe('per-block item JSON URLs resolve through the same path (the integratio
     // the manifest a consumer fetches. The bundled copy already has them on
     // disk, so nothing is re-stripped here.
     const item = buildRegistryItem(withStrippedTwins(block, (source) => source));
-    const dir = await project('url-case', { name: 'host', dependencies: { vue: '3' } });
+    const dir = await project('url-case', { name: 'host', dependencies: { preact: '10' } });
     let fetched: string | undefined;
     const run = await runInto(dir, [`https://registry.example/r/${block.name}.json`], {
       fetchJson: async (url) => {

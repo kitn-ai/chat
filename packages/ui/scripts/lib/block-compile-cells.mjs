@@ -25,7 +25,7 @@
 
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { CELL_NOTES } from './block-framework-cells.mjs';
+import { CELL_NOTES, FRAMEWORK_CELLS } from './block-framework-cells.mjs';
 
 /**
  * TypeScript that survived the strip.
@@ -140,7 +140,7 @@ function htmlCell({ esbuild, name, files }) {
  * than a skip: a cell that quietly stops running is the exact shape of check
  * this repo keeps paying for.
  */
-const STRATEGIES = { react: reactCell, html: htmlCell };
+const STRATEGIES = { react: reactCell, html: htmlCell, vue: FRAMEWORK_CELLS.vue };
 
 /**
  * Run every block x form cell. Prints the axis and the cell count it actually

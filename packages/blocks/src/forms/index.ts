@@ -12,6 +12,10 @@
  *   - `react`- the react form: the block root as a tree of the typed
  *              wrappers from `@kitn.ai/ui/react`, plus a `useSyncExternalStore`
  *              adapter over the controller (see `./react`).
+ *   - `vue`  : the vue form: the block root as a `<script setup>` SFC over the
+ *              custom elements, plus a composable holding one `shallowRef`
+ *              over the controller (see `./vue`, built on the shared
+ *              component-framework preamble in `./emit`).
  *   - `cdn`  : the single-file CDN paste form: the HTML form above, inlined
  *              and pinned onto the published entries by `registry.ts`'s
  *              `generateCdnForm` (see `./cdn`).
@@ -32,6 +36,7 @@ import type { Block, CdnFormOptions } from '../registry';
 import type { FormFile } from '../contract/types';
 import { renderHtmlForm } from './html';
 import { renderReactForm } from './react';
+import { renderVueForm } from './vue';
 import { renderCdnFormFiles } from './cdn';
 
 // The renderers live in their own modules and are re-exported HERE, so every
@@ -40,6 +45,7 @@ import { renderCdnFormFiles } from './cdn';
 export { renderHtmlForm, renderBinder, serializeTemplate, adaptRegistrationForBundler } from './html';
 export type { HtmlFormOptions } from './html';
 export { renderReactForm, handlerName } from './react';
+export { renderVueForm } from './vue';
 export { renderCdnFormFiles } from './cdn';
 export { README_FILE, renderReadme } from './readme';
 export type { FormFile };
@@ -58,6 +64,7 @@ export { pascal as componentName } from '../registry';
 export const BLOCK_FORMS = [
   { id: 'html', label: 'HTML' },
   { id: 'react', label: 'React' },
+  { id: 'vue', label: 'Vue' },
   { id: 'cdn', label: 'CDN single file' },
 ] as const;
 
@@ -125,6 +132,7 @@ export function renderBlockForm(block: Block, form: BlockFormId, opts: { cdn: Cd
   switch (form) {
     case 'html': return renderHtmlForm(block);
     case 'react': return renderReactForm(block);
+    case 'vue': return renderVueForm(block);
     case 'cdn': return renderCdnFormFiles(block, opts.cdn);
   }
 }
