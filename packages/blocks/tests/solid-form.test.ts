@@ -69,7 +69,7 @@ describe('the solid form', () => {
     expect(byPath(renderSolidForm(b)).get('Fixture.tsx')).toContain('prop:activeId={state().title}');
   });
 
-  it('annotates the ref callback, because an unannotated one is TS7006', () => {
+  it('annotates the ref callback, kept for readability -- the parameterized augmentation infers it either way', () => {
     const tsx = byPath(renderSolidForm(block())).get('Fixture.tsx')!;
     expect(tsx).toContain("import type { KaiDockElement } from '@kitn.ai/ui/elements';");
     expect(tsx).toContain('ref={(el: KaiDockElement) => { dock = el; }}');

@@ -20,9 +20,12 @@
  * (Task 6 Step 6).
  *
  * REFS ARE PLAIN `let`s, not signals: the controller reads them lazily
- * through a getter, so nothing here needs to be reactive. An unannotated
- * `ref` callback is TS7006 under the kit's generic JSX augmentation, so every
- * ref callback below carries an explicit parameter type.
+ * through a getter, so nothing here needs to be reactive. Ruling B2-T1-d: the
+ * explicit parameter type on every ref callback below is kept for
+ * readability, not because it is required -- the kit's parameterized
+ * augmentation (parameterized on the element type; only its prop index
+ * signature is generic) infers the real element interface either way,
+ * annotated or not.
  *
  * `<For>` TAKES NO KEY: it is reference-keyed by the row object itself, so
  * the authored `:key` has no expression to become in this form. Rather than
@@ -118,7 +121,8 @@ function bindingProp(tag: string, b: Binding, scope: string | undefined, refType
       // would not reach it.
       return `on:${b.name}={actions.${b.value}}`;
     case 'ref':
-      // The annotation is not decoration: without it this is TS7006.
+      // Ruling B2-T1-d: kept for readability. The kit's parameterized
+      // augmentation infers the real element interface either way.
       return `ref={(el: ${refType}) => { ${b.value} = el; }}`;
     case 'seed':
       // Handled by the caller: a non-colliding seed formats through
@@ -185,8 +189,8 @@ function printElement(node: ElementNode, pad: string, scope: string | undefined,
     .filter((p): p is string => p !== null);
 
   const attrs = [
-    ...(syntheticRef ? [`ref={(el: ${refType}) => { ${syntheticRef} = el; }}`] : []),
     ...literalAttrs,
+    ...(syntheticRef ? [`ref={(el: ${refType}) => { ${syntheticRef} = el; }}`] : []),
     ...orderedProps,
   ];
 
@@ -276,8 +280,8 @@ export function renderSolidForm(block: Block): FormFile[] {
     `//`,
     `// CUSTOM ELEMENTS, not the Solid components in \`@kitn.ai/ui/solid\`, and the`,
     `// reasons are mechanical rather than stylistic. The controller types its refs`,
-    `// as the ELEMENT interfaces (${refImports[0] ?? 'HTMLElement'}), which a Solid component does not`,
-    `// hand back; and the kai- events are dispatched by the element facade, not by`,
+    `// as ELEMENT interfaces, which a Solid component does not hand back; and`,
+    `// the kai- events are dispatched by the element facade, not by`,
     `// the Solid component underneath it, so \`on:kai-click\` on a Solid component`,
     `// would silently never fire.`,
     `import { ${solidHelpers.join(', ')} } from 'solid-js';`,
@@ -290,8 +294,9 @@ export function renderSolidForm(block: Block): FormFile[] {
       ? [
           `  // A plain \`let\`, read through the getter below: refs are not reactive, and`,
           `  // the controller reads them lazily, so there is nothing here for a signal to`,
-          `  // do. The parameter annotation is required: under the kit's generic`,
-          `  // solid-js JSX augmentation an unannotated \`ref\` callback is TS7006.`,
+          `  // do. The ref parameter's type annotation is kept for readability, not because`,
+          `  // it is required: the kit's parameterized augmentation infers the real element`,
+          `  // interface either way, annotated or not.`,
           ...refDeclarations,
         ]
       : []),
