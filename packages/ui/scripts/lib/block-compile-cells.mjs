@@ -146,6 +146,7 @@ const STRATEGIES = {
   vue: FRAMEWORK_CELLS.vue,
   svelte: FRAMEWORK_CELLS.svelte,
   angular: FRAMEWORK_CELLS.angular,
+  solid: FRAMEWORK_CELLS.solid,
 };
 
 /**

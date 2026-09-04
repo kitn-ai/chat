@@ -225,8 +225,45 @@ One PR, several small independent fixes. Write a plan; keep it flat, one task pe
 | B0 residual: view-stack observer note | Overstates its claim; the stack resolves by name |
 | B0 residual: runtime.tsx comment | The self-registration comment is stale |
 | docs `guides/frameworks/react.mdx` | Lacks a wrapper-ref snippet, which PR B0 made worth having |
+| Solid exports named after the tag | The elements with no same-name Solid component export. Derived list in 3.6a |
+| Per-element Solid JSX typing | The PR B2 augmentation is generic, so the solid cell types no kai prop value. Reason in 3.6a |
+| Svelte template typing for `kai-*` | Svelte types every unknown element `any`, so the svelte cell sees no prop name. Reason in 3.6a |
 
 **Eval gate:** the full required job, plus each new guard watched failing first.
+
+### 3.6a Filed by PR B2
+
+- **[tickets] Export a Solid component named after the tag, for the elements that have none.** `verify:solid-coverage` grades WRITABLE EQUIVALENCE and passes at full coverage today, which is a weaker property than "there is a component with this name to put in a generated tree". The solid delivery form (PR B2) renders custom elements for every tag and does not need these, so nothing is blocked; what they would buy is a Solid consumer writing the block by hand rather than generating it. The list below was produced by `node packages/ui/scripts/verify-solid-coverage.mjs --json <path>`, read for `nameMatch` against `solidSurface`; re-run it rather than trusting the list, and note that the 2026-09-02 spec's section 3.6 table disagrees with the script in both directions.
+
+  - `kai-cards` wants `null`; `@kitn.ai/ui/solid` exports `[CardFallback]`
+  - `kai-chain-of-thought` wants `ChainOfThought`; `@kitn.ai/ui/solid` exports `[ChainOfThoughtAccordion]`
+  - `kai-chat` wants `null`; `@kitn.ai/ui/solid` exports `[ChatThread]`
+  - `kai-choice` wants `null`; `@kitn.ai/ui/solid` exports `[ChoiceCard]`
+  - `kai-command` wants `null`; `@kitn.ai/ui/solid` exports `[CommandList]`
+  - `kai-compare` wants `null`; `@kitn.ai/ui/solid` exports `[ChatConfig, ResponseCompare]`
+  - `kai-confirm` wants `null`; `@kitn.ai/ui/solid` exports `[ConfirmCard]`
+  - `kai-conversation-item` wants `ConversationItem`; `@kitn.ai/ui/solid` exports `[SlottedConversationItem]`
+  - `kai-conversations` wants `null`; `@kitn.ai/ui/solid` exports `[CollapsedRail, ConversationList]`
+  - `kai-hover-card` wants `HoverCard`; `@kitn.ai/ui/solid` exports `[HoverCardContent, HoverCardRoot, HoverCardTrigger]`
+  - `kai-icon` wants `null`; `@kitn.ai/ui/solid` exports `[renderIcon]`
+  - `kai-menu` wants `null`; `@kitn.ai/ui/solid` exports `[Dropdown, DropdownCheckboxItem, DropdownContent, DropdownItem, DropdownLabel, DropdownRadioItem, DropdownSeparator, DropdownSub, DropdownSubContent, DropdownSubTrigger, DropdownTrigger, Kbd]`
+  - `kai-remote` wants `null`; `@kitn.ai/ui/solid` exports `[emitCardEvent, mountRemoteCard]`
+  - `kai-resizable` wants `Resizable`; `@kitn.ai/ui/solid` exports `[ResizableHandle]`
+  - `kai-resizable-item` wants `null`; `@kitn.ai/ui/solid` exports `[clampBasis, normalizeSize]`
+  - `kai-scope-picker` wants `null`; `@kitn.ai/ui/solid` exports `[ChatScopePicker]`
+  - `kai-scroll-button` wants `ScrollButton`; `@kitn.ai/ui/solid` exports `[Button]`
+  - `kai-search` wants `null`; `@kitn.ai/ui/solid` exports `[Input, Kbd, Loader]`
+  - `kai-skills` wants `null`; `@kitn.ai/ui/solid` exports `[MessageSkills]`
+  - `kai-sources` wants `null`; `@kitn.ai/ui/solid` exports `[Source, SourceContent, SourceList, SourceTrigger]`
+  - `kai-suggestions` wants `null`; `@kitn.ai/ui/solid` exports `[PromptSuggestion]`
+  - `kai-tab-bar` wants `null`; `@kitn.ai/ui/solid` exports `[createTabBarItemsController, isTabBarItemDisabled, readTabBarItemValue]`
+  - `kai-tab-bar-item` wants `null`; `@kitn.ai/ui/solid` exports `[TabBarItemContent]`
+  - `kai-tasks` wants `null`; `@kitn.ai/ui/solid` exports `[TasksCard]`
+  - `kai-view-stack` wants `ViewStack`; `@kitn.ai/ui/solid` exports `[createViewStack]`
+  - `kai-workspace` wants `null`; `@kitn.ai/ui/solid` exports `[WorkspaceShell]`
+
+- **[tickets] Per-element Solid JSX typing.** The `solid-js/jsx-runtime` augmentation shipped in PR B2 is generic, so the solid compile cell checks JSX expressions and not kai prop VALUES. A per-element version needs an Events type keyed by the RAW event name (`on:kai-click`); `gen-element-types.mjs` emits only the camel-cased `onKaiClick` shape the React and Vue blocks use, and one cannot be derived from the other at the type level. Generator work, not augmentation work.
+- **[tickets] Svelte template typing for `kai-*`.** `svelte/elements.d.ts` ends `SvelteHTMLElements` with `[name: string]: { [name: string]: any }`, so `svelte-check` types every unknown element and every attribute on it as `any` and a wrong kai prop NAME is invisible to the svelte compile cell. An augmentation of `svelteHTML.IntrinsicElements` would close it, on the same generator, and would let the svelte cell carry a prop-type plant the way the vue cell does.
 
 ### 3.7 The new-blocks round
 

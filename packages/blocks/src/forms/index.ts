@@ -22,6 +22,11 @@
  *   - `angular`: a standalone `Component` with `CUSTOM_ELEMENTS_SCHEMA` over
  *              the custom elements, plus an `@Injectable()` store holding one
  *              `signal` over the controller (see `./angular`, same preamble).
+ *   - `solid`: the block root rendered as custom elements directly (spec 3.6,
+ *              option (a) -- no Solid component in `@kitn.ai/ui/solid` types
+ *              its refs as the controller's element interfaces or dispatches
+ *              a kai- event), gated on `<Show when={ready()}>`, plus a
+ *              `createSignal` adapter (see `./solid`, same preamble).
  *   - `cdn`  : the single-file CDN paste form: the HTML form above, inlined
  *              and pinned onto the published entries by `registry.ts`'s
  *              `generateCdnForm` (see `./cdn`).
@@ -45,6 +50,7 @@ import { renderReactForm } from './react';
 import { renderVueForm } from './vue';
 import { renderSvelteForm } from './svelte';
 import { renderAngularForm } from './angular';
+import { renderSolidForm } from './solid';
 import { renderCdnFormFiles } from './cdn';
 
 // The renderers live in their own modules and are re-exported HERE, so every
@@ -56,6 +62,7 @@ export { renderReactForm, handlerName } from './react';
 export { renderVueForm } from './vue';
 export { renderSvelteForm } from './svelte';
 export { renderAngularForm } from './angular';
+export { renderSolidForm } from './solid';
 export { renderCdnFormFiles } from './cdn';
 export { README_FILE, renderReadme } from './readme';
 export type { FormFile };
@@ -77,6 +84,7 @@ export const BLOCK_FORMS = [
   { id: 'vue', label: 'Vue' },
   { id: 'svelte', label: 'Svelte' },
   { id: 'angular', label: 'Angular' },
+  { id: 'solid', label: 'Solid' },
   { id: 'cdn', label: 'CDN single file' },
 ] as const;
 
@@ -147,6 +155,7 @@ export function renderBlockForm(block: Block, form: BlockFormId, opts: { cdn: Cd
     case 'vue': return renderVueForm(block);
     case 'svelte': return renderSvelteForm(block);
     case 'angular': return renderAngularForm(block);
+    case 'solid': return renderSolidForm(block);
     case 'cdn': return renderCdnFormFiles(block, opts.cdn);
   }
 }
