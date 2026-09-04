@@ -142,6 +142,90 @@ describe('the svelte form', () => {
     expect(other).toContain('compact={true}');
   });
 
+  it('never drops a seed colliding with a .prop/:attr binding on the same element: it applies in onMount instead', () => {
+    // Controller ruling B2-T3-a. Svelte's set_custom_element_data assigns
+    // the property for a bound expression AND for a plain attribute of the
+    // same name -- source order would decide silently which one wins -- so
+    // the colliding seed cannot stay a static attribute here either. It
+    // becomes a one-time setAttribute on the element's own bind:this ref,
+    // applied after the ready-gated tree has rendered and before boot().
+    const b = block();
+    (b.files as Map<string, string>).set(
+      'fixture.html',
+      PAGE.replace(
+        'seed:position="bottom-end" .unread="hidden"',
+        'seed:position="bottom-end" seed:unread="true" .unread="hidden"',
+      ),
+    );
+    const files = byPath(renderSvelteForm(b));
+    const sfc = files.get('Fixture.svelte')!;
+    const adapter = files.get('useFixture.svelte.ts')!;
+    // Not a static attribute anywhere: the reactive binding it collides with
+    // is unaffected.
+    expect(sfc).not.toContain('unread="true"');
+    expect(sfc).toContain('unread={fixture.state.hidden}');
+    // The OTHER seed on the same element, which does not collide, is
+    // unaffected: still a plain static attribute.
+    expect(sfc).toContain('position="bottom-end"');
+    // dock already has a #ref, so the seed reuses it rather than inventing a
+    // synthetic one.
+    expect(adapter).toContain("setAttribute('unread', 'true')");
+    const tickAt = adapter.indexOf('await tick();');
+    const seedAt = adapter.indexOf("setAttribute('unread', 'true')");
+    const bootAt = adapter.indexOf('void controller.actions.boot();');
+    expect(tickAt).toBeGreaterThan(-1);
+    expect(seedAt).toBeGreaterThan(tickAt);
+    expect(bootAt).toBeGreaterThan(seedAt);
+  });
+
+  it('never drops a seed colliding with a literal attribute of the same name: it applies in onMount through a synthetic ref', () => {
+    // The second collision shape B2-T3-a names: a literal attribute (not a
+    // binding) claiming the same name. kai-conversations has no #ref in the
+    // fixture, so this exercises the synthetic-ref path.
+    const b = block();
+    (b.files as Map<string, string>).set(
+      'fixture.html',
+      PAGE.replace('<kai-conversations>', '<kai-conversations label="orig" seed:label="seeded">'),
+    );
+    const files = byPath(renderSvelteForm(b));
+    const sfc = files.get('Fixture.svelte')!;
+    const adapter = files.get('useFixture.svelte.ts')!;
+    // The literal is unaffected; it still renders as authored.
+    expect(sfc).toContain('label="orig"');
+    // The seed never becomes a second, colliding "label" attribute.
+    expect(sfc).not.toMatch(/label="seeded"/);
+    expect(adapter).toContain("setAttribute('label', 'seeded')");
+    expect(sfc).toMatch(/let seedRef\d+ = \$state<KaiConversationsElement \| null>\(null\);/);
+    expect(sfc).toMatch(/bind:this=\{seedRef\d+\}/);
+    const tickAt = adapter.indexOf('await tick();');
+    const seedAt = adapter.indexOf("setAttribute('label', 'seeded')");
+    const bootAt = adapter.indexOf('void controller.actions.boot();');
+    expect(tickAt).toBeGreaterThan(-1);
+    expect(seedAt).toBeGreaterThan(tickAt);
+    expect(bootAt).toBeGreaterThan(seedAt);
+  });
+
+  it('escapes {, }, <, > and & in text, and passes a comment through unescaped', () => {
+    const b = block();
+    (b.files as Map<string, string>).set(
+      'fixture.html',
+      PAGE.replace(
+        '<span .textContent="title"></span>',
+        '<!-- note --><span>a { b } &lt; c &amp; d &gt; e</span>',
+      ),
+    );
+    const sfc = byPath(renderSvelteForm(b)).get('Fixture.svelte')!;
+    // Every stray brace is escaped (unlike vue's paired-mustache rule): a
+    // single `{` or `}` is enough to open or close a svelte expression.
+    expect(sfc).toContain('a &#123; b &#125; &lt; c &amp; d &gt; e');
+    expect(sfc).not.toContain('a { b } < c & d > e');
+    // A comment node passes through: nothing inside an HTML comment needs
+    // entity escaping, only a literal `-->` would (defensive, unreachable
+    // through an authored page -- the parser that read it would have already
+    // closed the comment on that sequence).
+    expect(sfc).toContain('<!-- note -->');
+  });
+
   it('the README says how to render it and claims no config a Svelte project does not need', () => {
     const readme = byPath(renderSvelteForm(block())).get('README.md')!;
     expect(readme).toContain('Fixture.svelte');
