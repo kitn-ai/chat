@@ -40,8 +40,20 @@ describe('analyzeController', () => {
       name: 'Widget',
       stateFields: ['messages', 'loading', 'backHidden'],
       actionNames: ['back', 'submit', 'boot'],
+      actionArity: { back: 0, submit: 1, boot: 0 },
       refNames: ['stack', 'dock'],
     });
+  });
+
+  it('records how many parameters each action declares', () => {
+    // Angular's event binding is a STATEMENT, so `strictTemplates` type-checks
+    // the call: a zero-arg action called with $event is TS2554 "Expected 0
+    // arguments, but got 1", and a one-arg action called with none is TS2554
+    // the other way. Nothing about the event NAME predicts it -- kai-click
+    // carries no detail, and the real blocks mix both arities across kai-*
+    // events in one template -- so the renderer reads the declaration.
+    const out = analyzeController(GOOD, 'Widget', 'fixture/w.controller.ts');
+    expect(out.shape?.actionArity).toEqual({ back: 0, submit: 1, boot: 0 });
   });
 
   it('ignores comments, including a commented-out member', () => {

@@ -139,6 +139,55 @@ function memberNames(body: string): string[] {
   return names;
 }
 
+/**
+ * How many parameters a member DECLARES: 0 for a property, and for a method or
+ * a function-typed property the count of top-level commas in its first
+ * parameter list, plus one, or 0 when that list is empty.
+ *
+ * Depth-tracked for the same reason `splitMembers` is: `send(a: string, opts: {
+ * x: boolean, y: boolean })` is TWO parameters, and a naive comma count reads
+ * four. This is not a parser and does not need to be -- the contract fixes
+ * these interfaces to plain method signatures, and the ONE consumer is a
+ * renderer deciding whether to pass `$event`.
+ *
+ * ONE KNOWN IMPRECISION, stated rather than hidden. An arrow type inside the
+ * parameter list (`send(cb: (a: string) => void, x: number)`) ends the scan
+ * early, because the `>` of `=>` reads as a closer under plain counting --
+ * the same case `splitMembers` handles explicitly. The count it returns is
+ * still >= 1, so the renderer's decision (pass `$event` or not) is unaffected,
+ * which is why this does not carry `splitMembers`'s arrow special case. If a
+ * consumer ever needs the exact count, add it there and here together.
+ */
+function memberArity(token: string): number {
+  const open = token.indexOf('(');
+  if (open === -1) return 0;
+  let depth = 0;
+  let commas = 0;
+  let body = '';
+  for (let i = open; i < token.length; i += 1) {
+    const ch = token[i];
+    if (ch === '(' || ch === '{' || ch === '[' || ch === '<') depth += 1;
+    else if (ch === ')' || ch === '}' || ch === ']' || ch === '>') {
+      depth -= 1;
+      if (depth === 0) break;
+    }
+    if (depth === 1 && ch === ',') commas += 1;
+    if (i > open) body += ch;
+  }
+  return body.trim() === '' ? 0 : commas + 1;
+}
+
+/** `name -> parameter count`, over an interface body's members, in the same
+ *  order `memberNames` would derive them. */
+function memberArities(body: string): Record<string, number> {
+  const arities: Record<string, number> = {};
+  for (const token of splitMembers(body)) {
+    const m = /^\s*(?:readonly\s+)?([A-Za-z_$][\w$]*)\s*\??\s*[:(<]/.exec(token);
+    if (m && !(m[1] in arities)) arities[m[1]] = memberArity(token);
+  }
+  return arities;
+}
+
 export function analyzeController(
   source: string,
   componentName: string,
@@ -151,9 +200,12 @@ export function analyzeController(
     errors.push(`${where}: no \`export function createController(\`. The controller contract (spec 3.2) is one factory returning { state, actions, subscribe }.`);
   }
 
+  let actionsBody: string | null = null;
+
   const read = (suffix: string, label: string): string[] => {
     const name = `${componentName}${suffix}`;
     const body = interfaceBody(code, name);
+    if (suffix === 'Actions') actionsBody = body;
     if (body === null) {
       errors.push(`${where}: no \`export interface ${name}\` (or its braces do not close). The generated adapters import that exact name, derived from the block id, so it is fixed by the contract.`);
       return [];
@@ -167,6 +219,11 @@ export function analyzeController(
 
   const stateFields = read('State', 'state');
   const actionNames = read('Actions', 'actions');
+  // Refs and state fields do not need an arity: only the angular form calls
+  // an action from the template, so this is scoped to Actions on purpose --
+  // an unused field on a shared type is the next thing somebody derives a
+  // wrong rule from.
+  const actionArity: Record<string, number> = actionsBody !== null ? memberArities(actionsBody) : {};
   // `boot()` is the mount hook every host calls once after wiring: the react
   // adapter fires it in an effect, and the html binder awaits it before
   // setting the driver's readiness signal. The html form has nowhere else to
@@ -178,7 +235,7 @@ export function analyzeController(
   const refNames = read('Refs', 'refs');
 
   if (errors.length) return { errors };
-  return { shape: { name: componentName, stateFields, actionNames, refNames }, errors: [] };
+  return { shape: { name: componentName, stateFields, actionNames, actionArity, refNames }, errors: [] };
 }
 
 /** The page's `@` and `#ref` bindings against the controller's declared

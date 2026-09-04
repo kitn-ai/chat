@@ -90,5 +90,13 @@ export interface ControllerShape {
   name: string;
   stateFields: string[];
   actionNames: string[];
+  /** How many parameters each action DECLARES, by name.
+   *
+   *  Only the angular form reads it, and only because an Angular event binding
+   *  is a statement: the action is CALLED in the template, and
+   *  `strictTemplates` checks that call in both directions. Additive on
+   *  purpose: `actionNames` keeps its exact meaning, so html.ts, react.ts and
+   *  checkBlockContracts do not move. */
+  actionArity: Record<string, number>;
   refNames: string[];
 }

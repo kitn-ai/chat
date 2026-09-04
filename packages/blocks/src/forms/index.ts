@@ -19,6 +19,9 @@
  *   - `svelte`: the svelte form: the block root as a `.svelte` component over
  *              the custom elements, plus a `.svelte.ts` rune adapter holding
  *              one `$state` snapshot (see `./svelte`, same preamble).
+ *   - `angular`: a standalone `Component` with `CUSTOM_ELEMENTS_SCHEMA` over
+ *              the custom elements, plus an `@Injectable()` store holding one
+ *              `signal` over the controller (see `./angular`, same preamble).
  *   - `cdn`  : the single-file CDN paste form: the HTML form above, inlined
  *              and pinned onto the published entries by `registry.ts`'s
  *              `generateCdnForm` (see `./cdn`).
@@ -41,6 +44,7 @@ import { renderHtmlForm } from './html';
 import { renderReactForm } from './react';
 import { renderVueForm } from './vue';
 import { renderSvelteForm } from './svelte';
+import { renderAngularForm } from './angular';
 import { renderCdnFormFiles } from './cdn';
 
 // The renderers live in their own modules and are re-exported HERE, so every
@@ -51,6 +55,7 @@ export type { HtmlFormOptions } from './html';
 export { renderReactForm, handlerName } from './react';
 export { renderVueForm } from './vue';
 export { renderSvelteForm } from './svelte';
+export { renderAngularForm } from './angular';
 export { renderCdnFormFiles } from './cdn';
 export { README_FILE, renderReadme } from './readme';
 export type { FormFile };
@@ -71,6 +76,7 @@ export const BLOCK_FORMS = [
   { id: 'react', label: 'React' },
   { id: 'vue', label: 'Vue' },
   { id: 'svelte', label: 'Svelte' },
+  { id: 'angular', label: 'Angular' },
   { id: 'cdn', label: 'CDN single file' },
 ] as const;
 
@@ -140,6 +146,7 @@ export function renderBlockForm(block: Block, form: BlockFormId, opts: { cdn: Cd
     case 'react': return renderReactForm(block);
     case 'vue': return renderVueForm(block);
     case 'svelte': return renderSvelteForm(block);
+    case 'angular': return renderAngularForm(block);
     case 'cdn': return renderCdnFormFiles(block, opts.cdn);
   }
 }
