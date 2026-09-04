@@ -114,12 +114,92 @@ describe('the vue form', () => {
     expect(sfc).not.toMatch(/(?<!:)searchable="false"/);
   });
 
-  it('emits a seed as a static attribute, never as a bound one', () => {
-    // A seed is written once. In react that is a mount effect; everywhere else
-    // it is a plain attribute, because nothing re-applies it     // amendment 5).
+  it('emits a non-colliding seed as a static attribute, never as a bound one', () => {
+    // A seed is written once. In react that is a mount effect; here, when
+    // nothing else on the element claims the same name, it is a plain
+    // attribute, because nothing re-applies it (spec 8b, amendment 5).
     const sfc = byPath(renderVueForm(block())).get('Fixture.vue')!;
     expect(sfc).toContain('position="bottom-end"');
     expect(sfc).not.toContain(':position');
+  });
+
+  it('never drops a seed colliding with a .prop/:attr binding on the same element: it applies in onMounted instead', () => {
+    // Controller ruling B2-T3-a. Dropping a colliding seed was the fix-round-1
+    // finding: Vue compiles a `.prop`/`:attr` binding and a plain attribute of
+    // the same name into two entries of ONE props object (TS1117, a duplicate
+    // object-literal key), so the seed cannot stay a static attribute here --
+    // but it must not disappear either. It becomes a one-time setAttribute on
+    // the element's own template ref, applied after the ready-gated tree has
+    // rendered and before boot() (the order react's own effect gives it).
+    const b = block();
+    (b.files as Map<string, string>).set(
+      'fixture.html',
+      PAGE.replace(
+        'seed:position="bottom-end" .unread="hidden"',
+        'seed:position="bottom-end" seed:unread="true" .unread="hidden"',
+      ),
+    );
+    const files = byPath(renderVueForm(b));
+    const sfc = files.get('Fixture.vue')!;
+    const composable = files.get('useFixture.ts')!;
+    // Not a static attribute (the un-bound literal form, only): the reactive
+    // binding it collides with is unaffected.
+    expect(sfc).not.toMatch(/(?<!:)unread="true"/);
+    expect(sfc).toContain(':unread.prop="state.hidden"');
+    // The OTHER seed on the same element, which does not collide, is
+    // unaffected: still a plain static attribute.
+    expect(sfc).toContain('position="bottom-end"');
+    // dock already has a #ref, so the seed reuses it rather than inventing a
+    // synthetic one.
+    expect(composable).toContain("setAttribute('unread', 'true')");
+    const nextTickAt = composable.indexOf('await nextTick();');
+    const seedAt = composable.indexOf("setAttribute('unread', 'true')");
+    const bootAt = composable.indexOf('void controller.actions.boot();');
+    expect(nextTickAt).toBeGreaterThan(-1);
+    expect(seedAt).toBeGreaterThan(nextTickAt);
+    expect(bootAt).toBeGreaterThan(seedAt);
+  });
+
+  it('never drops a seed colliding with a literal attribute of the same name: it applies in onMounted through a synthetic ref', () => {
+    // The second collision shape B2-T3-a names: a literal attribute (not a
+    // binding) claiming the same name. kai-conversations has no #ref in the
+    // fixture, so this exercises the synthetic-ref path.
+    const b = block();
+    (b.files as Map<string, string>).set(
+      'fixture.html',
+      PAGE.replace('<kai-conversations>', '<kai-conversations label="orig" seed:label="seeded">'),
+    );
+    const files = byPath(renderVueForm(b));
+    const sfc = files.get('Fixture.vue')!;
+    const composable = files.get('useFixture.ts')!;
+    // The literal is unaffected; it still renders as authored.
+    expect(sfc).toContain('label="orig"');
+    // The seed never becomes a second, colliding "label" attribute.
+    expect(sfc).not.toMatch(/label="seeded"/);
+    expect(composable).toContain("setAttribute('label', 'seeded')");
+    expect(sfc).toMatch(/const seedRef\d+ = useTemplateRef<KaiConversationsElement>\('seedRef\d+'\);/);
+    expect(sfc).toMatch(/ref="seedRef\d+"/);
+    const nextTickAt = composable.indexOf('await nextTick();');
+    const seedAt = composable.indexOf("setAttribute('label', 'seeded')");
+    const bootAt = composable.indexOf('void controller.actions.boot();');
+    expect(nextTickAt).toBeGreaterThan(-1);
+    expect(seedAt).toBeGreaterThan(nextTickAt);
+    expect(bootAt).toBeGreaterThan(seedAt);
+  });
+
+  it('escapes {{, <, > and & in text, so a literal one does not open a Vue interpolation or a tag', () => {
+    const b = block();
+    (b.files as Map<string, string>).set(
+      'fixture.html',
+      PAGE.replace('<span .textContent="title"></span>', '<span>a {{ b }} &lt; c &amp; d &gt; e</span>'),
+    );
+    const sfc = byPath(renderVueForm(b)).get('Fixture.vue')!;
+    // Only the SECOND brace of the opening "{{" is encoded as an entity: the
+    // raw first brace plus the decoded second one still RENDERS as "{{", but
+    // the source text no longer carries the literal two-character sequence a
+    // template compiler recognizes as mustache-open.
+    expect(sfc).toContain('a {&#123; b }} &lt; c &amp; d &gt; e');
+    expect(sfc).not.toContain('a {{ b }} < c & d > e');
   });
 
   it('wires an event straight to the action, with no handler name to invent', () => {

@@ -15,12 +15,47 @@
  */
 import { fileTarget } from '../targets';
 import { README_FILE, renderReadme } from './readme';
-import { camel, carriedFiles, escapeAttr, isKai, parseBlock } from './emit';
+import { camel, carriedFiles, elementInterface, escapeAttr, isKai, parseBlock } from './emit';
 import type { Block } from '../registry';
 import type { Binding, FormFile, TemplateNode } from '../contract/types';
 
 const read = (value: string, scope: string | undefined): string =>
   scope && value.startsWith(`${scope}.`) ? value : `state.${value}`;
+
+/** A JS single-quoted string literal, for the composable's own `setAttribute`
+ *  calls (a JS context, not an HTML attribute -- `escapeAttr` is the wrong
+ *  escaper here). */
+const jsString = (value: string): string => `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+
+/**
+ * Literal text in the template.
+ *
+ * `&` first, or the ampersand of an entity this function itself introduced
+ * gets escaped twice. `<` and `>` because Vue's template compiler is an HTML
+ * parser: a bare `<` opens a tag the way it would in any hand-authored
+ * template. `{{` is broken by encoding only its SECOND brace as an entity --
+ * `{{` becomes `{&#123;` -- which still RENDERS as `{{` (the entity decodes
+ * to `{`, so the raw first brace plus the decoded second one is `{{` again)
+ * but no longer opens a mustache interpolation for the compiler that reads
+ * the source text.
+ */
+function escapeText(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\{\{/g, '{&#123;');
+}
+
+/** A comment's text. `-->` cannot occur in an AUTHORED HTML comment (the
+ *  parser that read the page would have already closed the comment on it),
+ *  but this is defensive in the same spirit as html.ts's binder escaping and
+ *  react.ts's own comment-closer guard (it replaces a JS "star slash"
+ *  sequence the same way): never trust that every path into a comment node
+ *  went through that parser. */
+function escapeComment(text: string): string {
+  return text.replace(/-->/g, '--&gt;');
+}
 
 /** The template NAME a binding lands on. Camel for a kai element, because
  *  `KaiElementVueProps` carries an index signature and an explicit member only
@@ -68,15 +103,37 @@ function bindingAttr(tag: string, b: Binding, scope: string | undefined): string
     case 'ref':
       return `ref="${b.name}"`;
     case 'seed':
-      // A seed is written once. Everywhere except react that is a plain
-      // static attribute, because nothing re-applies it (spec 8b, amendment 5).
+      // A NON-colliding seed only: a seed whose target name is also claimed
+      // by a prop/attr binding or a literal attribute on the same element is
+      // filtered out of `node.bindings` before this runs (see `printNode`)
+      // and applied through onMounted instead. A seed is written once, and
+      // when nothing else on the element claims its name it stays a plain
+      // static attribute, because nothing re-applies it (spec 8b,
+      // amendment 5).
       return `${b.name}="${escapeAttr(b.value)}"`;
   }
 }
 
-function printNode(node: TemplateNode, pad: string, scope: string | undefined, isRoot: boolean): string {
-  if (node.type === 'text') return `${pad}${node.text.trim()}`;
-  if (node.type === 'comment') return `${pad}<!--${node.text}-->`;
+/** A seed the template cannot carry as a static attribute: something else on
+ *  the same element already claims its name. `ref` names the template ref
+ *  (an existing `#ref`, or a synthetic one this renderer invents) whose
+ *  `setAttribute` call the composable emits. */
+interface CollidingSeed {
+  ref: string;
+  name: string;
+  value: string;
+}
+
+interface Emit {
+  collidingSeeds: CollidingSeed[];
+  /** Synthetic ref name -> element interface, for an element with a
+   *  colliding seed and no authored `#ref` to reuse. */
+  extraRefs: Map<string, string>;
+}
+
+function printNode(node: TemplateNode, pad: string, scope: string | undefined, isRoot: boolean, emit: Emit): string {
+  if (node.type === 'text') return `${pad}${escapeText(node.text.trim())}`;
+  if (node.type === 'comment') return `${pad}<!--${escapeComment(node.text)}-->`;
 
   const tag = node.tag;
   const childScope = node.repeat ? node.repeat.item : scope;
@@ -87,23 +144,41 @@ function printNode(node: TemplateNode, pad: string, scope: string | undefined, i
   const literalAttrs = node.attrs
     .filter((a) => !boundNames.has(propName(tag, a.name)))
     .map((a) => literalAttr(tag, a.name, a.value));
-  // A seed sharing its target name with a prop/attr binding on the SAME
-  // element (the fixture never has this, support-widget's kai-tab-bar does:
-  // `seed:value="home" .value="tab"`) is dropped rather than emitted beside
-  // the binding. In react that pairing is fine -- the seed is a mount effect,
-  // wholly separate from the JSX prop -- but Vue compiles a `.prop` binding
-  // AND a plain attribute of the same name into two entries of ONE props
-  // object, which is TS1117, a duplicate object-literal key. The reactive
-  // binding already supplies the value on first render, so the seed's "write
-  // once" is redundant here rather than lost.
+
+  // CONTROLLER RULING B2-T3-a: a seed never disappears. A seed sharing its
+  // target name with a prop/attr binding OR a literal attribute on the SAME
+  // element (support-widget's kai-tab-bar has the first shape: `seed:value=
+  // "home" .value="tab"`) cannot stay a static attribute -- Vue compiles a
+  // `.prop`/`:attr` binding and a plain attribute of the same name into two
+  // entries of ONE props object, which is TS1117, a duplicate object-literal
+  // key -- so it is applied instead as a one-time `setAttribute` on the
+  // element's template ref, from the composable's `onMounted`, after `await
+  // nextTick()` and before `boot()` (the order react's own mount effect gives
+  // it; html and react apply every seed through their own mount step too,
+  // this is only "sometimes" here because a non-colliding seed compiles fine
+  // as a static attribute and there is no reason to route it through a ref).
+  const claimedNames = new Set([...boundNames, ...node.attrs.map((a) => propName(tag, a.name))]);
+  const refBinding = node.bindings.find((b) => b.kind === 'ref');
+  const collidingSeeds = node.bindings.filter((b) => b.kind === 'seed' && claimedNames.has(propName(tag, b.name)));
+  let syntheticRef: string | undefined;
+  if (collidingSeeds.length && !refBinding) {
+    syntheticRef = `seedRef${node.marker}`;
+    emit.extraRefs.set(syntheticRef, elementInterface(tag));
+  }
+  const seedRef = refBinding?.name ?? syntheticRef;
+  for (const b of collidingSeeds) {
+    emit.collidingSeeds.push({ ref: seedRef as string, name: b.name, value: b.value });
+  }
+
   const bindingAttrs = node.bindings
-    .filter((b) => !(b.kind === 'seed' && boundNames.has(propName(tag, b.name))))
+    .filter((b) => !collidingSeeds.includes(b))
     .map((b) => bindingAttr(tag, b, childScope))
     .filter((a): a is string => a !== null);
 
   const attrs = [
     ...(isRoot ? ['v-if="ready"'] : []),
     ...(node.repeat ? [`v-for="${node.repeat.item} in ${read(node.repeat.list, scope)}"`, `:key="${read(node.repeat.key, childScope)}"`] : []),
+    ...(syntheticRef ? [`ref="${syntheticRef}"`] : []),
     ...literalAttrs,
     ...bindingAttrs,
   ];
@@ -118,7 +193,7 @@ function printNode(node: TemplateNode, pad: string, scope: string | undefined, i
 
   const childrenLines = textBinding
     ? [`${pad}  {{ ${read(textBinding.value, childScope)} }}`]
-    : node.children.map((c) => printNode(c, `${pad}  `, childScope, false)).filter(Boolean);
+    : node.children.map((c) => printNode(c, `${pad}  `, childScope, false, emit)).filter(Boolean);
 
   if (attrs.length === 0) {
     if (childrenLines.length === 0) return `${pad}<${tag}></${tag}>`;
@@ -134,10 +209,21 @@ export function renderVueForm(block: Block): FormFile[] {
   const parsed = parseBlock(block, 'vue');
   const { name, root, tags, refTypes } = parsed;
 
-  const body = printNode(root, '  ', undefined, true);
+  const emit: Emit = { collidingSeeds: [], extraRefs: new Map() };
+  const body = printNode(root, '  ', undefined, true, emit);
 
-  const refImports = [...new Set([...refTypes.values()].filter((t) => t !== 'HTMLElement'))].sort();
   const refEntries = [...refTypes.entries()];
+  const extraRefEntries = [...emit.extraRefs.entries()];
+  const refImports = [
+    ...new Set([...refTypes.values(), ...emit.extraRefs.values()].filter((t) => t !== 'HTMLElement')),
+  ].sort();
+  // Every distinct ref a colliding seed applies through, whether that ref is
+  // ALSO part of the controller's declared Refs (an authored `#ref`, already
+  // in `refEntries`) or a synthetic one this renderer invented for an element
+  // that had none. A separate object literal from the controller's own
+  // `refs()` call: mixing a synthetic key into that one would fail Refs'
+  // excess-property check, since it is typed to exactly `${name}Refs`.
+  const seedRefNames = [...new Set(emit.collidingSeeds.map((s) => s.ref))].sort();
 
   const sfc = [
     '<script setup lang="ts">',
@@ -149,7 +235,11 @@ export function renderVueForm(block: Block): FormFile[] {
     ...parsed.template.stylesheets.map((css) => `import './${css}';`),
     '',
     ...refEntries.map(([refName, type]) => `const ${refName} = useTemplateRef<${type}>('${refName}');`),
-    `const { state, actions, ready } = use${name}(() => ({ ${refEntries.map(([r]) => `${r}: ${r}.value`).join(', ')} }));`,
+    ...extraRefEntries.map(([refName, type]) => `const ${refName} = useTemplateRef<${type}>('${refName}');`),
+    `const { state, actions, ready } = use${name}(` +
+      `() => ({ ${refEntries.map(([r]) => `${r}: ${r}.value`).join(', ')} })` +
+      (seedRefNames.length ? `, () => ({ ${seedRefNames.map((r) => `${r}: ${r}.value`).join(', ')} })` : '') +
+      `);`,
     '</script>',
     '',
     '<template>',
@@ -193,7 +283,18 @@ export function renderVueForm(block: Block): FormFile[] {
     `  ready: Ref<boolean>;`,
     `}`,
     '',
-    `export function use${name}(refs: () => ${name}Refs): Use${name} {`,
+    `export function use${name}(`,
+    `  refs: () => ${name}Refs,`,
+    ...(emit.collidingSeeds.length
+      ? [
+          `  // A colliding seed's target ref(s), separate from \`refs\` above:`,
+          `  // \`refs\` is typed to exactly ${name}Refs, and a synthetic ref this`,
+          `  // renderer invented for an un-\`#ref\`'d element is not one of its`,
+          `  // members.`,
+          `  seedRefs: () => Record<string, Element | null>,`,
+        ]
+      : []),
+    `): Use${name} {`,
     `  const controller = createController({ refs });`,
     `  const state = shallowRef<${name}State>(controller.state());`,
     `  const ready = ref(false);`,
@@ -206,6 +307,22 @@ export function renderVueForm(block: Block): FormFile[] {
     `    await Promise.all(TAGS.map((tag) => customElements.whenDefined(tag)));`,
     `    ready.value = true;`,
     `    await nextTick();`,
+    ...(emit.collidingSeeds.length
+      ? [
+          `    // CONTROLLER RULING B2-T3-a: a seed colliding with a reactive`,
+          `    // binding or a literal attribute of the same name (spec 8b,`,
+          `    // amendment 5, as amended) cannot stay a static attribute --`,
+          `    // Vue would compile two entries of the same name into ONE props`,
+          `    // object, TS1117 -- so it applies here instead, once, after the`,
+          `    // ready-gated tree has rendered and before boot() (the order`,
+          `    // react's own mount effect gives it; html and react apply every`,
+          `    // seed through their own mount step too).`,
+          `    const seedTargets = seedRefs();`,
+          ...emit.collidingSeeds.map(
+            (s) => `    seedTargets.${s.ref}?.setAttribute(${jsString(s.name)}, ${jsString(s.value)});`,
+          ),
+        ]
+      : []),
     `    void controller.actions.boot();`,
     `  });`,
     `  onUnmounted(() => unsubscribe?.());`,
